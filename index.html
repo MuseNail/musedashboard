@@ -389,26 +389,17 @@ tailwind.config = {
       <button class="dash-tab active" id="nav-queue" onclick="showDashPanel('queue')">
         <span class="material-symbols-outlined" style="font-size:18px">queue</span> Queue
       </button>
+      <button class="dash-tab" id="nav-calendar" onclick="showDashPanel('calendar')">
+        <span class="material-symbols-outlined" style="font-size:18px">calendar_month</span> Calendar
+      </button>
       <button class="dash-tab" id="nav-reports" onclick="showDashPanel('reports')">
         <span class="material-symbols-outlined" style="font-size:18px">bar_chart</span> Reports
       </button>
       <button class="dash-tab" id="nav-transactions" onclick="showDashPanel('transactions')">
         <span class="material-symbols-outlined" style="font-size:18px">receipt_long</span> Transactions
       </button>
-      <button class="dash-tab" id="nav-services" onclick="showDashPanel('services')">
-        <span class="material-symbols-outlined" style="font-size:18px">spa</span> Services
-      </button>
-      <button class="dash-tab" id="nav-staff" onclick="showDashPanel('staff')">
-        <span class="material-symbols-outlined" style="font-size:18px">people</span> Staff
-      </button>
       <button class="dash-tab" id="nav-giftcards" onclick="showDashPanel('giftcards')">
         <span class="material-symbols-outlined" style="font-size:18px">card_giftcard</span> Gift Cards
-      </button>
-      <button class="dash-tab" id="nav-calendar" onclick="showDashPanel('calendar')">
-        <span class="material-symbols-outlined" style="font-size:18px">calendar_month</span> Calendar
-      </button>
-      <button class="dash-tab" onclick="showCustomerDir()" title="Customer Directory">
-        <span class="material-symbols-outlined" style="font-size:18px">contacts</span> Customers
       </button>
       <button class="dash-tab" id="nav-settings" onclick="showDashPanel('settings')">
         <span class="material-symbols-outlined" style="font-size:18px">tune</span> Settings
@@ -432,7 +423,7 @@ tailwind.config = {
         <span class="sync-dot" id="cal-sync-dot" style="background:#adb3b5"></span>
         <span id="cal-sync-text">Calendar</span>
       </div>
-      <span class="text-[10px] font-body text-outline-variant px-2 select-none" title="musedashboard v1.30">v1.30</span>
+      <span class="text-[10px] font-body text-outline-variant px-2 select-none" title="musedashboard v1.32">v1.32</span>
       <button onclick="exportAllToSheets()" title="Export to Sheets" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">upload_file</span>
       </button>
@@ -754,14 +745,14 @@ tailwind.config = {
           </div>
           <div class="flex items-center gap-2 flex-wrap">
             <!-- Date nav -->
-            <button onclick="calNavDay(-1)" class="w-9 h-9 rounded-xl bg-surface-container hover:bg-surface-container-high flex items-center justify-center transition-colors">
-              <span class="material-symbols-outlined" style="font-size:20px">chevron_left</span>
+            <button onclick="calNavDay(-1)" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors" style="width:32px;height:32px;flex-shrink:0">
+              <span class="material-symbols-outlined" style="font-size:18px">chevron_left</span>
             </button>
-            <button onclick="calGoToday()" class="px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors">Today</button>
+            <button onclick="calGoToday()" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors" style="height:32px;padding:0 12px">Today</button>
             <!-- Mini date picker -->
-            <input type="date" id="cal-date-input" class="px-2 py-1.5 rounded-xl bg-surface-container border border-surface-container-high text-xs font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer" onchange="calPickDate(this.value)">
-            <button onclick="calNavDay(1)" class="w-9 h-9 rounded-xl bg-surface-container hover:bg-surface-container-high flex items-center justify-center transition-colors">
-              <span class="material-symbols-outlined" style="font-size:20px">chevron_right</span>
+            <input type="date" id="cal-date-input" style="height:32px;padding:0 8px" class="rounded-xl bg-surface-container border border-surface-container-high text-xs font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer" onchange="calPickDate(this.value)">
+            <button onclick="calNavDay(1)" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors" style="width:32px;height:32px;flex-shrink:0">
+              <span class="material-symbols-outlined" style="font-size:18px">chevron_right</span>
             </button>
             <!-- Calendar selector -->
             <div class="relative">
@@ -968,6 +959,43 @@ tailwind.config = {
             <div id="settings-active-staff" class="space-y-2"></div>
           </div>
         </div>
+
+        <!-- Staff Management -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <button onclick="toggleSettingsSection('settings-staff-section');if(!document.getElementById('settings-staff-embed').children.length)renderStaffEmbed()" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
+            <div class="font-headline font-bold text-on-surface flex items-center gap-2">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">people</span> Staff Management
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="settings-staff-section-icon">expand_more</span>
+          </button>
+          <div id="settings-staff-section" class="hidden border-t border-surface-container-high p-4">
+            <div id="settings-staff-embed"></div>
+          </div>
+        </div>
+
+        <!-- Services Management -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <button onclick="toggleSettingsSection('settings-services-section');if(!document.getElementById('settings-services-embed').children.length)renderServicesEmbed()" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
+            <div class="font-headline font-bold text-on-surface flex items-center gap-2">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">spa</span> Services Management
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="settings-services-section-icon">expand_more</span>
+          </button>
+          <div id="settings-services-section" class="hidden border-t border-surface-container-high p-4">
+            <div id="settings-services-embed"></div>
+          </div>
+        </div>
+
+        <!-- Customer Directory -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <button onclick="showCustomerDir()" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
+            <div class="font-headline font-bold text-on-surface flex items-center gap-2">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">contacts</span> Customer Directory
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">open_in_new</span>
+          </button>
+        </div>
+
       </div>
 
       <!-- ═══════════════════════════════════════════════
@@ -1829,19 +1857,31 @@ tailwind.config = {
       </button>
     </div>
     <div class="space-y-4">
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Customer Name *</label>
-        <div class="relative">
-          <input type="text" id="appt-name" placeholder="Full name" autocomplete="off"
-            class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2.5 text-sm font-body focus:border-primary outline-none"
-            oninput="apptNameSearch(this.value)" onblur="setTimeout(()=>document.getElementById('appt-name-suggestions')?.remove(),200)">
-          <div id="appt-name-suggestions" class="hidden absolute left-0 right-0 top-full z-50 bg-surface-container-lowest rounded-xl shadow-xl border border-surface-container-high overflow-hidden mt-1 max-h-48 overflow-y-auto"></div>
+      <!-- Phone first, then first/last — same pattern as check-in modal -->
+      <div class="ac-input-wrap">
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone Number</label>
+        <input id="appt-phone" type="tel" placeholder="(555) 000-0000" autocomplete="off"
+          oninput="apptAcSearch(this,'phone')"
+          class="w-full bg-transparent border-b-2 border-surface-container-high py-2 text-xl font-headline font-light focus:border-primary transition-colors outline-none placeholder:text-outline-variant">
+        <div id="appt-ac-phone" class="autocomplete-list hidden"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="ac-input-wrap">
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">First Name *</label>
+          <input id="appt-first" type="text" placeholder="First" autocomplete="off"
+            oninput="apptAcSearch(this,'first'); autoCapitalize(this)"
+            class="w-full bg-transparent border-b-2 border-surface-container-high py-2 text-lg font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant">
+          <div id="appt-ac-first" class="autocomplete-list hidden"></div>
+        </div>
+        <div>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Last Name</label>
+          <input id="appt-last" type="text" placeholder="Last" autocomplete="off"
+            oninput="autoCapitalize(this)"
+            class="w-full bg-transparent border-b-2 border-surface-container-high py-2 text-lg font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant">
         </div>
       </div>
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
-        <input type="tel" id="appt-phone" placeholder="(555) 000-0000" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2.5 text-sm font-body focus:border-primary outline-none">
-      </div>
+      <!-- Hidden combined name field for backward compat -->
+      <input type="hidden" id="appt-name">
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Date *</label>
@@ -1931,7 +1971,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAJYBBoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAEI/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//Z";
-const APP_VERSION  = 'v1.30';
+const APP_VERSION  = 'v1.32';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 const SHEETS_ID = "1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo";
@@ -9176,8 +9216,8 @@ function calGoToday() {
   calLoadAndRender();
 }
 
-async function calLoadAndRender() {
-  calSetStatus('Loading calendars…');
+async function calLoadAndRender(silent) {
+  if (!silent) calSetStatus('Loading calendars…');
   try {
     // 1. Get all calendars in the account
     const calListResp = await gapi.client.calendar.calendarList.list({ minAccessRole: 'owner' });
@@ -9305,10 +9345,11 @@ function calRenderGrid() {
     const isLast = colIdx === visible.length - 1;
 
     html += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;
-                          border-right:${isLast ? 'none' : '2px solid rgba(0,0,0,0.12)'}">`;
+                          border-right:${isLast ? 'none' : '2px solid rgba(0,0,0,0.12)'};
+                          overflow:hidden">`;
 
     // Column header — colored bottom border matching cal color
-    html += `<div style="height:${HEADER_H}px;position:sticky;top:0;z-index:2;
+    html += `<div style="height:${HEADER_H}px;position:sticky;top:0;z-index:10;
                           background:${cal.color}18;
                           display:flex;align-items:center;justify-content:center;
                           border-bottom:3px solid ${cal.color};padding:0 8px;gap:6px">
@@ -9441,6 +9482,63 @@ function calRenderGrid() {
   }
 }
 
+// ── Settings embedded panels ─────────────────────
+function renderStaffEmbed() {
+  const el = document.getElementById('settings-staff-embed');
+  if (!el) return;
+  // Clone the staff panel content into settings
+  el.innerHTML = `<div class="text-sm font-body text-on-surface-variant mb-3">Manage staff, photos, commission rates and schedules.</div>
+    <button onclick="showDashPanel('staff')" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors mb-3">
+      <span class="material-symbols-outlined" style="font-size:16px">open_in_full</span> Open Full Staff Manager
+    </button>`;
+  renderStaffList();
+  // Move the staff list render into embed
+  const staffList = document.getElementById('staff-list');
+  if (staffList) el.appendChild(staffList.cloneNode(true));
+}
+
+function renderServicesEmbed() {
+  const el = document.getElementById('settings-services-embed');
+  if (!el) return;
+  el.innerHTML = `<div class="text-sm font-body text-on-surface-variant mb-3">Add, edit or remove services and set base costs.</div>
+    <button onclick="showDashPanel('services')" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+      <span class="material-symbols-outlined" style="font-size:16px">open_in_full</span> Open Full Services Manager
+    </button>`;
+}
+
+// ── Silent calendar sync ─────────────────────────
+// Reloads events in background without showing loading spinner
+async function calSilentSync() {
+  if (!gapi?.client?.getToken()?.access_token) return;
+  try {
+    setCalSyncIndicator('syncing');
+    const dayStart = new Date(_calDate); dayStart.setHours(0,0,0,0);
+    const dayEnd   = new Date(_calDate); dayEnd.setHours(23,59,59,999);
+
+    const newEvents = {};
+    await Promise.all(_calCalendars.map(async cal => {
+      try {
+        const evResp = await gapi.client.calendar.events.list({
+          calendarId: cal.id,
+          timeMin: dayStart.toISOString(),
+          timeMax: dayEnd.toISOString(),
+          singleEvents: true,
+          orderBy: 'startTime',
+          maxResults: 100,
+        });
+        newEvents[cal.id] = evResp.result.items || [];
+      } catch(e) { newEvents[cal.id] = _calEvents[cal.id] || []; }
+    }));
+    _calEvents = newEvents;
+    // Only re-render if calendar panel is visible — no loading flash
+    if (document.getElementById('panel-calendar')?.classList.contains('active')) {
+      calRenderGrid();
+    }
+    setCalSyncIndicator('ok');
+  } catch(e) {
+    setCalSyncIndicator('error');
+  }
+}
 let _calSyncTimer  = null;
 let _calHidden = new Set(JSON.parse(localStorage.getItem('gcal_hidden') || '[]'));
 const CAL_SYNC_INTERVAL = 60000; // sync calendar every 60 seconds when tab is open
@@ -9465,21 +9563,14 @@ function setCalSyncIndicator(state) {
 function startCalSync() {
   if (_calSyncTimer) return;
   setCalSyncIndicator('ok');
-  _calSyncTimer = setInterval(async () => {
-    if (document.getElementById('panel-calendar')?.classList.contains('active')) {
-      setCalSyncIndicator('syncing');
-      try {
-        await calLoadAndRender();
-        setCalSyncIndicator('ok');
-      } catch(e) { setCalSyncIndicator('error'); }
-    }
-  }, CAL_SYNC_INTERVAL);
+  // Use silent sync (no loading flash) for background refreshes
+  _calSyncTimer = setInterval(() => calSilentSync(), CAL_SYNC_INTERVAL);
 }
 
 async function calForceSync() {
   setCalSyncIndicator('syncing');
   try {
-    await calLoadAndRender();
+    await calSilentSync();
     setCalSyncIndicator('ok');
     showToast('Calendar synced ✓');
   } catch(e) {
@@ -9647,6 +9738,9 @@ function showConvertToApptModal(calId, eventId) {
   document.getElementById('appt-modal-title').textContent = 'Convert to Appointment';
   document.getElementById('appt-event-id').value  = eventId;
   document.getElementById('appt-cal-id').value    = calId;
+  const convParts = title.split(' ');
+  document.getElementById('appt-first').value     = convParts[0] || '';
+  document.getElementById('appt-last').value      = convParts.slice(1).join(' ') || '';
   document.getElementById('appt-name').value      = title;
   document.getElementById('appt-phone').value     = phone;
   document.getElementById('appt-notes').value     = '';
@@ -9711,34 +9805,48 @@ function calQuickCheckin(calId, eventId) {
 }
 
 // ── New / Edit Appointment Modal ───────────────────
-// ── Square customer lookup for appointment modal ──
-function apptNameSearch(val) {
-  const box = document.getElementById('appt-name-suggestions');
-  if (!box) return;
-  if (!val || val.length < 2) { box.classList.add('hidden'); box.innerHTML = ''; return; }
-  const q = val.toLowerCase();
-  const matches = squareCustomers.filter(c =>
-    (c.given_name + ' ' + (c.family_name||'')).toLowerCase().includes(q) ||
-    (c.phone_number||'').replace(/\D/g,'').includes(q.replace(/\D/g,''))
-  ).slice(0, 8);
-  if (matches.length === 0) { box.classList.add('hidden'); return; }
-  box.innerHTML = matches.map(c => {
+// ── Appointment modal autocomplete (mirrors check-in acSearch) ──
+function apptAcSearch(input, field) {
+  if (field === 'phone') formatPhone(input);
+  const val = input.value.trim().toLowerCase();
+  const acId = field === 'phone' ? 'appt-ac-phone' : 'appt-ac-first';
+  const acBox = document.getElementById(acId);
+  if (!acBox) return;
+  if (!val || val.length < 2) { acBox.classList.add('hidden'); acBox.innerHTML=''; return; }
+
+  const matches = squareCustomers.filter(c => {
+    const full  = ((c.given_name||'') + ' ' + (c.family_name||'')).toLowerCase();
+    const phone = (c.phone_number||'').replace(/\D/g,'');
+    if (field === 'phone') return phone.includes(val.replace(/\D/g,''));
+    return full.startsWith(val) || (c.given_name||'').toLowerCase().startsWith(val);
+  }).slice(0, 8);
+
+  if (!matches.length) { acBox.classList.add('hidden'); return; }
+
+  acBox.innerHTML = matches.map(c => {
     const name  = [c.given_name, c.family_name].filter(Boolean).join(' ');
     const phone = c.phone_number || '';
-    return `<button type="button" onclick="apptSelectCustomer('${name.replace(/'/g,"\\'")}','${phone.replace(/'/g,"\\'")}',this)"
-      class="w-full text-left px-4 py-2.5 hover:bg-surface-container text-sm font-body border-b border-surface-container-high last:border-0 transition-colors">
-      <span class="font-semibold text-on-surface">${name}</span>
-      ${phone ? `<span class="text-on-surface-variant ml-2 text-xs">${phone}</span>` : ''}
-    </button>`;
+    return `<div class="autocomplete-item" onmousedown="apptAcFill('${name.replace(/'/g,"\\'")}','${phone.replace(/'/g,"\\'")}')">
+      <span class="ac-name">${name}</span>
+      ${phone ? `<span class="ac-phone">${phone}</span>` : ''}
+    </div>`;
   }).join('');
-  box.classList.remove('hidden');
+  acBox.classList.remove('hidden');
 }
 
-function apptSelectCustomer(name, phone, btn) {
-  document.getElementById('appt-name').value  = name;
+function apptAcFill(name, phone) {
+  const parts = name.trim().split(' ');
+  document.getElementById('appt-first').value = parts[0] || '';
+  document.getElementById('appt-last').value  = parts.slice(1).join(' ') || '';
   document.getElementById('appt-phone').value = phone;
-  const box = document.getElementById('appt-name-suggestions');
-  if (box) { box.classList.add('hidden'); box.innerHTML = ''; }
+  document.getElementById('appt-name').value  = name;
+  // Format phone
+  const phoneEl = document.getElementById('appt-phone');
+  if (phoneEl) formatPhone(phoneEl);
+  ['appt-ac-phone','appt-ac-first'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.add('hidden'); el.innerHTML = ''; }
+  });
 }
 // Each line: { svcId, calId } — one service + one tech per line
 let _apptLines = []; // [{svcId, calId}]
@@ -9797,6 +9905,8 @@ function showNewApptModal(calId, hour, minute, techName) {
   document.getElementById('appt-event-id').value  = '';
   document.getElementById('appt-cal-id').value    = calId || '';
   document.getElementById('appt-name').value      = '';
+  document.getElementById('appt-first').value     = '';
+  document.getElementById('appt-last').value      = '';
   document.getElementById('appt-phone').value     = '';
   document.getElementById('appt-notes').value     = '';
   document.getElementById('appt-delete-btn').classList.add('hidden');
@@ -9812,7 +9922,7 @@ function showNewApptModal(calId, hour, minute, techName) {
 
   document.getElementById('appt-modal').classList.remove('hidden');
   document.getElementById('appt-modal').style.display = 'flex';
-  setTimeout(() => document.getElementById('appt-name').focus(), 100);
+  setTimeout(() => document.getElementById('appt-phone').focus(), 100);
 }
 
 function showEditApptModal(calId, eventId) {
@@ -9827,6 +9937,9 @@ function showEditApptModal(calId, eventId) {
   document.getElementById('appt-modal-title').textContent = 'Edit Appointment';
   document.getElementById('appt-event-id').value  = eventId;
   document.getElementById('appt-cal-id').value    = calId;
+  const evNameParts = (ev.summary || '').split(' ');
+  document.getElementById('appt-first').value     = evNameParts[0] || '';
+  document.getElementById('appt-last').value      = evNameParts.slice(1).join(' ') || '';
   document.getElementById('appt-name').value      = ev.summary || '';
   document.getElementById('appt-notes').value     = (ev.description||'').replace(/\([^)]*\)\s*/g,'').replace(/\d{3}[\s.-]\d{3}[\s.-]\d{4}/g,'').trim();
   document.getElementById('appt-date').value      = localDateStr(startDt);
@@ -9868,7 +9981,9 @@ function closeApptModal() {
 }
 
 async function saveAppt() {
-  const name    = document.getElementById('appt-name').value.trim();
+  const first   = document.getElementById('appt-first')?.value.trim() || '';
+  const last    = document.getElementById('appt-last')?.value.trim()  || '';
+  const name    = [first, last].filter(Boolean).join(' ') || document.getElementById('appt-name')?.value.trim() || '';
   const phone   = document.getElementById('appt-phone').value.trim();
   const dateVal = document.getElementById('appt-date').value;
   const timeVal = document.getElementById('appt-time').value;
