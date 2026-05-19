@@ -252,7 +252,7 @@ tailwind.config = {
   <!-- Logo -->
   <div class="flex flex-col items-center fade-up">
     <img id="logo-welcome" src="" alt="Muse Nails & Spa"
-         class="h-56 md:h-64 w-auto object-contain mx-auto"
+         class="h-56 md:h-64 w-auto object-contain mx-auto" style="background:#fff;border-radius:8px;padding:4px;"
          onerror="this.style.display='none'; document.getElementById('logo-text-welcome').style.display='block'">
     <div id="logo-text-welcome" style="display:none" class="text-center">
       <div class="text-5xl font-headline font-bold tracking-widest text-on-surface">MUSE</div>
@@ -319,7 +319,7 @@ tailwind.config = {
       <span class="material-symbols-outlined text-lg">arrow_back</span>
       Back
     </button>
-    <img id="logo-checkin" src="" alt="Muse" class="h-14 w-auto object-contain"
+    <img id="logo-checkin" src="" alt="Muse" class="h-14 w-auto object-contain" style="background:#fff;border-radius:6px;padding:2px;"
          onerror="this.style.display='none'; document.getElementById('logo-text-checkin').style.display='block'">
     <div id="logo-text-checkin" style="display:none" class="text-right">
       <div class="text-lg font-headline font-bold tracking-widest">MUSE</div>
@@ -379,7 +379,7 @@ tailwind.config = {
   <header class="w-full px-5 py-1.5 bg-surface-container-lowest border-b border-surface-container-high flex items-center justify-between sticky top-0 z-10">
     <div class="flex items-center gap-4">
       <!-- Logo -->
-      <img id="logo-desk" src="" alt="Muse" class="h-[56px] w-auto object-contain" style="filter: none;" onerror="this.style.display='none'">
+      <img id="logo-desk" src="" alt="Muse" class="h-[56px] w-auto object-contain" style="filter: none;background:#fff;border-radius:4px;" onerror="this.style.display='none'">
     </div>
     <!-- Top nav tabs -->
     <nav class="flex items-center gap-1 overflow-x-auto no-scroll flex-shrink min-w-0">
@@ -427,7 +427,7 @@ tailwind.config = {
         <span class="sync-dot" id="sheets-sync-dot" style="background:#adb3b5"></span>
         <span id="sheets-sync-text">Sheets</span>
       </div>
-      <span class="text-[10px] font-body text-outline-variant px-2 select-none" title="musedashboard v1.24">v1.24</span>
+      <span class="text-[10px] font-body text-outline-variant px-2 select-none" title="musedashboard v1.26">v1.26</span>
       <button onclick="exportAllToSheets()" title="Export to Sheets" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">upload_file</span>
       </button>
@@ -742,20 +742,37 @@ tailwind.config = {
       ═══════════════════════════════════════ -->
       <div class="dash-panel" id="panel-calendar">
         <!-- Header -->
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div>
             <h2 class="text-xl font-headline font-bold text-on-surface">Appointments</h2>
             <p class="text-sm font-body text-on-surface-variant mt-0.5" id="cal-date-label">Loading…</p>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <!-- Date nav -->
             <button onclick="calNavDay(-1)" class="w-9 h-9 rounded-xl bg-surface-container hover:bg-surface-container-high flex items-center justify-center transition-colors">
               <span class="material-symbols-outlined" style="font-size:20px">chevron_left</span>
             </button>
             <button onclick="calGoToday()" class="px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors">Today</button>
+            <!-- Mini date picker -->
+            <input type="date" id="cal-date-input" class="px-2 py-1.5 rounded-xl bg-surface-container border border-surface-container-high text-xs font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer" onchange="calPickDate(this.value)">
             <button onclick="calNavDay(1)" class="w-9 h-9 rounded-xl bg-surface-container hover:bg-surface-container-high flex items-center justify-center transition-colors">
               <span class="material-symbols-outlined" style="font-size:20px">chevron_right</span>
             </button>
+            <!-- Calendar selector -->
+            <div class="relative">
+              <button onclick="toggleCalSelector()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors">
+                <span class="material-symbols-outlined" style="font-size:16px">tune</span>
+                <span id="cal-selector-label">Calendars</span>
+              </button>
+              <div id="cal-selector-dropdown" class="hidden absolute right-0 top-10 z-50 bg-surface-container-lowest rounded-xl shadow-2xl border border-surface-container-high p-3 min-w-48 space-y-1">
+                <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2">Show/Hide Calendars</div>
+                <div id="cal-selector-list"></div>
+                <div class="border-t border-surface-container-high mt-2 pt-2 flex gap-2">
+                  <button onclick="calSelectAll(true)" class="flex-1 text-xs font-body text-primary underline">All</button>
+                  <button onclick="calSelectAll(false)" class="flex-1 text-xs font-body text-outline underline">None</button>
+                </div>
+              </div>
+            </div>
             <!-- Auth / New appointment -->
             <div id="cal-auth-area">
               <button onclick="calSignIn()" id="cal-signin-btn" class="hidden flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
@@ -1465,18 +1482,23 @@ tailwind.config = {
       <h2 class="text-xl font-headline font-bold text-on-surface">Staff Photo</h2>
       <button onclick="closeStaffPhotoModal()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
     </div>
+    <!-- Preview -->
     <div id="staff-photo-preview" class="w-24 h-24 rounded-full bg-surface-container-high flex items-center justify-center mx-auto mb-4 overflow-hidden border-2 border-surface-container-highest">
       <span class="text-3xl font-headline font-bold text-on-surface-variant" id="staff-photo-initial">?</span>
     </div>
-    <label class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body font-semibold text-sm transition-colors mb-3">
-      <span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload Photo
+    <!-- Re-crop button — only shown when photo exists -->
+    <button onclick="recropStaffPhoto()" id="staff-recrop-btn" class="hidden w-full mb-2 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+      <span class="material-symbols-outlined" style="font-size:18px">crop</span> Re-crop / Adjust
+    </button>
+    <label class="cursor-pointer w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body font-semibold text-sm transition-colors mb-3">
+      <span class="material-symbols-outlined" style="font-size:16px">upload</span> Upload New Photo
       <input type="file" id="staff-photo-input" accept="image/*" class="hidden" onchange="handleStaffPhotoUpload(this)">
     </label>
     <p class="text-xs font-body text-on-surface-variant mb-5">Square or round photo works best.</p>
     <input type="hidden" id="staff-photo-target-id">
     <div class="flex gap-2">
       <button onclick="clearStaffPhoto()" class="flex-1 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-semibold transition-all">Clear</button>
-      <button onclick="saveStaffPhoto()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Save</button>
+      <button onclick="closeStaffPhotoModal()" class="flex-1 bg-surface-container hover:bg-surface-container-high text-on-surface py-3 rounded-xl font-headline font-semibold transition-all">Done</button>
     </div>
   </div>
 </div>
@@ -1899,7 +1921,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAJYBBoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAEI/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//Z";
-const APP_VERSION  = 'v1.24';
+const APP_VERSION  = 'v1.26';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 const SHEETS_ID = "1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo";
@@ -2392,8 +2414,7 @@ function handleLogoUpload(input) {
       document.getElementById('photo-crop-placeholder').classList.add('hidden');
       document.getElementById('photo-crop-controls').classList.remove('hidden');
       document.getElementById('photo-crop-save').disabled = false;
-      updatePhotoCrop();
-      attachCropDrag();
+      requestAnimationFrame(() => { updatePhotoCrop(); attachCropDrag(); });
     };
     img.src = ev.target.result;
   };
@@ -4673,8 +4694,7 @@ function showPhotoUpload(type, id) {
       document.getElementById('photo-crop-placeholder').classList.add('hidden');
       document.getElementById('photo-crop-controls').classList.remove('hidden');
       document.getElementById('photo-crop-save').disabled = false;
-      updatePhotoCrop();
-      attachCropDrag();
+      requestAnimationFrame(() => { updatePhotoCrop(); attachCropDrag(); });
     };
     img.src = existing;
   } else {
@@ -4716,8 +4736,7 @@ function loadPhotoCrop(input) {
       document.getElementById('photo-crop-placeholder').classList.add('hidden');
       document.getElementById('photo-crop-controls').classList.remove('hidden');
       document.getElementById('photo-crop-save').disabled = false;
-      updatePhotoCrop();
-      attachCropDrag();
+      requestAnimationFrame(() => { updatePhotoCrop(); attachCropDrag(); });
     };
     img.src = ev.target.result;
   };
@@ -4865,10 +4884,13 @@ function showStaffPhotoModal(staffId) {
   document.getElementById('staff-photo-target-id').value = staffId;
   document.getElementById('staff-photo-initial').textContent = st.name.charAt(0).toUpperCase();
   const preview = document.getElementById('staff-photo-preview');
+  const recropBtn = document.getElementById('staff-recrop-btn');
   if (st.photo) {
     preview.innerHTML = `<img src="${st.photo}" class="w-full h-full object-cover rounded-full">`;
+    if (recropBtn) recropBtn.classList.remove('hidden');
   } else {
     preview.innerHTML = `<span class="text-3xl font-headline font-bold text-on-surface-variant">${st.name.charAt(0).toUpperCase()}</span>`;
+    if (recropBtn) recropBtn.classList.add('hidden');
   }
   document.getElementById('staff-photo-input').value = '';
   document.getElementById('staff-photo-modal').classList.remove('hidden');
@@ -4882,17 +4904,58 @@ function closeStaffPhotoModal() {
   staffPhotoDataUrl  = null;
 }
 
+// Re-crop existing staff photo
+function recropStaffPhoto() {
+  const id = document.getElementById('staff-photo-target-id').value;
+  if (!id) return;
+  const existing = loadPhotoFromStorage('staff', id);
+  if (!existing) { showToast('No photo to re-crop'); return; }
+  closeStaffPhotoModal();
+  // Open the crop modal with existing photo
+  showPhotoUpload('staff', id);
+  // Pre-load existing photo
+  const img = new Image();
+  img.onload = () => {
+    _photoCropImg = img;
+    _photoCropZoom = 1;
+    _photoCropOffset = { x: 0, y: 0 };
+    document.getElementById('photo-crop-zoom').value = 1;
+    document.getElementById('photo-crop-canvas').classList.remove('hidden');
+    document.getElementById('photo-crop-placeholder').classList.add('hidden');
+    document.getElementById('photo-crop-controls').classList.remove('hidden');
+    document.getElementById('photo-crop-save').disabled = false;
+    requestAnimationFrame(() => { updatePhotoCrop(); attachCropDrag(); });
+  };
+  img.src = existing;
+}
+
 function handleStaffPhotoUpload(input) {
   const file = input.files[0];
   if (!file) return;
   if (file.size > 2 * 1024 * 1024) { showToast('Photo must be under 2MB.'); return; }
+  const id = document.getElementById('staff-photo-target-id').value;
+  // Close simple modal and open crop modal
+  closeStaffPhotoModal();
+  showPhotoUpload('staff', id);
+  // Load the file into crop modal
   const reader = new FileReader();
-  reader.onload = e => {
-    staffPhotoDataUrl = e.target.result;
-    const preview = document.getElementById('staff-photo-preview');
-    preview.innerHTML = `<img src="${staffPhotoDataUrl}" class="w-full h-full object-cover rounded-full">`;
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      _photoCropImg = img;
+      _photoCropZoom = 1;
+      _photoCropOffset = { x: 0, y: 0 };
+      document.getElementById('photo-crop-zoom').value = 1;
+      document.getElementById('photo-crop-canvas').classList.remove('hidden');
+      document.getElementById('photo-crop-placeholder').classList.add('hidden');
+      document.getElementById('photo-crop-controls').classList.remove('hidden');
+      document.getElementById('photo-crop-save').disabled = false;
+      requestAnimationFrame(() => { updatePhotoCrop(); attachCropDrag(); });
+    };
+    img.src = ev.target.result;
   };
   reader.readAsDataURL(file);
+  input.value = '';
 }
 
 function saveStaffPhoto() {
@@ -8981,8 +9044,12 @@ function loadGCalScripts() {
       scope: GCAL_SCOPES,
       callback: (resp) => {
         if (resp.error) { calSetStatus('Sign-in failed: ' + resp.error); return; }
-        localStorage.setItem('gcal_token', JSON.stringify({ token: resp.access_token, expires: Date.now() + (resp.expires_in * 1000) }));
+        const expires = Date.now() + (resp.expires_in * 1000);
+        localStorage.setItem('gcal_token', JSON.stringify({ token: resp.access_token, expires }));
+        // Share token with other devices via Sheets
+        saveTokenToSheets(resp.access_token, expires);
         gapi.client.setToken({ access_token: resp.access_token });
+        document.getElementById('cal-signin-btn')?.classList.add('hidden');
         calSetStatus('');
         calLoadAndRender();
       },
@@ -8995,22 +9062,35 @@ function loadGCalScripts() {
 
 function _calTryReady() {
   if (!_calGapiLoaded || !_calGisLoaded) return;
-  // Try restoring saved token
+  // Try local token first
   const saved = localStorage.getItem('gcal_token');
   if (saved) {
     try {
       const { token, expires } = JSON.parse(saved);
-      if (Date.now() < expires - 60000) { // valid for at least 1 more minute
+      if (Date.now() < expires - 60000) {
         gapi.client.setToken({ access_token: token });
+        document.getElementById('cal-signin-btn')?.classList.add('hidden');
         calSetStatus('');
         calLoadAndRender();
         return;
       }
     } catch(e) {}
   }
-  // No valid token — show sign-in button
-  document.getElementById('cal-signin-btn')?.classList.remove('hidden');
-  calSetStatus('Click "Connect Google Calendar" to get started');
+  // Try token from Sheets (shared from another device)
+  calSetStatus('Checking for saved credentials…');
+  loadTokenFromSheets().then(saved => {
+    if (saved) {
+      localStorage.setItem('gcal_token', JSON.stringify(saved));
+      gapi.client.setToken({ access_token: saved.token });
+      document.getElementById('cal-signin-btn')?.classList.add('hidden');
+      calSetStatus('');
+      calLoadAndRender();
+    } else {
+      // No valid token anywhere — show sign-in
+      document.getElementById('cal-signin-btn')?.classList.remove('hidden');
+      calSetStatus('Click "Connect Google Calendar" to get started');
+    }
+  });
 }
 
 function initCalendar() {
@@ -9053,6 +9133,7 @@ function calSetStatus(msg) {
 function calUpdateDateLabel() {
   const el = document.getElementById('cal-date-label');
   if (el) el.textContent = _calDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  calUpdateDateInput();
 }
 
 function calNavDay(delta) {
@@ -9115,6 +9196,8 @@ async function calLoadAndRender() {
     }));
 
     calRenderGrid();
+    renderCalSelectorList();
+    calUpdateDateInput();
   } catch(err) {
     console.error('[Calendar]', err);
     if (err.status === 401) {
@@ -9131,8 +9214,17 @@ function calRenderGrid() {
   const grid = document.getElementById('cal-grid');
   if (!grid) return;
 
+  // Only show visible calendars
+  const visible = _calCalendars.filter(c => !_calHidden.has(c.id));
+
   if (_calCalendars.length === 0) {
     calSetStatus('No technician calendars found. Create one calendar per technician in Google Calendar (info@musenailandspa.com).');
+    return;
+  }
+  if (visible.length === 0) {
+    calSetStatus('All calendars are hidden. Use the Calendars filter to show some.');
+    document.getElementById('cal-loading').classList.remove('hidden');
+    grid.classList.add('hidden');
     return;
   }
 
@@ -9140,82 +9232,109 @@ function calRenderGrid() {
   document.getElementById('cal-loading').classList.add('hidden');
   grid.classList.remove('hidden');
 
-  // Time grid: 6am to 10pm in 30-min slots
+  // Time grid constants
   const START_HOUR = 6;
   const END_HOUR   = 22;
   const SLOT_MINS  = 30;
   const SLOTS      = (END_HOUR - START_HOUR) * (60 / SLOT_MINS);
-  const SLOT_H     = 48; // px per slot
-  const HEADER_H   = 48;
-  const TIME_W     = 56;
-  const COL_W      = Math.max(160, Math.floor((window.innerWidth - TIME_W - 80) / _calCalendars.length));
-  const totalH     = SLOTS * SLOT_H + HEADER_H;
+  const SLOT_H     = 52; // px per 30-min slot
+  const HEADER_H   = 52;
+  const TIME_W     = 64;
+  const COL_W      = Math.max(170, Math.floor((window.innerWidth - TIME_W - 80) / visible.length));
 
-  let html = `<div style="display:flex;min-width:${TIME_W + COL_W * _calCalendars.length}px;position:relative">`;
+  // Current time indicator
+  const now = new Date();
+  const isToday = now.toDateString() === _calDate.toDateString();
+  const nowMin  = now.getHours() * 60 + now.getMinutes();
+  const nowTop  = ((nowMin - START_HOUR * 60) / SLOT_MINS) * SLOT_H + HEADER_H;
 
-  // Time column
-  html += `<div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--md-surface-container-lowest)">`;
-  html += `<div style="height:${HEADER_H}px"></div>`; // header spacer
+  let html = `<div style="display:flex;min-width:${TIME_W + COL_W * visible.length}px;position:relative;background:var(--md-surface-container-lowest)">`;
+
+  // ── Time column ───────────────────────────────────
+  html += `<div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)">`;
+  html += `<div style="height:${HEADER_H}px;border-bottom:2px solid var(--md-outline-variant)"></div>`;
   for (let s = 0; s < SLOTS; s++) {
     const totalMins = START_HOUR * 60 + s * SLOT_MINS;
     const h = Math.floor(totalMins / 60);
     const m = totalMins % 60;
-    const label = m === 0 ? `${h > 12 ? h-12 : h}${h >= 12 ? 'pm' : 'am'}` : '';
-    html += `<div style="height:${SLOT_H}px;display:flex;align-items:flex-start;padding:2px 6px 0;border-top:1px solid var(--md-outline-variant);opacity:0.5">
-      <span style="font-size:10px;font-family:var(--font-body);white-space:nowrap">${label}</span>
+    const isHour = m === 0;
+    // Show label for every hour
+    const label = isHour ? `${h > 12 ? h-12 : (h === 0 ? 12 : h)} ${h >= 12 ? 'PM' : 'AM'}` : '';
+    html += `<div style="height:${SLOT_H}px;display:flex;align-items:${isHour ? 'flex-start' : 'flex-start'};
+                          padding:${isHour ? '3px' : '1px'} 8px 0;
+                          border-top:${isHour ? '2px solid rgba(0,0,0,0.15)' : '1px solid rgba(0,0,0,0.07)'}">
+      ${label ? `<span style="font-size:11px;font-family:var(--font-body);font-weight:${isHour ? '600' : '400'};color:var(--md-on-surface-variant);white-space:nowrap;margin-top:-7px">${label}</span>` : ''}
     </div>`;
   }
   html += '</div>';
 
-  // Tech columns
-  _calCalendars.forEach(cal => {
+  // ── Tech columns ──────────────────────────────────
+  visible.forEach((cal, colIdx) => {
     const events = _calEvents[cal.id] || [];
-    html += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;border-left:1px solid var(--md-outline-variant)">`;
+    const isLast = colIdx === visible.length - 1;
 
-    // Column header
-    html += `<div style="height:${HEADER_H}px;position:sticky;top:0;z-index:2;background:var(--md-surface-container-lowest);display:flex;align-items:center;justify-content:center;border-bottom:2px solid ${cal.color};padding:0 8px">
-      <span style="font-size:13px;font-family:var(--font-headline);font-weight:700;color:var(--md-on-surface);text-align:center">${cal.name}</span>
+    html += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;
+                          border-right:${isLast ? 'none' : '2px solid rgba(0,0,0,0.12)'}">`;
+
+    // Column header — colored bottom border matching cal color
+    html += `<div style="height:${HEADER_H}px;position:sticky;top:0;z-index:2;
+                          background:${cal.color}18;
+                          display:flex;align-items:center;justify-content:center;
+                          border-bottom:3px solid ${cal.color};padding:0 8px;gap:6px">
+      <div style="width:10px;height:10px;border-radius:50%;background:${cal.color};flex-shrink:0"></div>
+      <span style="font-size:13px;font-family:var(--font-headline);font-weight:700;color:var(--md-on-surface);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cal.name}</span>
     </div>`;
 
-    // Slot grid background
+    // Slot background grid
     html += `<div style="position:relative;height:${SLOTS * SLOT_H}px">`;
     for (let s = 0; s < SLOTS; s++) {
       const isHour = s % 2 === 0;
-      html += `<div style="position:absolute;left:0;right:0;top:${s * SLOT_H}px;height:${SLOT_H}px;border-top:1px solid var(--md-outline-variant);opacity:${isHour ? '0.4' : '0.15'};cursor:pointer"
+      html += `<div style="position:absolute;left:0;right:0;top:${s * SLOT_H}px;height:${SLOT_H}px;
+                            border-top:${isHour ? '1.5px solid rgba(0,0,0,0.12)' : '1px solid rgba(0,0,0,0.05)'};
+                            cursor:pointer"
         onclick="calSlotClick('${cal.id}',${START_HOUR + Math.floor(s/2)},${(s%2)*30})"></div>`;
+    }
+
+    // Current time line
+    if (isToday && nowTop > HEADER_H && nowTop < HEADER_H + SLOTS * SLOT_H) {
+      const lineTop = nowTop - HEADER_H;
+      html += `<div style="position:absolute;left:0;right:0;top:${lineTop}px;height:2px;background:#e53935;z-index:2;pointer-events:none">
+        <div style="position:absolute;left:-4px;top:-4px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>
+      </div>`;
     }
 
     // Events
     events.forEach(ev => {
       if (!ev.start) return;
-      const startDt = new Date(ev.start.dateTime || ev.start.date);
-      const endDt   = new Date(ev.end?.dateTime   || ev.end?.date   || startDt.getTime() + 3600000);
+      const startDt  = new Date(ev.start.dateTime || ev.start.date);
+      const endDt    = new Date(ev.end?.dateTime   || ev.end?.date   || startDt.getTime() + 3600000);
       const startMin = startDt.getHours() * 60 + startDt.getMinutes();
       const endMin   = endDt.getHours()   * 60 + endDt.getMinutes();
       const topMin   = startMin - START_HOUR * 60;
       const durMin   = Math.max(endMin - startMin, 15);
       if (topMin < 0 || topMin >= (END_HOUR - START_HOUR) * 60) return;
 
-      const top  = (topMin  / SLOT_MINS) * SLOT_H;
-      const ht   = (durMin / SLOT_MINS) * SLOT_H;
+      const top     = (topMin  / SLOT_MINS) * SLOT_H;
+      const ht      = (durMin  / SLOT_MINS) * SLOT_H;
       const timeStr = startDt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       const title   = ev.summary || 'Appointment';
-      const desc    = ev.description || '';
+      const inQueue = queue.some(q => q.name && title.toLowerCase().includes(q.name.toLowerCase().split(' ')[0]));
+      const safeId  = ev.id.replace(/'/g,"\\'");
+      const safeTitle = JSON.stringify(title);
+      const safeDesc  = JSON.stringify(ev.description||'');
 
-      // Check if it matches a queue customer for quick check-in indicator
-      const nameMatch = queue.some(q => q.name && title.toLowerCase().includes(q.name.toLowerCase().split(' ')[0]));
-
-      html += `<div onclick="calEventClick(event,'${cal.id}','${ev.id.replace(/'/g,"\\'")}',${JSON.stringify(title).replace(/</g,'&lt;')},${JSON.stringify(desc).replace(/</g,'&lt;')})"
-        style="position:absolute;left:4px;right:4px;top:${top}px;height:${Math.max(ht,28)}px;
-               background:${cal.color}22;border-left:3px solid ${cal.color};border-radius:6px;
-               padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1">
-        <div style="font-size:11px;font-family:var(--font-body);font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${title}</div>
-        ${ht > 36 ? `<div style="font-size:10px;color:var(--md-on-surface-variant)">${timeStr}</div>` : ''}
-        ${nameMatch ? '<div style="font-size:9px;color:#1a5252;font-weight:700">● In Queue</div>' : ''}
+      html += `<div onclick="calEventClick(event,'${cal.id}','${safeId}',${safeTitle},${safeDesc})"
+        style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,30)}px;
+               background:${cal.color};border-radius:6px;
+               padding:4px 7px;cursor:pointer;overflow:hidden;z-index:1;
+               box-shadow:0 1px 4px rgba(0,0,0,0.2)">
+        <div style="font-size:11px;font-family:var(--font-body);font-weight:700;color:#fff;
+                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${title}</div>
+        ${ht > 34 ? `<div style="font-size:10px;color:rgba(255,255,255,0.85)">${timeStr}</div>` : ''}
+        ${inQueue ? '<div style="font-size:9px;color:#fff;font-weight:700;opacity:0.9">✓ In Queue</div>' : ''}
       </div>`;
     });
 
-    // Quick check-in button for each event — added via event onclick
     html += '</div></div>';
   });
 
@@ -9225,12 +9344,99 @@ function calRenderGrid() {
   // Scroll to 8am
   const container = document.getElementById('cal-container');
   if (container) {
-    const eightAm = (8 - START_HOUR) * 2 * SLOT_H + HEADER_H;
-    container.scrollTop = eightAm;
+    const scrollTo = (8 - START_HOUR) * 2 * SLOT_H + HEADER_H - 20;
+    container.scrollTop = Math.max(0, scrollTo);
   }
 }
 
-function calSlotClick(calId, hour, minute) {
+let _calHidden = new Set(JSON.parse(localStorage.getItem('gcal_hidden') || '[]'));
+
+function calUpdateDateInput() {
+  const inp = document.getElementById('cal-date-input');
+  if (inp) inp.value = localDateStr(_calDate);
+}
+
+function calPickDate(val) {
+  if (!val) return;
+  _calDate = new Date(val + 'T12:00:00'); // noon avoids timezone issues
+  calUpdateDateLabel();
+  calUpdateDateInput();
+  calLoadAndRender();
+}
+
+// Calendar selector dropdown
+function toggleCalSelector() {
+  const dd = document.getElementById('cal-selector-dropdown');
+  if (!dd) return;
+  const isHidden = dd.classList.contains('hidden');
+  // Close on outside click
+  if (isHidden) {
+    dd.classList.remove('hidden');
+    setTimeout(() => {
+      document.addEventListener('click', function closeDD(e) {
+        if (!dd.contains(e.target)) { dd.classList.add('hidden'); document.removeEventListener('click', closeDD); }
+      });
+    }, 10);
+  } else {
+    dd.classList.add('hidden');
+  }
+}
+
+function renderCalSelectorList() {
+  const list = document.getElementById('cal-selector-list');
+  if (!list || _calCalendars.length === 0) return;
+  list.innerHTML = _calCalendars.map(c => {
+    const on = !_calHidden.has(c.id);
+    return `<label class="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-surface-container rounded-lg px-2">
+      <div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div>
+      <span class="flex-grow text-sm font-body text-on-surface">${c.name}</span>
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleCalCalendar('${c.id}',this.checked)"
+        class="w-4 h-4 accent-primary">
+    </label>`;
+  }).join('');
+  // Update label
+  const visCount = _calCalendars.filter(c => !_calHidden.has(c.id)).length;
+  const lbl = document.getElementById('cal-selector-label');
+  if (lbl) lbl.textContent = visCount === _calCalendars.length ? 'Calendars' : `${visCount}/${_calCalendars.length}`;
+}
+
+function toggleCalCalendar(calId, show) {
+  if (show) _calHidden.delete(calId); else _calHidden.add(calId);
+  localStorage.setItem('gcal_hidden', JSON.stringify([..._calHidden]));
+  renderCalSelectorList();
+  calRenderGrid();
+}
+
+function calSelectAll(show) {
+  if (show) _calHidden.clear(); else _calCalendars.forEach(c => _calHidden.add(c.id));
+  localStorage.setItem('gcal_hidden', JSON.stringify([..._calHidden]));
+  renderCalSelectorList();
+  calRenderGrid();
+}
+
+// ── Cross-device token sharing via Sheets ──────────
+// Store the token in App Config row so other devices can pick it up without signing in
+async function saveTokenToSheets(token, expires) {
+  try {
+    await fetch(SHEETS_PROXY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'saveConfig', config: { gcal_token: { token, expires } }, device: DEVICE_ID }),
+    });
+  } catch(e) { /* silent */ }
+}
+
+async function loadTokenFromSheets() {
+  try {
+    const res  = await fetch(`${SHEETS_PROXY}?action=loadConfig`);
+    const data = await res.json();
+    if (data.success && data.config?.gcal_token) {
+      const { token, expires } = data.config.gcal_token;
+      if (Date.now() < expires - 60000) return { token, expires };
+    }
+  } catch(e) {}
+  return null;
+}
   // Open new appointment modal pre-filled with time and tech
   const cal = _calCalendars.find(c => c.id === calId);
   showNewApptModal(calId, hour, minute, cal?.name);
