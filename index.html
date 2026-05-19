@@ -376,7 +376,7 @@ tailwind.config = {
 <div id="screen-desk" class="screen flex-col bg-surface min-h-screen">
 
   <!-- Top bar -->
-  <header class="w-full px-5 py-1.5 bg-surface-container-lowest border-b border-surface-container-high flex items-center justify-between sticky top-0 z-10">
+  <header class="w-full px-5 py-1.5 bg-surface-container-lowest border-b border-surface-container-high flex items-center gap-3 sticky top-0 z-10 overflow-x-auto no-scroll">
     <div class="flex items-center gap-4">
       <!-- Logo -->
       <img id="logo-desk" src="" alt="Muse" class="h-[56px] w-auto object-contain" style="filter: none;background:#fff;border-radius:4px;" onerror="this.style.display='none'">
@@ -422,12 +422,17 @@ tailwind.config = {
       </div>
       <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:80px"
         onclick="forceSyncNow()"
-        oncontextmenu="event.preventDefault(); if(confirm('Push YOUR local queue up to Sheets? Only do this if your local data is correct and Sheets is wrong.')) { pushQueueToSheets(); showToast('Local queue pushed to Sheets'); }"
-        title="Tap to pull from Sheets · Right-click to push local queue up">
+        title="Tap to sync queue">
         <span class="sync-dot" id="sheets-sync-dot" style="background:#adb3b5"></span>
         <span id="sheets-sync-text">Sheets</span>
       </div>
-      <span class="text-[10px] font-body text-outline-variant px-2 select-none" title="musedashboard v1.27">v1.27</span>
+      <!-- Calendar sync bubble -->
+      <div id="cal-sync-pill" class="hidden items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:80px"
+        onclick="calForceSync()" title="Tap to sync calendar">
+        <span class="sync-dot" id="cal-sync-dot" style="background:#adb3b5"></span>
+        <span id="cal-sync-text">Calendar</span>
+      </div>
+      <span class="text-[10px] font-body text-outline-variant px-2 select-none" title="musedashboard v1.30">v1.30</span>
       <button onclick="exportAllToSheets()" title="Export to Sheets" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">upload_file</span>
       </button>
@@ -786,7 +791,7 @@ tailwind.config = {
         </div>
 
         <!-- Calendar grid container -->
-        <div id="cal-container" class="relative overflow-auto" style="height:calc(100vh - 220px)">
+        <div id="cal-container" class="relative overflow-auto rounded-xl border border-surface-container-high" style="height:calc(100vh - 240px)">
           <!-- Loading / auth state -->
           <div id="cal-loading" class="flex flex-col items-center justify-center h-64 text-on-surface-variant">
             <span class="material-symbols-outlined text-5xl mb-3 opacity-30">calendar_month</span>
@@ -1826,7 +1831,12 @@ tailwind.config = {
     <div class="space-y-4">
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Customer Name *</label>
-        <input type="text" id="appt-name" placeholder="Full name" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2.5 text-sm font-body focus:border-primary outline-none">
+        <div class="relative">
+          <input type="text" id="appt-name" placeholder="Full name" autocomplete="off"
+            class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2.5 text-sm font-body focus:border-primary outline-none"
+            oninput="apptNameSearch(this.value)" onblur="setTimeout(()=>document.getElementById('appt-name-suggestions')?.remove(),200)">
+          <div id="appt-name-suggestions" class="hidden absolute left-0 right-0 top-full z-50 bg-surface-container-lowest rounded-xl shadow-xl border border-surface-container-high overflow-hidden mt-1 max-h-48 overflow-y-auto"></div>
+        </div>
       </div>
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
@@ -1852,15 +1862,15 @@ tailwind.config = {
           <option value="120">2 hours</option>
         </select>
       </div>
+      <!-- Service lines: each row = service + technician -->
       <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Technician *</label>
-        <select id="appt-tech" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2.5 text-sm font-body focus:border-primary outline-none">
-          <option value="">— Select technician —</option>
-        </select>
-      </div>
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Services</label>
-        <div id="appt-services-grid" class="grid grid-cols-3 gap-2"></div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest">Services & Technicians</label>
+          <button type="button" onclick="addApptServiceLine()" class="flex items-center gap-1 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
+            <span class="material-symbols-outlined" style="font-size:14px">add</span> Add service
+          </button>
+        </div>
+        <div id="appt-service-lines" class="space-y-2"></div>
       </div>
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Notes</label>
@@ -1921,7 +1931,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAJYBBoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAEI/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//Z";
-const APP_VERSION  = 'v1.27';
+const APP_VERSION  = 'v1.30';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 const SHEETS_ID = "1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo";
@@ -2189,10 +2199,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         ['delete-txn-modal',    closeDeleteTxnModal],
         ['gc-modal',            closeGcModal],
         ['square-modal',        () => { document.getElementById('square-modal').classList.add('hidden'); document.getElementById('square-modal').style.display=''; }],
+        ['appt-modal',          closeApptModal],
+        ['historical-modal',    closeHistoricalModal],
+        ['numpad-modal',        () => { numpadConfirm(); }],
       ];
       for (const [id, fn] of allModals) {
         const el = document.getElementById(id);
         if (el && !el.classList.contains('hidden')) { fn(); return; }
+      }
+      // Close calendar selector dropdown if open
+      const calDD = document.getElementById('cal-selector-dropdown');
+      if (calDD && !calDD.classList.contains('hidden')) { calDD.classList.add('hidden'); return; }
+      // Screen-level Esc navigation
+      const checkin = document.getElementById('screen-checkin');
+      if (checkin && checkin.classList.contains('active')) { goTo('screen-welcome'); return; }
+      const pinModal = document.getElementById('pin-modal');
+      if (pinModal && !pinModal.classList.contains('hidden')) {
+        pinModal.classList.add('hidden'); pinModal.style.display = '';
+        return;
       }
     }
     // Enter in manual add modal submits the form
@@ -9051,6 +9075,7 @@ function loadGCalScripts() {
         gapi.client.setToken({ access_token: resp.access_token });
         document.getElementById('cal-signin-btn')?.classList.add('hidden');
         calSetStatus('');
+        startCalSync();
         calLoadAndRender();
       },
     });
@@ -9071,6 +9096,7 @@ function _calTryReady() {
         gapi.client.setToken({ access_token: token });
         document.getElementById('cal-signin-btn')?.classList.add('hidden');
         calSetStatus('');
+        startCalSync();
         calLoadAndRender();
         return;
       }
@@ -9084,6 +9110,7 @@ function _calTryReady() {
       gapi.client.setToken({ access_token: saved.token });
       document.getElementById('cal-signin-btn')?.classList.add('hidden');
       calSetStatus('');
+      startCalSync();
       calLoadAndRender();
     } else {
       // No valid token anywhere — show sign-in
@@ -9099,9 +9126,9 @@ function initCalendar() {
   loadGCalScripts();
 }
 
-function calSignIn() {
+function calSignIn(silent) {
   if (!_calTokenClient) { showToast('Still loading — try again in a moment'); return; }
-  _calTokenClient.requestAccessToken({ prompt: 'consent' });
+  _calTokenClient.requestAccessToken({ prompt: silent ? '' : 'consent' });
 }
 
 function calSignOut() {
@@ -9180,9 +9207,11 @@ async function calLoadAndRender() {
     const dayEnd   = new Date(_calDate);
     dayEnd.setHours(23,59,59,999);
 
+    // Apply saved column order
+    applyCalOrder();
+
     _calEvents = {};
-    await Promise.all(_calCalendars.map(async cal => {
-      try {
+    await Promise.all(_calCalendars.map(async cal => {      try {
         const evResp = await gapi.client.calendar.events.list({
           calendarId: cal.id,
           timeMin: dayStart.toISOString(),
@@ -9202,7 +9231,9 @@ async function calLoadAndRender() {
     console.error('[Calendar]', err);
     if (err.status === 401) {
       localStorage.removeItem('gcal_token');
-      calSetStatus('Session expired — please sign in again');
+      // Try silent re-auth first, then prompt if that fails
+      calSetStatus('Session expired — reconnecting…');
+      calSignIn(true); // silent re-auth attempt
       document.getElementById('cal-signin-btn')?.classList.remove('hidden');
     } else {
       calSetStatus('Error loading calendar: ' + (err.result?.error?.message || err.message || 'Unknown error'));
@@ -9252,7 +9283,7 @@ function calRenderGrid() {
 
   // ── Time column ───────────────────────────────────
   html += `<div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)">`;
-  html += `<div style="height:${HEADER_H}px;border-bottom:2px solid var(--md-outline-variant)"></div>`;
+  html += `<div style="height:${HEADER_H}px;border-bottom:2px solid var(--md-outline-variant);position:sticky;top:0;background:var(--md-surface-container-lowest);z-index:4"></div>`;
   for (let s = 0; s < SLOTS; s++) {
     const totalMins = START_HOUR * 60 + s * SLOT_MINS;
     const h = Math.floor(totalMins / 60);
@@ -9295,12 +9326,16 @@ function calRenderGrid() {
         onclick="calSlotClick('${cal.id}',${START_HOUR + Math.floor(s/2)},${(s%2)*30})"></div>`;
     }
 
-    // Current time line
-    if (isToday && nowTop > HEADER_H && nowTop < HEADER_H + SLOTS * SLOT_H) {
-      const lineTop = nowTop - HEADER_H;
-      html += `<div style="position:absolute;left:0;right:0;top:${lineTop}px;height:2px;background:#e53935;z-index:2;pointer-events:none">
-        <div style="position:absolute;left:-4px;top:-4px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>
-      </div>`;
+    // Current time line — red dashed, drawn in every column at same position
+    if (isToday) {
+      const lineTop = ((nowMin - START_HOUR * 60) / SLOT_MINS) * SLOT_H;
+      if (lineTop >= 0 && lineTop <= SLOTS * SLOT_H) {
+        const isDotCol = colIdx === 0; // show dot only in first column
+        html += `<div style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;
+                              border-top:2px dashed #e53935;z-index:5;pointer-events:none">
+          ${isDotCol ? `<div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>` : ''}
+        </div>`;
+      }
     }
 
     // Events
@@ -9317,21 +9352,78 @@ function calRenderGrid() {
       const top     = (topMin  / SLOT_MINS) * SLOT_H;
       const ht      = (durMin  / SLOT_MINS) * SLOT_H;
       const timeStr = startDt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      const title   = ev.summary || 'Appointment';
-      const inQueue = queue.some(q => q.name && title.toLowerCase().includes(q.name.toLowerCase().split(' ')[0]));
+      const title   = ev.summary || '';
+      const desc    = ev.description || '';
       const safeId  = ev.id.replace(/'/g,"\\'");
-      const safeTitle = JSON.stringify(title);
-      const safeDesc  = JSON.stringify(ev.description||'');
 
-      html += `<div onclick="calEventClick(event,'${cal.id}','${safeId}',${safeTitle},${safeDesc})"
-        style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,30)}px;
-               background:${cal.color};border-radius:6px;
-               padding:4px 7px;cursor:pointer;overflow:hidden;z-index:1;
-               box-shadow:0 1px 4px rgba(0,0,0,0.2)">
-        <div style="font-size:11px;font-family:var(--font-body);font-weight:700;color:#fff;
-                    white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${title}</div>
-        ${ht > 34 ? `<div style="font-size:10px;color:rgba(255,255,255,0.85)">${timeStr}</div>` : ''}
-        ${inQueue ? '<div style="font-size:9px;color:#fff;font-weight:700;opacity:0.9">✓ In Queue</div>' : ''}
+      // ── Determine if this is a customer appointment or an existing calendar event ──
+      // Heuristic: appointment events have customer name format + service keywords or phone
+      const hasPhone   = /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(desc);
+      const knownSvcs  = SERVICES.some(s => title.toLowerCase().includes(s.label.toLowerCase()) || desc.toLowerCase().includes(s.label.toLowerCase()));
+      const isAppt     = hasPhone || knownSvcs || ev._isAppointment;
+      const isPast     = startDt < now;
+
+      // ── Match to queue ──
+      const firstName   = title.split(/[\s—–-]/)[0].toLowerCase();
+      const queueMatch  = queue.find(q => q.name && q.name.toLowerCase().startsWith(firstName) && firstName.length > 1);
+      const qStatus     = queueMatch?.status || null;
+
+      // ── Status-based colors ──
+      let bg, border, textColor = '#1a1a1a', statusLabel = '';
+      if (!isAppt) {
+        // Existing non-appointment event — neutral gray
+        bg = '#eceff1'; border = '#78909c'; textColor = '#37474f';
+        statusLabel = '';
+      } else if (qStatus === 'done') {
+        bg = '#f3f4f6'; border = '#9ca3af'; textColor = '#6b7280';
+        statusLabel = '✓ Done';
+      } else if (qStatus === 'inservice') {
+        bg = '#dcfce7'; border = '#16a34a'; textColor = '#14532d';
+        statusLabel = '● In Service';
+      } else if (qStatus === 'waiting') {
+        bg = '#dbeafe'; border = '#2563eb'; textColor = '#1e3a8a';
+        statusLabel = '● Checked In';
+      } else if (isPast) {
+        bg = '#fff7ed'; border = '#ea580c'; textColor = '#7c2d12';
+        statusLabel = '⚠ Not Checked In';
+      } else {
+        bg = '#eff6ff'; border = '#3b82f6'; textColor = '#1e3a8a';
+        statusLabel = '';
+      }
+
+      // ── Service color chips ──
+      const SVC_GROUPS = [
+        { ids: ['fullset','fill','dip'],             color: '#7b1fa2' },
+        { ids: ['pedicure','kidpedicure'],            color: '#0277bd' },
+        { ids: ['manicure','polishchange','kidmani'], color: '#00695c' },
+        { ids: ['wax'],                              color: '#e65100' },
+      ];
+      const matchedSvcs = SERVICES.filter(s =>
+        title.toLowerCase().includes(s.label.toLowerCase()) ||
+        desc.toLowerCase().includes(s.label.toLowerCase())
+      );
+      const chips = matchedSvcs.map(s => {
+        const grp = SVC_GROUPS.find(g => g.ids.some(id => s.id.toLowerCase().includes(id)));
+        const c = grp?.color || '#455a64';
+        return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:2px;flex-shrink:0"></span>`;
+      }).join('');
+
+      const displayTitle = title || 'Event';
+      const safeTitle = JSON.stringify(displayTitle);
+      const safeDesc  = JSON.stringify(desc);
+
+      html += `<div onclick="calEventClick(event,'${cal.id}','${safeId}',${safeTitle},${safeDesc},${isAppt})"
+        style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,28)}px;
+               background:${bg};border-left:3px solid ${border};border-radius:6px;
+               padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;
+               box-shadow:0 1px 3px rgba(0,0,0,0.12)">
+        <div style="display:flex;align-items:center;gap:2px;overflow:hidden">
+          ${chips}
+          <span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${textColor};
+                       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${displayTitle}</span>
+        </div>
+        ${ht > 32 ? `<div style="font-size:10px;color:${textColor};opacity:0.75">${timeStr}</div>` : ''}
+        ${statusLabel && ht > 44 ? `<div style="font-size:9px;font-weight:700;color:${border}">${statusLabel}</div>` : ''}
       </div>`;
     });
 
@@ -9349,7 +9441,52 @@ function calRenderGrid() {
   }
 }
 
+let _calSyncTimer  = null;
 let _calHidden = new Set(JSON.parse(localStorage.getItem('gcal_hidden') || '[]'));
+const CAL_SYNC_INTERVAL = 60000; // sync calendar every 60 seconds when tab is open
+
+function setCalSyncIndicator(state) {
+  const dot  = document.getElementById('cal-sync-dot');
+  const text = document.getElementById('cal-sync-text');
+  const pill = document.getElementById('cal-sync-pill');
+  if (!dot) return;
+  if (pill) pill.style.display = 'flex';
+  const states = {
+    ok:      { bg: '#2a7a4f', label: 'Calendar' },
+    syncing: { bg: '#f5c870', label: null        },
+    error:   { bg: '#fa746f', label: 'Cal ✗'    },
+    idle:    { bg: '#adb3b5', label: 'Calendar'  },
+  };
+  const s = states[state] || states.idle;
+  dot.style.background = s.bg;
+  if (text && s.label !== null) text.textContent = s.label;
+}
+
+function startCalSync() {
+  if (_calSyncTimer) return;
+  setCalSyncIndicator('ok');
+  _calSyncTimer = setInterval(async () => {
+    if (document.getElementById('panel-calendar')?.classList.contains('active')) {
+      setCalSyncIndicator('syncing');
+      try {
+        await calLoadAndRender();
+        setCalSyncIndicator('ok');
+      } catch(e) { setCalSyncIndicator('error'); }
+    }
+  }, CAL_SYNC_INTERVAL);
+}
+
+async function calForceSync() {
+  setCalSyncIndicator('syncing');
+  try {
+    await calLoadAndRender();
+    setCalSyncIndicator('ok');
+    showToast('Calendar synced ✓');
+  } catch(e) {
+    setCalSyncIndicator('error');
+    showToast('Calendar sync failed');
+  }
+}
 
 function calUpdateDateInput() {
   const inp = document.getElementById('cal-date-input');
@@ -9382,23 +9519,7 @@ function toggleCalSelector() {
   }
 }
 
-function renderCalSelectorList() {
-  const list = document.getElementById('cal-selector-list');
-  if (!list || _calCalendars.length === 0) return;
-  list.innerHTML = _calCalendars.map(c => {
-    const on = !_calHidden.has(c.id);
-    return `<label class="flex items-center gap-2 py-1.5 cursor-pointer hover:bg-surface-container rounded-lg px-2">
-      <div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div>
-      <span class="flex-grow text-sm font-body text-on-surface">${c.name}</span>
-      <input type="checkbox" ${on ? 'checked' : ''} onchange="toggleCalCalendar('${c.id}',this.checked)"
-        class="w-4 h-4 accent-primary">
-    </label>`;
-  }).join('');
-  // Update label
-  const visCount = _calCalendars.filter(c => !_calHidden.has(c.id)).length;
-  const lbl = document.getElementById('cal-selector-label');
-  if (lbl) lbl.textContent = visCount === _calCalendars.length ? 'Calendars' : `${visCount}/${_calCalendars.length}`;
-}
+// renderCalSelectorList defined below with drag-to-reorder support
 
 function toggleCalCalendar(calId, show) {
   if (show) _calHidden.delete(calId); else _calHidden.add(calId);
@@ -9444,56 +9565,103 @@ function calSlotClick(calId, hour, minute) {
   showNewApptModal(calId, hour, minute, cal?.name);
 }
 
-function calEventClick(e, calId, eventId, title, desc) {
+function calEventClick(e, calId, eventId, title, desc, isAppt) {
   e.stopPropagation();
-  // Show context: edit appointment OR quick check-in
-  const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
+  const ev  = (_calEvents[calId] || []).find(x => x.id === eventId);
   if (!ev) return;
-
-  // Build quick check-in data from event
-  const startDt = new Date(ev.start.dateTime || ev.start.date);
-  const cal = _calCalendars.find(c => c.id === calId);
-
-  // Try to extract phone from description
-  const phoneMatch = (ev.description || '').match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
-  const phone = phoneMatch ? phoneMatch[1] : '';
-
-  // Parse services from description or title
-  const knownSvcs = SERVICES.filter(s =>
-    title.toLowerCase().includes(s.label.toLowerCase()) ||
-    (ev.description || '').toLowerCase().includes(s.label.toLowerCase())
-  ).map(s => s.id);
-
-  // Find matching tech
-  const tech = STAFF.find(s => s.name.toLowerCase() === (cal?.name || '').toLowerCase());
+  const cal      = _calCalendars.find(c => c.id === calId);
+  const startDt  = new Date(ev.start.dateTime || ev.start.date);
+  const phoneMatch = desc.match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
+  const phone    = phoneMatch ? phoneMatch[1] : '';
+  const firstName = title.split(/[\s—–-]/)[0].toLowerCase();
+  const queueMatch = queue.find(q => q.name && q.name.toLowerCase().startsWith(firstName) && firstName.length > 1);
 
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-[85] flex items-center justify-center bg-on-surface/40 px-4';
+
+  // Determine color hint
+  let statusBadge = '';
+  if (queueMatch?.status === 'done')      statusBadge = '<span style="color:#6b7280;font-size:11px;font-weight:700">✓ Completed</span>';
+  else if (queueMatch?.status === 'inservice') statusBadge = '<span style="color:#16a34a;font-size:11px;font-weight:700">● In Service</span>';
+  else if (queueMatch?.status === 'waiting')   statusBadge = '<span style="color:#2563eb;font-size:11px;font-weight:700">● Checked In</span>';
+  else if (startDt < new Date() && isAppt)     statusBadge = '<span style="color:#ea580c;font-size:11px;font-weight:700">⚠ Not Checked In</span>';
+
   modal.innerHTML = `
     <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-      <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center justify-between mb-3">
         <h3 class="font-headline font-bold text-on-surface text-lg">${title}</h3>
         <button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center">
           <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span>
         </button>
       </div>
-      <div class="space-y-1 text-sm font-body text-on-surface-variant mb-5">
+      <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4">
         <p><span class="font-semibold text-on-surface">${cal?.name || ''}</span> · ${startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</p>
         ${phone ? `<p>📞 ${phone}</p>` : ''}
-        ${ev.description ? `<p class="text-xs">${ev.description.replace(/\n/g,'<br>')}</p>` : ''}
+        ${desc ? `<p class="text-xs opacity-75">${desc.replace(/\n/g,'<br>')}</p>` : ''}
+        ${statusBadge ? `<div class="mt-1">${statusBadge}</div>` : ''}
       </div>
-      <div class="flex gap-2">
+      <div class="space-y-2">
+        ${isAppt ? `
         <button onclick="calQuickCheckin('${calId}','${eventId}'); this.closest('.fixed').remove()"
-          class="flex-1 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors">
-          <span class="material-symbols-outlined align-middle" style="font-size:16px">how_to_reg</span> Quick Check-In
+          class="${queueMatch ? 'hidden' : ''} w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Quick Check-In
+        </button>
+        ${queueMatch ? `
+        <button onclick="this.closest('.fixed').remove(); showGroupAssignModal('${queueMatch.id}')"
+          class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined" style="font-size:16px">assignment_ind</span> Assign & Price
+        </button>` : ''}
+        <button onclick="this.closest('.fixed').remove(); showEditApptModal('${calId}','${eventId}')"
+          class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">
+          Edit Appointment
+        </button>` : `
+        <button onclick="this.closest('.fixed').remove(); showConvertToApptModal('${calId}','${eventId}')"
+          class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined" style="font-size:16px">event_available</span> Convert to Appointment
         </button>
         <button onclick="this.closest('.fixed').remove(); showEditApptModal('${calId}','${eventId}')"
-          class="px-4 py-3 rounded-xl border-2 border-outline-variant text-on-surface font-headline font-semibold text-sm hover:bg-surface-container transition-colors">
-          Edit
+          class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">
+          Edit Event
+        </button>`}
+        <button onclick="if(confirm('Cancel this appointment?')) { deleteAppt('${calId}','${eventId}'); this.closest('.fixed').remove(); }"
+          class="w-full text-error py-2 rounded-xl font-headline font-semibold text-sm hover:bg-error/10 transition-colors">
+          Cancel / Delete
         </button>
       </div>
     </div>`;
   document.body.appendChild(modal);
+}
+
+function showConvertToApptModal(calId, eventId) {
+  const ev  = (_calEvents[calId] || []).find(x => x.id === eventId);
+  if (!ev) return;
+  // Pre-fill the appointment modal with whatever we can glean from the event
+  const startDt = new Date(ev.start.dateTime || ev.start.date);
+  const endDt   = new Date(ev.end?.dateTime || ev.end?.date || startDt.getTime() + 3600000);
+  const durMins = Math.round((endDt - startDt) / 60000);
+  const phone   = (ev.description||'').match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/)?.[1] || '';
+  const title   = ev.summary || '';
+
+  _apptEditId = eventId;
+  _apptLines  = [{ svcId: '', calId }];
+  document.getElementById('appt-modal-title').textContent = 'Convert to Appointment';
+  document.getElementById('appt-event-id').value  = eventId;
+  document.getElementById('appt-cal-id').value    = calId;
+  document.getElementById('appt-name').value      = title;
+  document.getElementById('appt-phone').value     = phone;
+  document.getElementById('appt-notes').value     = '';
+  document.getElementById('appt-date').value      = localDateStr(startDt);
+  document.getElementById('appt-time').value      = `${String(startDt.getHours()).padStart(2,'0')}:${String(startDt.getMinutes()).padStart(2,'0')}`;
+  document.getElementById('appt-delete-btn').classList.remove('hidden');
+
+  const durSel = document.getElementById('appt-duration');
+  if (durSel) {
+    const closest = [...durSel.options].reduce((a,b) => Math.abs(parseInt(b.value)-durMins) < Math.abs(parseInt(a.value)-durMins) ? b : a);
+    durSel.value = closest.value;
+  }
+  renderApptServiceLines();
+  document.getElementById('appt-modal').classList.remove('hidden');
+  document.getElementById('appt-modal').style.display = 'flex';
 }
 
 function calQuickCheckin(calId, eventId) {
@@ -9543,9 +9711,88 @@ function calQuickCheckin(calId, eventId) {
 }
 
 // ── New / Edit Appointment Modal ───────────────────
+// ── Square customer lookup for appointment modal ──
+function apptNameSearch(val) {
+  const box = document.getElementById('appt-name-suggestions');
+  if (!box) return;
+  if (!val || val.length < 2) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  const q = val.toLowerCase();
+  const matches = squareCustomers.filter(c =>
+    (c.given_name + ' ' + (c.family_name||'')).toLowerCase().includes(q) ||
+    (c.phone_number||'').replace(/\D/g,'').includes(q.replace(/\D/g,''))
+  ).slice(0, 8);
+  if (matches.length === 0) { box.classList.add('hidden'); return; }
+  box.innerHTML = matches.map(c => {
+    const name  = [c.given_name, c.family_name].filter(Boolean).join(' ');
+    const phone = c.phone_number || '';
+    return `<button type="button" onclick="apptSelectCustomer('${name.replace(/'/g,"\\'")}','${phone.replace(/'/g,"\\'")}',this)"
+      class="w-full text-left px-4 py-2.5 hover:bg-surface-container text-sm font-body border-b border-surface-container-high last:border-0 transition-colors">
+      <span class="font-semibold text-on-surface">${name}</span>
+      ${phone ? `<span class="text-on-surface-variant ml-2 text-xs">${phone}</span>` : ''}
+    </button>`;
+  }).join('');
+  box.classList.remove('hidden');
+}
+
+function apptSelectCustomer(name, phone, btn) {
+  document.getElementById('appt-name').value  = name;
+  document.getElementById('appt-phone').value = phone;
+  const box = document.getElementById('appt-name-suggestions');
+  if (box) { box.classList.add('hidden'); box.innerHTML = ''; }
+}
+// Each line: { svcId, calId } — one service + one tech per line
+let _apptLines = []; // [{svcId, calId}]
+
+function _buildTechOptions(selectedCalId) {
+  return '<option value="">— Tech —</option>' +
+    _calCalendars.map(c => `<option value="${c.id}" ${c.id === selectedCalId ? 'selected' : ''}>${c.name}</option>`).join('');
+}
+
+function _buildSvcOptions(selectedSvcId) {
+  return '<option value="">— Service —</option>' +
+    SERVICES.filter(s => isServiceVisibleOnCheckin(s.id))
+      .map(s => `<option value="${s.id}" ${s.id === selectedSvcId ? 'selected' : ''}>${s.label}</option>`).join('');
+}
+
+function renderApptServiceLines() {
+  const container = document.getElementById('appt-service-lines');
+  if (!container) return;
+  container.innerHTML = _apptLines.map((line, i) => `
+    <div class="flex items-center gap-2" data-line="${i}">
+      <select onchange="updateApptLine(${i},'svc',this.value)"
+        class="flex-1 border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+        ${_buildSvcOptions(line.svcId)}
+      </select>
+      <select onchange="updateApptLine(${i},'cal',this.value)"
+        class="flex-1 border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+        ${_buildTechOptions(line.calId)}
+      </select>
+      <button type="button" onclick="removeApptLine(${i})"
+        class="w-8 h-8 rounded-xl text-outline hover:text-error hover:bg-error/10 flex items-center justify-center transition-colors flex-shrink-0">
+        <span class="material-symbols-outlined" style="font-size:18px">remove</span>
+      </button>
+    </div>`).join('');
+}
+
+function addApptServiceLine(svcId, calId) {
+  _apptLines.push({ svcId: svcId || '', calId: calId || '' });
+  renderApptServiceLines();
+}
+
+function removeApptLine(i) {
+  _apptLines.splice(i, 1);
+  if (_apptLines.length === 0) addApptServiceLine();
+  else renderApptServiceLines();
+}
+
+function updateApptLine(i, field, val) {
+  if (field === 'svc') _apptLines[i].svcId = val;
+  else _apptLines[i].calId = val;
+}
+
 function showNewApptModal(calId, hour, minute, techName) {
-  _apptEditId   = null;
-  _apptServices = [];
+  _apptEditId = null;
+  _apptLines  = [];
   document.getElementById('appt-modal-title').textContent = 'New Appointment';
   document.getElementById('appt-event-id').value  = '';
   document.getElementById('appt-cal-id').value    = calId || '';
@@ -9554,19 +9801,14 @@ function showNewApptModal(calId, hour, minute, techName) {
   document.getElementById('appt-notes').value     = '';
   document.getElementById('appt-delete-btn').classList.add('hidden');
 
-  // Pre-fill date/time
   const d = new Date(_calDate);
   document.getElementById('appt-date').value = localDateStr(d);
   document.getElementById('appt-time').value =
     `${String(hour ?? 9).padStart(2,'0')}:${String(minute ?? 0).padStart(2,'0')}`;
 
-  // Populate tech dropdown
-  const techSel = document.getElementById('appt-tech');
-  techSel.innerHTML = '<option value="">— Select technician —</option>' +
-    _calCalendars.map(c => `<option value="${c.id}" ${c.name === techName ? 'selected' : ''}>${c.name}</option>`).join('');
-
-  // Populate services
-  _buildApptServicesGrid([]);
+  // Start with one service line pre-filled with the clicked tech
+  const matchedCal = _calCalendars.find(c => c.name === techName);
+  addApptServiceLine('', matchedCal?.id || calId || '');
 
   document.getElementById('appt-modal').classList.remove('hidden');
   document.getElementById('appt-modal').style.display = 'flex';
@@ -9586,58 +9828,37 @@ function showEditApptModal(calId, eventId) {
   document.getElementById('appt-event-id').value  = eventId;
   document.getElementById('appt-cal-id').value    = calId;
   document.getElementById('appt-name').value      = ev.summary || '';
-  document.getElementById('appt-notes').value     = ev.description || '';
+  document.getElementById('appt-notes').value     = (ev.description||'').replace(/\([^)]*\)\s*/g,'').replace(/\d{3}[\s.-]\d{3}[\s.-]\d{4}/g,'').trim();
   document.getElementById('appt-date').value      = localDateStr(startDt);
   document.getElementById('appt-time').value      = `${String(startDt.getHours()).padStart(2,'0')}:${String(startDt.getMinutes()).padStart(2,'0')}`;
   document.getElementById('appt-delete-btn').classList.remove('hidden');
 
-  // Duration
   const durSel = document.getElementById('appt-duration');
   const closestOpt = [...durSel.options].reduce((a,b) =>
     Math.abs(parseInt(b.value)-durMins) < Math.abs(parseInt(a.value)-durMins) ? b : a);
   durSel.value = closestOpt.value;
 
-  // Phone from description
   const phoneMatch = (ev.description||'').match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
   document.getElementById('appt-phone').value = phoneMatch ? phoneMatch[1] : '';
 
-  // Tech
-  const techSel = document.getElementById('appt-tech');
-  techSel.innerHTML = '<option value="">— Select technician —</option>' +
-    _calCalendars.map(c => `<option value="${c.id}" ${c.id === calId ? 'selected' : ''}>${c.name}</option>`).join('');
-
-  // Services
-  const selectedSvcs = SERVICES.filter(s =>
-    (ev.summary||'').toLowerCase().includes(s.label.toLowerCase()) ||
-    (ev.description||'').toLowerCase().includes(s.label.toLowerCase())
-  ).map(s => s.id);
-  _buildApptServicesGrid(selectedSvcs);
-  _apptServices = [...selectedSvcs];
+  // Parse service lines from description: "Pedicure (Lyn)\nFill (Lee)"
+  _apptLines = [];
+  const desc = ev.description || '';
+  const linePattern = /(.+?)\s*\(([^)]+)\)/g;
+  let match;
+  while ((match = linePattern.exec(desc)) !== null) {
+    const svcLabel = match[1].trim();
+    const techName = match[2].trim();
+    const svc = SERVICES.find(s => s.label.toLowerCase() === svcLabel.toLowerCase());
+    const cal = _calCalendars.find(c => c.name.toLowerCase() === techName.toLowerCase()) ||
+                _calCalendars.find(c => c.id === calId);
+    if (svc || cal) _apptLines.push({ svcId: svc?.id || '', calId: cal?.id || calId });
+  }
+  if (_apptLines.length === 0) _apptLines.push({ svcId: '', calId });
+  renderApptServiceLines();
 
   document.getElementById('appt-modal').classList.remove('hidden');
   document.getElementById('appt-modal').style.display = 'flex';
-}
-
-function _buildApptServicesGrid(selected) {
-  const grid = document.getElementById('appt-services-grid');
-  grid.innerHTML = SERVICES.filter(s => isServiceVisibleOnCheckin(s.id)).map(s => {
-    const on = selected.includes(s.id);
-    return `<button type="button" data-sid="${s.id}" onclick="toggleApptService('${s.id}',this)"
-      class="px-2 py-2 rounded-xl border-2 text-xs font-body font-semibold transition-all
-             ${on ? 'border-primary bg-primary/10 text-primary' : 'border-surface-container-high text-on-surface-variant'}">${s.label}</button>`;
-  }).join('');
-}
-
-function toggleApptService(sid, btn) {
-  if (_apptServices.includes(sid)) {
-    _apptServices = _apptServices.filter(s => s !== sid);
-    btn.classList.remove('border-primary','bg-primary/10','text-primary');
-    btn.classList.add('border-surface-container-high','text-on-surface-variant');
-  } else {
-    _apptServices.push(sid);
-    btn.classList.add('border-primary','bg-primary/10','text-primary');
-    btn.classList.remove('border-surface-container-high','text-on-surface-variant');
-  }
 }
 
 function closeApptModal() {
@@ -9647,40 +9868,76 @@ function closeApptModal() {
 }
 
 async function saveAppt() {
-  const name     = document.getElementById('appt-name').value.trim();
-  const phone    = document.getElementById('appt-phone').value.trim();
-  const dateVal  = document.getElementById('appt-date').value;
-  const timeVal  = document.getElementById('appt-time').value;
-  const durMins  = parseInt(document.getElementById('appt-duration').value) || 60;
-  const calId    = document.getElementById('appt-tech').value || document.getElementById('appt-cal-id').value;
-  const notes    = document.getElementById('appt-notes').value.trim();
+  const name    = document.getElementById('appt-name').value.trim();
+  const phone   = document.getElementById('appt-phone').value.trim();
+  const dateVal = document.getElementById('appt-date').value;
+  const timeVal = document.getElementById('appt-time').value;
+  const durMins = parseInt(document.getElementById('appt-duration').value) || 60;
+  const notes   = document.getElementById('appt-notes').value.trim();
 
   if (!name)    { showToast('Enter a customer name'); return; }
   if (!dateVal) { showToast('Select a date'); return; }
-  if (!calId)   { showToast('Select a technician'); return; }
+
+  // Read current line values from DOM
+  document.querySelectorAll('#appt-service-lines [data-line]').forEach((row, i) => {
+    const selects = row.querySelectorAll('select');
+    if (_apptLines[i]) {
+      _apptLines[i].svcId = selects[0]?.value || '';
+      _apptLines[i].calId = selects[1]?.value || '';
+    }
+  });
+
+  // Need at least one line with a tech
+  const linesWithTech = _apptLines.filter(l => l.calId);
+  if (linesWithTech.length === 0) { showToast('Select at least one technician'); return; }
+
+  // Primary calendar = first line's tech
+  const primaryCalId = linesWithTech[0].calId;
 
   const startDt = new Date(`${dateVal}T${timeVal || '09:00'}`);
   const endDt   = new Date(startDt.getTime() + durMins * 60000);
 
-  const svcLabels = _apptServices.map(sid => SERVICES.find(s=>s.id===sid)?.label).filter(Boolean).join(', ');
-  const descParts = [];
-  if (svcLabels) descParts.push(svcLabels);
-  if (phone)     descParts.push(phone);
-  if (notes)     descParts.push(notes);
+  // Build description: "Pedicure (Lyn)\nFill (Lee)\n(323) 555-1234\nnotes"
+  const lineParts = _apptLines
+    .filter(l => l.svcId || l.calId)
+    .map(l => {
+      const svcLabel  = SERVICES.find(s=>s.id===l.svcId)?.label || '';
+      const techName  = _calCalendars.find(c=>c.id===l.calId)?.name || '';
+      if (svcLabel && techName) return `${svcLabel} (${techName})`;
+      if (svcLabel) return svcLabel;
+      if (techName) return `(${techName})`;
+      return '';
+    }).filter(Boolean);
+
+  const descParts = [...lineParts];
+  if (phone) descParts.push(phone);
+  if (notes) descParts.push(notes);
+
+  // Build title: "Name — Pedicure, Fill"
+  const svcTitles = _apptLines.filter(l=>l.svcId).map(l=>SERVICES.find(s=>s.id===l.svcId)?.label).filter(Boolean);
+  const summary   = svcTitles.length > 0 ? `${name} — ${svcTitles.join(', ')}` : name;
 
   const eventBody = {
-    summary:     name,
+    summary,
     description: descParts.join('\n'),
-    start:       { dateTime: startDt.toISOString() },
-    end:         { dateTime: endDt.toISOString()   },
+    start: { dateTime: startDt.toISOString() },
+    end:   { dateTime: endDt.toISOString()   },
   };
 
   try {
     showToast('Saving…');
+    const apptCalId = _apptEditId
+      ? document.getElementById('appt-cal-id').value
+      : primaryCalId;
+
     if (_apptEditId) {
-      await gapi.client.calendar.events.update({ calendarId: calId, eventId: _apptEditId, resource: eventBody });
+      await gapi.client.calendar.events.update({ calendarId: apptCalId, eventId: _apptEditId, resource: eventBody });
     } else {
-      await gapi.client.calendar.events.insert({ calendarId: calId, resource: eventBody });
+      // If multiple techs, create one event per tech calendar
+      const uniqueCals = [...new Set(linesWithTech.map(l=>l.calId))];
+      await Promise.all(uniqueCals.map(cid =>
+        gapi.client.calendar.events.insert({ calendarId: cid, resource: eventBody })
+      ));
     }
     closeApptModal();
     await calLoadAndRender();
@@ -9690,16 +9947,71 @@ async function saveAppt() {
   }
 }
 
-async function deleteAppt() {
-  const calId   = document.getElementById('appt-cal-id').value;
-  const eventId = document.getElementById('appt-event-id').value;
+// ── Calendar column reorder ───────────────────────
+let _calOrder = JSON.parse(localStorage.getItem('gcal_order') || 'null');
+
+function applyCalOrder() {
+  if (!_calOrder || _calOrder.length === 0) return;
+  const ordered = [];
+  _calOrder.forEach(id => {
+    const c = _calCalendars.find(x => x.id === id);
+    if (c) ordered.push(c);
+  });
+  // Append any new calendars not in saved order
+  _calCalendars.forEach(c => { if (!ordered.find(x => x.id === c.id)) ordered.push(c); });
+  _calCalendars = ordered;
+}
+
+function saveCalOrder() {
+  _calOrder = _calCalendars.map(c => c.id);
+  localStorage.setItem('gcal_order', JSON.stringify(_calOrder));
+}
+
+// Drag-to-reorder calendar columns via the selector dropdown
+function renderCalSelectorList() {
+  const list = document.getElementById('cal-selector-list');
+  if (!list || _calCalendars.length === 0) return;
+  list.innerHTML = _calCalendars.map((c, i) => `
+    <div class="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-surface-container cursor-grab select-none"
+         draggable="true" data-cal-idx="${i}"
+         ondragstart="calDragStart(event,${i})"
+         ondragover="calDragOver(event)"
+         ondrop="calDrop(event,${i})">
+      <span class="material-symbols-outlined text-outline-variant" style="font-size:14px">drag_indicator</span>
+      <div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div>
+      <span class="flex-grow text-sm font-body text-on-surface">${c.name}</span>
+      <input type="checkbox" ${!_calHidden.has(c.id) ? 'checked' : ''} onchange="toggleCalCalendar('${c.id}',this.checked)"
+        class="w-4 h-4 accent-primary" onclick="event.stopPropagation()">
+    </div>`).join('');
+  const visCount = _calCalendars.filter(c => !_calHidden.has(c.id)).length;
+  const lbl = document.getElementById('cal-selector-label');
+  if (lbl) lbl.textContent = visCount === _calCalendars.length ? 'Calendars' : `${visCount}/${_calCalendars.length}`;
+}
+
+let _calDragIdx = null;
+function calDragStart(e, i) { _calDragIdx = i; e.dataTransfer.effectAllowed = 'move'; }
+function calDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+function calDrop(e, targetIdx) {
+  e.preventDefault();
+  if (_calDragIdx === null || _calDragIdx === targetIdx) return;
+  const moved = _calCalendars.splice(_calDragIdx, 1)[0];
+  _calCalendars.splice(targetIdx, 0, moved);
+  _calDragIdx = null;
+  saveCalOrder();
+  renderCalSelectorList();
+  calRenderGrid();
+}
+
+async function deleteAppt(calIdParam, eventIdParam) {
+  const calId   = calIdParam   || document.getElementById('appt-cal-id')?.value;
+  const eventId = eventIdParam || document.getElementById('appt-event-id')?.value;
   if (!calId || !eventId) return;
-  if (!confirm('Delete this appointment?')) return;
+  if (!calIdParam && !confirm('Cancel this appointment?')) return; // only confirm if from modal
   try {
     await gapi.client.calendar.events.delete({ calendarId: calId, eventId: eventId });
-    closeApptModal();
+    if (!calIdParam) closeApptModal();
     await calLoadAndRender();
-    showToast('Appointment deleted');
+    showToast('Appointment cancelled');
   } catch(err) {
     showToast('Delete failed: ' + (err.result?.error?.message || 'Unknown error'));
   }
