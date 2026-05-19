@@ -420,7 +420,7 @@ tailwind.config = {
         <span class="sync-dot" id="cal-sync-dot" style="background:#adb3b5"></span>
         <span id="cal-sync-text">Calendar</span>
       </div>
-      <span class="text-[10px] font-body text-outline-variant select-none" title="musedashboard v1.34">v1.34</span>
+      <span class="text-[10px] font-body text-outline-variant select-none" title="musedashboard v1.35">v1.35</span>
       <button onclick="exportAllToSheets()" title="Export to Sheets" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">upload_file</span>
       </button>
@@ -746,13 +746,13 @@ tailwind.config = {
             </button>
             <button onclick="calGoToday()" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors" style="height:32px;padding:0 12px">Today</button>
             <!-- Mini date picker -->
-            <input type="date" id="cal-date-input" style="height:32px;padding:0 8px" class="rounded-xl bg-surface-container border border-surface-container-high text-xs font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer" onchange="calPickDate(this.value)">
+            <input type="date" id="cal-date-input" style="height:32px;padding:0 8px;box-sizing:border-box;line-height:30px;appearance:none;-webkit-appearance:none" class="rounded-xl bg-surface-container border border-surface-container-high text-xs font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer" onchange="calPickDate(this.value)">
             <button onclick="calNavDay(1)" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors" style="width:32px;height:32px;flex-shrink:0">
               <span class="material-symbols-outlined" style="font-size:18px">chevron_right</span>
             </button>
             <!-- Calendar selector -->
             <div class="relative">
-              <button onclick="toggleCalSelector()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors">
+              <button onclick="toggleCalSelector()" class="flex items-center gap-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors" style="height:32px;padding:0 12px">
                 <span class="material-symbols-outlined" style="font-size:16px">tune</span>
                 <span id="cal-selector-label">Calendars</span>
               </button>
@@ -777,15 +777,39 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Calendar grid container -->
-        <div id="cal-container" class="relative overflow-hidden rounded-xl border border-surface-container-high" style="height:calc(100vh - 240px)" onwheel="calHandleWheel(event)" ontouchstart="calTouchStart(event)" ontouchmove="calTouchMove(event)">
-          <!-- Loading / auth state -->
-          <div id="cal-loading" class="flex flex-col items-center justify-center h-64 text-on-surface-variant">
-            <span class="material-symbols-outlined text-5xl mb-3 opacity-30">calendar_month</span>
-            <p class="font-body text-sm" id="cal-status-msg">Connecting to Google Calendar…</p>
+        <!-- Calendar + Tasks side-by-side layout -->
+        <div class="flex gap-3" style="height:calc(100vh - 200px)">
+          <!-- Calendar grid -->
+          <div id="cal-container" class="flex-1 relative overflow-hidden rounded-xl border border-surface-container-high flex flex-col" onwheel="calHandleWheel(event)" ontouchstart="calTouchStart(event)" ontouchmove="calTouchMove(event)">
+            <!-- Loading / auth state -->
+            <div id="cal-loading" class="flex flex-col items-center justify-center h-64 text-on-surface-variant">
+              <span class="material-symbols-outlined text-5xl mb-3 opacity-30">calendar_month</span>
+              <p class="font-body text-sm" id="cal-status-msg">Connecting to Google Calendar…</p>
+            </div>
+            <!-- Side-by-side grid (built by JS) -->
+            <div id="cal-grid" class="hidden flex-1 min-h-0"></div>
           </div>
-          <!-- Side-by-side grid (built by JS) -->
-          <div id="cal-grid" class="hidden"></div>
+          <!-- Tasks panel -->
+          <div id="cal-tasks-panel" class="hidden flex-col rounded-xl border border-surface-container-high bg-surface-container-lowest overflow-hidden" style="width:280px;flex-shrink:0">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-surface-container-high">
+              <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary" style="font-size:18px">task_alt</span>
+                <span class="font-headline font-bold text-on-surface text-sm">My Tasks</span>
+              </div>
+              <button onclick="showAddTaskModal()" class="w-7 h-7 rounded-full bg-primary flex items-center justify-center hover:bg-primary-dim transition-colors" title="Add task">
+                <span class="material-symbols-outlined text-on-primary" style="font-size:16px">add</span>
+              </button>
+            </div>
+            <!-- Task list selector -->
+            <div class="px-3 py-2 border-b border-surface-container-high">
+              <select id="tasks-list-select" onchange="loadTasksForList(this.value)"
+                class="w-full bg-surface-container rounded-lg px-2 py-1.5 text-xs font-body text-on-surface focus:outline-none focus:border-primary border border-surface-container-high">
+                <option value="">— Loading lists… —</option>
+              </select>
+            </div>
+            <!-- Tasks list -->
+            <div id="tasks-list" class="flex-1 overflow-y-auto no-scroll p-2 space-y-1"></div>
+          </div>
         </div>
       </div>
 
@@ -1967,7 +1991,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAJYBBoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAEI/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//Z";
-const APP_VERSION  = 'v1.34';
+const APP_VERSION  = 'v1.35';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 const SHEETS_ID = "1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo";
@@ -6341,6 +6365,7 @@ async function pushQueueToSheets() {
         action: 'saveQueue',
         device: DEVICE_ID,
         clientDate,
+        turnsOrder: turnsTechOrder, // piggyback turns order on every queue push
         queue: queue.map(e => ({
           ...e,
           checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
@@ -6373,9 +6398,10 @@ async function loadQueueFromSheets() {
     const data = await res.json();
     if (data.success) {
       return {
-        queue:     Array.isArray(data.queue) ? data.queue.map(e => ({ ...e, checkinTime: new Date(e.checkinTime) })) : [],
-        updatedAt: data.updatedAt,
-        device:    data.device,
+        queue:      Array.isArray(data.queue) ? data.queue.map(e => ({ ...e, checkinTime: new Date(e.checkinTime) })) : [],
+        updatedAt:  data.updatedAt,
+        device:     data.device,
+        turnsOrder: data.turnsOrder || null,
       };
     }
   } catch(e) { console.warn('Sheets load failed:', e); }
@@ -6423,6 +6449,29 @@ async function pollSheets() {
         setSheetsIndicator('ok');
       });
     }
+
+    // Also check turns order — it piggybacks on the queue payload for instant sync
+    if (result.turnsOrder && Array.isArray(result.turnsOrder)) {
+      const remote = JSON.stringify(result.turnsOrder);
+      const local  = JSON.stringify(turnsTechOrder);
+      if (remote !== local) {
+        turnsTechOrder = result.turnsOrder;
+        localStorage.setItem('muse_turns_order', remote);
+        requestAnimationFrame(() => renderTurns());
+        console.log('[Sync] Turns order updated from Sheets');
+      }
+    }
+    // Also check turns order on every poll — it's time-sensitive (techs added for the day)
+    if (result.config?.muse_turns_order) {
+      const remote = JSON.stringify(result.config.muse_turns_order);
+      const local  = JSON.stringify(turnsTechOrder);
+      if (remote !== local) {
+        turnsTechOrder = result.config.muse_turns_order;
+        localStorage.setItem('muse_turns_order', remote);
+        requestAnimationFrame(() => renderTurns());
+        console.log('[Sync] Turns order updated from Sheets');
+      }
+    }
   } catch(e) {
     console.warn('[Sync] Poll failed:', e);
   }
@@ -6459,7 +6508,7 @@ async function forceSyncNow() {
 }
 
 let _configPollTimer = null;
-const CONFIG_POLL_INTERVAL = 30000; // 30 seconds for config/photos (less frequent than queue)
+const CONFIG_POLL_INTERVAL = 15000; // 15 seconds — frequent enough for turns order sync
 
 function startSheetsPolling() {
   if (_pollTimer) return;
@@ -9088,8 +9137,9 @@ function updateHistoricalButtonVisibility() {
 
 // ── Google Calendar Integration ───────────────────
 const GCAL_CLIENT_ID = '174518644579-5vgt7vvllm2ekpk0gb8l4sa4f3va9r9l.apps.googleusercontent.com';
-const GCAL_SCOPES    = 'https://www.googleapis.com/auth/calendar';
+const GCAL_SCOPES    = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks';
 const GCAL_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
+const GTASK_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest';
 
 let _calGapiLoaded  = false;
 let _calGisLoaded   = false;
@@ -9108,7 +9158,7 @@ function loadGCalScripts() {
   s1.src = 'https://apis.google.com/js/api.js';
   s1.onload = () => {
     gapi.load('client', async () => {
-      await gapi.client.init({ discoveryDocs: [GCAL_DISCOVERY] });
+      await gapi.client.init({ discoveryDocs: [GCAL_DISCOVERY, GTASK_DISCOVERY] });
       _calGapiLoaded = true;
       _calTryReady();
     });
@@ -9133,6 +9183,7 @@ function loadGCalScripts() {
         calSetStatus('');
         startCalSync();
         calLoadAndRender();
+        loadTaskLists();
       },
     });
     _calGisLoaded = true;
@@ -9154,6 +9205,7 @@ function _calTryReady() {
         calSetStatus('');
         startCalSync();
         calLoadAndRender();
+        loadTaskLists();
         return;
       }
     } catch(e) {}
@@ -9168,6 +9220,7 @@ function _calTryReady() {
       calSetStatus('');
       startCalSync();
       calLoadAndRender();
+      loadTaskLists();
     } else {
       // No valid token anywhere — show sign-in
       document.getElementById('cal-signin-btn')?.classList.remove('hidden');
@@ -9421,10 +9474,13 @@ function calRenderGrid() {
         const g=SVC_GROUPS.find(x=>x.ids.some(id=>s.id.toLowerCase().includes(id)));
         return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${g?.color||'#455a64'};margin-right:2px;flex-shrink:0"></span>`;
       }).join('');
-      const safeId    = ev.id.replace(/'/g,"\'");
-      const safeTitle = (title||'Event').replace(/\\/g,'\\\\').replace(/'/g,"\'").replace(/"/g,'&quot;');
-      const safeDesc  = desc.replace(/\\/g,'\\\\').replace(/'/g,"\'").replace(/"/g,'&quot;');
-      body += `<div onclick="calEventClick(event,'${cal.id}','${safeId}','${safeTitle}','${safeDesc}',${isAppt})"
+      // Escape all chars unsafe in single-quoted onclick: backslash, quote, newline
+      const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,' ').replace(/\r/g,'');
+      const safeId    = _e(ev.id);
+      const safeCalId = _e(cal.id);
+      const safeTitle = _e(title||'Event');
+      const safeDesc  = _e(desc);
+      body += `<div onclick="calEventClick(event,'${safeCalId}','${safeId}','${safeTitle}','${safeDesc}',${isAppt})"
         style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,26)}px;
                background:${bg};border-left:3px solid ${border};border-radius:6px;
                padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">
@@ -9439,7 +9495,7 @@ function calRenderGrid() {
   });
   body += '</div>';
 
-  grid.innerHTML = `<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">${hdr}${body}</div>`;
+  grid.innerHTML = `<div style="display:flex;flex-direction:column;height:100%;min-height:0">${hdr}${body}</div>`;
 
   // Scroll to 8am
   const gb = document.getElementById('cal-grid-body');
@@ -9467,6 +9523,103 @@ function renderServicesEmbed() {
     <button onclick="showDashPanel('services')" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
       <span class="material-symbols-outlined" style="font-size:16px">open_in_full</span> Open Full Services Manager
     </button>`;
+}
+
+// ── Google Tasks ──────────────────────────────────
+let _taskLists     = [];
+let _currentListId = null;
+
+async function loadTaskLists() {
+  try {
+    const res = await gapi.client.tasks.tasklists.list({ maxResults: 20 });
+    _taskLists = res.result.items || [];
+    const sel = document.getElementById('tasks-list-select');
+    if (!sel) return;
+    sel.innerHTML = _taskLists.map(l => `<option value="${l.id}">${l.title}</option>`).join('');
+    if (_taskLists.length > 0) {
+      _currentListId = _taskLists[0].id;
+      loadTasksForList(_currentListId);
+    }
+    const panel = document.getElementById('cal-tasks-panel');
+    if (panel) { panel.classList.remove('hidden'); panel.style.display = 'flex'; }
+  } catch(e) { console.warn('[Tasks] loadTaskLists failed:', e); }
+}
+
+async function loadTasksForList(listId) {
+  if (!listId) return;
+  _currentListId = listId;
+  const container = document.getElementById('tasks-list');
+  if (!container) return;
+  container.innerHTML = '<div class="text-xs text-on-surface-variant text-center py-4">Loading…</div>';
+  try {
+    const res = await gapi.client.tasks.tasks.list({
+      tasklist: listId, showCompleted: true, showHidden: false, maxResults: 100,
+    });
+    const tasks = (res.result.items || []).sort((a,b) => {
+      const ad = a.status === 'completed' ? 1 : 0;
+      const bd = b.status === 'completed' ? 1 : 0;
+      return ad - bd;
+    });
+    renderTasks(tasks);
+  } catch(e) {
+    container.innerHTML = '<div class="text-xs text-error text-center py-4">Failed to load tasks</div>';
+  }
+}
+
+function renderTasks(tasks) {
+  const container = document.getElementById('tasks-list');
+  if (!container) return;
+  if (!tasks.length) {
+    container.innerHTML = '<div class="text-xs text-on-surface-variant text-center py-6 opacity-60">No tasks — all caught up!</div>';
+    return;
+  }
+  container.innerHTML = tasks.map(t => {
+    const done    = t.status === 'completed';
+    const due     = t.due ? new Date(t.due) : null;
+    const dueStr  = due ? due.toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+    const overdue = due && due < new Date() && !done;
+    const lid = _currentListId;
+    return `<div class="flex items-start gap-2 px-2 py-2 rounded-xl hover:bg-surface-container transition-colors group">
+      <button onclick="toggleTask('${lid}','${t.id}','${done?'needsAction':'completed'}')"
+        class="w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors mt-0.5
+               ${done?'bg-primary border-primary':'border-outline-variant hover:border-primary'}">
+        ${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:11px;font-variation-settings:\'FILL\' 1">check</span>':''}
+      </button>
+      <div class="flex-1 min-w-0">
+        <div class="text-xs font-body leading-tight ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-semibold'}">${t.title||'(no title)'}</div>
+        ${t.notes?`<div class="text-[10px] text-on-surface-variant mt-0.5 truncate">${t.notes}</div>`:''}
+        ${dueStr?`<div class="text-[10px] mt-0.5 font-semibold ${overdue?'text-error':'text-on-surface-variant'}">${overdue?'⚠ ':''}${dueStr}</div>`:''}
+      </div>
+      <button onclick="deleteTask('${lid}','${t.id}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all">
+        <span class="material-symbols-outlined" style="font-size:14px">close</span>
+      </button>
+    </div>`;
+  }).join('');
+}
+
+async function toggleTask(listId, taskId, newStatus) {
+  try {
+    await gapi.client.tasks.tasks.patch({
+      tasklist: listId, task: taskId,
+      resource: { status: newStatus, completed: newStatus==='completed' ? new Date().toISOString() : null },
+    });
+    loadTasksForList(listId);
+  } catch(e) { showToast('Could not update task'); }
+}
+
+async function deleteTask(listId, taskId) {
+  try {
+    await gapi.client.tasks.tasks.delete({ tasklist: listId, task: taskId });
+    loadTasksForList(listId);
+  } catch(e) { showToast('Could not delete task'); }
+}
+
+function showAddTaskModal() {
+  const title = prompt('New task title:');
+  if (!title?.trim() || !_currentListId) return;
+  gapi.client.tasks.tasks.insert({ tasklist: _currentListId, resource: { title: title.trim() } })
+    .then(() => loadTasksForList(_currentListId))
+    .catch(() => showToast('Could not add task'));
 }
 
 // ── Silent calendar sync ─────────────────────────
