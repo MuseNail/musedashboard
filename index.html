@@ -375,14 +375,12 @@ tailwind.config = {
 ═══════════════════════════════════════════════ -->
 <div id="screen-desk" class="screen flex-col bg-surface min-h-screen">
 
-  <!-- Top bar -->
-  <header class="w-full px-5 py-1.5 bg-surface-container-lowest border-b border-surface-container-high flex items-center gap-3 sticky top-0 z-10 overflow-x-auto no-scroll">
-    <div class="flex items-center gap-4">
-      <!-- Logo -->
-      <img id="logo-desk" src="" alt="Muse" class="h-[56px] w-auto object-contain" style="filter: none;background:#fff;border-radius:4px;" onerror="this.style.display='none'">
-    </div>
-    <!-- Top nav tabs -->
-    <nav class="flex items-center gap-1 overflow-x-auto no-scroll flex-shrink min-w-0">
+  <!-- Top bar: logo left, nav centered, sync+user right -->
+  <header class="w-full bg-surface-container-lowest border-b border-surface-container-high sticky top-0 z-10 flex items-center gap-2" style="height:52px;padding:0 12px;min-width:0">
+    <!-- Logo -->
+    <img id="logo-desk" src="" alt="Muse" class="h-[40px] w-auto object-contain flex-shrink-0" style="background:#fff;border-radius:4px;" onerror="this.style.display='none'">
+    <!-- Nav — centered, takes remaining space -->
+    <nav class="flex-1 flex items-center justify-center gap-1 overflow-x-auto no-scroll min-w-0" style="min-width:0">
       <button class="dash-tab" id="nav-turns" onclick="showDashPanel('turns')">
         <span class="material-symbols-outlined" style="font-size:18px">swap_vert</span> Turns
       </button>
@@ -405,36 +403,34 @@ tailwind.config = {
         <span class="material-symbols-outlined" style="font-size:18px">tune</span> Settings
       </button>
     </nav>
-    <!-- Action buttons -->
-    <div class="flex items-center gap-2">
-      <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant" style="height:32px;min-width:120px">
+    <!-- Right side: sync pills + actions — locked right -->
+    <div class="flex items-center gap-1.5 flex-shrink-0">
+      <div class="flex items-center gap-2 px-3 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:110px"
+        onclick="syncSquare && syncSquare()" title="Click to sync Square data">
         <span class="sync-dot ok" id="sync-dot"></span>
         <span id="sync-label">Square synced</span>
       </div>
-      <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:80px"
-        onclick="forceSyncNow()"
-        title="Tap to sync queue">
+      <div class="flex items-center gap-2 px-3 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:72px"
+        onclick="forceSyncNow()" title="Tap to sync queue">
         <span class="sync-dot" id="sheets-sync-dot" style="background:#adb3b5"></span>
         <span id="sheets-sync-text">Sheets</span>
       </div>
-      <!-- Calendar sync bubble -->
-      <div id="cal-sync-pill" class="hidden items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:80px"
+      <div id="cal-sync-pill" class="hidden items-center gap-2 px-3 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:72px"
         onclick="calForceSync()" title="Tap to sync calendar">
         <span class="sync-dot" id="cal-sync-dot" style="background:#adb3b5"></span>
         <span id="cal-sync-text">Calendar</span>
       </div>
-      <span class="text-[10px] font-body text-outline-variant px-2 select-none" title="musedashboard v1.32">v1.32</span>
-      <button onclick="exportAllToSheets()" title="Export to Sheets" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container transition-colors">
-        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">upload_file</span>
+      <span class="text-[10px] font-body text-outline-variant select-none" title="musedashboard v1.34">v1.34</span>
+      <button onclick="exportAllToSheets()" title="Export to Sheets" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
+        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">upload_file</span>
       </button>
-      <button onclick="goTo('screen-welcome')" title="Customer Screen" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container transition-colors">
-        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">tablet</span>
+      <button onclick="goTo('screen-welcome')" title="Customer Screen" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
+        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">tablet</span>
       </button>
-      <!-- Logged-in user -->
       <button onclick="showWarnModal('Log out?','You will need to re-enter your PIN.',() => { activeUser=null; goTo(\'screen-dashboard-login\'); })" id="logged-in-user-btn"
-        class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container hover:bg-surface-container-high transition-colors">
-        <div id="logged-in-avatar" class="w-7 h-7 rounded-full bg-primary flex items-center justify-center text-on-primary text-xs font-headline font-bold flex-shrink-0">?</div>
-        <span id="logged-in-name" class="text-xs font-body font-semibold text-on-surface hidden sm:block">Manager</span>
+        class="flex items-center gap-2 px-2.5 rounded-full bg-surface-container hover:bg-surface-container-high transition-colors" style="height:32px">
+        <div id="logged-in-avatar" class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary text-xs font-headline font-bold flex-shrink-0">?</div>
+        <span id="logged-in-name" class="text-xs font-body font-semibold text-on-surface">Manager</span>
       </button>
     </div>
   </header>
@@ -782,7 +778,7 @@ tailwind.config = {
         </div>
 
         <!-- Calendar grid container -->
-        <div id="cal-container" class="relative overflow-auto rounded-xl border border-surface-container-high" style="height:calc(100vh - 240px)">
+        <div id="cal-container" class="relative overflow-hidden rounded-xl border border-surface-container-high" style="height:calc(100vh - 240px)" onwheel="calHandleWheel(event)" ontouchstart="calTouchStart(event)" ontouchmove="calTouchMove(event)">
           <!-- Loading / auth state -->
           <div id="cal-loading" class="flex flex-col items-center justify-center h-64 text-on-surface-variant">
             <span class="material-symbols-outlined text-5xl mb-3 opacity-30">calendar_month</span>
@@ -1971,7 +1967,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAJYBBoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAEI/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//Z";
-const APP_VERSION  = 'v1.32';
+const APP_VERSION  = 'v1.34';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 const SHEETS_ID = "1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo";
@@ -7809,7 +7805,7 @@ function renderAssignRows(entry) {
           </div>
           <div>
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
-            <input type="text" inputmode="decimal" readonly
+            <input type="text" inputmode="decimal"
               placeholder="${svc.baseCost != null ? Number(svc.baseCost).toFixed(2) : '0.00'}"
               value="${assignment.cost != null && assignment.cost !== 0 ? assignment.cost : ''}"
               class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
@@ -8188,7 +8184,7 @@ function renderGroupAssignContent() {
           </div>
           <div>
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
-            <input type="text" inputmode="decimal" readonly
+            <input type="text" inputmode="decimal"
               placeholder="${svc.baseCost != null ? Number(svc.baseCost).toFixed(2) : '0.00'}"
               value="${assignment.cost != null && assignment.cost !== 0 ? assignment.cost : ''}"
               class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
@@ -8747,64 +8743,84 @@ async function squarePullCustomers() {
 }
 
 async function squareUpsertCustomer(entry) {
-  if (!squareConfig || !entry.phone) return;
+  // Need at minimum a name to create a Square customer
+  if (!entry.name || entry.name.trim() === '-') return;
+  // Need Square to be reachable — SQUARE_PROXY is always available even without squareConfig
   try {
-    const rawPhone = entry.phone.replace(/\D/g, '');
+    const rawPhone = (entry.phone || '').replace(/\D/g, '');
 
-    // Check local cache first (already loaded for autocomplete)
+    // Check local cache first
     let existingId = null;
-    if (squareCustomers.length > 0) {
+    if (rawPhone && squareCustomers.length > 0) {
       const cached = squareCustomers.find(c => {
-        const cp = c.phone.replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+        const cp = (c.phone||'').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
         return cp === rawPhone || cp === rawPhone.replace(/^1/, '');
       });
       if (cached) existingId = cached.id;
     }
 
-    // If not in cache, search Square
-    if (!existingId) {
-      const searchRes = await fetch(`${SQUARE_PROXY}/v2/customers/search`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: { filter: { phone_number: { exact: entry.phone } } }
-        })
-      });
-      if (searchRes.ok) {
-        const searchData = await searchRes.json();
-        existingId = searchData?.customers?.[0]?.id || null;
-      }
+    // If not in cache and we have a phone, search Square
+    if (!existingId && rawPhone) {
+      try {
+        const searchRes = await fetch(`${SQUARE_PROXY}/v2/customers/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: { filter: { phone_number: { exact: entry.phone } } } })
+        });
+        if (searchRes.ok) {
+          const sd = await searchRes.json();
+          existingId = sd?.customers?.[0]?.id || null;
+        }
+      } catch(e) { /* search failed — will create new */ }
     }
 
-    const nameParts = entry.name.split(' ');
-    const svcLabels = entry.services.map(sid => SERVICES.find(s => s.id === sid)?.label || sid).join(', ');
+    const nameParts = entry.name.trim().split(/\s+/);
+    const svcLabels = (entry.services || []).map(sid => SERVICES.find(s => s.id === sid)?.label || sid).join(', ');
     const payload = {
-      given_name: nameParts[0] || '',
-      family_name: nameParts.slice(1).join(' ') || '',
-      phone_number: entry.phone,
-      note: `Last check-in: ${new Date().toLocaleDateString()} | Services: ${svcLabels}`
+      given_name:   nameParts[0] || '',
+      family_name:  nameParts.slice(1).join(' ') || '',
+      note: `Last check-in: ${new Date().toLocaleDateString()}${svcLabels ? ' | Services: ' + svcLabels : ''}`,
     };
+    if (rawPhone) payload.phone_number = entry.phone;
 
     if (existingId) {
-      // Update existing — never creates a duplicate
-      await fetch(`${SQUARE_PROXY}/v2/customers/${existingId}`, {
+      // Update existing
+      const res = await fetch(`${SQUARE_PROXY}/v2/customers/${existingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      if (res.ok) {
+        const data = await res.json();
+        const c = data.customer;
+        if (c && !squareCustomers.find(x => x.id === c.id)) {
+          squareCustomers.push({ id: c.id, given_name: c.given_name||'', family_name: c.family_name||'', phone: c.phone_number||'', display: entry.name });
+        }
+      }
     } else {
-      // Create new with idempotency key based on phone so repeated calls don't duplicate
-      await fetch(`${SQUARE_PROXY}/v2/customers`, {
+      // Create new — idempotency key prevents duplicates on retry
+      const iKey = rawPhone
+        ? `muse-customer-${rawPhone}`
+        : `muse-customer-${nameParts[0].toLowerCase()}-${Date.now()}`;
+      const res = await fetch(`${SQUARE_PROXY}/v2/customers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          idempotency_key: `muse-customer-${rawPhone}`,
-          ...payload
-        })
+        body: JSON.stringify({ idempotency_key: iKey, ...payload })
       });
+      if (res.ok) {
+        const data = await res.json();
+        const c = data.customer;
+        if (c) {
+          // Add to local cache so autocomplete shows them immediately
+          squareCustomers.push({ id: c.id, given_name: c.given_name||'', family_name: c.family_name||'', phone: c.phone_number||'', display: entry.name });
+          customerDirectory.push({ squareId: c.id, firstName: c.given_name||'', lastName: c.family_name||'', phone: c.phone_number||'', email: '', note: c.note||'' });
+          localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
+          console.log('[Square] Created customer:', entry.name);
+        }
+      }
     }
   } catch(e) {
-    console.warn('Square upsert failed:', e);
+    console.warn('[Square] Customer upsert failed:', e);
   }
 }
 
@@ -9284,204 +9300,151 @@ async function calLoadAndRender(silent) {
 function calRenderGrid() {
   const grid = document.getElementById('cal-grid');
   if (!grid) return;
-
-  // Only show visible calendars
   const visible = _calCalendars.filter(c => !_calHidden.has(c.id));
-
-  if (_calCalendars.length === 0) {
-    calSetStatus('No technician calendars found. Create one calendar per technician in Google Calendar (info@musenailandspa.com).');
-    return;
-  }
+  if (_calCalendars.length === 0) { calSetStatus('No technician calendars found.'); return; }
   if (visible.length === 0) {
-    calSetStatus('All calendars are hidden. Use the Calendars filter to show some.');
+    calSetStatus('All calendars hidden. Use Calendars filter.');
     document.getElementById('cal-loading').classList.remove('hidden');
-    grid.classList.add('hidden');
-    return;
+    grid.classList.add('hidden'); return;
   }
 
   calSetStatus('');
   document.getElementById('cal-loading').classList.add('hidden');
   grid.classList.remove('hidden');
 
-  // Time grid constants
-  const START_HOUR = 6;
-  const END_HOUR   = 22;
-  const SLOT_MINS  = 30;
+  const START_HOUR = 6, END_HOUR = 22;
+  const SLOT_MINS  = _calSlotMins || 30;
   const SLOTS      = (END_HOUR - START_HOUR) * (60 / SLOT_MINS);
-  const SLOT_H     = 52; // px per 30-min slot
-  const HEADER_H   = 52;
+  const SLOT_H     = _calSlotH   || 52;
+  const HEADER_H   = 48;
   const TIME_W     = 64;
-  const COL_W      = Math.max(170, Math.floor((window.innerWidth - TIME_W - 80) / visible.length));
+  const COL_W      = Math.max(160, Math.floor((window.innerWidth - TIME_W - 80) / visible.length));
 
-  // Current time indicator
-  const now = new Date();
+  const now     = new Date();
   const isToday = now.toDateString() === _calDate.toDateString();
   const nowMin  = now.getHours() * 60 + now.getMinutes();
-  const nowTop  = ((nowMin - START_HOUR * 60) / SLOT_MINS) * SLOT_H + HEADER_H;
 
-  let html = `<div style="display:flex;min-width:${TIME_W + COL_W * visible.length}px;position:relative;background:var(--md-surface-container-lowest)">`;
+  // ── Sticky header row (outside scroll) ──
+  let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;border-bottom:2px solid var(--md-outline-variant);background:var(--md-surface-container-lowest)">`;
+  hdr += `<div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;border-right:2px solid var(--md-outline-variant)"></div>`;
+  visible.forEach((cal, i) => {
+    const isLast = i === visible.length - 1;
+    hdr += `<div style="width:${COL_W}px;flex-shrink:0;height:${HEADER_H}px;background:${cal.color}18;
+                         border-bottom:3px solid ${cal.color};border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'};
+                         display:flex;align-items:center;justify-content:center;gap:5px;padding:0 8px">
+      <div style="width:10px;height:10px;border-radius:50%;background:${cal.color};flex-shrink:0"></div>
+      <span style="font-size:13px;font-family:var(--font-headline);font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cal.name}</span>
+    </div>`;
+  });
+  hdr += `</div>`;
 
-  // ── Time column ───────────────────────────────────
-  html += `<div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)">`;
-  html += `<div style="height:${HEADER_H}px;border-bottom:2px solid var(--md-outline-variant);position:sticky;top:0;background:var(--md-surface-container-lowest);z-index:4"></div>`;
+  // ── Scrollable body ──
+  let body = `<div id="cal-grid-body" style="display:flex;flex:1;overflow:auto;min-width:${TIME_W + COL_W * visible.length}px">`;
+
+  // Time column
+  body += `<div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)">`;
   for (let s = 0; s < SLOTS; s++) {
-    const totalMins = START_HOUR * 60 + s * SLOT_MINS;
-    const h = Math.floor(totalMins / 60);
-    const m = totalMins % 60;
+    const h = Math.floor((START_HOUR * 60 + s * SLOT_MINS) / 60);
+    const m = (START_HOUR * 60 + s * SLOT_MINS) % 60;
     const isHour = m === 0;
-    // Show label for every hour
-    const label = isHour ? `${h > 12 ? h-12 : (h === 0 ? 12 : h)} ${h >= 12 ? 'PM' : 'AM'}` : '';
-    html += `<div style="height:${SLOT_H}px;display:flex;align-items:${isHour ? 'flex-start' : 'flex-start'};
-                          padding:${isHour ? '3px' : '1px'} 8px 0;
-                          border-top:${isHour ? '2px solid rgba(0,0,0,0.15)' : '1px solid rgba(0,0,0,0.07)'}">
-      ${label ? `<span style="font-size:11px;font-family:var(--font-body);font-weight:${isHour ? '600' : '400'};color:var(--md-on-surface-variant);white-space:nowrap;margin-top:-7px">${label}</span>` : ''}
+    const label = isHour ? `${h>12?h-12:(h===0?12:h)} ${h>=12?'PM':'AM'}` : (SLOT_MINS<=15&&m===30?`${h>12?h-12:(h===0?12:h)}:30`:'');
+    body += `<div style="height:${SLOT_H}px;display:flex;align-items:flex-start;padding:${isHour?'3px':'1px'} 8px 0;
+                          border-top:${isHour?'1.5px solid rgba(0,0,0,0.15)':'1px solid rgba(0,0,0,0.06)'}">
+      ${label?`<span style="font-size:10px;font-family:var(--font-body);font-weight:${isHour?'600':'400'};color:var(--md-on-surface-variant);white-space:nowrap;margin-top:-6px">${label}</span>`:''}
     </div>`;
   }
-  html += '</div>';
+  body += '</div>';
 
-  // ── Tech columns ──────────────────────────────────
+  // Tech columns
   visible.forEach((cal, colIdx) => {
     const events = _calEvents[cal.id] || [];
     const isLast = colIdx === visible.length - 1;
+    body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'}">`;
+    body += `<div style="position:relative;height:${SLOTS*SLOT_H}px">`;
 
-    html += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;
-                          border-right:${isLast ? 'none' : '2px solid rgba(0,0,0,0.12)'};
-                          overflow:hidden">`;
-
-    // Column header — colored bottom border matching cal color
-    html += `<div style="height:${HEADER_H}px;position:sticky;top:0;z-index:10;
-                          background:${cal.color}18;
-                          display:flex;align-items:center;justify-content:center;
-                          border-bottom:3px solid ${cal.color};padding:0 8px;gap:6px">
-      <div style="width:10px;height:10px;border-radius:50%;background:${cal.color};flex-shrink:0"></div>
-      <span style="font-size:13px;font-family:var(--font-headline);font-weight:700;color:var(--md-on-surface);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cal.name}</span>
-    </div>`;
-
-    // Slot background grid
-    html += `<div style="position:relative;height:${SLOTS * SLOT_H}px">`;
+    // Slot lines
     for (let s = 0; s < SLOTS; s++) {
-      const isHour = s % 2 === 0;
-      html += `<div style="position:absolute;left:0;right:0;top:${s * SLOT_H}px;height:${SLOT_H}px;
-                            border-top:${isHour ? '1.5px solid rgba(0,0,0,0.12)' : '1px solid rgba(0,0,0,0.05)'};
-                            cursor:pointer"
-        onclick="calSlotClick('${cal.id}',${START_HOUR + Math.floor(s/2)},${(s%2)*30})"></div>`;
+      const isHour = s % (60/SLOT_MINS) === 0;
+      const h = START_HOUR + Math.floor(s * SLOT_MINS / 60);
+      const m = (s * SLOT_MINS) % 60;
+      body += `<div style="position:absolute;left:0;right:0;top:${s*SLOT_H}px;height:${SLOT_H}px;
+                            border-top:${isHour?'1.5px solid rgba(0,0,0,0.12)':'1px solid rgba(0,0,0,0.05)'};cursor:pointer"
+        onclick="calSlotClick('${cal.id}',${h},${m})"></div>`;
     }
 
-    // Current time line — red dashed, drawn in every column at same position
+    // Current time line
     if (isToday) {
-      const lineTop = ((nowMin - START_HOUR * 60) / SLOT_MINS) * SLOT_H;
-      if (lineTop >= 0 && lineTop <= SLOTS * SLOT_H) {
-        const isDotCol = colIdx === 0; // show dot only in first column
-        html += `<div style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;
-                              border-top:2px dashed #e53935;z-index:5;pointer-events:none">
-          ${isDotCol ? `<div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>` : ''}
+      const lineTop = ((nowMin - START_HOUR*60) / SLOT_MINS) * SLOT_H;
+      if (lineTop >= 0 && lineTop <= SLOTS*SLOT_H) {
+        body += `<div style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;border-top:2px dashed #e53935;z-index:5;pointer-events:none">
+          ${colIdx===0?`<div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>`:''}
         </div>`;
       }
     }
 
     // Events
+    const SVC_GROUPS = [
+      {ids:['fullset','fill','dip'],color:'#7b1fa2'},
+      {ids:['pedicure','kidpedicure'],color:'#0277bd'},
+      {ids:['manicure','polishchange','kidmani'],color:'#00695c'},
+      {ids:['wax'],color:'#e65100'},
+    ];
     events.forEach(ev => {
       if (!ev.start) return;
-      const startDt  = new Date(ev.start.dateTime || ev.start.date);
-      const endDt    = new Date(ev.end?.dateTime   || ev.end?.date   || startDt.getTime() + 3600000);
-      const startMin = startDt.getHours() * 60 + startDt.getMinutes();
-      const endMin   = endDt.getHours()   * 60 + endDt.getMinutes();
-      const topMin   = startMin - START_HOUR * 60;
-      const durMin   = Math.max(endMin - startMin, 15);
-      if (topMin < 0 || topMin >= (END_HOUR - START_HOUR) * 60) return;
-
-      const top     = (topMin  / SLOT_MINS) * SLOT_H;
-      const ht      = (durMin  / SLOT_MINS) * SLOT_H;
-      const timeStr = startDt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      const title   = ev.summary || '';
-      const desc    = ev.description || '';
-      const safeId  = ev.id.replace(/'/g,"\\'");
-
-      // ── Determine if this is a customer appointment or an existing calendar event ──
-      // Heuristic: appointment events have customer name format + service keywords or phone
-      const hasPhone   = /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(desc);
-      const knownSvcs  = SERVICES.some(s => title.toLowerCase().includes(s.label.toLowerCase()) || desc.toLowerCase().includes(s.label.toLowerCase()));
-      const isAppt     = hasPhone || knownSvcs || ev._isAppointment;
-      const isPast     = startDt < now;
-
-      // ── Match to queue ──
-      const firstName   = title.split(/[\s—–-]/)[0].toLowerCase();
-      const queueMatch  = queue.find(q => q.name && q.name.toLowerCase().startsWith(firstName) && firstName.length > 1);
-      const qStatus     = queueMatch?.status || null;
-
-      // ── Status-based colors ──
-      let bg, border, textColor = '#1a1a1a', statusLabel = '';
-      if (!isAppt) {
-        // Existing non-appointment event — neutral gray
-        bg = '#eceff1'; border = '#78909c'; textColor = '#37474f';
-        statusLabel = '';
-      } else if (qStatus === 'done') {
-        bg = '#f3f4f6'; border = '#9ca3af'; textColor = '#6b7280';
-        statusLabel = '✓ Done';
-      } else if (qStatus === 'inservice') {
-        bg = '#dcfce7'; border = '#16a34a'; textColor = '#14532d';
-        statusLabel = '● In Service';
-      } else if (qStatus === 'waiting') {
-        bg = '#dbeafe'; border = '#2563eb'; textColor = '#1e3a8a';
-        statusLabel = '● Checked In';
-      } else if (isPast) {
-        bg = '#fff7ed'; border = '#ea580c'; textColor = '#7c2d12';
-        statusLabel = '⚠ Not Checked In';
-      } else {
-        bg = '#eff6ff'; border = '#3b82f6'; textColor = '#1e3a8a';
-        statusLabel = '';
-      }
-
-      // ── Service color chips ──
-      const SVC_GROUPS = [
-        { ids: ['fullset','fill','dip'],             color: '#7b1fa2' },
-        { ids: ['pedicure','kidpedicure'],            color: '#0277bd' },
-        { ids: ['manicure','polishchange','kidmani'], color: '#00695c' },
-        { ids: ['wax'],                              color: '#e65100' },
-      ];
-      const matchedSvcs = SERVICES.filter(s =>
-        title.toLowerCase().includes(s.label.toLowerCase()) ||
-        desc.toLowerCase().includes(s.label.toLowerCase())
-      );
-      const chips = matchedSvcs.map(s => {
-        const grp = SVC_GROUPS.find(g => g.ids.some(id => s.id.toLowerCase().includes(id)));
-        const c = grp?.color || '#455a64';
-        return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:2px;flex-shrink:0"></span>`;
+      const startDt = new Date(ev.start.dateTime||ev.start.date);
+      const endDt   = new Date(ev.end?.dateTime||ev.end?.date||startDt.getTime()+3600000);
+      const sMin = startDt.getHours()*60+startDt.getMinutes();
+      const eMin = endDt.getHours()*60+endDt.getMinutes();
+      const topMin = sMin - START_HOUR*60;
+      const durMin = Math.max(eMin-sMin,15);
+      if (topMin < 0 || topMin >= (END_HOUR-START_HOUR)*60) return;
+      const top = (topMin/SLOT_MINS)*SLOT_H;
+      const ht  = (durMin/SLOT_MINS)*SLOT_H;
+      const timeStr = startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+      const title = ev.summary||'';
+      const desc  = ev.description||'';
+      const hasPhone = /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(desc);
+      const knownSvcs = SERVICES.some(s=>title.toLowerCase().includes(s.label.toLowerCase())||desc.toLowerCase().includes(s.label.toLowerCase()));
+      const isAppt = hasPhone||knownSvcs;
+      const isPast = startDt < now;
+      const fn = title.split(/[\s—–-]/)[0].toLowerCase();
+      const qm = queue.find(q=>q.name&&q.name.toLowerCase().startsWith(fn)&&fn.length>1);
+      const qs = qm?.status||null;
+      let bg,border,tc='#1a1a1a',sl='';
+      if (!isAppt){bg='#eceff1';border='#78909c';tc='#37474f';}
+      else if(qs==='done'){bg='#f3f4f6';border='#9ca3af';tc='#6b7280';sl='✓ Done';}
+      else if(qs==='inservice'){bg='#dcfce7';border='#16a34a';tc='#14532d';sl='● In Service';}
+      else if(qs==='waiting'){bg='#dbeafe';border='#2563eb';tc='#1e3a8a';sl='● Checked In';}
+      else if(isPast&&isAppt){bg='#fff7ed';border='#ea580c';tc='#7c2d12';sl='⚠ Not Checked In';}
+      else{bg='#eff6ff';border='#3b82f6';tc='#1e3a8a';}
+      const chips = SERVICES.filter(s=>title.toLowerCase().includes(s.label.toLowerCase())||desc.toLowerCase().includes(s.label.toLowerCase())).map(s=>{
+        const g=SVC_GROUPS.find(x=>x.ids.some(id=>s.id.toLowerCase().includes(id)));
+        return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${g?.color||'#455a64'};margin-right:2px;flex-shrink:0"></span>`;
       }).join('');
-
-      const displayTitle = title || 'Event';
-      const safeTitle = JSON.stringify(displayTitle);
-      const safeDesc  = JSON.stringify(desc);
-
-      html += `<div onclick="calEventClick(event,'${cal.id}','${safeId}',${safeTitle},${safeDesc},${isAppt})"
-        style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,28)}px;
+      const safeId    = ev.id.replace(/'/g,"\'");
+      const safeTitle = (title||'Event').replace(/\\/g,'\\\\').replace(/'/g,"\'").replace(/"/g,'&quot;');
+      const safeDesc  = desc.replace(/\\/g,'\\\\').replace(/'/g,"\'").replace(/"/g,'&quot;');
+      body += `<div onclick="calEventClick(event,'${cal.id}','${safeId}','${safeTitle}','${safeDesc}',${isAppt})"
+        style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,26)}px;
                background:${bg};border-left:3px solid ${border};border-radius:6px;
-               padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;
-               box-shadow:0 1px 3px rgba(0,0,0,0.12)">
-        <div style="display:flex;align-items:center;gap:2px;overflow:hidden">
-          ${chips}
-          <span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${textColor};
-                       white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${displayTitle}</span>
+               padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">
+        <div style="display:flex;align-items:center;gap:2px;overflow:hidden">${chips}
+          <span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${title||'Event'}</span>
         </div>
-        ${ht > 32 ? `<div style="font-size:10px;color:${textColor};opacity:0.75">${timeStr}</div>` : ''}
-        ${statusLabel && ht > 44 ? `<div style="font-size:9px;font-weight:700;color:${border}">${statusLabel}</div>` : ''}
+        ${ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75">${timeStr}</div>`:''}
+        ${sl&&ht>44?`<div style="font-size:9px;font-weight:700;color:${border}">${sl}</div>`:''}
       </div>`;
     });
-
-    html += '</div></div>';
+    body += '</div></div>';
   });
+  body += '</div>';
 
-  html += '</div>';
-  grid.innerHTML = html;
+  grid.innerHTML = `<div style="display:flex;flex-direction:column;height:100%;overflow:hidden">${hdr}${body}</div>`;
 
   // Scroll to 8am
-  const container = document.getElementById('cal-container');
-  if (container) {
-    const scrollTo = (8 - START_HOUR) * 2 * SLOT_H + HEADER_H - 20;
-    container.scrollTop = Math.max(0, scrollTo);
-  }
+  const gb = document.getElementById('cal-grid-body');
+  if (gb) gb.scrollTop = Math.max(0,(8-START_HOUR)*(60/SLOT_MINS)*SLOT_H - 10);
 }
-
 // ── Settings embedded panels ─────────────────────
 function renderStaffEmbed() {
   const el = document.getElementById('settings-staff-embed');
@@ -9541,6 +9504,60 @@ async function calSilentSync() {
 }
 let _calSyncTimer  = null;
 let _calHidden = new Set(JSON.parse(localStorage.getItem('gcal_hidden') || '[]'));
+// Calendar zoom: slot height and minutes per slot (zoom in = smaller slots, zoom out = larger)
+let _calSlotH   = 52; // px per slot
+let _calSlotMins = 30; // minutes per slot: 15, 30, or 60
+let _calPinchDist = null; // for pinch tracking
+
+function calHandleWheel(e) {
+  if (!e.ctrlKey && !e.metaKey) return; // only zoom on ctrl+scroll
+  e.preventDefault();
+  const delta = e.deltaY > 0 ? -1 : 1; // scroll down = zoom out
+  calAdjustZoom(delta);
+}
+
+let _calTouchStartDist = null;
+function calTouchStart(e) {
+  if (e.touches.length === 2) {
+    _calTouchStartDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+  }
+}
+function calTouchMove(e) {
+  if (e.touches.length !== 2 || !_calTouchStartDist) return;
+  const dist = Math.hypot(
+    e.touches[0].clientX - e.touches[1].clientX,
+    e.touches[0].clientY - e.touches[1].clientY
+  );
+  if (Math.abs(dist - _calTouchStartDist) > 20) {
+    calAdjustZoom(dist > _calTouchStartDist ? 1 : -1);
+    _calTouchStartDist = dist;
+  }
+}
+
+function calAdjustZoom(direction) {
+  // direction: +1 = zoom in (more detail), -1 = zoom out (more time visible)
+  const levels = [
+    { slotMins: 60, slotH: 80 },  // 1 hour slots — widest view
+    { slotMins: 30, slotH: 52 },  // 30 min slots — default
+    { slotMins: 15, slotH: 36 },  // 15 min slots — most detail
+  ];
+  const current = levels.findIndex(l => l.slotMins === _calSlotMins);
+  const next = Math.max(0, Math.min(levels.length - 1, current + direction));
+  if (next === current) return;
+  const gb = document.getElementById('cal-grid-body');
+  const scrollRatio = gb ? gb.scrollTop / (gb.scrollHeight || 1) : 0;
+  _calSlotMins = levels[next].slotMins;
+  _calSlotH    = levels[next].slotH;
+  calRenderGrid();
+  // Restore scroll position proportionally
+  requestAnimationFrame(() => {
+    const newGb = document.getElementById('cal-grid-body');
+    if (newGb) newGb.scrollTop = scrollRatio * newGb.scrollHeight;
+  });
+}
 const CAL_SYNC_INTERVAL = 60000; // sync calendar every 60 seconds when tab is open
 
 function setCalSyncIndicator(state) {
