@@ -107,6 +107,48 @@ tailwind.config = {
     .turns-slot-row .flex-shrink-0 { width: 130px !important; }
     #turns-tech-grid .w-\[155px\] { width: 130px !important; }
   }
+
+  /* ── iPad / tablet (≤1180px) ─────────────────────
+     13" iPad Pro portrait = 1024px, landscape = 1366px.
+     At ≤1180px we hide nav tab text labels (keep icons)
+     to prevent the header from overflowing.              */
+  @media (max-width: 1180px) {
+    /* Nav tabs: icon only, no text */
+    .dash-tab span:not(.material-symbols-outlined) { display: none !important; }
+    .dash-tab { padding: 8px 10px !important; gap: 0 !important; }
+    /* Hide "Square synced" text, keep dot */
+    #sync-label { display: none !important; }
+    /* Shrink action icon buttons slightly */
+    .dash-tab .material-symbols-outlined { font-size: 20px !important; }
+    /* Logged-in user: hide name, keep avatar */
+    #logged-in-name { display: none !important; }
+  }
+
+  /* ── Galaxy Tab S9 portrait + iPad 11" portrait (≤820px) ──
+     Tab S9 portrait CSS viewport ≈ 753px
+     iPad 11" portrait CSS viewport = 820px
+     Customer screen needs bigger touch targets & readable text.
+     Dashboard header gets tighter.                            */
+  @media (max-width: 820px) {
+    /* Customer welcome screen — larger buttons */
+    #screen-welcome .text-2xl { font-size: 1.35rem !important; }
+    #screen-welcome .py-7 { padding-top: 1.25rem !important; padding-bottom: 1.25rem !important; }
+    /* Check-in form — full width, bigger service grid */
+    #guests-container .grid-cols-4 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    /* Dashboard turns grid tighter */
+    #panel-turns .flex-shrink-0[style*="width:300px"] { width: 220px !important; }
+    /* Modals: full width on small screens */
+    .fixed.inset-0 > div[class*="max-w-"] { margin: 0.5rem !important; }
+  }
+
+  /* ── Galaxy Tab S9 portrait specifically (≤760px) ──
+     Slightly narrower than iPad 11" — push a bit further */
+  @media (max-width: 760px) {
+    /* Service buttons in check-in: 3-col → 2-col */
+    #guests-container .grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    /* Sync indicators: hide both text labels */
+    #sheets-sync-text { display: none !important; }
+  }
   @media (max-width: 768px) {
     #panel-turns .flex-shrink-0[style*="width:380px"] { width: 260px !important; }
     .w-\[165px\] { width: 130px !important; }
@@ -203,7 +245,7 @@ tailwind.config = {
   <!-- Logo -->
   <div class="flex flex-col items-center fade-up">
     <img id="logo-welcome" src="" alt="Muse Nails & Spa"
-         class="h-64 md:h-72 w-auto object-contain mx-auto"
+         class="h-56 md:h-64 w-auto object-contain mx-auto"
          onerror="this.style.display='none'; document.getElementById('logo-text-welcome').style.display='block'">
     <div id="logo-text-welcome" style="display:none" class="text-center">
       <div class="text-5xl font-headline font-bold tracking-widest text-on-surface">MUSE</div>
@@ -327,13 +369,13 @@ tailwind.config = {
 <div id="screen-desk" class="screen flex-col bg-surface min-h-screen">
 
   <!-- Top bar -->
-  <header class="w-full px-5 py-3 bg-surface-container-lowest border-b border-surface-container-high flex items-center justify-between sticky top-0 z-10">
+  <header class="w-full px-5 py-1.5 bg-surface-container-lowest border-b border-surface-container-high flex items-center justify-between sticky top-0 z-10">
     <div class="flex items-center gap-4">
       <!-- Logo -->
-      <img id="logo-desk" src="" alt="Muse" class="h-10 w-auto object-contain" style="filter: none;" onerror="this.style.display='none'">
+      <img id="logo-desk" src="" alt="Muse" class="h-[56px] w-auto object-contain" style="filter: none;" onerror="this.style.display='none'">
     </div>
     <!-- Top nav tabs -->
-    <nav class="flex items-center gap-1">
+    <nav class="flex items-center gap-1 overflow-x-auto no-scroll flex-shrink min-w-0">
       <button class="dash-tab" id="nav-turns" onclick="showDashPanel('turns')">
         <span class="material-symbols-outlined" style="font-size:18px">swap_vert</span> Turns
       </button>
@@ -352,14 +394,14 @@ tailwind.config = {
       <button class="dash-tab" id="nav-staff" onclick="showDashPanel('staff')">
         <span class="material-symbols-outlined" style="font-size:18px">people</span> Staff
       </button>
-      <button class="dash-tab" id="nav-settings" onclick="showDashPanel('settings')">
-        <span class="material-symbols-outlined" style="font-size:18px">tune</span> Settings
-      </button>
       <button class="dash-tab" id="nav-giftcards" onclick="showDashPanel('giftcards')">
         <span class="material-symbols-outlined" style="font-size:18px">card_giftcard</span> Gift Cards
       </button>
       <button class="dash-tab" onclick="showCustomerDir()" title="Customer Directory">
         <span class="material-symbols-outlined" style="font-size:18px">contacts</span> Customers
+      </button>
+      <button class="dash-tab" id="nav-settings" onclick="showDashPanel('settings')">
+        <span class="material-symbols-outlined" style="font-size:18px">tune</span> Settings
       </button>
     </nav>
     <!-- Action buttons -->
@@ -375,15 +417,12 @@ tailwind.config = {
         <span class="sync-dot" id="sheets-sync-dot" style="background:#adb3b5"></span>
         <span id="sheets-sync-text">Sheets</span>
       </div>
-      <span class="text-[10px] font-body text-outline-variant px-2 select-none" title="musedashboard v1.01">v1.01</span>
+      <span class="text-[10px] font-body text-outline-variant px-2 select-none" title="musedashboard v1.10">v1.10</span>
       <button onclick="syncSquare()" title="Sync Square" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">sync</span>
       </button>
       <button onclick="exportAllToSheets()" title="Export to Sheets" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">upload_file</span>
-      </button>
-      <button onclick="showSquareModal()" title="Square Settings" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container transition-colors">
-        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">settings</span>
       </button>
       <button onclick="goTo('screen-welcome')" title="Customer Screen" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">tablet</span>
@@ -695,6 +734,42 @@ tailwind.config = {
           <p class="text-sm font-body text-on-surface-variant mt-0.5">Configure app behavior and customer-facing options</p>
         </div>
 
+        <!-- Business Logo -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <button onclick="toggleSettingsSection('logo-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
+            <div class="text-left">
+              <div class="font-headline font-bold text-on-surface">Business Logo</div>
+              <div class="text-xs font-body text-on-surface-variant mt-0.5">Upload your logo for the dashboard header and PDF reports</div>
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="logo-section-icon">expand_more</span>
+          </button>
+          <div id="logo-section" class="hidden px-5 pb-5 border-t border-surface-container-high pt-4">
+            <div class="flex items-start gap-6">
+              <!-- Preview -->
+              <div class="flex-shrink-0">
+                <div id="logo-settings-preview" class="w-24 h-14 rounded-xl bg-surface-container-high border-2 border-surface-container-highest flex items-center justify-center overflow-hidden" style="background-image:linear-gradient(45deg,#ddd 25%,transparent 25%),linear-gradient(-45deg,#ddd 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ddd 75%),linear-gradient(-45deg,transparent 75%,#ddd 75%);background-size:10px 10px;background-position:0 0,0 5px,5px -5px,-5px 0;">
+                  <span class="material-symbols-outlined text-2xl text-on-surface-variant" id="logo-settings-placeholder">store</span>
+                </div>
+                <p class="text-[10px] font-body text-on-surface-variant mt-1.5 text-center">Current logo</p>
+              </div>
+              <!-- Controls -->
+              <div class="flex-grow space-y-2">
+                <button onclick="recropLogo()" id="logo-recrop-btn" class="hidden w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+                  <span class="material-symbols-outlined" style="font-size:18px">crop</span> Re-crop / Adjust
+                </button>
+                <label class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body font-semibold text-sm transition-colors cursor-pointer w-full">
+                  <span class="material-symbols-outlined" style="font-size:18px">upload</span> Upload New Logo
+                  <input type="file" accept="image/png,image/jpeg,image/jpg" class="hidden" onchange="handleLogoUpload(this)">
+                </label>
+                <button onclick="removeLogo()" class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/60 text-on-surface-variant font-body font-semibold text-sm hover:bg-surface-container transition-colors">
+                  <span class="material-symbols-outlined" style="font-size:16px">delete</span> Remove Logo
+                </button>
+                <p class="text-xs font-body text-on-surface-variant">PNG with transparent background works best. Wide/rectangular logos display better than square ones.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Turn Thresholds -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <button onclick="toggleSettingsSection('turns-thresh-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
@@ -867,8 +942,21 @@ tailwind.config = {
             class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-body focus:border-primary outline-none">
         </div>
 
+        <!-- Column headers -->
+        <div id="gc-headers" class="hidden flex items-center gap-0 px-0 mb-1 text-[10px] font-body font-semibold text-outline uppercase tracking-widest">
+          <div style="width:88px" class="px-4">Amount</div>
+          <div style="width:96px" class="px-3">Status</div>
+          <div style="width:90px" class="px-2">Serial</div>
+          <div style="width:96px" class="px-2">Date</div>
+          <div style="width:110px" class="px-2">From</div>
+          <div style="width:110px" class="px-2">To</div>
+          <div style="width:110px" class="px-2">Phone</div>
+          <div class="flex-grow px-2">Notes</div>
+          <div style="width:90px" class="px-3">Balance</div>
+          <div style="width:76px" class="px-2">Actions</div>
+        </div>
         <!-- Card list -->
-        <div id="gc-list" class="space-y-2"></div>
+        <div id="gc-list" class="space-y-1.5"></div>
         <div id="gc-empty" class="hidden text-sm font-body text-on-surface-variant text-center py-12 bg-surface-container-lowest rounded-xl border border-surface-container-high">
           <span class="material-symbols-outlined text-4xl block mb-2 opacity-40">card_giftcard</span>
           No gift cards yet. Click <strong>New Gift Card</strong> to add one.
@@ -1175,9 +1263,7 @@ tailwind.config = {
           <span id="assign-advance-label">In Service</span>
         </button>
       </div>
-      <button onclick="saveAssignmentsAndPushToSquare()" class="w-full bg-surface-container-lowest border border-outline-variant/60 text-on-surface hover:bg-surface-container py-3 rounded-xl font-headline font-semibold tracking-tight transition-all active:scale-95 flex items-center justify-center gap-2 text-sm">
-        <span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Save & Push to Square
-      </button>
+      <!-- Push to Square button removed — Terminal API integration planned for future release -->
     </div>
   </div>
 </div>
@@ -1209,9 +1295,7 @@ tailwind.config = {
           <span id="group-advance-label">In Service</span>
         </button>
       </div>
-      <button onclick="saveGroupAndPushSquare()" class="w-full bg-surface-container-lowest border border-outline-variant/60 text-on-surface hover:bg-surface-container py-3 rounded-xl font-headline font-semibold text-sm transition-all flex items-center justify-center gap-2">
-        <span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Save & Push to Square
-      </button>
+      <!-- Push to Square button removed — Terminal API integration planned for future release -->
     </div>
   </div>
 </div>
@@ -1507,8 +1591,8 @@ tailwind.config = {
       <h2 class="text-xl font-headline font-bold text-on-surface">Upload Photo</h2>
       <button onclick="closePhotoCrop()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
     </div>
-    <!-- Preview / crop area -->
-    <div class="relative mb-4 overflow-hidden rounded-xl bg-surface-container" style="height:240px">
+    <!-- Preview / crop area — checkerboard shows transparency -->
+    <div class="relative mb-4 overflow-hidden rounded-xl" style="height:240px;background-image:linear-gradient(45deg,#ccc 25%,transparent 25%),linear-gradient(-45deg,#ccc 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ccc 75%),linear-gradient(-45deg,transparent 75%,#ccc 75%);background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;">
       <canvas id="photo-crop-canvas" class="hidden w-full h-full object-contain"></canvas>
       <div id="photo-crop-placeholder" class="flex flex-col items-center justify-center h-full gap-3 text-on-surface-variant">
         <span class="material-symbols-outlined" style="font-size:48px">add_a_photo</span>
@@ -1585,6 +1669,42 @@ tailwind.config = {
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════
+     NUMERIC KEYPAD MODAL (for price inputs)
+═══════════════════════════════════════════════ -->
+<div id="numpad-modal" class="fixed inset-0 z-[90] hidden items-end justify-center bg-on-surface/40" onclick="closeNumpad(event)">
+  <div class="bg-surface-container-lowest w-full max-w-sm rounded-t-2xl shadow-2xl pb-safe" onclick="event.stopPropagation()">
+    <!-- Display -->
+    <div class="px-6 pt-5 pb-3 border-b border-surface-container-high">
+      <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1" id="numpad-label">Cost</div>
+      <div class="text-4xl font-headline font-bold text-on-surface tracking-tight" id="numpad-display">$0.00</div>
+    </div>
+    <!-- Keys -->
+    <div class="grid grid-cols-4 gap-px bg-surface-container-high" style="padding:1px">
+      <button onclick="numpadKey('1')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">1</button>
+      <button onclick="numpadKey('2')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">2</button>
+      <button onclick="numpadKey('3')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">3</button>
+      <button onclick="numpadBackspace()" class="numpad-key bg-surface-container-lowest text-on-surface-variant py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors flex items-center justify-center">
+        <span class="material-symbols-outlined" style="font-size:26px">backspace</span>
+      </button>
+      <button onclick="numpadKey('4')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">4</button>
+      <button onclick="numpadKey('5')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">5</button>
+      <button onclick="numpadKey('6')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">6</button>
+      <button onclick="numpadKey('+')" class="numpad-key bg-surface-container-lowest text-primary text-2xl font-headline font-bold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">+</button>
+      <button onclick="numpadKey('7')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">7</button>
+      <button onclick="numpadKey('8')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">8</button>
+      <button onclick="numpadKey('9')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">9</button>
+      <button onclick="numpadConfirm()" class="numpad-key bg-primary text-on-primary text-base font-headline font-bold py-5 hover:bg-primary-dim active:scale-95 transition-all" style="grid-row: span 2">
+        <span class="material-symbols-outlined block mb-0.5" style="font-size:24px">check</span>
+        <span style="font-size:11px">Done</span>
+      </button>
+      <button onclick="numpadKey('00')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">00</button>
+      <button onclick="numpadKey('0')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">0</button>
+      <button onclick="numpadKey('.')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">.</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="fixed top-6 left-1/2 -translate-x-1/2 z-[100] hidden">
   <div class="bg-on-surface text-surface px-5 py-3 rounded-xl text-sm font-body font-medium shadow-2xl fade-up" id="toast-text"></div>
 </div>
@@ -1597,7 +1717,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAJYBBoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAEI/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//Z";
-const APP_VERSION  = 'v1.01';
+const APP_VERSION  = 'v1.10';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 const SHEETS_ID = "1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo";
@@ -1728,9 +1848,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Try to load queue from Sheets — retry once if first attempt fails
-  // Also load photos in parallel
-  const [, result] = await Promise.all([
+  // Also load photos, records, and gift cards in parallel
+  const [, , , result] = await Promise.all([
     loadPhotosFromSheets().then(() => applyPhotosToObjects()),
+    loadRecordsFromSheets(),
+    loadGiftCardsFromSheets(),
     (async () => {
       let r = await loadQueueFromSheets();
       if (!r) {
@@ -1995,11 +2117,134 @@ function clearQueueHistory() {
 }
 
 function setLogo() {
-  // Attempt to load the uploaded logo for all screens
+  // Use custom logo if saved, otherwise fall back to hardcoded LOGO_PATH
+  const customLogo = localStorage.getItem('muse_logo');
+  const logoSrc = customLogo || LOGO_PATH;
   ['logo-welcome','logo-checkin','logo-desk'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.src = LOGO_PATH;
+    if (!el) return;
+    // Always un-hide first — onerror may have hidden it previously
+    el.style.display = '';
+    el.src = logoSrc;
+    // Hide text fallbacks when we have a real logo src
+    if (id === 'logo-welcome') {
+      const textFallback = document.getElementById('logo-text-welcome');
+      if (textFallback) textFallback.style.display = 'none';
+    }
+    if (id === 'logo-checkin') {
+      const textFallback = document.getElementById('logo-text-checkin');
+      if (textFallback) textFallback.style.display = 'none';
+    }
   });
+  // Update settings preview and Re-crop button
+  const preview = document.getElementById('logo-settings-preview');
+  const placeholder = document.getElementById('logo-settings-placeholder');
+  const recropBtn = document.getElementById('logo-recrop-btn');
+  if (preview) {
+    if (customLogo) {
+      preview.innerHTML = `<img src="${customLogo}" class="w-full h-full object-contain">`;
+      if (recropBtn) recropBtn.classList.remove('hidden');
+    } else {
+      preview.innerHTML = `<img src="${LOGO_PATH}" class="w-full h-full object-contain" onerror="this.style.display='none'"><span class="material-symbols-outlined text-2xl text-on-surface-variant" id="logo-settings-placeholder">store</span>`;
+      if (recropBtn) recropBtn.classList.add('hidden');
+    }
+  }
+}
+
+// ── Logo Upload & Crop ─────────────────────────────
+function handleLogoUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  // Set crop target to logo mode
+  _photoCropTarget   = { type: 'logo', id: 'business' };
+  _photoCropImg      = null;
+  _photoCropRotation = 0;
+  _photoCropZoom     = 1;
+  _photoCropOffset   = { x: 0, y: 0 };
+
+  // Switch preview container to wide rectangular aspect for logo
+  const cropArea = document.querySelector('#photo-crop-modal .relative.mb-4');
+  if (cropArea) cropArea.style.height = '200px';
+
+  // Open modal
+  document.getElementById('photo-crop-zoom').value = 1;
+  document.getElementById('photo-crop-canvas').classList.add('hidden');
+  document.getElementById('photo-crop-placeholder').classList.remove('hidden');
+  document.getElementById('photo-crop-controls').classList.add('hidden');
+  document.getElementById('photo-crop-save').disabled = true;
+  const h2 = document.querySelector('#photo-crop-modal h2');
+  if (h2) h2.textContent = 'Upload Logo';
+  document.getElementById('photo-crop-modal').classList.remove('hidden');
+  document.getElementById('photo-crop-modal').style.display = 'flex';
+
+  // Load the image
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      _photoCropImg = img;
+      _photoCropZoom = 1;
+      _photoCropOffset = { x: 0, y: 0 };
+      document.getElementById('photo-crop-zoom').value = 1;
+      document.getElementById('photo-crop-canvas').classList.remove('hidden');
+      document.getElementById('photo-crop-placeholder').classList.add('hidden');
+      document.getElementById('photo-crop-controls').classList.remove('hidden');
+      document.getElementById('photo-crop-save').disabled = false;
+      updatePhotoCrop();
+      attachCropDrag();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function removeLogo() {
+  localStorage.removeItem('muse_logo');
+  setLogo();
+  showToast('Logo removed — using default');
+}
+
+// Re-open crop modal with the already-saved logo for re-cropping
+function recropLogo() {
+  const existing = localStorage.getItem('muse_logo');
+  if (!existing) { showToast('No logo uploaded yet.'); return; }
+
+  _photoCropTarget   = { type: 'logo', id: 'business' };
+  _photoCropImg      = null;
+  _photoCropRotation = 0;
+  _photoCropZoom     = 1;
+  _photoCropOffset   = { x: 0, y: 0 };
+
+  // Switch preview area to wide rectangular shape
+  const cropArea = document.querySelector('#photo-crop-modal .relative.mb-4');
+  if (cropArea) cropArea.style.height = '200px';
+
+  document.getElementById('photo-crop-zoom').value = 1;
+  document.getElementById('photo-crop-canvas').classList.add('hidden');
+  document.getElementById('photo-crop-placeholder').classList.remove('hidden');
+  document.getElementById('photo-crop-controls').classList.add('hidden');
+  document.getElementById('photo-crop-save').disabled = true;
+  const h2 = document.querySelector('#photo-crop-modal h2');
+  if (h2) h2.textContent = 'Re-crop Logo';
+  document.getElementById('photo-crop-modal').classList.remove('hidden');
+  document.getElementById('photo-crop-modal').style.display = 'flex';
+
+  const img = new Image();
+  img.onload = () => {
+    _photoCropImg = img;
+    _photoCropZoom = 1;
+    _photoCropOffset = { x: 0, y: 0 };
+    document.getElementById('photo-crop-zoom').value = 1;
+    document.getElementById('photo-crop-canvas').classList.remove('hidden');
+    document.getElementById('photo-crop-placeholder').classList.add('hidden');
+    document.getElementById('photo-crop-controls').classList.remove('hidden');
+    document.getElementById('photo-crop-save').disabled = false;
+    updatePhotoCrop();
+    attachCropDrag();
+  };
+  img.src = existing;
 }
 
 // ── Clock ────────────────────────────────────────
@@ -2522,7 +2767,7 @@ function updateStats() {
 
 // ── Dashboard Panel Switching ─────────────────────
 function showDashPanel(panel) {
-  ['queue','reports','transactions','services','staff','turns','settings'].forEach(p => {
+  ['queue','reports','transactions','services','staff','turns','settings','giftcards'].forEach(p => {
     document.getElementById(`panel-${p}`)?.classList.remove('active');
     document.getElementById(`nav-${p}`)?.classList.remove('active');
   });
@@ -3639,7 +3884,9 @@ function exportReportPDF() {
     <title>Muse Nails & Spa — Report ${period}</title>
     <style>
       body { font-family: Arial, sans-serif; font-size: 12px; color: #222; margin: 24px; }
-      h1 { color: #1a5252; font-size: 20px; margin-bottom: 4px; }
+      .report-header { display: flex; align-items: center; gap: 16px; margin-bottom: 8px; }
+      .report-logo { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; flex-shrink: 0; }
+      h1 { color: #1a5252; font-size: 20px; margin: 0 0 2px; }
       h2 { color: #1a5252; font-size: 14px; margin: 20px 0 8px; border-bottom: 2px solid #1a5252; padding-bottom: 4px; }
       .summary { display: flex; gap: 24px; margin: 12px 0 20px; flex-wrap: wrap; }
       .card { background: #f5f5f5; border-radius: 8px; padding: 10px 16px; min-width: 120px; text-align: center; }
@@ -3654,8 +3901,13 @@ function exportReportPDF() {
       @media print { body { margin: 12px; } }
     </style>
   </head><body>
-    <h1>Muse Nails &amp; Spa — Daily Report</h1>
-    <p style="color:#666;margin:0">${period}</p>
+    <div class="report-header">
+      ${(localStorage.getItem('muse_logo') || LOGO_PATH) ? `<img src="${localStorage.getItem('muse_logo') || LOGO_PATH}" class="report-logo" onerror="this.style.display='none'">` : ''}
+      <div>
+        <h1>Muse Nails &amp; Spa — Daily Report</h1>
+        <p style="color:#666;margin:0">${period}</p>
+      </div>
+    </div>
     <div class="summary">
       <div class="card"><div class="val">$${d.totalIncome.toFixed(2)}</div><div class="lbl">Total Billed</div></div>
       <div class="card"><div class="val">${d.guestCount}</div><div class="lbl">Guests Served</div></div>
@@ -4042,6 +4294,58 @@ async function loadPhotosFromSheets() {
   return false;
 }
 
+// ── Load historical records from Transaction Log in Sheets ──
+// Deduplication is done server-side (Apps Script keeps latest row per Entry ID).
+// On the client side we further merge with any existing local records,
+// so records created today (not yet in Sheets) are never lost.
+async function loadRecordsFromSheets() {
+  try {
+    const res  = await fetch(SHEETS_PROXY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'loadRecords' }),
+    });
+    const data = await res.json();
+    if (!data.success || !data.records || data.records.length === 0) return false;
+
+    // Merge: Sheets records are the authority for historical data.
+    // Local records that aren't in Sheets yet (e.g. created today) take priority.
+    const sheetsIds = new Set(data.records.map(r => String(r.id)));
+    const localOnly = allRecords.filter(r => !sheetsIds.has(String(r.id)));
+    allRecords = [...data.records, ...localOnly];
+    localStorage.setItem('muse_records', JSON.stringify(allRecords));
+    console.log('[Records] Loaded', data.records.length, 'from Sheets +', localOnly.length, 'local-only');
+    return true;
+  } catch(e) {
+    console.warn('[Records] Failed to load from Sheets:', e);
+    return false;
+  }
+}
+
+// ── Load gift cards from Gift Cards tab in Sheets ──
+async function loadGiftCardsFromSheets() {
+  try {
+    const res  = await fetch(SHEETS_PROXY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'loadGiftCards' }),
+    });
+    const data = await res.json();
+    if (!data.success || !data.giftCards || data.giftCards.length === 0) return false;
+
+    // Merge: Sheets is authority for gift cards. Keep any local cards not yet synced.
+    const sheetsIds = new Set(data.giftCards.map(g => String(g.id)));
+    const localOnly = giftCards.filter(g => !sheetsIds.has(String(g.id)));
+    giftCards = [...data.giftCards, ...localOnly];
+    localStorage.setItem('muse_gift_cards', JSON.stringify(giftCards));
+    console.log('[GiftCards] Loaded', data.giftCards.length, 'from Sheets +', localOnly.length, 'local-only');
+    return true;
+  } catch(e) {
+    console.warn('[GiftCards] Failed to load from Sheets:', e);
+    return false;
+  }
+}
+
 
 let _photoCropTarget  = null; // { type: 'staff'|'fduser', id }
 let _photoCropImg     = null; // Image object
@@ -4089,6 +4393,12 @@ function showStaffPhotoModal(staffId) { showPhotoUpload('staff', staffId); }
 function closePhotoCrop() {
   document.getElementById('photo-crop-modal').classList.add('hidden');
   document.getElementById('photo-crop-modal').style.display = '';
+  // Reset preview area height (logo mode changes it to wide)
+  const cropArea = document.querySelector('#photo-crop-modal .relative.mb-4');
+  if (cropArea) cropArea.style.height = '240px';
+  // Reset title
+  const h2 = document.querySelector('#photo-crop-modal h2');
+  if (h2) h2.textContent = 'Upload Photo';
   _photoCropTarget = null; _photoCropImg = null;
 }
 
@@ -4120,24 +4430,47 @@ function updatePhotoCrop() {
   const canvas = document.getElementById('photo-crop-canvas');
   if (!canvas || !_photoCropImg) return;
   _photoCropZoom = parseFloat(document.getElementById('photo-crop-zoom').value) || 1;
-  const SIZE = 300; // output square size
-  canvas.width = canvas.height = SIZE;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, SIZE, SIZE);
-  // Circular clip
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(SIZE/2, SIZE/2, SIZE/2, 0, Math.PI*2);
-  ctx.clip();
-  ctx.translate(SIZE/2 + _photoCropOffset.x, SIZE/2 + _photoCropOffset.y);
-  ctx.rotate((_photoCropRotation * Math.PI) / 180);
-  ctx.scale(_photoCropZoom, _photoCropZoom);
-  const aspect = _photoCropImg.width / _photoCropImg.height;
-  let dw, dh;
-  if (aspect >= 1) { dh = SIZE; dw = SIZE * aspect; }
-  else             { dw = SIZE; dh = SIZE / aspect; }
-  ctx.drawImage(_photoCropImg, -dw/2, -dh/2, dw, dh);
-  ctx.restore();
+
+  const isLogo = _photoCropTarget?.type === 'logo';
+
+  if (isLogo) {
+    // Rectangular crop for logos — 3:2 aspect ratio, no circular clip
+    const W = 600, H = 300;
+    canvas.width  = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    // Transparent background — preserve PNG alpha
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.translate(W/2 + _photoCropOffset.x, H/2 + _photoCropOffset.y);
+    ctx.rotate((_photoCropRotation * Math.PI) / 180);
+    ctx.scale(_photoCropZoom, _photoCropZoom);
+    const aspect = _photoCropImg.width / _photoCropImg.height;
+    let dw, dh;
+    if (aspect >= W/H) { dh = H; dw = H * aspect; }
+    else               { dw = W; dh = W / aspect; }
+    ctx.drawImage(_photoCropImg, -dw/2, -dh/2, dw, dh);
+    ctx.restore();
+  } else {
+    // Square + circular clip for staff/fduser photos
+    const SIZE = 300;
+    canvas.width = canvas.height = SIZE;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, SIZE, SIZE);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(SIZE/2, SIZE/2, SIZE/2, 0, Math.PI*2);
+    ctx.clip();
+    ctx.translate(SIZE/2 + _photoCropOffset.x, SIZE/2 + _photoCropOffset.y);
+    ctx.rotate((_photoCropRotation * Math.PI) / 180);
+    ctx.scale(_photoCropZoom, _photoCropZoom);
+    const aspect = _photoCropImg.width / _photoCropImg.height;
+    let dw, dh;
+    if (aspect >= 1) { dh = SIZE; dw = SIZE * aspect; }
+    else             { dw = SIZE; dh = SIZE / aspect; }
+    ctx.drawImage(_photoCropImg, -dw/2, -dh/2, dw, dh);
+    ctx.restore();
+  }
 }
 
 function rotateCrop(deg) {
@@ -4171,8 +4504,20 @@ function attachCropDrag() {
 function savePhotoCrop() {
   const canvas = document.getElementById('photo-crop-canvas');
   if (!canvas || !_photoCropTarget) return;
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
   const { type, id } = _photoCropTarget;
+
+  // For logos: save as PNG to preserve transparency — no white background
+  let dataUrl;
+  if (type === 'logo') {
+    dataUrl = canvas.toDataURL('image/png');
+    localStorage.setItem('muse_logo', dataUrl);
+    closePhotoCrop();
+    setLogo();
+    showToast('Logo saved ✓');
+    return;
+  }
+
+  dataUrl = canvas.toDataURL('image/jpeg', 0.85);
 
   // Save photo to its own storage key
   savePhotoToStorage(type, id, dataUrl);
@@ -4709,8 +5054,10 @@ function renderTurnsHistoryView() {
 function showTurnsTechSelector() {
   const list = document.getElementById('turns-tech-selector-list');
   const currentOrder = getActiveTurnsOrder();
-  const remaining = STAFF.filter(s => !currentOrder.includes(s.id));
-  const allForDisplay = [...currentOrder.map(id=>STAFF.find(s=>s.id===id)).filter(Boolean), ...remaining];
+  // Only show active staff (respects Settings → Active Staff toggles)
+  const activeOnly = STAFF.filter(s => isStaffActive(s.id));
+  const remaining = activeOnly.filter(s => !currentOrder.includes(s.id));
+  const allForDisplay = [...currentOrder.map(id=>activeOnly.find(s=>s.id===id)).filter(Boolean), ...remaining];
 
   list.innerHTML = allForDisplay.map(st => {
     const inOrder = currentOrder.includes(st.id);
@@ -5679,7 +6026,7 @@ function setSheetsIndicator(state) {
   const text = document.getElementById('sheets-sync-text');
   if (!dot && !text) return; // elements not in DOM (e.g. customer screen)
   const states = {
-    ok:      { bg: '#2a7a4f', label: 'Sheets ✓' },
+    ok:      { bg: '#2a7a4f', label: 'Sheets'   },
     syncing: { bg: '#f5c870', label: 'Syncing…' },
     error:   { bg: '#fa746f', label: 'Sheets ✗' },
     idle:    { bg: '#adb3b5', label: 'Sheets'   },
@@ -5839,9 +6186,11 @@ function renderGiftCards() {
   if (filtered.length === 0) {
     list.innerHTML = '';
     empty?.classList.remove('hidden');
+    document.getElementById('gc-headers')?.classList.add('hidden');
     return;
   }
   empty?.classList.add('hidden');
+  document.getElementById('gc-headers')?.classList.remove('hidden');
 
   list.innerHTML = filtered.map(g => {
     const balance   = (g.amount||0) - (g.amountUsed||0);
@@ -5855,51 +6204,59 @@ function renderGiftCards() {
 
     const formatDate = d => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : null;
 
-    // Build info tokens for single-line display
-    const tokens = [];
-    if (g.serial)        tokens.push(`<span class="font-semibold text-on-surface">#${g.serial}</span>`);
-    if (g.datePurchased) tokens.push(`<span class="text-on-surface-variant">${formatDate(g.datePurchased)}</span>`);
-    if (g.from)          tokens.push(`<span>From: <span class="text-on-surface">${g.from}</span></span>`);
-    if (g.to)            tokens.push(`<span>To: <span class="text-on-surface">${g.to}</span></span>`);
-    if (g.phone)         tokens.push(`<span class="text-on-surface-variant">${g.phone}</span>`);
-    if (g.dateUsed)      tokens.push(`<span>Used: <span class="text-on-surface">${formatDate(g.dateUsed)}</span></span>`);
-    if (g.notes)         tokens.push(`<span class="text-on-surface-variant italic">${g.notes}</span>`);
-
-    const infoLine = tokens.join('<span class="text-outline mx-1">·</span>');
-
+    // Grid layout — fixed columns so all cards align
     return `
-      <div class="rounded-xl border px-4 py-3 flex items-center gap-4" style="background:${statusColor.bg};border-color:${statusColor.border}">
+      <div class="rounded-xl border flex items-center gap-0 overflow-hidden" style="background:${statusColor.bg};border-color:${statusColor.border}">
 
-        <!-- Amount bubble — wide enough for 3 digits -->
-        <div class="flex-shrink-0 rounded-xl flex items-center justify-center font-headline font-extrabold text-2xl"
-          style="width:80px;height:56px;background:${statusColor.border}25;border:2px solid ${statusColor.border};color:${statusColor.lc}">
+        <!-- Amount bubble -->
+        <div class="flex-shrink-0 flex items-center justify-center font-headline font-extrabold text-xl px-4 self-stretch"
+          style="width:88px;background:${statusColor.border}22;border-right:1px solid ${statusColor.border}40;color:${statusColor.lc}">
           $${(g.amount||0).toFixed(0)}
         </div>
 
-        <!-- Status badge -->
-        <div class="flex-shrink-0">
-          <span class="text-xs font-semibold px-2.5 py-1 rounded-full" style="background:${statusColor.border}20;color:${statusColor.lc}">${statusColor.label}</span>
+        <!-- Status badge — fixed width so columns align -->
+        <div class="flex-shrink-0 flex items-center justify-center px-3" style="width:96px">
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style="background:${statusColor.border}20;color:${statusColor.lc}">${statusColor.label}</span>
         </div>
 
-        <!-- Info line — fills remaining space -->
-        <div class="flex-grow min-w-0 text-sm font-body text-on-surface-variant truncate">${infoLine}</div>
+        <!-- Serial — fixed width -->
+        <div class="flex-shrink-0 text-xs font-body font-semibold text-on-surface px-2" style="width:90px">${g.serial ? '#' + g.serial : '—'}</div>
 
-        <!-- Balance -->
-        <div class="flex-shrink-0 text-right">
-          <div class="text-xs text-on-surface-variant leading-none mb-0.5">Balance</div>
-          <div class="text-lg font-headline font-extrabold leading-none" style="color:${balance > 0 ? '#1a5252' : '#aaa'}">${'$' + balance.toFixed(2)}</div>
-          ${g.amountUsed > 0 ? `<div class="text-xs text-on-surface-variant mt-0.5">$${(g.amountUsed).toFixed(2)} used</div>` : ''}
+        <!-- Date purchased — fixed width -->
+        <div class="flex-shrink-0 text-xs font-body text-on-surface-variant px-2" style="width:96px">${g.datePurchased ? formatDate(g.datePurchased) : '—'}</div>
+
+        <!-- From — fixed width -->
+        <div class="flex-shrink-0 text-xs font-body px-2 truncate" style="width:110px">
+          ${g.from ? `<span class="text-on-surface-variant">From: </span><span class="text-on-surface">${g.from}</span>` : '<span class="text-outline-variant">—</span>'}
         </div>
 
-        <!-- Action buttons — large touch targets -->
-        <div class="flex-shrink-0 flex gap-2">
+        <!-- To — fixed width -->
+        <div class="flex-shrink-0 text-xs font-body px-2 truncate" style="width:110px">
+          ${g.to ? `<span class="text-on-surface-variant">To: </span><span class="text-on-surface">${g.to}</span>` : '<span class="text-outline-variant">—</span>'}
+        </div>
+
+        <!-- Phone — fixed width -->
+        <div class="flex-shrink-0 text-xs font-body text-on-surface-variant px-2" style="width:110px">${g.phone || '—'}</div>
+
+        <!-- Notes — flex grow -->
+        <div class="flex-grow min-w-0 text-xs font-body text-on-surface-variant italic truncate px-2">${g.notes || ''}</div>
+
+        <!-- Balance — fixed width -->
+        <div class="flex-shrink-0 text-right px-3 py-3" style="width:90px">
+          <div class="text-[10px] text-on-surface-variant leading-none mb-0.5">Balance</div>
+          <div class="text-base font-headline font-extrabold leading-none" style="color:${balance > 0 ? '#1a5252' : '#aaa'}">${'$' + balance.toFixed(2)}</div>
+          ${g.amountUsed > 0 ? `<div class="text-[10px] text-on-surface-variant mt-0.5">$${(g.amountUsed).toFixed(2)} used</div>` : ''}
+        </div>
+
+        <!-- Action buttons -->
+        <div class="flex-shrink-0 flex gap-1 px-2">
           <button onclick="showEditGiftCard('${g.id}')" title="Edit"
-            class="w-11 h-11 rounded-xl bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors active:scale-95">
-            <span class="material-symbols-outlined" style="font-size:22px">edit</span>
+            class="w-9 h-9 rounded-xl bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors active:scale-95">
+            <span class="material-symbols-outlined" style="font-size:18px">edit</span>
           </button>
           <button onclick="deleteGiftCard('${g.id}')" title="Delete"
-            class="w-11 h-11 rounded-xl bg-surface-container hover:bg-error/15 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors active:scale-95">
-            <span class="material-symbols-outlined" style="font-size:22px">delete</span>
+            class="w-9 h-9 rounded-xl bg-surface-container hover:bg-error/15 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors active:scale-95">
+            <span class="material-symbols-outlined" style="font-size:18px">delete</span>
           </button>
         </div>
       </div>`;
@@ -6096,6 +6453,9 @@ function renderSettingsPanel() {
   renderSettingsActiveStaff();
   const lbl = document.getElementById('last-backup-label');
   if (lbl) lbl.textContent = localStorage.getItem('muse_last_backup') || 'Never';
+
+  // Logo preview
+  setLogo();
 
   // Square connection status
   const sqStatus = document.getElementById('settings-square-status');
@@ -6948,9 +7308,10 @@ function renderAssignRows(entry) {
   servicesList.innerHTML = entryServices.map(sid => {
     const svc = SERVICES.find(s => s.id === sid) || { id: sid, label: sid };
     const assignment = (entry.assignments || []).find(a => a.serviceId === sid) || {};
-    const techOptions = getActiveStaff().map(st =>
-      `<option value="${st.id}" ${assignment.techId === st.id ? 'selected' : ''}>${st.name}</option>`
-    ).join('');
+    const _checkedIn1 = getActiveStaff().filter(s => turnsTechOrder.includes(s.id));
+    const techOptions = _checkedIn1.length > 0
+      ? _checkedIn1.map(st => `<option value="${st.id}" ${assignment.techId === st.id ? 'selected' : ''}>${st.name}</option>`).join('')
+      : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
     const stationOptions = stations.map(st =>
       `<option value="${st}" ${assignment.station === st ? 'selected' : ''}>${st}</option>`
     ).join('');
@@ -6974,10 +7335,12 @@ function renderAssignRows(entry) {
           </div>
           <div>
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
-            <input type="number" min="0" step="0.01"
+            <input type="text" inputmode="decimal" readonly
               placeholder="${svc.baseCost != null ? Number(svc.baseCost).toFixed(2) : '0.00'}"
               value="${assignment.cost != null && assignment.cost !== 0 ? assignment.cost : ''}"
-              class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"
+              class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
+              onfocus="openNumpad(this,'Cost — ' + '${svc.label}')"
+              onclick="openNumpad(this,'Cost — ' + '${svc.label}')"
               oninput="updateAssignTotal()">
           </div>
           </div>
@@ -7228,6 +7591,28 @@ function cycleServiceStatus(entryId, serviceId, newStatus) {
   saveCurrentGroupTabInputs();
   const entry = queue.find(e => String(e.id) === String(entryId));
   if (!entry) return;
+
+  // Find this service's assignment
+  const a = (entry.assignments || []).find(x => x.serviceId === serviceId);
+
+  // Validate before advancing
+  if (newStatus === 'inservice') {
+    if (!a || !a.techId) {
+      showToast('Assign a technician before marking In Service.');
+      return;
+    }
+  }
+  if (newStatus === 'done') {
+    if (!a || !a.techId) {
+      showToast('Assign a technician before marking Done.');
+      return;
+    }
+    if (!a.cost || a.cost <= 0) {
+      showToast('Enter a price before marking Done.');
+      return;
+    }
+  }
+
   setAssignmentStatus(entry, serviceId, newStatus);
   // Re-render the modal content to update the button
   renderGroupAssignContent();
@@ -7279,9 +7664,10 @@ function renderGroupAssignContent() {
     const svc = SERVICES.find(s => s.id === sid) || { id: sid, label: sid };
     const assignment = (entry.assignments || []).find(a => a.serviceId === sid) || {};
     const svcStatus = getAssignmentStatus(entry, assignment);
-    const techOptions = getActiveStaff().map(st =>
-      `<option value="${st.id}" ${assignment.techId === st.id ? 'selected' : ''}>${st.name}</option>`
-    ).join('');
+    const _checkedIn2 = getActiveStaff().filter(s => turnsTechOrder.includes(s.id));
+    const techOptions = _checkedIn2.length > 0
+      ? _checkedIn2.map(st => `<option value="${st.id}" ${assignment.techId === st.id ? 'selected' : ''}>${st.name}</option>`).join('')
+      : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
     const stationOptions = stations.map(st =>
       `<option value="${st}" ${assignment.station === st ? 'selected' : ''}>${st}</option>`
     ).join('');
@@ -7318,10 +7704,12 @@ function renderGroupAssignContent() {
           </div>
           <div>
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
-            <input type="number" min="0" step="0.01"
+            <input type="text" inputmode="decimal" readonly
               placeholder="${svc.baseCost != null ? Number(svc.baseCost).toFixed(2) : '0.00'}"
               value="${assignment.cost != null && assignment.cost !== 0 ? assignment.cost : ''}"
-              class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"
+              class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
+              onfocus="openNumpad(this,'Cost — ' + '${svc.label}')"
+              onclick="openNumpad(this,'Cost — ' + '${svc.label}')"
               oninput="updateGroupTotal()">
           </div>
         </div>
@@ -7329,8 +7717,8 @@ function renderGroupAssignContent() {
     `;
   }).join('');
 
-  // Service picker for this guest
-  const svcPicker = SERVICES.map(s => {
+  // Service picker for this guest — only show visible (non-hidden) services
+  const svcPicker = SERVICES.filter(s => isServiceVisibleOnCheckin(s.id)).map(s => {
     const selected = entry.services.includes(s.id);
     return `
       <button type="button" onclick="toggleGroupService('${s.id}')" id="gsvc-btn-${s.id}"
@@ -7437,9 +7825,22 @@ function saveGroupAndAdvance() {
   const curStatus = currentEntry.status || 'waiting';
   const targetStatus = curStatus === 'inservice' ? 'done' : 'inservice';
 
+  // Validate before advancing
+  if (targetStatus === 'inservice') {
+    // Must have a tech assigned to at least one service
+    const hasTech = (currentEntry.assignments||[]).some(a => a.techId);
+    if (!hasTech) {
+      showToast('Assign a technician before marking In Service.');
+      return;
+    }
+  }
   if (targetStatus === 'done') {
+    // Must have tech AND price for every service
     const incomplete = validateGroupAssignments([currentEntry]);
-    if (incomplete.length > 0) { showToast(currentEntry.name.split(' ')[0] + ' is missing tech or price.'); return; }
+    if (incomplete.length > 0) {
+      showToast(currentEntry.name.split(' ')[0] + ' — assign a tech and price for all services before marking Done.');
+      return;
+    }
   }
 
   if (!currentEntry.assignments || currentEntry.assignments.length === 0) {
@@ -7926,6 +8327,84 @@ function updateSyncLabel(state, label) {
   const lbl = document.getElementById('sync-label');
   if (dot) { dot.className = `sync-dot ${state}`; }
   if (lbl) lbl.textContent = label;
+}
+
+// ── Numeric Keypad ────────────────────────────────
+let _numpadTarget   = null; // the input element being edited
+let _numpadRaw      = '';   // raw string being built e.g. "3300" = $33.00
+let _numpadCallback = null; // optional callback after confirm
+
+function openNumpad(inputEl, label) {
+  _numpadTarget = inputEl;
+  _numpadCallback = null;
+  // Read existing value — strip non-numeric except decimal
+  const existing = (inputEl.value || '').replace(/[^0-9.]/g, '');
+  // Convert to cents string for internal representation
+  if (existing && !isNaN(parseFloat(existing))) {
+    // Store as integer cents
+    _numpadRaw = Math.round(parseFloat(existing) * 100).toString();
+  } else {
+    _numpadRaw = '';
+  }
+  document.getElementById('numpad-label').textContent = label || 'Cost';
+  _numpadUpdateDisplay();
+  document.getElementById('numpad-modal').classList.remove('hidden');
+  document.getElementById('numpad-modal').style.display = 'flex';
+  // Prevent native keyboard
+  inputEl.blur();
+}
+
+function _numpadUpdateDisplay() {
+  const cents = parseInt(_numpadRaw || '0', 10);
+  const dollars = cents / 100;
+  document.getElementById('numpad-display').textContent = '$' + dollars.toFixed(2);
+}
+
+function numpadKey(key) {
+  if (key === '.') return; // decimal handled via cents automatically
+  if (key === '+') {
+    // Quick add base cost if available — no-op for now, reserved
+    return;
+  }
+  if (key === '00') {
+    if (_numpadRaw === '' || _numpadRaw === '0') return;
+    _numpadRaw += '00';
+  } else {
+    if (_numpadRaw === '0') _numpadRaw = key;
+    else _numpadRaw += key;
+  }
+  // Cap at 6 digits ($9999.99)
+  if (_numpadRaw.length > 6) _numpadRaw = _numpadRaw.slice(0, 6);
+  _numpadUpdateDisplay();
+}
+
+function numpadBackspace() {
+  _numpadRaw = _numpadRaw.slice(0, -1);
+  _numpadUpdateDisplay();
+}
+
+function numpadConfirm() {
+  if (_numpadTarget) {
+    const cents = parseInt(_numpadRaw || '0', 10);
+    const dollars = (cents / 100).toFixed(2);
+    _numpadTarget.value = cents > 0 ? (cents / 100).toString() : '';
+    // Trigger the oninput handler so totals update
+    _numpadTarget.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  if (_numpadCallback) _numpadCallback();
+  _closeNumpadModal();
+}
+
+function closeNumpad(e) {
+  // Called when backdrop is tapped
+  numpadConfirm();
+}
+
+function _closeNumpadModal() {
+  document.getElementById('numpad-modal').classList.add('hidden');
+  document.getElementById('numpad-modal').style.display = '';
+  _numpadTarget = null;
+  _numpadRaw = '';
 }
 
 // ── Toast ────────────────────────────────────────
