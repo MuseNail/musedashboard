@@ -176,7 +176,14 @@ tailwind.config = {
   @media (pointer: coarse) {
     .turns-empty-slot { min-height: 60px !important; }
     .q-action-btn { min-width: 48px !important; min-height: 48px !important; }
-    button { touch-action: manipulation; }
+    button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    input, select, textarea { touch-action: manipulation; }
+    /* Remove 300ms tap delay on all interactive elements */
+    a, button, label, select, input[type="checkbox"], input[type="radio"] {
+      touch-action: manipulation;
+    }
+    /* Larger tap targets for service/status buttons */
+    .numpad-key { min-height: 56px !important; }
   }
 
   /* Queue action buttons — large touch targets */
@@ -417,10 +424,7 @@ tailwind.config = {
         <span class="sync-dot" id="sheets-sync-dot" style="background:#adb3b5"></span>
         <span id="sheets-sync-text">Sheets</span>
       </div>
-      <span class="text-[10px] font-body text-outline-variant px-2 select-none" title="musedashboard v1.19">v1.19</span>
-      <button onclick="syncSquare()" title="Sync Square" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container transition-colors">
-        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">sync</span>
-      </button>
+      <span class="text-[10px] font-body text-outline-variant px-2 select-none" title="musedashboard v1.21">v1.21</span>
       <button onclick="exportAllToSheets()" title="Export to Sheets" class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">upload_file</span>
       </button>
@@ -565,6 +569,10 @@ tailwind.config = {
             <p class="text-sm font-body text-on-surface-variant mt-0.5">All check-ins with service and payment details</p>
           </div>
           <div class="flex items-center gap-2">
+            <button id="add-historical-btn" onclick="showHistoricalEntryModal()"
+              class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+              <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical
+            </button>
             <input type="date" id="txn-date-filter" class="bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="renderTransactions()">
             <button onclick="document.getElementById('txn-date-filter').value=''; renderTransactions()" class="text-xs font-body text-primary underline">All</button>
           </div>
@@ -989,7 +997,7 @@ tailwind.config = {
       </div>
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Purchase Amount ($)</label>
-        <input type="number" id="gc-amount" min="0" step="0.01" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none">
+        <input type="text" inputmode="decimal" readonly id="gc-amount" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none cursor-pointer" onclick="openNumpad(this,'Amount')" onfocus="openNumpad(this,'Amount')">
       </div>
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
@@ -1009,7 +1017,7 @@ tailwind.config = {
       </div>
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Amount Used ($)</label>
-        <input type="number" id="gc-amount-used" min="0" step="0.01" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none">
+        <input type="text" inputmode="decimal" readonly id="gc-amount-used" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none cursor-pointer" onclick="openNumpad(this,'Amount Used')" onfocus="openNumpad(this,'Amount Used')">
       </div>
       <div class="col-span-2">
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Notes</label>
@@ -1204,6 +1212,8 @@ tailwind.config = {
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Role</label>
         <div class="flex gap-2">
+          <button type="button" id="role-btn-admin" onclick="selectRole('admin')"
+            class="role-btn flex-1 py-2 rounded-xl border-2 border-outline-variant bg-transparent text-on-surface font-body font-semibold text-sm transition-all">Admin</button>
           <button type="button" id="role-btn-manager" onclick="selectRole('manager')"
             class="role-btn flex-1 py-2 rounded-xl border-2 border-primary bg-primary text-on-primary font-body font-semibold text-sm transition-all">Manager</button>
           <button type="button" id="role-btn-frontdesk" onclick="selectRole('frontdesk')"
@@ -1672,6 +1682,70 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      NUMERIC KEYPAD MODAL (for price inputs)
 ═══════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════
+     HISTORICAL TRANSACTION ENTRY MODAL (admin only)
+═══════════════════════════════════════════════ -->
+<div id="historical-modal" class="fixed inset-0 z-[80] hidden items-center justify-center bg-on-surface/40 px-4">
+  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto no-scroll">
+    <div class="flex items-center justify-between mb-5">
+      <h2 class="text-xl font-headline font-bold text-on-surface">Add Historical Transaction</h2>
+      <button onclick="closeHistoricalModal()" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center">
+        <span class="material-symbols-outlined text-on-surface-variant">close</span>
+      </button>
+    </div>
+    <div class="space-y-4">
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Date</label>
+          <input type="date" id="hist-date" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+        </div>
+        <div>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Time</label>
+          <input type="time" id="hist-time" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+        </div>
+      </div>
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Customer Name</label>
+        <input type="text" id="hist-name" placeholder="Full name" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+      </div>
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
+        <input type="tel" id="hist-phone" placeholder="(555) 000-0000" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+      </div>
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Services</label>
+        <div id="hist-services" class="grid grid-cols-3 gap-2"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Technician</label>
+          <select id="hist-tech" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+            <option value="">— Select tech —</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Total ($)</label>
+          <input type="text" inputmode="decimal" readonly id="hist-total" placeholder="0.00"
+            class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none cursor-pointer"
+            onclick="openNumpad(this, 'Total Amount')" onfocus="openNumpad(this, 'Total Amount')">
+        </div>
+      </div>
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Type</label>
+        <div class="flex gap-2">
+          <button type="button" id="hist-type-walkin" onclick="setHistType('Walk-In')"
+            class="flex-1 py-2 rounded-xl border-2 border-primary bg-primary text-on-primary font-body font-semibold text-sm transition-all">Walk-In</button>
+          <button type="button" id="hist-type-appt" onclick="setHistType('Appointment')"
+            class="flex-1 py-2 rounded-xl border-2 border-outline-variant bg-transparent text-on-surface font-body font-semibold text-sm transition-all">Appointment</button>
+        </div>
+      </div>
+      <button onclick="saveHistoricalTransaction()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">
+        Save Transaction
+      </button>
+    </div>
+  </div>
+</div>
+
 <div id="numpad-modal" class="fixed inset-0 z-[90] hidden items-end justify-center bg-on-surface/40" onclick="closeNumpad(event)">
   <div class="bg-surface-container-lowest w-full max-w-sm rounded-t-2xl shadow-2xl pb-safe" onclick="event.stopPropagation()">
     <!-- Display -->
@@ -1690,7 +1764,7 @@ tailwind.config = {
       <button onclick="numpadKey('4')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">4</button>
       <button onclick="numpadKey('5')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">5</button>
       <button onclick="numpadKey('6')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">6</button>
-      <button onclick="numpadKey('+')" class="numpad-key bg-surface-container-lowest text-primary text-2xl font-headline font-bold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">+</button>
+      <button onclick="numpadKey('+')" id="numpad-plus-key" class="numpad-key bg-surface-container-lowest text-primary text-2xl font-headline font-bold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">+</button>
       <button onclick="numpadKey('7')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">7</button>
       <button onclick="numpadKey('8')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">8</button>
       <button onclick="numpadKey('9')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">9</button>
@@ -1700,7 +1774,7 @@ tailwind.config = {
       </button>
       <button onclick="numpadKey('00')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">00</button>
       <button onclick="numpadKey('0')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">0</button>
-      <button onclick="numpadKey('.')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">.</button>
+      <button onclick="numpadKey('.')" id="numpad-dot-key" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">.</button>
     </div>
   </div>
 </div>
@@ -1717,7 +1791,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAJYBBoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAEI/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//Z";
-const APP_VERSION  = 'v1.19';
+const APP_VERSION  = 'v1.21';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 const SHEETS_ID = "1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo";
@@ -1808,7 +1882,7 @@ let STAFF = JSON.parse(localStorage.getItem('muse_staff') || 'null') || [
 
 // Front desk users — each has a name, role, and PIN
 let FRONT_DESK_USERS = JSON.parse(localStorage.getItem('muse_fd_users') || 'null') || [
-  { id: "admin", name: "Manager", pin: "1234", role: "manager" },
+  { id: "admin", name: "Manager", pin: "1234", role: "admin" },
 ];
 let activeUser = null; // currently logged-in front desk user
 
@@ -4176,7 +4250,7 @@ function toggleSettingsSection(sectionId) {
   if (icon) icon.style.transform = isHidden ? 'rotate(180deg)' : '';
 }
 
-function renderSettingsPanel() { /* sections render on open */ }
+// renderSettingsPanel defined below
 
 function renderSettingsServiceVisibility() {
   const container = document.getElementById('settings-service-visibility');
@@ -4225,6 +4299,7 @@ function toggleCheckinService(id) {
   else hiddenCheckinServices.push(id);
   saveHiddenServices();
   renderSettingsServiceVisibility();
+  setTimeout(() => pushConfigToSheets(), 1000); // sync to other devices
 }
 
 function toggleAllCheckinServices() {
@@ -4238,6 +4313,7 @@ function toggleActiveStaff(id) {
   else inactiveStaff.push(id);
   saveInactiveStaff();
   renderSettingsActiveStaff();
+  setTimeout(() => pushConfigToSheets(), 1000); // sync to other devices
 }
 
 function toggleAllActiveStaff() {
@@ -4496,7 +4572,7 @@ function showPhotoUpload(type, id) {
 }
 
 // Also keep old showStaffPhotoModal as alias for backward compatibility
-function showStaffPhotoModal(staffId) { showPhotoUpload('staff', staffId); }
+// showStaffPhotoModal defined below
 
 function closePhotoCrop() {
   document.getElementById('photo-crop-modal').classList.add('hidden');
@@ -4660,9 +4736,8 @@ function clearPhotoCrop() {
 }
 
 // Keep old functions as aliases
-function closeStaffPhotoModal() { closePhotoCrop(); }
-function saveStaffPhoto()       { savePhotoCrop(); }
-function clearStaffPhoto()      { clearPhotoCrop(); }
+// closeStaffPhotoModal defined below
+// saveStaffPhoto and clearStaffPhoto defined below
 
 
 
@@ -5936,11 +6011,10 @@ function setupTurnsDragDrop() { /* no-op — drag handled by event delegation ab
 const CONFIG_KEYS = [
   'muse_staff', 'muse_services', 'muse_fd_users',
   'muse_schedule', 'muse_turn_config', 'muse_bonus_services',
-  'muse_hidden_services', 'muse_inactive_staff',
+  'muse_hidden_services', 'muse_inactive_staff', 'muse_logo',
 ];
 
 async function pushConfigToSheets() {
-  if (!squareConfig) return;
   try {
     const config = {};
     CONFIG_KEYS.forEach(k => {
@@ -6096,10 +6170,13 @@ async function pollSheets() {
         ...e,
         checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
       }))));
-      renderQueue();
-      updateStats();
-      renderTurns();
-      setSheetsIndicator('ok');
+      // Use RAF for smooth rendering — avoids janky repaints on iPad
+      requestAnimationFrame(() => {
+        renderQueue();
+        updateStats();
+        renderTurns();
+        setSheetsIndicator('ok');
+      });
     }
   } catch(e) {
     console.warn('[Sync] Poll failed:', e);
@@ -6715,7 +6792,6 @@ function updateLoggedInDisplay() {
   const name = activeUser?.name || 'Manager';
   nameEl.textContent = name;
 
-  // Look up photo — check FRONT_DESK_USERS first (by id), then STAFF (by id then name)
   const fdUser    = FRONT_DESK_USERS.find(u => u.id === activeUser?.id);
   const staffUser = STAFF.find(s => s.id === activeUser?.id) || STAFF.find(s => s.name === name);
   const photo     = fdUser?.photo || staffUser?.photo || null;
@@ -6726,6 +6802,8 @@ function updateLoggedInDisplay() {
     avatarEl.innerHTML = '';
     avatarEl.textContent = name.charAt(0).toUpperCase();
   }
+  // Show/hide admin-only features
+  updateHistoricalButtonVisibility();
 }
 
 // ── Edit Check-In ─────────────────────────────────
@@ -7153,7 +7231,7 @@ function pinBackspace() {
 function checkPin() {
   // Show matched user name as they type (without revealing PIN)
   const matched = FRONT_DESK_USERS.find(u => u.pin === pinBuffer) ||
-    (pinBuffer === STAFF_PIN ? { name: 'Manager', role: 'manager' } : null);
+    (pinBuffer === STAFF_PIN ? { name: 'Manager', role: 'admin' } : null);
 
   const matchedEl = document.getElementById('pin-matched-user');
   if (matched && pinBuffer.length >= 4) {
@@ -7171,7 +7249,7 @@ function checkPin() {
 
   if (user || isFallback) {
     setTimeout(() => {
-      activeUser = user || { id: 'fallback', name: 'Manager', pin: STAFF_PIN, role: 'manager' };
+      activeUser = user || { id: 'fallback', name: 'Manager', pin: STAFF_PIN, role: 'admin' };
       pinCancel();
       updateLoggedInDisplay();
       goTo('screen-desk');
@@ -7234,7 +7312,7 @@ function renderFdUsersList() {
   // Show PIN viewer button only for managers
   const pinSection = document.getElementById('pin-viewer-section');
   if (pinSection) {
-    pinSection.classList.toggle('hidden', activeUser?.role !== 'manager');
+    pinSection.classList.toggle('hidden', !['admin','manager'].includes(activeUser?.role));
   }
   // Reset pin viewer if it was open
   const pinList = document.getElementById('pin-viewer-list');
@@ -7275,7 +7353,7 @@ function renderFdUsersList() {
 
 function selectRole(role) {
   document.getElementById('fduser-role-input').value = role;
-  ['manager','frontdesk'].forEach(r => {
+  ['admin','manager','frontdesk'].forEach(r => {
     const btn = document.getElementById(`role-btn-${r}`);
     if (r === role) {
       btn.classList.add('bg-primary','text-on-primary','border-primary');
@@ -8468,41 +8546,86 @@ function updateSyncLabel(state, label) {
 
 // ── Numeric Keypad ────────────────────────────────
 let _numpadTarget   = null; // the input element being edited
-let _numpadRaw      = '';   // raw string being built e.g. "3300" = $33.00
+let _numpadRaw      = '';   // raw string being built
 let _numpadCallback = null; // optional callback after confirm
+let _numpadMode     = 'cost'; // 'cost' | 'phone'
 
 function openNumpad(inputEl, label) {
-  _numpadTarget = inputEl;
+  _numpadMode     = 'cost';
+  _numpadTarget   = inputEl;
   _numpadCallback = null;
-  // Read existing value — strip non-numeric except decimal
   const existing = (inputEl.value || '').replace(/[^0-9.]/g, '');
-  // Convert to cents string for internal representation
-  if (existing && !isNaN(parseFloat(existing))) {
-    // Store as integer cents
-    _numpadRaw = Math.round(parseFloat(existing) * 100).toString();
-  } else {
-    _numpadRaw = '';
-  }
+  _numpadRaw = existing && !isNaN(parseFloat(existing))
+    ? Math.round(parseFloat(existing) * 100).toString()
+    : '';
   document.getElementById('numpad-label').textContent = label || 'Cost';
+  // Show decimal dot key, show 00 key
+  document.getElementById('numpad-dot-key').textContent = '.';
+  document.getElementById('numpad-plus-key').textContent = '+';
   _numpadUpdateDisplay();
   document.getElementById('numpad-modal').classList.remove('hidden');
   document.getElementById('numpad-modal').style.display = 'flex';
-  // Prevent native keyboard
   inputEl.blur();
 }
 
+function openPhoneNumpad(inputEl, label) {
+  _numpadMode     = 'phone';
+  _numpadTarget   = inputEl;
+  _numpadCallback = null;
+  // Strip formatting — keep digits only
+  _numpadRaw = (inputEl.value || '').replace(/\D/g, '').slice(0, 10);
+  document.getElementById('numpad-label').textContent = label || 'Phone Number';
+  // Change dot key to show nothing useful for phone — hide it
+  document.getElementById('numpad-dot-key').textContent = '';
+  document.getElementById('numpad-plus-key').textContent = '';
+  _numpadUpdateDisplay();
+  document.getElementById('numpad-modal').classList.remove('hidden');
+  document.getElementById('numpad-modal').style.display = 'flex';
+  inputEl.blur();
+}
+
+// Global listener: intercept focus on tel inputs to show phone numpad
+document.addEventListener('focusin', e => {
+  const el = e.target;
+  if (el.tagName === 'INPUT' && el.type === 'tel' && !el.dataset.noNumpad) {
+    // Use setTimeout to avoid interfering with the focus event itself
+    setTimeout(() => openPhoneNumpad(el, el.placeholder || 'Phone Number'), 0);
+  }
+});
+
 function _numpadUpdateDisplay() {
-  const cents = parseInt(_numpadRaw || '0', 10);
-  const dollars = cents / 100;
-  document.getElementById('numpad-display').textContent = '$' + dollars.toFixed(2);
+  const el = document.getElementById('numpad-display');
+  if (_numpadMode === 'phone') {
+    // Format as (XXX) XXX-XXXX
+    const d = _numpadRaw;
+    let formatted = '';
+    if (d.length === 0) formatted = '';
+    else if (d.length <= 3) formatted = '(' + d;
+    else if (d.length <= 6) formatted = '(' + d.slice(0,3) + ') ' + d.slice(3);
+    else formatted = '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6,10);
+    el.textContent = formatted || '—';
+  } else {
+    const cents = parseInt(_numpadRaw || '0', 10);
+    el.textContent = '$' + (cents / 100).toFixed(2);
+  }
 }
 
 function numpadKey(key) {
-  if (key === '.') return; // decimal handled via cents automatically
-  if (key === '+') {
-    // Quick add base cost if available — no-op for now, reserved
+  if (_numpadMode === 'phone') {
+    if (key === '.' || key === '+') return; // no decimals for phone
+    if (_numpadRaw.length >= 10) return;    // max 10 digits
+    if (key === '00') {
+      if (_numpadRaw.length + 2 <= 10) _numpadRaw += '00';
+      else if (_numpadRaw.length + 1 <= 10) _numpadRaw += '0';
+    } else {
+      _numpadRaw += key;
+    }
+    _numpadUpdateDisplay();
     return;
   }
+  // Cost mode
+  if (key === '.') return;
+  if (key === '+') return;
   if (key === '00') {
     if (_numpadRaw === '' || _numpadRaw === '0') return;
     _numpadRaw += '00';
@@ -8510,7 +8633,6 @@ function numpadKey(key) {
     if (_numpadRaw === '0') _numpadRaw = key;
     else _numpadRaw += key;
   }
-  // Cap at 6 digits ($9999.99)
   if (_numpadRaw.length > 6) _numpadRaw = _numpadRaw.slice(0, 6);
   _numpadUpdateDisplay();
 }
@@ -8522,10 +8644,17 @@ function numpadBackspace() {
 
 function numpadConfirm() {
   if (_numpadTarget) {
-    const cents = parseInt(_numpadRaw || '0', 10);
-    const dollars = (cents / 100).toFixed(2);
-    _numpadTarget.value = cents > 0 ? (cents / 100).toString() : '';
-    // Trigger the oninput handler so totals update
+    if (_numpadMode === 'phone') {
+      // Format phone number for the input
+      const d = _numpadRaw;
+      let formatted = '';
+      if (d.length === 10) formatted = '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
+      else if (d.length > 0) formatted = d; // partial — just digits
+      _numpadTarget.value = formatted;
+    } else {
+      const cents = parseInt(_numpadRaw || '0', 10);
+      _numpadTarget.value = cents > 0 ? (cents / 100).toString() : '';
+    }
     _numpadTarget.dispatchEvent(new Event('input', { bubbles: true }));
   }
   if (_numpadCallback) _numpadCallback();
@@ -8533,7 +8662,6 @@ function numpadConfirm() {
 }
 
 function closeNumpad(e) {
-  // Called when backdrop is tapped
   numpadConfirm();
 }
 
@@ -8542,6 +8670,131 @@ function _closeNumpadModal() {
   document.getElementById('numpad-modal').style.display = '';
   _numpadTarget = null;
   _numpadRaw = '';
+}
+
+// ── Historical Transaction Entry (admin only) ──────
+let _histType = 'Walk-In';
+let _histServices = [];
+
+function showHistoricalEntryModal() {
+  if (!['admin'].includes(activeUser?.role)) { showToast('Admin access required'); return; }
+  // Pre-fill date/time to today/now
+  const now = new Date();
+  document.getElementById('hist-date').value = todayStr();
+  document.getElementById('hist-time').value = now.toTimeString().slice(0,5);
+  document.getElementById('hist-name').value = '';
+  document.getElementById('hist-phone').value = '';
+  document.getElementById('hist-total').value = '';
+  _histServices = [];
+  _histType = 'Walk-In';
+  setHistType('Walk-In');
+
+  // Populate services
+  const svcGrid = document.getElementById('hist-services');
+  svcGrid.innerHTML = SERVICES.filter(s => isServiceVisibleOnCheckin(s.id)).map(s =>
+    `<button type="button" onclick="toggleHistService('${s.id}',this)"
+      class="px-3 py-2 rounded-xl border-2 border-surface-container-high text-xs font-body font-semibold text-on-surface-variant hover:border-primary transition-all"
+      data-sid="${s.id}">${s.label}</button>`
+  ).join('');
+
+  // Populate tech dropdown
+  const techSel = document.getElementById('hist-tech');
+  techSel.innerHTML = '<option value="">— Select tech —</option>' +
+    getActiveStaff().map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+  document.getElementById('historical-modal').classList.remove('hidden');
+  document.getElementById('historical-modal').style.display = 'flex';
+}
+
+function closeHistoricalModal() {
+  document.getElementById('historical-modal').classList.add('hidden');
+  document.getElementById('historical-modal').style.display = '';
+}
+
+function toggleHistService(sid, btn) {
+  if (_histServices.includes(sid)) {
+    _histServices = _histServices.filter(s => s !== sid);
+    btn.classList.remove('border-primary', 'bg-primary/10', 'text-primary');
+    btn.classList.add('border-surface-container-high', 'text-on-surface-variant');
+  } else {
+    _histServices.push(sid);
+    btn.classList.add('border-primary', 'bg-primary/10', 'text-primary');
+    btn.classList.remove('border-surface-container-high', 'text-on-surface-variant');
+  }
+}
+
+function setHistType(type) {
+  _histType = type;
+  ['Walk-In','Appointment'].forEach(t => {
+    const btn = document.getElementById('hist-type-' + (t === 'Walk-In' ? 'walkin' : 'appt'));
+    if (t === type) {
+      btn.classList.add('bg-primary','text-on-primary','border-primary');
+      btn.classList.remove('bg-transparent','border-outline-variant','text-on-surface');
+    } else {
+      btn.classList.remove('bg-primary','text-on-primary','border-primary');
+      btn.classList.add('bg-transparent','border-outline-variant','text-on-surface');
+    }
+  });
+}
+
+function saveHistoricalTransaction() {
+  const name  = document.getElementById('hist-name').value.trim();
+  const phone = document.getElementById('hist-phone').value.trim();
+  const total = parseFloat(document.getElementById('hist-total').value) || 0;
+  const techId = document.getElementById('hist-tech').value;
+  const dateVal = document.getElementById('hist-date').value;
+  const timeVal = document.getElementById('hist-time').value;
+
+  if (!name) { showToast('Enter a customer name'); return; }
+  if (!dateVal) { showToast('Select a date'); return; }
+
+  const checkinTime = new Date(`${dateVal}T${timeVal || '12:00'}:00`);
+  const entryId = Date.now() + Math.random();
+
+  const assignments = _histServices.length > 0
+    ? _histServices.map(sid => ({
+        serviceId: sid, techId: techId || '',
+        status: 'done', cost: total / Math.max(_histServices.length, 1),
+        assignedAt: checkinTime.getTime(),
+      }))
+    : total > 0 ? [{ serviceId: '', techId: techId || '', status: 'done', cost: total, assignedAt: checkinTime.getTime() }] : [];
+
+  const record = {
+    id:            String(entryId),
+    name,
+    phone:         phone || '',
+    services:      _histServices,
+    assignments,
+    totalCost:     total,
+    checkinTime:   checkinTime.toISOString(),
+    completedAt:   checkinTime.toISOString(),
+    status:        'done',
+    isAppointment: _histType === 'Appointment',
+    loggedBy:      activeUser?.name || 'Admin',
+  };
+
+  // Add to allRecords
+  allRecords.push(record);
+  localStorage.setItem('muse_records', JSON.stringify(allRecords));
+
+  // Push to Sheets — Check-Ins row + Transaction Log row
+  const entry = {
+    ...record,
+    checkinTime: checkinTime,
+    completedAt: checkinTime,
+  };
+  sendCheckinRow(entry);
+  exportToSheets(entry);
+
+  closeHistoricalModal();
+  renderTransactions();
+  showToast('Historical transaction saved ✓');
+}
+
+// Show/hide "Add Historical" button based on role
+function updateHistoricalButtonVisibility() {
+  const btn = document.getElementById('add-historical-btn');
+  if (btn) btn.classList.toggle('hidden', activeUser?.role !== 'admin');
 }
 
 // ── Toast ────────────────────────────────────────
