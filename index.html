@@ -420,7 +420,7 @@ tailwind.config = {
         <span class="sync-dot" id="cal-sync-dot" style="background:#adb3b5"></span>
         <span id="cal-sync-text">Calendar</span>
       </div>
-      <span class="text-[10px] font-body text-outline-variant select-none" title="musedashboard v1.38">v1.38</span>
+      <span class="text-[10px] font-body text-outline-variant select-none" title="musedashboard v1.39">v1.39</span>
       <button onclick="exportAllToSheets()" title="Export to Sheets" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">upload_file</span>
       </button>
@@ -772,7 +772,7 @@ tailwind.config = {
                 <span class="material-symbols-outlined" style="font-size:16px">tune</span>
                 <span id="cal-selector-label">Calendars</span>
               </button>
-              <div id="cal-selector-dropdown" class="hidden absolute right-0 top-10 z-50 bg-surface-container-lowest rounded-xl shadow-2xl border border-surface-container-high p-3 min-w-48 space-y-1">
+              <div id="cal-selector-dropdown" class="hidden absolute right-0 top-10 z-50 rounded-xl shadow-2xl border border-surface-container-high p-3 min-w-48 space-y-1" style="background:var(--md-surface);border:1px solid var(--md-outline-variant)">
                 <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2">Show/Hide Calendars</div>
                 <div id="cal-selector-list"></div>
                 <div class="border-t border-surface-container-high mt-2 pt-2 flex gap-2">
@@ -806,7 +806,7 @@ tailwind.config = {
             <div id="cal-grid" class="hidden flex-1 min-h-0"></div>
           </div>
           <!-- Tasks panel -->
-          <div id="cal-tasks-panel" class="hidden flex-col rounded-xl border border-surface-container-high bg-surface-container-lowest overflow-hidden" style="width:260px;flex-shrink:0">
+          <div id="cal-tasks-panel" class="hidden flex-col rounded-xl border overflow-hidden" style="width:260px;flex-shrink:0;background:var(--md-surface);border-color:var(--md-outline-variant);box-shadow:0 2px 8px rgba(0,0,0,0.08)">
             <div class="flex items-center justify-between px-3 py-2.5 border-b border-surface-container-high">
               <div class="flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-primary" style="font-size:16px">task_alt</span>
@@ -2124,7 +2124,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAJYBBoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAEI/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//Z";
-const APP_VERSION  = 'v1.38';
+const APP_VERSION  = 'v1.39';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 const SHEETS_ID = "1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo";
@@ -4596,6 +4596,7 @@ function autoCapitalize(input) {
 // Persist which services are shown on customer-facing check-in
 let hiddenCheckinServices = JSON.parse(localStorage.getItem('muse_hidden_services') || '[]');
 let hiddenDashServices    = JSON.parse(localStorage.getItem('muse_hidden_dash_services') || '[]');
+let showDoneInQueue = true; // toggle for showing/hiding done cards in queue tab
 
 // Retail items — synced from Square Item Library, also editable locally
 let ITEMS = JSON.parse(localStorage.getItem('muse_items') || 'null') || [
@@ -6610,7 +6611,7 @@ async function pushConfigToSheets() {
 
 async function loadConfigFromSheets() {
   try {
-    const res  = await fetch(`${SHEETS_PROXY}?action=loadConfig`);
+    const res  = await fetch(`${SHEETS_PROXY}?action=loadConfig&_=${Date.now()}`);
     const data = await res.json();
     if (!data.success || !data.config) return false;
     let changed = false;
@@ -6676,6 +6677,7 @@ async function pushQueueToSheets() {
         device: DEVICE_ID,
         clientDate,
         turnsOrder: turnsTechOrder, // piggyback turns order on every queue push
+        deletedIds: allRecords.filter(r => r.status === 'deleted').map(r => String(r.id)),
         queue: queue.map(e => ({
           ...e,
           checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
@@ -6712,6 +6714,7 @@ async function loadQueueFromSheets() {
         updatedAt:  data.updatedAt,
         device:     data.device,
         turnsOrder: data.turnsOrder || null,
+        deletedIds: data.deletedIds || [],
       };
     }
   } catch(e) { console.warn('Sheets load failed:', e); }
@@ -6737,6 +6740,25 @@ async function pollSheets() {
     const needsSync = isNewer || sizeDiff || localEmpty;
 
     // SAFETY: never replace a non-empty queue with an empty one during polling
+    // Apply deleted IDs from the queue payload — cross-device delete sync
+    if (result.deletedIds && result.deletedIds.length > 0) {
+      let deletionChanged = false;
+      result.deletedIds.forEach(id => {
+        const existing = allRecords.find(r => String(r.id) === String(id));
+        if (existing && existing.status !== 'deleted') {
+          existing.status = 'deleted';
+          deletionChanged = true;
+        } else if (!existing) {
+          // Not in allRecords yet — add a deleted placeholder
+          allRecords.push({ id: String(id), status: 'deleted', name: '', totalCost: 0, services: [], assignments: [] });
+          deletionChanged = true;
+        }
+      });
+      if (deletionChanged) {
+        localStorage.setItem('muse_records', JSON.stringify(allRecords));
+      }
+    }
+
     if (needsSync && !(result.queue.length === 0 && queue.length > 0)) {
       console.log('[Sync] Poll update — Sheets:', result.queue.length, 'local:', queue.length, 'newer:', isNewer);
       _lastSheetsUpdate = result.updatedAt || new Date().toISOString();
@@ -9840,8 +9862,9 @@ function calRenderGrid() {
   const SLOT_H     = _calSlotH   || 52;
   const HEADER_H   = 48;
   const TIME_W     = 64;
-  // Fit columns to screen width; min 120px — only scroll if needed
-  const availW = window.innerWidth - TIME_W - 60;
+  // All columns equal width — account for tasks panel if visible
+  const tasksPanelW = (!_tasksMinimized && document.getElementById('cal-tasks-panel')?.style.display !== 'none') ? 280 : 44;
+  const availW = window.innerWidth - TIME_W - tasksPanelW - 48;
   const COL_W  = Math.max(120, Math.floor(availW / visible.length));
 
   const now     = new Date();
@@ -10136,8 +10159,8 @@ function renderTasks(tasks) {
     return `<div class="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-container transition-colors group">
       <button onclick="toggleTask('${lid}','${t.id}','${done?'needsAction':'completed'}')"
         class="flex-shrink-0 transition-colors mt-0.5"
-        style="width:16px;height:16px;border-radius:50%;border:2px solid ${done?'var(--md-primary)':'var(--md-outline-variant)'};
-               background:${done?'var(--md-primary)':'transparent'};display:flex;align-items:center;justify-content:center;min-width:16px">
+        style="width:16px;height:16px;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};
+               background:${done?'#1a5252':'#ffffff'};display:flex;align-items:center;justify-content:center;min-width:16px">
         ${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;font-variation-settings:\'FILL\' 1">check</span>':''}
       </button>
       <div class="flex-1 min-w-0" style="line-height:1.3">
@@ -10158,14 +10181,23 @@ function toggleTasksPanel() {
   const panel = document.getElementById('cal-tasks-panel');
   const btn   = document.getElementById('tasks-minimize-btn');
   const body  = document.getElementById('tasks-list');
-  const sel   = document.getElementById('tasks-list-select')?.parentElement;
+  const selWrap = document.getElementById('tasks-list-select')?.parentElement;
   if (panel) {
-    panel.style.width = _tasksMinimized ? '36px' : '260px';
+    panel.style.width = _tasksMinimized ? '40px' : '260px';
+    panel.style.overflow = 'hidden';
     if (body) body.style.display = _tasksMinimized ? 'none' : '';
-    if (sel) sel.style.display = _tasksMinimized ? 'none' : '';
+    if (selWrap) selWrap.style.display = _tasksMinimized ? 'none' : '';
+    // Hide title text but keep header row for the button
+    const titleEl = panel.querySelector('.font-headline.font-bold.text-on-surface.text-sm');
+    if (titleEl) titleEl.style.display = _tasksMinimized ? 'none' : '';
+    const iconEl = panel.querySelector('.material-symbols-outlined.text-primary');
+    if (iconEl) iconEl.style.display = _tasksMinimized ? 'none' : '';
+    const addBtn = panel.querySelector('button[title="Add task"]');
+    if (addBtn) addBtn.style.display = _tasksMinimized ? 'none' : '';
   }
   if (btn) {
     btn.querySelector('.material-symbols-outlined').textContent = _tasksMinimized ? 'chevron_left' : 'chevron_right';
+    btn.title = _tasksMinimized ? 'Show Tasks' : 'Hide Tasks';
   }
 }
 
@@ -10382,7 +10414,7 @@ async function saveTokenToSheets(token, expires) {
 
 async function loadTokenFromSheets() {
   try {
-    const res  = await fetch(`${SHEETS_PROXY}?action=loadConfig`);
+    const res  = await fetch(`${SHEETS_PROXY}?action=loadConfig&_=${Date.now()}`);
     const data = await res.json();
     if (data.success && data.config?.gcal_token) {
       const { token, expires } = data.config.gcal_token;
