@@ -2225,14 +2225,20 @@ let FRONT_DESK_USERS = JSON.parse(localStorage.getItem('muse_fd_users') || 'null
 ];
 let activeUser = null; // currently logged-in front desk user
 
-function saveFrontDeskUsers() { localStorage.setItem('muse_fd_users', JSON.stringify(FRONT_DESK_USERS)); }
+function saveFrontDeskUsers() {
+  localStorage.setItem('muse_fd_users', JSON.stringify(FRONT_DESK_USERS));
+  _configWriteTime = Date.now(); // lock immediately so poll doesn't overwrite
+  setTimeout(() => pushConfigToSheets(), 1000);
+}
 function saveFdUsersToStorage() { saveFrontDeskUsers(); }
 function saveServicesToStorage() {
   localStorage.setItem('muse_services', JSON.stringify(SERVICES));
+  _configWriteTime = Date.now(); // lock immediately so poll doesn't overwrite
   setTimeout(() => pushConfigToSheets(), 1000);
 }
 function saveStaffToStorage() {
   localStorage.setItem('muse_staff', JSON.stringify(STAFF));
+  _configWriteTime = Date.now(); // lock immediately so poll doesn't overwrite
   setTimeout(() => pushConfigToSheets(), 1000); // sync to Sheets for other devices
 }
 
@@ -4692,10 +4698,12 @@ let FEES = JSON.parse(localStorage.getItem('muse_fees') || 'null') || [
 
 function saveItems() {
   localStorage.setItem('muse_items', JSON.stringify(ITEMS));
+  _configWriteTime = Date.now();
   setTimeout(() => pushConfigToSheets(), 500);
 }
 function saveFees() {
   localStorage.setItem('muse_fees', JSON.stringify(FEES));
+  _configWriteTime = Date.now();
   setTimeout(() => pushConfigToSheets(), 500);
 }
 
@@ -4709,6 +4717,7 @@ function toggleDashService(id) {
   else hiddenDashServices.push(id);
   saveHiddenDashServices();
   renderSettingsDashServiceVisibility();
+  _configWriteTime = Date.now();
   setTimeout(() => pushConfigToSheets(), 1000);
 }
 function toggleAllDashServices() {
@@ -5291,6 +5300,7 @@ function savePhotoCrop() {
     closePhotoCrop();
     setLogo();
     // Push to Sheets so other devices get the logo
+    _configWriteTime = Date.now();
     setTimeout(() => pushConfigToSheets(), 500);
     showToast('Logo saved ✓');
     return;
@@ -5455,6 +5465,7 @@ let schedulePickerTarget = null; // { date, staffId }
 
 function saveScheduleData() {
   localStorage.setItem('muse_schedule', JSON.stringify(scheduleData));
+  _configWriteTime = Date.now();
   setTimeout(() => pushConfigToSheets(), 1000);
 }
 
@@ -6476,6 +6487,7 @@ function setTechBreak(isBreak) {
   saveTurnsBreak(); saveTurnsOff();
   closeTechStatusMenu();
   renderTurnsTechGrid();
+  _configWriteTime = Date.now();
   setTimeout(() => pushConfigToSheets(), 500);
 }
 
@@ -6484,6 +6496,7 @@ function setTechOff() {
   const staffId = _techStatusMenuId;
   toggleTurnsOffStaff(staffId);
   closeTechStatusMenu();
+  _configWriteTime = Date.now();
   setTimeout(() => pushConfigToSheets(), 500);
 }
 
@@ -6696,16 +6709,12 @@ async function pushConfigToSheets() {
     CONFIG_KEYS.forEach(k => {
       const v = localStorage.getItem(k);
       if (!v) return;
-      // muse_logo is stored as raw base64 string — not JSON wrapped
-      // All other keys are JSON arrays/objects
       if (k === 'muse_logo') {
-        config[k] = v; // store as-is
+        config[k] = v;
       } else {
         try { config[k] = JSON.parse(v); } catch(e) { config[k] = v; }
       }
     });
-    // Record write time BEFORE the fetch so the poll lock is in place immediately
-    _configWriteTime = Date.now();
     await fetch(`${SHEETS_PROXY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -10327,6 +10336,7 @@ function saveTurnsAndSync() {
   localStorage.setItem('muse_turns_break', JSON.stringify(turnsBreakStaff));
   localStorage.setItem('muse_turns_off',   JSON.stringify(turnsOffStaff));
   renderTurns();
+  _configWriteTime = Date.now();
   pushConfigToSheets();
   showToast('Turns saved & synced ✓');
 }
