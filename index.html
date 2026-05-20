@@ -2128,10 +2128,9 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = ""; // No default logo — upload one in Settings → Business Logo
-const APP_VERSION  = 'v1.43';
+const APP_VERSION  = 'v1.46';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
-const SHEETS_ID = "1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo";
 
 // ── State ────────────────────────────────────────
 let queue = [];
@@ -2139,15 +2138,24 @@ let queue = [];
 const QUEUE_STORAGE_KEY = 'muse_live_queue';
 const QUEUE_DATE_KEY    = 'muse_live_queue_date';
 
+// Whether this session has ever had a non-empty queue — used to distinguish
+// "deliberately cleared" from "fresh device with no data" in pushQueueToSheets.
+// Declared here so loadQueueFromStorage (below) can safely set it.
+let _queueWasPopulated = false;
+
+// Shared queue serializer — converts Date objects to ISO strings for storage/transmission
+function serializeQueue(q) {
+  return q.map(e => ({
+    ...e,
+    checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
+  }));
+}
+
 function saveQueueToStorage() {
   const today = todayStr();
   localStorage.setItem(QUEUE_DATE_KEY, today);
-  localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue.map(e => ({
-    ...e,
-    checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
-  }))));
-  // Only push to Sheets if we actually have something — don't spam empty queue rows
-  if (queue.length > 0) scheduleSheetsSave();
+  localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(serializeQueue(queue)));
+  scheduleSheetsSave();
 }
 
 function loadQueueFromStorage() {
@@ -2192,32 +2200,11 @@ let currentFilter = 'all';
 let pinBuffer = "";
 let squareConfig = JSON.parse(localStorage.getItem('muse_sq_config') || 'null');
 
-// Services — editable, persisted to localStorage
-let SERVICES = JSON.parse(localStorage.getItem('muse_services') || 'null') || [
-  { id: "manicure", label: "Manicure",       abbr: "M"   },
-  { id: "pedicure", label: "Pedicure",        abbr: "P"   },
-  { id: "fullset",  label: "Full Set",         abbr: "FS"  },
-  { id: "fill",     label: "Fill",             abbr: "FI"  },
-  { id: "dip",      label: "Dip",              abbr: "D"   },
-  { id: "polish",   label: "Polish Change",    abbr: "PC"  },
-  { id: "wax",      label: "Wax",              abbr: "W"   },
-  { id: "other",    label: "Other",            abbr: "..." },
-];
+// Services — editable, persisted to localStorage and synced from Sheets on load
+let SERVICES = JSON.parse(localStorage.getItem('muse_services') || 'null') || [];
 
-// Staff — editable, persisted to localStorage
-let STAFF = JSON.parse(localStorage.getItem('muse_staff') || 'null') || [
-  { id: "christina", name: "Christina" },
-  { id: "emily",     name: "Emily"     },
-  { id: "john",      name: "John"      },
-  { id: "kat",       name: "Kat"       },
-  { id: "lyn",       name: "Lyn"       },
-  { id: "lee",       name: "Lee"       },
-  { id: "mary",      name: "Mary"      },
-  { id: "miley",     name: "Miley"     },
-  { id: "my",        name: "My"        },
-  { id: "sarah",     name: "Sarah"     },
-  { id: "tu",        name: "Tu"        },
-];
+// Staff — editable, persisted to localStorage and synced from Sheets on load
+let STAFF = JSON.parse(localStorage.getItem('muse_staff') || 'null') || [];
 
 // Front desk users — each has a name, role, and PIN
 let FRONT_DESK_USERS = JSON.parse(localStorage.getItem('muse_fd_users') || 'null') || [
@@ -2239,7 +2226,6 @@ function saveServicesToStorage() {
 function saveStaffToStorage() {
   localStorage.setItem('muse_staff', JSON.stringify(STAFF));
   _configWriteTime = Date.now();
-  console.log(`[Config] saveStaffToStorage — _configWriteTime set, STAFF count: ${STAFF.length}`);
   setTimeout(() => pushConfigToSheets(), 1000);
 }
 
@@ -2318,18 +2304,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check if a newer version is deployed — fetches live file bypassing CDN cache.
   // If a newer version exists, reloads automatically. Must run first.
   await checkAppVersion();
-  // 1. Load from localStorage instantly (offline fallback)
-  queue = loadQueueFromStorage();
-  renderQueue(); // show local data immediately while fetching
 
-  // Start Sheets polling immediately on load
-  startSheetsPolling();
-
-  // 2. Fetch from Sheets — with retry (Apps Script can be slow on cold start)
+  // 1. Load config from Sheets FIRST so STAFF/SERVICES are populated before any render.
+  //    On a fresh/cleared device this is the only source of staff and service data.
   setSheetsIndicator('syncing');
-
-  // Always load config from Sheets — don't gate on squareConfig
-  const configChanged = await loadConfigFromSheets();
+  const { changed: configChanged } = await loadConfigFromSheets();
   if (configChanged) {
     const staffRaw    = localStorage.getItem('muse_staff');
     const servicesRaw = localStorage.getItem('muse_services');
@@ -2345,17 +2324,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (feesRaw) { try { const t = JSON.parse(feesRaw); if (Array.isArray(t) && t.length) FEES = t; } catch(e){} }
     const hiddenDashRaw = localStorage.getItem('muse_hidden_dash_services');
     if (hiddenDashRaw) { try { hiddenDashServices = JSON.parse(hiddenDashRaw); } catch(e){} }
-    // Apply logo if it changed
+    const hCheckinRaw = localStorage.getItem('muse_hidden_services');
+    if (hCheckinRaw) { try { hiddenCheckinServices = JSON.parse(hCheckinRaw); } catch(e){} }
+    const inactiveRaw = localStorage.getItem('muse_inactive_staff');
+    if (inactiveRaw) { try { inactiveStaff = JSON.parse(inactiveRaw); } catch(e){} }
     setLogo();
   }
+
+  // 2. Load queue from localStorage (instant offline fallback) then render
+  queue = loadQueueFromStorage();
+  renderQueue();
+
+  // Start Sheets polling
+  startSheetsPolling();
 
   // Try to load queue from Sheets — retry once if first attempt fails
   // Also load photos, records, and gift cards in parallel
   const [, , , result] = await Promise.all([
     loadPhotosFromSheets().then(() => applyPhotosToObjects()),
-    loadRecordsFromSheets().then(ok => {
+    // Records: try blob (App Config row 4) first — it's the authoritative cross-device source.
+    // Fall back to Transaction Log if blob is empty (e.g. first deploy before any completions).
+    (async () => {
+      let ok = await pullRecordsIfNewer(null, true); // force=true to load regardless of timestamp
+      if (!ok) ok = await loadRecordsFromSheets();
       if (ok) {
-        // Re-render if Reports or Transactions panel is currently visible
         const activePanel = document.querySelector('.dash-panel.active');
         if (activePanel) {
           const id = activePanel.id;
@@ -2363,7 +2355,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (id === 'panel-transactions')  renderTransactions();
         }
       }
-    }),
+    })(),
     loadGiftCardsFromSheets().then(ok => {
       if (ok) {
         const activePanel = document.querySelector('.dash-panel.active');
@@ -3064,7 +3056,7 @@ function submitCheckin() {
     const services = Array.from(selectedBtns).map(b => b.dataset.service);
 
     const entry = {
-      id: Date.now() + Math.random(),
+      id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
       name: first + (last ? ' ' + last : ''),
       phone,
       services,
@@ -3233,21 +3225,16 @@ function buildQueueRow(e) {
 function updateStatus(id, status) {
   const entry = queue.find(e => String(e.id) === String(id));
   if (!entry) return;
-  // When setting from queue buttons: only update assignments that are currently
-  // in the source state — don't override assignments that are already more advanced
   if (entry.assignments && entry.assignments.length > 0) {
     if (status === 'inservice') {
-      // Move waiting services → inservice (only if they have a tech assigned)
       entry.assignments.forEach(a => {
         if (a.techId && getAssignmentStatus(entry, a) === 'waiting') a.status = 'inservice';
       });
     } else if (status === 'waiting') {
-      // Move inservice services back → waiting
       entry.assignments.forEach(a => {
         if (getAssignmentStatus(entry, a) === 'inservice') a.status = 'waiting';
       });
     } else if (status === 'done') {
-      // Mark all assigned services done
       entry.assignments.forEach(a => { if (a.techId) a.status = 'done'; });
     }
     entry.status = deriveEntryStatus(entry);
@@ -3255,7 +3242,8 @@ function updateStatus(id, status) {
     entry.status = status;
   }
   if (entry.status === 'done') saveRecord(entry);
-  updateSheetsRow(entry);
+  // saveQueueToStorage pushes the full queue (including this entry) to Sheets —
+  // updateSheetsRow is not needed here and would cause a redundant double write.
   saveQueueToStorage();
   scheduleSheetsSave();
   renderQueue();
@@ -3713,7 +3701,7 @@ function submitManualAdd() {
     const services = Array.from(selectedBtns).map(b => b.dataset.service);
 
     const entry = {
-      id: Date.now() + Math.random(),
+      id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
       name: first + (last ? ' ' + last : ''),
       phone, services,
       status: 'waiting',
@@ -3894,34 +3882,67 @@ function saveRecord(entry) {
   const existing = allRecords.findIndex(r => String(r.id) === String(entry.id));
   const alreadySavedDone = existing >= 0 && allRecords[existing].status === 'done';
 
+  // Ensure completedAt is set and persisted on the entry
+  if (!entry.completedAt) entry.completedAt = new Date().toISOString();
+  else if (entry.completedAt instanceof Date) entry.completedAt = entry.completedAt.toISOString();
+
   const snapshot = {
-    id: String(entry.id),
-    name: entry.name,
-    phone: entry.phone || '',
-    services: entry.services,
-    assignments: entry.assignments || [],
-    items: entry.items || [],
-    fees: entry.fees || [],
-    totalCost: entry.totalCost || 0,
-    checkinTime: entry.checkinTime instanceof Date ? entry.checkinTime.toISOString() : entry.checkinTime,
-    status: entry.status,
+    id:            String(entry.id),
+    name:          entry.name,
+    phone:         entry.phone || '',
+    services:      entry.services,
+    assignments:   entry.assignments || [],
+    items:         entry.items || [],
+    fees:          entry.fees || [],
+    totalCost:     entry.totalCost || 0,
+    checkinTime:   entry.checkinTime instanceof Date ? entry.checkinTime.toISOString() : entry.checkinTime,
+    completedAt:   entry.completedAt,  // persisted so sendCheckinRow uses correct timestamp
+    status:        entry.status,
     isAppointment: entry.isAppointment || false,
-    loggedBy: activeUser ? activeUser.name : '',
+    loggedBy:      activeUser ? activeUser.name : '',
   };
   if (existing >= 0) allRecords[existing] = snapshot;
   else allRecords.push(snapshot);
   localStorage.setItem('muse_records', JSON.stringify(allRecords));
 
-  // Event-driven push: write allRecords to Sheets so other devices get the update
-  // within the next 15s config poll. Debounced 1s to batch rapid completions.
+  // Event-driven push so other devices get the update within the next 15s poll.
   scheduleRecordsPush();
 
-  // Only write to Sheets on the FIRST time a record is saved as done.
-  // Subsequent calls (e.g. from cycleServiceStatus + updateStatus both firing)
-  // update local state only — no duplicate rows in Transaction Log or Check-Ins.
+  // Only write Check-Ins row to Sheets on the FIRST time a record is saved as done.
+  // Subsequent calls (e.g. re-pricing after done) update local state only.
   if (!alreadySavedDone) {
     sendCheckinRow(entry);
   }
+}
+
+// ── Shared record merge helper ────────────────────
+// Combines live queue (done, non-deleted) with allRecords (historical).
+// Queue entries take priority over allRecords for today's customers —
+// they have the freshest totalCost and assignment data.
+// Used by both runReport() and renderTransactions() to guarantee consistency.
+function buildCombinedRecords() {
+  const deletedIds = new Set(allRecords.filter(r => r.status === 'deleted').map(r => String(r.id)));
+  const liveSnaps  = queue
+    .filter(e => e.status === 'done' && !deletedIds.has(String(e.id)))
+    .map(e => ({
+      id:            String(e.id),
+      name:          e.name,
+      phone:         e.phone || '',
+      services:      e.services,
+      assignments:   e.assignments || [],
+      items:         e.items || [],
+      fees:          e.fees || [],
+      totalCost:     e.totalCost || 0,
+      checkinTime:   e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
+      completedAt:   e.completedAt || null,
+      status:        e.status,
+      isAppointment: e.isAppointment || false,
+    }));
+  const liveIds = new Set(liveSnaps.map(r => String(r.id)));
+  return [
+    ...liveSnaps,
+    ...allRecords.filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted'),
+  ];
 }
 
 // ── Report Range ──────────────────────────────────
@@ -3970,22 +3991,8 @@ function runReport() {
   if (!dates) return;
   const { from, to } = dates;
 
-  // Merge live queue (done, non-deleted entries) + historical records
-  const deletedIds2 = new Set(allRecords.filter(r => r.status === 'deleted').map(r => String(r.id)));
-  const liveSnaps = queue
-    .filter(e => e.status === 'done' && !deletedIds2.has(String(e.id)))
-    .map(e => ({
-      id: String(e.id), name: e.name, phone: e.phone || '',
-      services: e.services, assignments: e.assignments || [],
-      items: e.items || [], fees: e.fees || [],
-      totalCost: e.totalCost || 0,
-      checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
-      status: e.status, isAppointment: e.isAppointment || false,
-      loggedBy: activeUser ? activeUser.name : '',
-    }));
-  const liveIds = new Set(liveSnaps.map(r => String(r.id)));
-  const combined = [...liveSnaps, ...allRecords.filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted')];
-
+  // Use shared helper — guarantees same merge logic as renderTransactions()
+  const combined = buildCombinedRecords();
   const filtered = combined.filter(r => {
     if (r.status === 'deleted') return false;
     const d = r.checkinTime instanceof Date ? r.checkinTime : new Date(r.checkinTime);
@@ -4271,27 +4278,12 @@ function renderTransactions() {
 
   const dateFilter = document.getElementById('txn-date-filter')?.value;
 
-  // IDs marked as deleted in allRecords — exclude from everywhere
-  const deletedIds = new Set(allRecords.filter(r => r.status === 'deleted').map(r => String(r.id)));
-
-  // Merge live queue (done only, not deleted) + historical records
-  const liveSnaps = queue
-    .filter(e => e.status === 'done' && !deletedIds.has(String(e.id)))
-    .map(e => ({
-      id: String(e.id), name: e.name, phone: e.phone || '',
-      services: e.services, assignments: e.assignments || [],
-      items: e.items || [], fees: e.fees || [],
-      totalCost: e.totalCost || 0,
-      checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
-      status: e.status, isAppointment: e.isAppointment || false,
-    }));
-  const liveIds = new Set(liveSnaps.map(r => String(r.id)));
-  let combined = [...liveSnaps, ...allRecords.filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted')];
+  // Use shared helper — same merge logic as runReport()
+  let combined = buildCombinedRecords();
 
   if (dateFilter) {
     combined = combined.filter(r => {
       const d = new Date(r.checkinTime);
-      // Use local date comparison to avoid UTC timezone shifting dates
       const localDate = d.getFullYear() + '-' +
         String(d.getMonth()+1).padStart(2,'0') + '-' +
         String(d.getDate()).padStart(2,'0');
@@ -4299,7 +4291,6 @@ function renderTransactions() {
     });
   }
 
-  // Only show completed, non-deleted transactions (liveSnaps already filtered above)
   combined = combined.filter(r => r.status === 'done');
   combined.sort((a, b) => new Date(b.checkinTime) - new Date(a.checkinTime));
 
@@ -4523,7 +4514,7 @@ async function exportReportSheets() {
   try {
     const payload = {
       action: 'report',
-      sheetId: SHEETS_ID,
+      sheetId: '1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo',
       from: d.from.toLocaleDateString(),
       to: d.to.toLocaleDateString(),
       totalIncome: d.totalIncome.toFixed(2),
@@ -4896,13 +4887,16 @@ function toggleCheckinService(id) {
   else hiddenCheckinServices.push(id);
   saveHiddenServices();
   renderSettingsServiceVisibility();
-  setTimeout(() => pushConfigToSheets(), 1000); // sync to other devices
+  _configWriteTime = Date.now();
+  setTimeout(() => pushConfigToSheets(), 1000);
 }
 
 function toggleAllCheckinServices() {
   hiddenCheckinServices = hiddenCheckinServices.length === 0 ? SERVICES.map(s => s.id) : [];
   saveHiddenServices();
   renderSettingsServiceVisibility();
+  _configWriteTime = Date.now();
+  setTimeout(() => pushConfigToSheets(), 1000);
 }
 
 function toggleActiveStaff(id) {
@@ -4910,13 +4904,16 @@ function toggleActiveStaff(id) {
   else inactiveStaff.push(id);
   saveInactiveStaff();
   renderSettingsActiveStaff();
-  setTimeout(() => pushConfigToSheets(), 1000); // sync to other devices
+  _configWriteTime = Date.now();
+  setTimeout(() => pushConfigToSheets(), 1000);
 }
 
 function toggleAllActiveStaff() {
   inactiveStaff = inactiveStaff.length === 0 ? STAFF.map(s => s.id) : [];
   saveInactiveStaff();
   renderSettingsActiveStaff();
+  _configWriteTime = Date.now();
+  setTimeout(() => pushConfigToSheets(), 1000);
 }
 
 // ── Photo Storage ─────────────────────────────────
@@ -4996,10 +4993,15 @@ async function pushPhotosToSheets() {
   }, 2000);
 }
 
-async function loadPhotosFromSheets() {
+// Accepts pre-fetched config data from the poll to avoid a second loadConfig HTTP call.
+// Falls back to its own fetch if called standalone (e.g. on startup).
+async function loadPhotosFromSheets(preloadedData) {
   try {
-    const res  = await fetch(`${SHEETS_PROXY}?action=loadConfig&_=${Date.now()}`);
-    const data = await res.json();
+    let data = preloadedData;
+    if (!data) {
+      const res = await fetch(`${SHEETS_PROXY}?action=loadConfig&_=${Date.now()}`);
+      data = await res.json();
+    }
     if (data.success && data.config?.muse_photos) {
       restorePhotos(data.config.muse_photos);
       return true;
@@ -5665,15 +5667,14 @@ function deriveEntryStatus(entry) {
   return 'waiting';
 }
 
-// Set a single assignment's status and sync entry status
 function setAssignmentStatus(entry, serviceId, newStatus) {
   if (!entry.assignments) entry.assignments = [];
   const a = entry.assignments.find(x => x.serviceId === serviceId);
   if (a) a.status = newStatus;
-  // Sync the entry-level status
   entry.status = deriveEntryStatus(entry);
   if (entry.status === 'done') saveRecord(entry);
-  updateSheetsRow(entry);
+  // saveQueueToStorage via saveCurrentGroupTabInputs handles the Sheets push —
+  // no separate updateSheetsRow needed here.
   renderQueue();
   updateStats();
   renderTurns();
@@ -6018,14 +6019,12 @@ function onTechReorderEnd(e) {
 
 function checkAllTechs() {
   turnsTechOrder = STAFF.map(s => s.id);
-  _turnsWriteTime = Date.now();
   localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   showTurnsTechSelector();
 }
 
 function uncheckAllTechs() {
   turnsTechOrder = [];
-  _turnsWriteTime = Date.now();
   localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   showTurnsTechSelector();
 }
@@ -6036,7 +6035,6 @@ function toggleTurnsTechOrder(staffId) {
   } else {
     turnsTechOrder.push(staffId);
   }
-  _turnsWriteTime = Date.now();
   localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   showTurnsTechSelector();
 }
@@ -6044,7 +6042,6 @@ function toggleTurnsTechOrder(staffId) {
 function saveTurnsTechOrder() {
   localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   turnsTechOrder = JSON.parse(localStorage.getItem('muse_turns_order') || '[]');
-  _turnsWriteTime = Date.now();
   closeTurnsTechModal();
   renderTurns();
   _configWriteTime = Date.now();
@@ -6715,14 +6712,9 @@ const CONFIG_KEYS = [
 ];
 
 // Tracks the last time THIS device pushed config to Sheets.
-// loadConfigFromSheets will not overwrite local data within 10s of a push —
-// this prevents the config poll from undoing changes before Sheets has confirmed them.
+// loadConfigFromSheets skips overwriting if this device wrote the row,
+// with a 10s fallback for slow writes where DEVICE_ID may not match yet.
 let _configWriteTime = 0;
-
-// Tracks the last time THIS device changed turns order.
-// The queue poll carries turnsOrder piggyback — suppress applying it for 10s
-// after a local change so the queue push has time to propagate the new order.
-let _turnsWriteTime = 0;
 
 async function pushConfigToSheets() {
   try {
@@ -6736,26 +6728,26 @@ async function pushConfigToSheets() {
         try { config[k] = JSON.parse(v); } catch(e) { config[k] = v; }
       }
     });
-    console.log(`[Config] pushConfigToSheets — keys: ${Object.keys(config).join(', ')}, muse_staff length: ${JSON.stringify(config.muse_staff || []).length}`);
     await fetch(`${SHEETS_PROXY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'saveConfig', config }),
     });
-    console.log('[Config] pushConfigToSheets — done');
-  } catch(e) { console.error('[Config] pushConfigToSheets failed:', e); }
+  } catch(e) { console.warn('[Config] Push failed:', e); }
 }
 
 async function loadConfigFromSheets() {
   try {
     const res  = await fetch(`${SHEETS_PROXY}?action=loadConfig&_=${Date.now()}`);
     const data = await res.json();
-    if (!data.success || !data.config) return { changed: false, recordsUpdatedAt: null };
+    if (!data.success || !data.config) return { changed: false, recordsUpdatedAt: null, _raw: null };
 
+    // Skip overwriting if this device wrote the config row, OR wrote within 10s (slow write safety net)
     const msSinceWrite = Date.now() - _configWriteTime;
-    if (msSinceWrite < 10000) {
-      console.log(`[Config] Skipping poll overwrite — wrote ${Math.round(msSinceWrite/1000)}s ago`);
-      return { changed: false, recordsUpdatedAt: data.recordsUpdatedAt || null };
+    const wroteByUs = data.device && data.device === DEVICE_ID;
+    if (wroteByUs || msSinceWrite < 10000) {
+      console.log(`[Config] Skipping poll overwrite — ${wroteByUs ? 'our device wrote it' : `wrote ${Math.round(msSinceWrite/1000)}s ago`}`);
+      return { changed: false, recordsUpdatedAt: data.recordsUpdatedAt || null, _raw: data };
     }
 
     let changed = false;
@@ -6766,15 +6758,13 @@ async function loadConfigFromSheets() {
           : JSON.stringify(data.config[k]);
         const local = localStorage.getItem(k);
         if (local !== remote) {
-          // Diagnostic: log exactly which key is being overwritten and why
-          console.warn(`[Config] OVERWRITING ${k} | msSinceWrite:${msSinceWrite} | localLen:${local?.length ?? 'null'} | remoteLen:${remote.length}`);
           localStorage.setItem(k, remote);
           changed = true;
         }
       }
     });
-    return { changed, recordsUpdatedAt: data.recordsUpdatedAt || null };
-  } catch(e) { return { changed: false, recordsUpdatedAt: null }; }
+    return { changed, recordsUpdatedAt: data.recordsUpdatedAt || null, _raw: data };
+  } catch(e) { return { changed: false, recordsUpdatedAt: null, _raw: null }; }
 }
 
 
@@ -6800,11 +6790,6 @@ let _isSyncing         = false;
 let _lastRecordsUpdate = null;
 let _recordsPushTimer  = null; // debounce handle for pushRecordsToSheets
 
-// Tracks whether this session has ever had a non-empty queue.
-// Used to distinguish "queue was cleared" (safe to push empty) from
-// "device just loaded with no data" (never push empty — would wipe another device).
-let _queueWasPopulated = false;
-
 // Debounce queue writes by 500ms — fast enough for near-instant cross-device sync
 // without spamming Sheets on every keystroke or rapid tap sequence
 function scheduleSheetsSave() {
@@ -6823,8 +6808,6 @@ function scheduleRecordsPush() {
 
 async function pushRecordsToSheets() {
   try {
-    // Strip photos from records before sending — they're synced separately and
-    // would make the payload huge if included here
     const payload = allRecords.map(r => {
       const { photo, ...rest } = r;
       return rest;
@@ -6836,8 +6819,8 @@ async function pushRecordsToSheets() {
     });
     const data = await res.json();
     if (data.success) {
+      // Store the exact timestamp we wrote so pullRecordsIfNewer skips our own push
       _lastRecordsUpdate = data.updatedAt;
-      console.log('[Records] Pushed', payload.length, 'records to Sheets');
     }
   } catch(e) {
     console.warn('[Records] Push failed:', e);
@@ -6846,10 +6829,13 @@ async function pushRecordsToSheets() {
 
 // Pull allRecords from Sheets only if the server timestamp is newer than
 // what this device last saw. Called from the 15s config poll.
-async function pullRecordsIfNewer(serverUpdatedAt) {
-  if (!serverUpdatedAt) return;
-  // Skip if we wrote this ourselves or already have this version
-  if (_lastRecordsUpdate && serverUpdatedAt <= _lastRecordsUpdate) return;
+// Pass force=true on startup to always load regardless of timestamp.
+async function pullRecordsIfNewer(serverUpdatedAt, force) {
+  if (!force) {
+    if (!serverUpdatedAt) return false;
+    // Skip if we already have this version or wrote it ourselves
+    if (_lastRecordsUpdate && serverUpdatedAt <= _lastRecordsUpdate) return false;
+  }
   try {
     const res  = await fetch(SHEETS_PROXY, {
       method:  'POST',
@@ -6857,7 +6843,7 @@ async function pullRecordsIfNewer(serverUpdatedAt) {
       body:    JSON.stringify({ action: 'loadRecordsBlob' }),
     });
     const data = await res.json();
-    if (!data.success || !data.records || data.records.length === 0) return;
+    if (!data.success || !data.records || data.records.length === 0) return false;
 
     _lastRecordsUpdate = data.updatedAt;
 
@@ -6879,8 +6865,10 @@ async function pullRecordsIfNewer(serverUpdatedAt) {
     const rptPanel = document.getElementById('panel-reports');
     if (txPanel?.classList.contains('active'))  renderTransactions();
     if (rptPanel?.classList.contains('active')) runReport();
+    return true;
   } catch(e) {
     console.warn('[Records] Pull failed:', e);
+    return false;
   }
 }
 
@@ -6910,10 +6898,7 @@ async function pushQueueToSheets() {
         clientDate,
         turnsOrder: turnsTechOrder, // piggyback turns order on every queue push
         deletedIds: allRecords.filter(r => r.status === 'deleted').map(r => String(r.id)),
-        queue: queue.map(e => ({
-          ...e,
-          checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
-        })),
+        queue: serializeQueue(queue),
       }),
     });
     const data = await res.json();
@@ -7001,10 +6986,7 @@ async function pollSheets() {
       // Save to localStorage only — do NOT push back to Sheets (would cause ping-pong loop)
       const today = todayStr();
       localStorage.setItem(QUEUE_DATE_KEY, today);
-      localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue.map(e => ({
-        ...e,
-        checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
-      }))));
+      localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(serializeQueue(queue)));
       // Use RAF for smooth rendering — avoids janky repaints on iPad
       requestAnimationFrame(() => {
         renderQueue();
@@ -7015,20 +6997,17 @@ async function pollSheets() {
     }
 
     // Sync turns order — it piggybacks on the queue payload for instant sync.
-    // BUT: if this device just changed the turns order, skip the sync for 10s
-    // so the queue push has time to propagate the new order to Sheets first.
-    const msSinceTurnsWrite = Date.now() - _turnsWriteTime;
-    if (result.turnsOrder && Array.isArray(result.turnsOrder) && msSinceTurnsWrite >= 10000) {
+    // Skip if this device wrote the queue row — we already have the correct order locally.
+    // Only apply if a DIFFERENT device wrote it (result.device !== DEVICE_ID).
+    if (result.turnsOrder && Array.isArray(result.turnsOrder) && result.device !== DEVICE_ID) {
       const remote = JSON.stringify(result.turnsOrder);
       const local  = JSON.stringify(turnsTechOrder);
       if (remote !== local) {
         turnsTechOrder = result.turnsOrder;
         localStorage.setItem('muse_turns_order', remote);
         requestAnimationFrame(() => renderTurns());
-        console.log('[Sync] Turns order updated from Sheets');
+        console.log('[Sync] Turns order updated from Sheets (device:', result.device, ')');
       }
-    } else if (msSinceTurnsWrite < 10000) {
-      console.log(`[Sync] Skipping turns order sync — wrote ${Math.round(msSinceTurnsWrite/1000)}s ago`);
     }
   } catch(e) {
     console.warn('[Sync] Poll failed:', e);
@@ -7041,12 +7020,23 @@ async function pollSheets() {
 // Start polling when the dashboard is open
 async function forceSyncNow() {
   setSheetsIndicator('syncing');
-  console.log('[ForcSync] Starting manual sync, device:', DEVICE_ID, 'current queue:', queue.length);
   try {
-    const clientDate = todayStr();
     const result = await loadQueueFromSheets();
-    console.log('[ForceSync] Sheets result:', result ? `${result.queue.length} entries, updatedAt:${result.updatedAt}` : 'null');
     if (result) {
+      // Apply deletedIds so deleted transactions don't re-appear after manual sync
+      if (result.deletedIds && result.deletedIds.length > 0) {
+        let deletionChanged = false;
+        result.deletedIds.forEach(id => {
+          const existing = allRecords.find(r => String(r.id) === String(id));
+          if (existing && existing.status !== 'deleted') {
+            existing.status = 'deleted'; deletionChanged = true;
+          } else if (!existing) {
+            allRecords.push({ id: String(id), status: 'deleted', name: '', totalCost: 0, services: [], assignments: [] });
+            deletionChanged = true;
+          }
+        });
+        if (deletionChanged) localStorage.setItem('muse_records', JSON.stringify(allRecords));
+      }
       // Always accept on manual sync — ignore timestamp checks
       queue = result.queue;
       _lastSheetsUpdate = result.updatedAt;
@@ -7063,7 +7053,7 @@ async function forceSyncNow() {
   } catch(e) {
     setSheetsIndicator('error');
     showToast('Sync error: ' + e.message);
-    console.error('[ForceSync] Error:', e);
+    console.warn('[ForceSync] Error:', e);
   }
 }
 
@@ -7077,7 +7067,7 @@ function startSheetsPolling() {
   if (!_configPollTimer) {
     _configPollTimer = setInterval(async () => {
       // loadConfigFromSheets now returns { changed, recordsUpdatedAt }
-      const { changed, recordsUpdatedAt } = await loadConfigFromSheets();
+      const { changed, recordsUpdatedAt, _raw } = await loadConfigFromSheets();
       if (changed) {
         const staffRaw    = localStorage.getItem('muse_staff');
         const servicesRaw = localStorage.getItem('muse_services');
@@ -7085,18 +7075,58 @@ function startSheetsPolling() {
         if (staffRaw)    { try { const s = JSON.parse(staffRaw);    if (s.length) STAFF            = s; } catch(e){} }
         if (servicesRaw) { try { const s = JSON.parse(servicesRaw); if (s.length) SERVICES         = s; } catch(e){} }
         if (fdUsersRaw)  { try { const s = JSON.parse(fdUsersRaw);  if (s.length) FRONT_DESK_USERS = s; } catch(e){} }
+        // Turns order: only apply if a different device wrote it (same guard as queue poll)
         const turnsRaw = localStorage.getItem('muse_turns_order');
-        if (turnsRaw) { try { const t = JSON.parse(turnsRaw); if (Array.isArray(t)) turnsTechOrder = t; renderTurns(); } catch(e){} }
-        const itemsRaw2 = localStorage.getItem('muse_items');
-        if (itemsRaw2) { try { const t = JSON.parse(itemsRaw2); if (Array.isArray(t) && t.length) ITEMS = t; } catch(e){} }
-        const feesRaw2 = localStorage.getItem('muse_fees');
-        if (feesRaw2) { try { const t = JSON.parse(feesRaw2); if (Array.isArray(t) && t.length) FEES = t; } catch(e){} }
+        if (turnsRaw) {
+          try {
+            const t = JSON.parse(turnsRaw);
+            if (Array.isArray(t) && JSON.stringify(t) !== JSON.stringify(turnsTechOrder)) {
+              turnsTechOrder = t;
+              renderTurns();
+            }
+          } catch(e){}
+        }
+        const itemsRaw = localStorage.getItem('muse_items');
+        if (itemsRaw) { try { const t = JSON.parse(itemsRaw); if (Array.isArray(t) && t.length) ITEMS = t; } catch(e){} }
+        const feesRaw = localStorage.getItem('muse_fees');
+        if (feesRaw) { try { const t = JSON.parse(feesRaw); if (Array.isArray(t) && t.length) FEES = t; } catch(e){} }
+        // Hidden dash services — update in-memory AND re-render if Settings panel is open
         const hDashRaw = localStorage.getItem('muse_hidden_dash_services');
-        if (hDashRaw) { try { hiddenDashServices = JSON.parse(hDashRaw); } catch(e){} }
+        if (hDashRaw) {
+          try {
+            hiddenDashServices = JSON.parse(hDashRaw);
+            // Re-render settings toggle list if currently visible
+            if (document.getElementById('settings-dash-service-visibility')?.offsetParent !== null) {
+              renderSettingsDashServiceVisibility();
+            }
+          } catch(e){}
+        }
+        // Hidden checkin services — update in-memory AND re-render if visible
+        const hCheckinRaw = localStorage.getItem('muse_hidden_services');
+        if (hCheckinRaw) {
+          try {
+            hiddenCheckinServices = JSON.parse(hCheckinRaw);
+            if (document.getElementById('settings-service-visibility')?.offsetParent !== null) {
+              renderSettingsServiceVisibility();
+            }
+          } catch(e){}
+        }
+        // Inactive staff — update in-memory AND re-render if visible
+        const inactiveRaw = localStorage.getItem('muse_inactive_staff');
+        if (inactiveRaw) {
+          try {
+            inactiveStaff = JSON.parse(inactiveRaw);
+            if (document.getElementById('settings-active-staff')?.offsetParent !== null) {
+              renderSettingsActiveStaff();
+            }
+          } catch(e){}
+        }
+        // Bonus services — read back into memory (isAlwaysBonusService reads from localStorage directly so this is a cache refresh)
+        // No separate in-memory variable needed — isAlwaysBonusService always reads localStorage
         setLogo();
       }
-      // Always reload photos (they're on a separate row, not in CONFIG_KEYS)
-      await loadPhotosFromSheets().then(ok => { if (ok) { applyPhotosToObjects(); updateLoggedInDisplay(); renderStaffList(); } });
+      // Photos: pass pre-fetched config data to avoid a second loadConfig HTTP call
+      await loadPhotosFromSheets(_raw).then(ok => { if (ok) { applyPhotosToObjects(); updateLoggedInDisplay(); renderStaffList(); } });
 
       // Pull allRecords if another device wrote a newer version.
       // recordsUpdatedAt comes free with the loadConfig response — no extra HTTP call.
@@ -7139,28 +7169,7 @@ async function clearSheetsQueue() {
 
 
 // ── Gift Cards ────────────────────────────────────
-let giftCards = JSON.parse(localStorage.getItem('muse_gift_cards') || 'null');
-
-// Pre-load existing gift cards from your Google Sheets data on first run
-if (!giftCards) {
-  giftCards = [
-    { id:'gc-001', datePurchased:'2026-05-09', serial:'', amount:60,  from:'',              to:'Jessica Lomeli',      phone:'909 363 5820', dateUsed:'', amountUsed:0,  notes:'',                              createdAt:'2026-05-09T00:00:00Z', updatedAt:'2026-05-09T00:00:00Z' },
-    { id:'gc-002', datePurchased:'2026-05-09', serial:'', amount:85,  from:'',              to:'Shereda Evans',       phone:'909 910 5077', dateUsed:'', amountUsed:0,  notes:'',                              createdAt:'2026-05-09T00:00:00Z', updatedAt:'2026-05-09T00:00:00Z' },
-    { id:'gc-003', datePurchased:'2026-05-09', serial:'', amount:40,  from:'Elma Jones',   to:'',                    phone:'909 553 1572', dateUsed:'', amountUsed:0,  notes:'',                              createdAt:'2026-05-09T00:00:00Z', updatedAt:'2026-05-09T00:00:00Z' },
-    { id:'gc-004', datePurchased:'2026-05-09', serial:'', amount:85,  from:'Andrey Dylon', to:'Alicia Dylon',        phone:'559 260 0292', dateUsed:'', amountUsed:0,  notes:'',                              createdAt:'2026-05-09T00:00:00Z', updatedAt:'2026-05-09T00:00:00Z' },
-    { id:'gc-005', datePurchased:'2026-05-10', serial:'', amount:30,  from:'Jessica B',    to:'Grandma Lorraine',    phone:'000 000 7338', dateUsed:'', amountUsed:0,  notes:'',                              createdAt:'2026-05-10T00:00:00Z', updatedAt:'2026-05-10T00:00:00Z' },
-    { id:'gc-006', datePurchased:'2026-05-10', serial:'', amount:100, from:'',              to:'',                    phone:'',             dateUsed:'', amountUsed:0,  notes:'',                              createdAt:'2026-05-10T00:00:00Z', updatedAt:'2026-05-10T00:00:00Z' },
-    { id:'gc-007', datePurchased:'2026-05-10', serial:'', amount:120, from:'Jaden',        to:'',                    phone:'909 809 4382', dateUsed:'', amountUsed:0,  notes:'',                              createdAt:'2026-05-10T00:00:00Z', updatedAt:'2026-05-10T00:00:00Z' },
-    { id:'gc-008', datePurchased:'2026-05-11', serial:'', amount:50,  from:'sarah',        to:'',                    phone:'',             dateUsed:'', amountUsed:0,  notes:'',                              createdAt:'2026-05-11T00:00:00Z', updatedAt:'2026-05-11T00:00:00Z' },
-    { id:'gc-009', datePurchased:'2026-05-12', serial:'', amount:40,  from:'',              to:'',                    phone:'',             dateUsed:'', amountUsed:0,  notes:'',                              createdAt:'2026-05-12T00:00:00Z', updatedAt:'2026-05-12T00:00:00Z' },
-    { id:'gc-010', datePurchased:'2026-05-12', serial:'', amount:33,  from:'',              to:'',                    phone:'818 307 2870', dateUsed:'', amountUsed:0,  notes:'for classic ped',              createdAt:'2026-05-12T00:00:00Z', updatedAt:'2026-05-12T00:00:00Z' },
-    { id:'gc-011', datePurchased:'2026-05-12', serial:'', amount:79,  from:'',              to:'',                    phone:'',             dateUsed:'', amountUsed:0,  notes:'',                              createdAt:'2026-05-12T00:00:00Z', updatedAt:'2026-05-12T00:00:00Z' },
-    { id:'gc-012', datePurchased:'2026-05-07', serial:'00000029', amount:80, from:'Mom',   to:'Jayne (Kate Summers)',phone:'909 846 0519', dateUsed:'2026-05-17', amountUsed:80, notes:'Used $56, returned $24 in cash', createdAt:'2026-05-07T00:00:00Z', updatedAt:'2026-05-17T00:00:00Z' },
-    { id:'gc-013', datePurchased:'2026-05-07', serial:'00000030', amount:80, from:'Mom',   to:'Kate Summers',        phone:'909 846 0519', dateUsed:'2026-05-17', amountUsed:80, notes:'Used $56, returned $24 in cash', createdAt:'2026-05-07T00:00:00Z', updatedAt:'2026-05-17T00:00:00Z' },
-    { id:'gc-014', datePurchased:'2026-05-17', serial:'00000040', amount:100, from:'teresa reynolds', to:'Asheley Reynold', phone:'909 953 9050', dateUsed:'', amountUsed:0, notes:'', createdAt:'2026-05-17T00:00:00Z', updatedAt:'2026-05-17T00:00:00Z' },
-  ];
-  localStorage.setItem('muse_gift_cards', JSON.stringify(giftCards));
-}
+let giftCards = JSON.parse(localStorage.getItem('muse_gift_cards') || 'null') || [];
 
 function saveGiftCardsToStorage() {
   localStorage.setItem('muse_gift_cards', JSON.stringify(giftCards));
@@ -8569,14 +8578,17 @@ function saveAndAdvanceStatus() {
     showToast('Please assign a tech and cost for every service.');
     return;
   }
+  // Advance all assignment statuses to match targetStatus, then derive entry status
+  entry.assignments.forEach(a => { if (a.techId) a.status = targetStatus; });
+  entry.status = deriveEntryStatus(entry);
   closeAssignModal();
-  entry.status = targetStatus;
-  if (targetStatus === 'done') saveRecord(entry);
+  if (entry.status === 'done') saveRecord(entry);
   updateSheetsRow(entry);
+  saveQueueToStorage();
   renderQueue();
   updateStats();
   renderTurns();
-  showToast(`Saved & moved to ${targetStatus === 'done' ? 'Done' : 'In Service'}`);
+  showToast(`Saved & moved to ${entry.status === 'done' ? 'Done' : 'In Service'}`);
 }
 
 function saveAssignments() {
@@ -8754,8 +8766,10 @@ function switchGroupTab(i) {
 }
 
 function cycleServiceStatus(entryId, serviceId, newStatus) {
-  // Save current modal inputs first so we don't lose tech/cost data
-  saveCurrentGroupTabInputs();
+  // Save current modal inputs first so we don't lose tech/cost data.
+  // Only meaningful when the group assign modal is open — guard against stale DOM reads.
+  const modalOpen = document.getElementById('group-assign-modal')?.style.display === 'flex';
+  if (modalOpen) saveCurrentGroupTabInputs();
   const entry = queue.find(e => String(e.id) === String(entryId));
   if (!entry) return;
 
@@ -9840,7 +9854,7 @@ function saveHistoricalTransaction() {
   if (!dateVal) { showToast('Select a date'); return; }
 
   const checkinTime = new Date(`${dateVal}T${timeVal || '12:00'}:00`);
-  const entryId = Date.now() + Math.random();
+  const entryId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
 
   const assignments = _histServices.length > 0
     ? _histServices.map(sid => ({
@@ -9868,13 +9882,13 @@ function saveHistoricalTransaction() {
   allRecords.push(record);
   localStorage.setItem('muse_records', JSON.stringify(allRecords));
 
-  // Push to Sheets — Check-Ins row + Transaction Log row
+  // Push to Sheets — exportToSheets writes both Transaction Log row AND Check-Ins row.
+  // Do NOT call sendCheckinRow separately here — exportToSheets already calls it internally.
   const entry = {
     ...record,
     checkinTime: checkinTime,
     completedAt: checkinTime,
   };
-  sendCheckinRow(entry);
   exportToSheets(entry);
 
   closeHistoricalModal();
@@ -10362,7 +10376,6 @@ function saveTurnsAndSync() {
   localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   localStorage.setItem('muse_turns_break', JSON.stringify(turnsBreakStaff));
   localStorage.setItem('muse_turns_off',   JSON.stringify(turnsOffStaff));
-  _turnsWriteTime = Date.now();
   renderTurns();
   _configWriteTime = Date.now();
   pushConfigToSheets();
@@ -10819,7 +10832,7 @@ function calQuickCheckin(calId, eventId) {
 
   // Build a queue entry
   const entry = {
-    id:            Date.now() + Math.random(),
+    id:            Date.now() * 1000 + Math.floor(Math.random() * 1000),
     name:          title,
     phone:         phone,
     services:      svcs.length > 0 ? svcs : (SERVICES.length > 0 ? [SERVICES[0].id] : []),
