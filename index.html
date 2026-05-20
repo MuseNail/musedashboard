@@ -6018,12 +6018,14 @@ function onTechReorderEnd(e) {
 
 function checkAllTechs() {
   turnsTechOrder = STAFF.map(s => s.id);
+  _turnsWriteTime = Date.now();
   localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   showTurnsTechSelector();
 }
 
 function uncheckAllTechs() {
   turnsTechOrder = [];
+  _turnsWriteTime = Date.now();
   localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   showTurnsTechSelector();
 }
@@ -6034,17 +6036,19 @@ function toggleTurnsTechOrder(staffId) {
   } else {
     turnsTechOrder.push(staffId);
   }
+  _turnsWriteTime = Date.now();
   localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
-  showTurnsTechSelector(); // re-render picker with updated state
+  showTurnsTechSelector();
 }
 
 function saveTurnsTechOrder() {
   localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   turnsTechOrder = JSON.parse(localStorage.getItem('muse_turns_order') || '[]');
+  _turnsWriteTime = Date.now();
   closeTurnsTechModal();
   renderTurns();
   _configWriteTime = Date.now();
-  setTimeout(() => pushConfigToSheets(), 500); // sync to other devices
+  setTimeout(() => pushConfigToSheets(), 500);
   showToast(turnsTechOrder.length + ' technician' + (turnsTechOrder.length !== 1 ? 's' : '') + ' in today\'s rotation');
 }
 
@@ -6715,6 +6719,11 @@ const CONFIG_KEYS = [
 // this prevents the config poll from undoing changes before Sheets has confirmed them.
 let _configWriteTime = 0;
 
+// Tracks the last time THIS device changed turns order.
+// The queue poll carries turnsOrder piggyback — suppress applying it for 10s
+// after a local change so the queue push has time to propagate the new order.
+let _turnsWriteTime = 0;
+
 async function pushConfigToSheets() {
   try {
     const config = {};
@@ -7005,8 +7014,11 @@ async function pollSheets() {
       });
     }
 
-    // Sync turns order — it piggybacks on the queue payload for instant sync
-    if (result.turnsOrder && Array.isArray(result.turnsOrder)) {
+    // Sync turns order — it piggybacks on the queue payload for instant sync.
+    // BUT: if this device just changed the turns order, skip the sync for 10s
+    // so the queue push has time to propagate the new order to Sheets first.
+    const msSinceTurnsWrite = Date.now() - _turnsWriteTime;
+    if (result.turnsOrder && Array.isArray(result.turnsOrder) && msSinceTurnsWrite >= 10000) {
       const remote = JSON.stringify(result.turnsOrder);
       const local  = JSON.stringify(turnsTechOrder);
       if (remote !== local) {
@@ -7015,6 +7027,8 @@ async function pollSheets() {
         requestAnimationFrame(() => renderTurns());
         console.log('[Sync] Turns order updated from Sheets');
       }
+    } else if (msSinceTurnsWrite < 10000) {
+      console.log(`[Sync] Skipping turns order sync — wrote ${Math.round(msSinceTurnsWrite/1000)}s ago`);
     }
   } catch(e) {
     console.warn('[Sync] Poll failed:', e);
@@ -10348,6 +10362,7 @@ function saveTurnsAndSync() {
   localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   localStorage.setItem('muse_turns_break', JSON.stringify(turnsBreakStaff));
   localStorage.setItem('muse_turns_off',   JSON.stringify(turnsOffStaff));
+  _turnsWriteTime = Date.now();
   renderTurns();
   _configWriteTime = Date.now();
   pushConfigToSheets();
