@@ -6685,6 +6685,11 @@ const CONFIG_KEYS = [
   'muse_items', 'muse_fees',
 ];
 
+// Tracks the last time THIS device pushed config to Sheets.
+// loadConfigFromSheets will not overwrite local data within 10s of a push —
+// this prevents the config poll from undoing changes before Sheets has confirmed them.
+let _configWriteTime = 0;
+
 async function pushConfigToSheets() {
   try {
     const config = {};
@@ -6699,6 +6704,8 @@ async function pushConfigToSheets() {
         try { config[k] = JSON.parse(v); } catch(e) { config[k] = v; }
       }
     });
+    // Record write time BEFORE the fetch so the poll lock is in place immediately
+    _configWriteTime = Date.now();
     await fetch(`${SHEETS_PROXY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -6712,6 +6719,15 @@ async function loadConfigFromSheets() {
     const res  = await fetch(`${SHEETS_PROXY}?action=loadConfig&_=${Date.now()}`);
     const data = await res.json();
     if (!data.success || !data.config) return { changed: false, recordsUpdatedAt: null };
+
+    // If this device pushed config less than 10 seconds ago, Sheets may not have
+    // finished writing yet. Skip overwriting local data to prevent undoing changes.
+    const msSinceWrite = Date.now() - _configWriteTime;
+    if (msSinceWrite < 10000) {
+      console.log(`[Config] Skipping poll overwrite — wrote ${Math.round(msSinceWrite/1000)}s ago`);
+      return { changed: false, recordsUpdatedAt: data.recordsUpdatedAt || null };
+    }
+
     let changed = false;
     CONFIG_KEYS.forEach(k => {
       if (data.config[k] !== undefined) {
