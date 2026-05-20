@@ -252,7 +252,7 @@ tailwind.config = {
   <!-- Logo -->
   <div class="flex flex-col items-center fade-up">
     <img id="logo-welcome" src="" alt="Muse Nails & Spa"
-         class="h-56 md:h-64 w-auto object-contain mx-auto" style="background:#fff;border-radius:8px;padding:4px;"
+         class="h-56 md:h-64 w-auto object-contain mx-auto" style="border-radius:8px;"
          onerror="this.style.display='none'; document.getElementById('logo-text-welcome').style.display='block'">
     <div id="logo-text-welcome" style="display:none" class="text-center">
       <div class="text-5xl font-headline font-bold tracking-widest text-on-surface">MUSE</div>
@@ -319,7 +319,7 @@ tailwind.config = {
       <span class="material-symbols-outlined text-lg">arrow_back</span>
       Back
     </button>
-    <img id="logo-checkin" src="" alt="Muse" class="h-14 w-auto object-contain" style="background:#fff;border-radius:6px;padding:2px;"
+    <img id="logo-checkin" src="" alt="Muse" class="h-14 w-auto object-contain" style="border-radius:6px;padding:2px;"
          onerror="this.style.display='none'; document.getElementById('logo-text-checkin').style.display='block'">
     <div id="logo-text-checkin" style="display:none" class="text-right">
       <div class="text-lg font-headline font-bold tracking-widest">MUSE</div>
@@ -378,13 +378,13 @@ tailwind.config = {
   <!-- Top bar: logo left, nav centered, sync+user right -->
   <header class="w-full bg-surface-container-lowest border-b border-surface-container-high sticky top-0 z-10 flex items-center gap-2" style="height:52px;padding:0 12px;min-width:0">
     <!-- Logo -->
-    <img id="logo-desk" src="" alt="Muse" class="h-[40px] w-auto object-contain flex-shrink-0" style="background:#fff;border-radius:4px;" onerror="this.style.display='none'">
+    <img id="logo-desk" src="" alt="Muse" class="h-[40px] w-auto object-contain flex-shrink-0" style="border-radius:4px;" onerror="this.style.display='none'">
     <!-- Nav — centered, takes remaining space -->
     <nav class="flex-1 flex items-center justify-center gap-1 overflow-x-auto no-scroll min-w-0" style="min-width:0">
-      <button class="dash-tab" id="nav-turns" onclick="showDashPanel('turns')">
+      <button class="dash-tab active" id="nav-turns" onclick="showDashPanel('turns')">
         <span class="material-symbols-outlined" style="font-size:18px">swap_vert</span> Turns
       </button>
-      <button class="dash-tab active" id="nav-queue" onclick="showDashPanel('queue')">
+      <button class="dash-tab" id="nav-queue" onclick="showDashPanel('queue')">
         <span class="material-symbols-outlined" style="font-size:18px">queue</span> Queue
       </button>
       <button class="dash-tab" id="nav-calendar" onclick="showDashPanel('calendar')">
@@ -420,7 +420,7 @@ tailwind.config = {
         <span class="sync-dot" id="cal-sync-dot" style="background:#adb3b5"></span>
         <span id="cal-sync-text">Calendar</span>
       </div>
-      <span class="text-[10px] font-body text-outline-variant select-none" title="musedashboard v1.35">v1.35</span>
+      <span class="text-[10px] font-body text-outline-variant select-none" title="musedashboard v1.38">v1.38</span>
       <button onclick="exportAllToSheets()" title="Export to Sheets" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">upload_file</span>
       </button>
@@ -533,6 +533,22 @@ tailwind.config = {
           <div class="rounded-xl p-4 border text-center" style="background:rgba(255,224,178,0.3);border-color:rgba(212,134,10,0.4)">
             <div class="text-2xl font-headline font-extrabold" style="color:#a05000" id="rpt-total-commission">$0.00</div>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Commission Owed</div>
+          </div>
+        </div>
+
+        <!-- Revenue breakdown by type -->
+        <div class="grid grid-cols-3 gap-3 mb-5">
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-svc-total">$0.00</div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Services</div>
+          </div>
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-items-total">$0.00</div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Retail Items</div>
+          </div>
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-fees-total">$0.00</div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Fees</div>
           </div>
         </div>
 
@@ -790,15 +806,20 @@ tailwind.config = {
             <div id="cal-grid" class="hidden flex-1 min-h-0"></div>
           </div>
           <!-- Tasks panel -->
-          <div id="cal-tasks-panel" class="hidden flex-col rounded-xl border border-surface-container-high bg-surface-container-lowest overflow-hidden" style="width:280px;flex-shrink:0">
-            <div class="flex items-center justify-between px-4 py-3 border-b border-surface-container-high">
-              <div class="flex items-center gap-2">
-                <span class="material-symbols-outlined text-primary" style="font-size:18px">task_alt</span>
-                <span class="font-headline font-bold text-on-surface text-sm">My Tasks</span>
+          <div id="cal-tasks-panel" class="hidden flex-col rounded-xl border border-surface-container-high bg-surface-container-lowest overflow-hidden" style="width:260px;flex-shrink:0">
+            <div class="flex items-center justify-between px-3 py-2.5 border-b border-surface-container-high">
+              <div class="flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-primary" style="font-size:16px">task_alt</span>
+                <span class="font-headline font-bold text-on-surface text-sm">Tasks</span>
               </div>
-              <button onclick="showAddTaskModal()" class="w-7 h-7 rounded-full bg-primary flex items-center justify-center hover:bg-primary-dim transition-colors" title="Add task">
-                <span class="material-symbols-outlined text-on-primary" style="font-size:16px">add</span>
-              </button>
+              <div class="flex items-center gap-1">
+                <button onclick="showAddTaskModal()" class="w-6 h-6 rounded-full bg-primary flex items-center justify-center hover:bg-primary-dim transition-colors" title="Add task">
+                  <span class="material-symbols-outlined text-on-primary" style="font-size:14px">add</span>
+                </button>
+                <button onclick="toggleTasksPanel()" id="tasks-minimize-btn" class="w-6 h-6 rounded-full hover:bg-surface-container flex items-center justify-center transition-colors" title="Minimize">
+                  <span class="material-symbols-outlined text-on-surface-variant" style="font-size:14px">chevron_right</span>
+                </button>
+              </div>
             </div>
             <!-- Task list selector -->
             <div class="px-3 py-2 border-b border-surface-container-high">
@@ -950,8 +971,8 @@ tailwind.config = {
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <button onclick="toggleSettingsSection('svc-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
             <div class="text-left">
-              <div class="font-headline font-bold text-on-surface">Check-In Services</div>
-              <div class="text-xs font-body text-on-surface-variant mt-0.5">Choose which services appear on the customer check-in screen</div>
+              <div class="font-headline font-bold text-on-surface">Customer Screen Services</div>
+              <div class="text-xs font-body text-on-surface-variant mt-0.5">Services shown on the customer check-in tablet only</div>
             </div>
             <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="svc-section-icon">expand_more</span>
           </button>
@@ -960,6 +981,57 @@ tailwind.config = {
               <button onclick="toggleAllCheckinServices()" class="text-xs font-body text-primary underline">Toggle All</button>
             </div>
             <div id="settings-service-visibility" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- Collapsible: Dashboard Services -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <button onclick="toggleSettingsSection('dash-svc-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
+            <div class="text-left">
+              <div class="font-headline font-bold text-on-surface">Dashboard Services</div>
+              <div class="text-xs font-body text-on-surface-variant mt-0.5">Services shown in Assign &amp; Price, Turns, Queue, and Calendar tabs</div>
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="dash-svc-section-icon">expand_more</span>
+          </button>
+          <div id="dash-svc-section" class="hidden px-5 pb-4 border-t border-surface-container-high">
+            <div class="flex justify-end pt-3 mb-2">
+              <button onclick="toggleAllDashServices()" class="text-xs font-body text-primary underline">Toggle All</button>
+            </div>
+            <div id="settings-dash-service-visibility" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- Collapsible: Items -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <button onclick="toggleSettingsSection('items-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
+            <div class="text-left">
+              <div class="font-headline font-bold text-on-surface">Retail Items</div>
+              <div class="text-xs font-body text-on-surface-variant mt-0.5">Add-on items (cuticle oil, gift card, etc.) — appear at the bottom of Assign &amp; Price</div>
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="items-section-icon">expand_more</span>
+          </button>
+          <div id="items-section" class="hidden px-5 pb-4 border-t border-surface-container-high">
+            <div id="settings-items-list" class="space-y-2 mt-3"></div>
+            <button onclick="addItemRow()" class="mt-3 flex items-center gap-1.5 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
+              <span class="material-symbols-outlined" style="font-size:14px">add</span> Add Item
+            </button>
+          </div>
+        </div>
+
+        <!-- Collapsible: Fees -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <button onclick="toggleSettingsSection('fees-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
+            <div class="text-left">
+              <div class="font-headline font-bold text-on-surface">Fees</div>
+              <div class="text-xs font-body text-on-surface-variant mt-0.5">Flat or percentage fees — appear at the bottom of Assign &amp; Price</div>
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="fees-section-icon">expand_more</span>
+          </button>
+          <div id="fees-section" class="hidden px-5 pb-4 border-t border-surface-container-high">
+            <div id="settings-fees-list" class="space-y-2 mt-3"></div>
+            <button onclick="addFeeRow()" class="mt-3 flex items-center gap-1.5 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
+              <span class="material-symbols-outlined" style="font-size:14px">add</span> Add Fee
+            </button>
           </div>
         </div>
 
@@ -977,6 +1049,37 @@ tailwind.config = {
               <button onclick="toggleAllActiveStaff()" class="text-xs font-body text-primary underline">Toggle All</button>
             </div>
             <div id="settings-active-staff" class="space-y-2"></div>
+          </div>
+        </div>
+
+        <!-- Calendar Hours -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <button onclick="toggleSettingsSection('settings-calhours-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
+            <div class="font-headline font-bold text-on-surface flex items-center gap-2">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">schedule</span> Calendar Hours
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="settings-calhours-section-icon">expand_more</span>
+          </button>
+          <div id="settings-calhours-section" class="hidden border-t border-surface-container-high px-5 py-4">
+            <p class="text-sm font-body text-on-surface-variant mb-4">Set the earliest and latest time visible on the Calendar tab.</p>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Opens At</label>
+                <select id="cal-hour-start" onchange="saveCalHours()" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+                  <option value="5">5:00 AM</option><option value="6" selected>6:00 AM</option>
+                  <option value="7">7:00 AM</option><option value="8">8:00 AM</option>
+                  <option value="9">9:00 AM</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Closes At</label>
+                <select id="cal-hour-end" onchange="saveCalHours()" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+                  <option value="18">6:00 PM</option><option value="19">7:00 PM</option>
+                  <option value="20">8:00 PM</option><option value="21">9:00 PM</option>
+                  <option value="22" selected>10:00 PM</option><option value="23">11:00 PM</option>
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1003,6 +1106,23 @@ tailwind.config = {
           </button>
           <div id="settings-services-section" class="hidden border-t border-surface-container-high p-4">
             <div id="settings-services-embed"></div>
+          </div>
+        </div>
+
+        <!-- Audit Log -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <button onclick="toggleSettingsSection('settings-audit-section');if(!document.getElementById('audit-log-content').children.length)loadAuditLog()" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
+            <div class="font-headline font-bold text-on-surface flex items-center gap-2">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">history</span> Audit Log
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="settings-audit-section-icon">expand_more</span>
+          </button>
+          <div id="settings-audit-section" class="hidden border-t border-surface-container-high px-5 py-4">
+            <p class="text-sm font-body text-on-surface-variant mb-3">History of deleted transactions and admin actions.</p>
+            <button onclick="loadAuditLog()" class="mb-3 flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body font-semibold text-sm transition-colors">
+              <span class="material-symbols-outlined" style="font-size:16px">refresh</span> Load Audit Log
+            </button>
+            <div id="audit-log-content" class="space-y-2 max-h-80 overflow-y-auto"></div>
           </div>
         </div>
 
@@ -1057,11 +1177,21 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Search -->
-        <div class="mb-4">
+        <!-- Search + sort controls -->
+        <div class="mb-3 flex items-center gap-2 flex-wrap">
           <input type="text" id="gc-search" placeholder="Search by serial #, name, phone, notes…"
             oninput="renderGiftCards()"
-            class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-body focus:border-primary outline-none">
+            class="flex-1 min-w-48 border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-body focus:border-primary outline-none">
+          <button id="gc-hide-zero-btn" onclick="toggleGcHideZero()"
+            class="px-3 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors">Hide $0</button>
+          <select onchange="setGcSort(this.value); this.blur()"
+            class="px-3 py-2 rounded-xl bg-surface-container border border-surface-container-high text-xs font-body text-on-surface focus:outline-none">
+            <option value="datePurchased">Sort: Date</option>
+            <option value="amount">Sort: Amount</option>
+            <option value="balance">Sort: Balance</option>
+            <option value="status">Sort: Status</option>
+            <option value="serial">Sort: Serial</option>
+          </select>
         </div>
 
         <!-- Column headers -->
@@ -1492,6 +1622,7 @@ tailwind.config = {
   <div class="flex gap-2 mb-3">
     <button onclick="setTechBreak(false)" id="tsm-available" class="flex-1 py-2 rounded-xl text-xs font-body font-semibold transition-all" style="background:#2a7a4f;color:#fff">Available</button>
     <button onclick="setTechBreak(true)" id="tsm-break" class="flex-1 py-2 rounded-xl text-xs font-body font-semibold transition-all" style="background:#f5c870;color:#3a2800">On Break</button>
+    <button onclick="setTechOff()" id="tsm-off" class="flex-1 py-2 rounded-xl text-xs font-body font-semibold transition-all" style="background:#f3f4f6;color:#6b7280">Off</button>
   </div>
   <div class="border-t border-surface-container-high pt-2">
     <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Services Today</div>
@@ -1513,7 +1644,9 @@ tailwind.config = {
       <button onclick="uncheckAllTechs()" class="text-xs font-body text-outline hover:text-error underline">Uncheck All</button>
     </div>
     <div id="turns-tech-selector-list" class="space-y-2 max-h-96 overflow-y-auto no-scroll mb-4"></div>
-    <button onclick="saveTurnsTechOrder()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Save Order</button>
+    <button onclick="saveTurnsTechOrder()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">
+      Save &amp; Sync to All Devices
+    </button>
   </div>
 </div>
 
@@ -1991,7 +2124,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCAJYBBoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAAAAEI/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/EABQBAQAAAAAAAAAAAAAAAAAAAAD/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwDGQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA//Z";
-const APP_VERSION  = 'v1.35';
+const APP_VERSION  = 'v1.38';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 const SHEETS_ID = "1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo";
@@ -2121,6 +2254,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (fdUsersRaw)  { const s = JSON.parse(fdUsersRaw);  if (s.length) FRONT_DESK_USERS  = s; }
     const turnsRaw = localStorage.getItem('muse_turns_order');
     if (turnsRaw) { try { const t = JSON.parse(turnsRaw); if (Array.isArray(t)) turnsTechOrder = t; } catch(e){} }
+    const itemsRaw = localStorage.getItem('muse_items');
+    if (itemsRaw) { try { const t = JSON.parse(itemsRaw); if (Array.isArray(t) && t.length) ITEMS = t; } catch(e){} }
+    const feesRaw = localStorage.getItem('muse_fees');
+    if (feesRaw) { try { const t = JSON.parse(feesRaw); if (Array.isArray(t) && t.length) FEES = t; } catch(e){} }
+    const hiddenDashRaw = localStorage.getItem('muse_hidden_dash_services');
+    if (hiddenDashRaw) { try { hiddenDashServices = JSON.parse(hiddenDashRaw); } catch(e){} }
     // Apply logo if it changed
     setLogo();
   }
@@ -2600,7 +2739,7 @@ function goTo(screenId, param) {
       label.textContent = 'Walk-In Check-In';
     }
   }
-  if (screenId === 'screen-desk') updateDeskDate();
+  if (screenId === 'screen-desk') { updateDeskDate(); initCalHoursSelectors(); }
 }
 
 // ── Guest Card Builder ───────────────────────────
@@ -3680,6 +3819,8 @@ function saveRecord(entry) {
     phone: entry.phone || '',
     services: entry.services,
     assignments: entry.assignments || [],
+    items: entry.items || [],
+    fees: entry.fees || [],
     totalCost: entry.totalCost || 0,
     checkinTime: entry.checkinTime instanceof Date ? entry.checkinTime.toISOString() : entry.checkinTime,
     status: entry.status,
@@ -3741,26 +3882,32 @@ function runReport() {
   if (!dates) return;
   const { from, to } = dates;
 
-  // Merge live queue (done entries) + historical records
+  // Merge live queue (done, non-deleted entries) + historical records
+  const deletedIds2 = new Set(allRecords.filter(r => r.status === 'deleted').map(r => String(r.id)));
   const liveSnaps = queue
-    .filter(e => e.status === 'done')
+    .filter(e => e.status === 'done' && !deletedIds2.has(String(e.id)))
     .map(e => ({
       id: String(e.id), name: e.name, phone: e.phone || '',
       services: e.services, assignments: e.assignments || [],
+      items: e.items || [], fees: e.fees || [],
       totalCost: e.totalCost || 0,
       checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
       status: e.status, isAppointment: e.isAppointment || false,
       loggedBy: activeUser ? activeUser.name : '',
     }));
-  const liveIds = new Set(liveSnaps.map(r => r.id));
-  const combined = [...liveSnaps, ...allRecords.filter(r => !liveIds.has(r.id))];
+  const liveIds = new Set(liveSnaps.map(r => String(r.id)));
+  const combined = [...liveSnaps, ...allRecords.filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted')];
 
   const filtered = combined.filter(r => {
+    if (r.status === 'deleted') return false;
     const d = r.checkinTime instanceof Date ? r.checkinTime : new Date(r.checkinTime);
-    return d >= from && d <= to;
+    return d >= from && d <= to && r.status === 'done';
   });
 
-  // Totals
+  // Totals — broken down by services, items, fees
+  const svcTotal   = filtered.reduce((s, r) => s + (r.assignments||[]).reduce((a, x) => a + (x.cost||0), 0), 0);
+  const itemsTotal = filtered.reduce((s, r) => s + (r.items||[]).reduce((a, x) => a + (x.price||0)*(x.qty||1), 0), 0);
+  const feesTotal  = filtered.reduce((s, r) => s + (r.fees||[]).reduce((a, x) => a + (x.amount||0), 0), 0);
   const totalIncome = filtered.reduce((s, r) => s + (r.totalCost || 0), 0);
   const guestCount  = filtered.length;
   const avgTicket   = guestCount > 0 ? totalIncome / guestCount : 0;
@@ -3768,6 +3915,12 @@ function runReport() {
   document.getElementById('rpt-total-income').textContent = `$${totalIncome.toFixed(2)}`;
   document.getElementById('rpt-total-guests').textContent = guestCount;
   document.getElementById('rpt-avg-ticket').textContent   = `$${avgTicket.toFixed(2)}`;
+  const svcEl   = document.getElementById('rpt-svc-total');
+  const itmEl   = document.getElementById('rpt-items-total');
+  const feeEl   = document.getElementById('rpt-fees-total');
+  if (svcEl)  svcEl.textContent   = `$${svcTotal.toFixed(2)}`;
+  if (itmEl)  itmEl.textContent   = `$${itemsTotal.toFixed(2)}`;
+  if (feeEl)  feeEl.textContent   = `$${feesTotal.toFixed(2)}`;
 
   // Date label
   const fmt = d => d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
@@ -4030,16 +4183,22 @@ function renderTransactions() {
 
   const dateFilter = document.getElementById('txn-date-filter')?.value;
 
-  // Merge live queue + historical records
-  const liveSnaps = queue.map(e => ({
-    id: String(e.id), name: e.name, phone: e.phone || '',
-    services: e.services, assignments: e.assignments || [],
-    totalCost: e.totalCost || 0,
-    checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
-    status: e.status, isAppointment: e.isAppointment || false,
-  }));
-  const liveIds = new Set(liveSnaps.map(r => r.id));
-  let combined = [...liveSnaps, ...allRecords.filter(r => !liveIds.has(r.id))];
+  // IDs marked as deleted in allRecords — exclude from everywhere
+  const deletedIds = new Set(allRecords.filter(r => r.status === 'deleted').map(r => String(r.id)));
+
+  // Merge live queue (done only, not deleted) + historical records
+  const liveSnaps = queue
+    .filter(e => e.status === 'done' && !deletedIds.has(String(e.id)))
+    .map(e => ({
+      id: String(e.id), name: e.name, phone: e.phone || '',
+      services: e.services, assignments: e.assignments || [],
+      items: e.items || [], fees: e.fees || [],
+      totalCost: e.totalCost || 0,
+      checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
+      status: e.status, isAppointment: e.isAppointment || false,
+    }));
+  const liveIds = new Set(liveSnaps.map(r => String(r.id)));
+  let combined = [...liveSnaps, ...allRecords.filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted')];
 
   if (dateFilter) {
     combined = combined.filter(r => {
@@ -4052,6 +4211,8 @@ function renderTransactions() {
     });
   }
 
+  // Only show completed, non-deleted transactions (liveSnaps already filtered above)
+  combined = combined.filter(r => r.status === 'done');
   combined.sort((a, b) => new Date(b.checkinTime) - new Date(a.checkinTime));
 
   if (combined.length === 0) {
@@ -4434,7 +4595,133 @@ function autoCapitalize(input) {
 // ── Settings Panel ────────────────────────────────
 // Persist which services are shown on customer-facing check-in
 let hiddenCheckinServices = JSON.parse(localStorage.getItem('muse_hidden_services') || '[]');
-let showDoneInQueue = true; // toggle for hiding done cards
+let hiddenDashServices    = JSON.parse(localStorage.getItem('muse_hidden_dash_services') || '[]');
+
+// Retail items — synced from Square Item Library, also editable locally
+let ITEMS = JSON.parse(localStorage.getItem('muse_items') || 'null') || [
+  { id: 'item-cuticle-oil',       label: 'Cuticle Oil',       abbr: 'CO',  price: 0 },
+  { id: 'item-small-cuticle-oil', label: 'Small Cuticle Oil', abbr: 'SCO', price: 0 },
+  { id: 'item-gift-card',         label: 'Gift Card',         abbr: 'GC',  price: 0 },
+];
+
+// Fees — flat dollar amount or percent of service subtotal
+let FEES = JSON.parse(localStorage.getItem('muse_fees') || 'null') || [
+  { id: 'fee-service', label: 'Service Fee', type: 'flat', value: 0 },
+];
+
+function saveItems() {
+  localStorage.setItem('muse_items', JSON.stringify(ITEMS));
+  setTimeout(() => pushConfigToSheets(), 500);
+}
+function saveFees() {
+  localStorage.setItem('muse_fees', JSON.stringify(FEES));
+  setTimeout(() => pushConfigToSheets(), 500);
+}
+
+// ── Dashboard service visibility ──────────────────
+function isServiceVisibleOnDash(id) { return !hiddenDashServices.includes(id); }
+function saveHiddenDashServices() {
+  localStorage.setItem('muse_hidden_dash_services', JSON.stringify(hiddenDashServices));
+}
+function toggleDashService(id) {
+  if (hiddenDashServices.includes(id)) hiddenDashServices = hiddenDashServices.filter(x => x !== id);
+  else hiddenDashServices.push(id);
+  saveHiddenDashServices();
+  renderSettingsDashServiceVisibility();
+  setTimeout(() => pushConfigToSheets(), 1000);
+}
+function toggleAllDashServices() {
+  hiddenDashServices = hiddenDashServices.length === 0 ? SERVICES.map(s => s.id) : [];
+  saveHiddenDashServices();
+  renderSettingsDashServiceVisibility();
+}
+function renderSettingsDashServiceVisibility() {
+  const container = document.getElementById('settings-dash-service-visibility');
+  if (!container) return;
+  container.innerHTML = SERVICES.map(s => {
+    const visible = isServiceVisibleOnDash(s.id);
+    return `
+      <div class="flex items-center justify-between py-2 border-b border-surface-container-high last:border-0">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center">
+            <span class="text-xs font-headline font-bold text-on-surface">${s.abbr}</span>
+          </div>
+          <span class="font-body font-semibold text-on-surface">${s.label}</span>
+        </div>
+        <button onclick="toggleDashService('${s.id}')"
+          class="relative w-12 h-6 rounded-full transition-colors ${visible ? 'bg-primary' : 'bg-surface-container-high'}">
+          <div class="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${visible ? 'left-6' : 'left-0.5'}"></div>
+        </button>
+      </div>`;
+  }).join('');
+}
+
+// ── Items settings render ─────────────────────────
+function renderSettingsItems() {
+  const container = document.getElementById('settings-items-list');
+  if (!container) return;
+  container.innerHTML = ITEMS.map((item, i) => `
+    <div class="flex items-center gap-2 py-2 border-b border-surface-container-high last:border-0">
+      <input type="text" value="${item.label}" placeholder="Item name"
+        onchange="ITEMS[${i}].label=this.value; saveItems()"
+        class="flex-1 bg-transparent border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:border-primary outline-none">
+      <input type="text" value="${item.abbr}" placeholder="Abbr"
+        onchange="ITEMS[${i}].abbr=this.value; saveItems()"
+        class="w-16 bg-transparent border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body font-semibold focus:border-primary outline-none text-center">
+      <div class="flex items-center gap-1">
+        <span class="text-sm text-on-surface-variant">$</span>
+        <input type="text" inputmode="decimal" value="${item.price || ''}" placeholder="0.00"
+          onchange="ITEMS[${i}].price=parseFloat(this.value)||0; saveItems()"
+          class="w-16 bg-transparent border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:border-primary outline-none text-right">
+      </div>
+      <button onclick="removeItem(${i})" class="text-outline-variant hover:text-error transition-colors">
+        <span class="material-symbols-outlined" style="font-size:16px">delete</span>
+      </button>
+    </div>`).join('') || '<p class="text-sm text-on-surface-variant py-2">No items yet.</p>';
+}
+
+function addItemRow() {
+  ITEMS.push({ id: 'item-' + Date.now(), label: '', abbr: '', price: 0 });
+  renderSettingsItems();
+}
+function removeItem(i) {
+  ITEMS.splice(i, 1);
+  saveItems();
+  renderSettingsItems();
+}
+
+// ── Fees settings render ──────────────────────────
+function renderSettingsFees() {
+  const container = document.getElementById('settings-fees-list');
+  if (!container) return;
+  container.innerHTML = FEES.map((fee, i) => `
+    <div class="flex items-center gap-2 py-2 border-b border-surface-container-high last:border-0">
+      <input type="text" value="${fee.label}" placeholder="Fee name"
+        onchange="FEES[${i}].label=this.value; saveFees()"
+        class="flex-1 bg-transparent border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:border-primary outline-none">
+      <select onchange="FEES[${i}].type=this.value; saveFees()"
+        class="bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:border-primary outline-none">
+        <option value="flat"    ${fee.type==='flat'   ?'selected':''}>Flat $</option>
+        <option value="percent" ${fee.type==='percent'?'selected':''}>Percent %</option>
+      </select>
+      <input type="text" inputmode="decimal" value="${fee.value || ''}" placeholder="0"
+        onchange="FEES[${i}].value=parseFloat(this.value)||0; saveFees()"
+        class="w-16 bg-transparent border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:border-primary outline-none text-right">
+      <button onclick="removeFee(${i})" class="text-outline-variant hover:text-error transition-colors">
+        <span class="material-symbols-outlined" style="font-size:16px">delete</span>
+      </button>
+    </div>`).join('') || '<p class="text-sm text-on-surface-variant py-2">No fees yet.</p>';
+}
+
+function addFeeRow() {
+  FEES.push({ id: 'fee-' + Date.now(), label: '', type: 'flat', value: 0 });
+  renderSettingsFees();
+}
+function removeFee(i) {
+  FEES.splice(i, 1);
+  saveFees();
+  renderSettingsFees();
+}
 let inactiveStaff = JSON.parse(localStorage.getItem('muse_inactive_staff') || '[]');
 
 
@@ -4711,11 +4998,19 @@ async function loadRecordsFromSheets() {
       return { ...r, assignments };
     });
 
-    // Merge: Sheets records are the authority for historical data.
-    // Local records that aren't in Sheets yet (e.g. created today) take priority.
+    // Merge: Sheets records are authority for historical data.
+    // BUT: locally deleted records must stay deleted even if Sheets has them as 'done'.
+    const localDeletedIds = new Set(allRecords.filter(r => r.status === 'deleted').map(r => String(r.id)));
+
     const sheetsIds = new Set(enriched.map(r => String(r.id)));
     const localOnly = allRecords.filter(r => !sheetsIds.has(String(r.id)));
-    allRecords = [...enriched, ...localOnly];
+
+    // Re-apply deleted status to any Sheets records that were deleted locally
+    const mergedEnriched = enriched.map(r =>
+      localDeletedIds.has(String(r.id)) ? { ...r, status: 'deleted' } : r
+    );
+
+    allRecords = [...mergedEnriched, ...localOnly];
     localStorage.setItem('muse_records', JSON.stringify(allRecords));
     console.log('[Records] Loaded', enriched.length, 'from Sheets +', localOnly.length, 'local-only');
     return true;
@@ -5344,6 +5639,7 @@ function cycleTechStatus(event, staffId) {
 
 function getTechStatusColor(staffId) {
   // Break takes priority — set from turns tab
+  if (turnsOffStaff.includes(staffId))   return { bg: '#f3f4f6', text: '#9ca3af', label: 'Off' };
   if (turnsBreakStaff.includes(staffId)) return { bg: '#f5c870', text: '#3a2800', label: 'On Break' };
   const activeEntries = getActiveTechEntries(staffId);
   if (activeEntries.length > 0) return { bg: '#fa746f', text: '#fff', label: 'In Service' };
@@ -5662,6 +5958,7 @@ function suggestTechForService(serviceId) {
     const st = STAFF.find(s => s.id === id);
     if (!st) return false;
     if (turnsBreakStaff.includes(id)) return false;
+    if (turnsOffStaff.includes(id))   return false;
     if (st.services && st.services.length > 0) {
       if (!st.services.includes(serviceId)) return false;
     }
@@ -6075,9 +6372,20 @@ function setTechBreak(isBreak) {
   const staffId = _techStatusMenuId;
   if (isBreak && !turnsBreakStaff.includes(staffId)) turnsBreakStaff.push(staffId);
   else if (!isBreak) turnsBreakStaff = turnsBreakStaff.filter(id => id !== staffId);
-  saveTurnsBreak();
+  // Remove from off if setting break/available
+  turnsOffStaff = turnsOffStaff.filter(id => id !== staffId);
+  saveTurnsBreak(); saveTurnsOff();
   closeTechStatusMenu();
   renderTurnsTechGrid();
+  setTimeout(() => pushConfigToSheets(), 500);
+}
+
+function setTechOff() {
+  if (!_techStatusMenuId) return;
+  const staffId = _techStatusMenuId;
+  toggleTurnsOffStaff(staffId);
+  closeTechStatusMenu();
+  setTimeout(() => pushConfigToSheets(), 500);
 }
 
 // ── Undo Stack ────────────────────────────────────
@@ -6273,7 +6581,9 @@ function setupTurnsDragDrop() { /* no-op — drag handled by event delegation ab
 const CONFIG_KEYS = [
   'muse_staff', 'muse_services', 'muse_fd_users',
   'muse_schedule', 'muse_turn_config', 'muse_bonus_services',
-  'muse_hidden_services', 'muse_inactive_staff', 'muse_logo', 'muse_turns_order',
+  'muse_hidden_services', 'muse_hidden_dash_services',
+  'muse_inactive_staff', 'muse_logo', 'muse_turns_order',
+  'muse_items', 'muse_fees',
 ];
 
 async function pushConfigToSheets() {
@@ -6526,6 +6836,12 @@ function startSheetsPolling() {
         if (fdUsersRaw)  { try { const s = JSON.parse(fdUsersRaw);  if (s.length) FRONT_DESK_USERS = s; } catch(e){} }
         const turnsRaw = localStorage.getItem('muse_turns_order');
         if (turnsRaw) { try { const t = JSON.parse(turnsRaw); if (Array.isArray(t)) turnsTechOrder = t; renderTurns(); } catch(e){} }
+        const itemsRaw2 = localStorage.getItem('muse_items');
+        if (itemsRaw2) { try { const t = JSON.parse(itemsRaw2); if (Array.isArray(t) && t.length) ITEMS = t; } catch(e){} }
+        const feesRaw2 = localStorage.getItem('muse_fees');
+        if (feesRaw2) { try { const t = JSON.parse(feesRaw2); if (Array.isArray(t) && t.length) FEES = t; } catch(e){} }
+        const hDashRaw = localStorage.getItem('muse_hidden_dash_services');
+        if (hDashRaw) { try { hiddenDashServices = JSON.parse(hDashRaw); } catch(e){} }
         setLogo();
       }
       // Always reload photos (they're on a separate row, not in CONFIG_KEYS)
@@ -6683,13 +6999,31 @@ function renderGiftCards() {
   if (!list) return;
 
   const q = (document.getElementById('gc-search')?.value || '').toLowerCase();
-  const filtered = giftCards.filter(g =>
+  let filtered = giftCards.filter(g =>
     !q || (g.serial||'').toLowerCase().includes(q) ||
     (g.from||'').toLowerCase().includes(q) ||
     (g.to||'').toLowerCase().includes(q) ||
     (g.phone||'').includes(q) ||
     (g.notes||'').toLowerCase().includes(q)
-  ).sort((a,b) => (b.datePurchased||'') > (a.datePurchased||'') ? 1 : -1);
+  );
+  // Hide $0 balance cards if toggled
+  if (_gcHideZero) filtered = filtered.filter(g => ((g.amount||0) - (g.amountUsed||0)) > 0);
+  // Sort
+  filtered.sort((a, b) => {
+    let av, bv;
+    if (_gcSortField === 'amount')       { av = a.amount||0; bv = b.amount||0; }
+    else if (_gcSortField === 'balance') { av = (a.amount||0)-(a.amountUsed||0); bv = (b.amount||0)-(b.amountUsed||0); }
+    else if (_gcSortField === 'serial')  { av = a.serial||''; bv = b.serial||''; }
+    else if (_gcSortField === 'status')  {
+      const order = { Active: 0, Partial: 1, Redeemed: 2 };
+      const getS = g => { const bal = (g.amount||0)-(g.amountUsed||0); return bal<=0?'Redeemed':g.amountUsed>0?'Partial':'Active'; };
+      av = order[getS(a)]??3; bv = order[getS(b)]??3;
+    }
+    else { av = a.datePurchased||''; bv = b.datePurchased||''; } // date
+    if (av < bv) return _gcSortDir === 'asc' ? -1 : 1;
+    if (av > bv) return _gcSortDir === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   // Summary
   const totalValue   = giftCards.reduce((s,g) => s + (g.amount||0), 0);
@@ -6836,14 +7170,28 @@ function confirmDeleteTransaction() {
   if (!reason) { showToast('Please enter a reason for deletion.'); return; }
   if (!_deleteTxnId) return;
 
-  // Remove from allRecords
-  allRecords = allRecords.filter(r => String(r.id) !== _deleteTxnId);
+  // Soft-delete: mark as 'deleted' in local records instead of removing
+  const delIdx = allRecords.findIndex(r => String(r.id) === _deleteTxnId);
+  if (delIdx >= 0) {
+    allRecords[delIdx] = { ...allRecords[delIdx], status: 'deleted' };
+  } else {
+    // Record only in queue (today's customer) — add a deleted snapshot to allRecords
+    const qEntry = queue.find(e => String(e.id) === _deleteTxnId);
+    if (qEntry) {
+      allRecords.push({
+        id: String(qEntry.id), name: qEntry.name, phone: qEntry.phone || '',
+        services: qEntry.services, assignments: qEntry.assignments || [],
+        totalCost: qEntry.totalCost || 0,
+        checkinTime: qEntry.checkinTime instanceof Date ? qEntry.checkinTime.toISOString() : qEntry.checkinTime,
+        status: 'deleted', isAppointment: qEntry.isAppointment || false,
+        loggedBy: activeUser?.name || '',
+      });
+    }
+  }
   localStorage.setItem('muse_records', JSON.stringify(allRecords));
 
-  // Remove from live queue if present
-  const qLen = queue.length;
-  queue = queue.filter(e => String(e.id) !== _deleteTxnId);
-  if (queue.length !== qLen) { saveQueueToStorage(); scheduleSheetsSave(); }
+  // DO NOT remove from live queue — keep in queue so other devices don't re-add
+  // The 'deleted' status in allRecords filters it from transactions/reports
 
   // Save to deletion log
   const log = JSON.parse(localStorage.getItem('muse_deletion_log') || '[]');
@@ -6858,23 +7206,22 @@ function confirmDeleteTransaction() {
   });
   localStorage.setItem('muse_deletion_log', JSON.stringify(log));
 
-  // Write deletion note to Transaction Log in Sheets
+  // Write deletion to both Transaction Log AND Check-Ins tab in Sheets
   const proxy = `${SQUARE_PROXY.replace('/square', '')}/sheets`;
-  fetch(proxy, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action:    'update',
-      entryId:   _deleteTxnId,
-      name:      _deleteTxnRecord?.name || '',
-      status:    'deleted',
-      detail:    `DELETED by ${activeUser?.name||'Unknown'}: ${reason}`,
-      loggedBy:  activeUser?.name || '',
-      checkinTime: _deleteTxnRecord?.checkinTime || new Date().toISOString(),
-      services:  (_deleteTxnRecord?.services||[]).map(sid => SERVICES.find(s=>s.id===sid)?.label||sid),
-      total:     _deleteTxnRecord?.totalCost || 0,
-    }),
-  }).catch(()=>{});
+  const delPayload = {
+    entryId:   _deleteTxnId,
+    name:      _deleteTxnRecord?.name || '',
+    status:    'deleted',
+    detail:    `DELETED by ${activeUser?.name||'Unknown'}: ${reason}`,
+    loggedBy:  activeUser?.name || '',
+    checkinTime: _deleteTxnRecord?.checkinTime || new Date().toISOString(),
+    services:  (_deleteTxnRecord?.services||[]).map(sid => SERVICES.find(s=>s.id===sid)?.label||sid),
+    total:     _deleteTxnRecord?.totalCost || 0,
+  };
+  // Update Transaction Log row
+  fetch(proxy, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'update', ...delPayload }) }).catch(()=>{});
+  // Update Check-Ins row status to deleted
+  fetch(proxy, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'checkinRow', ...delPayload, isAppointment: _deleteTxnRecord?.isAppointment||false }) }).catch(()=>{});
 
   closeDeleteTxnModal();
   renderTransactions();
@@ -6968,7 +7315,11 @@ function importAllData(input) {
 // Show last backup date in settings when panel opens
 function renderSettingsPanel() {
   renderSettingsServiceVisibility();
+  renderSettingsDashServiceVisibility();
   renderSettingsActiveStaff();
+  renderSettingsItems();
+  renderSettingsFees();
+  initCalHoursSelectors();
   const lbl = document.getElementById('last-backup-label');
   if (lbl) lbl.textContent = localStorage.getItem('muse_last_backup') || 'Never';
 
@@ -7569,6 +7920,7 @@ function checkPin() {
       pinCancel();
       updateLoggedInDisplay();
       goTo('screen-desk');
+      showDashPanel('turns'); // default to Turns tab on login
       showToast(`Welcome, ${activeUser.name}`);
     }, 300);
   } else if (pinBuffer.length >= 6) {
@@ -7774,7 +8126,7 @@ function showAssignModal(entryId) {
 function renderAssignServicePicker(entry) {
   const picker = document.getElementById('assign-service-picker');
   if (!picker) return;
-  picker.innerHTML = SERVICES.map(s => {
+  picker.innerHTML = SERVICES.filter(s => isServiceVisibleOnDash(s.id)).map(s => {
     const selected = entry.services.includes(s.id);
     return `
       <button type="button"
@@ -8153,26 +8505,41 @@ function saveCurrentGroupTabInputs() {
   const entry = queue.find(e => String(e.id) === entryId);
   if (!entry) return;
   const rows = document.querySelectorAll('#group-assign-content [data-service-id]');
-  if (rows.length === 0) return;
   if (!entry.assignments) entry.assignments = [];
   rows.forEach(row => {
     const sid = row.dataset.serviceId;
     let a = entry.assignments.find(x => x.serviceId === sid);
-    if (!a) {
-      a = { serviceId: sid, status: 'waiting' }; // explicit default
-      entry.assignments.push(a);
-    }
+    if (!a) { a = { serviceId: sid, status: 'waiting' }; entry.assignments.push(a); }
     const prevTech = a.techId;
     a.techId  = row.querySelector('.assign-tech')?.value || '';
     a.station = row.querySelector('.assign-station')?.value || '';
     a.cost    = parseFloat(row.querySelector('.assign-cost')?.value) || 0;
-    // Stamp assignedAt when a tech is first set (for turn ordering)
     if (a.techId && !prevTech) a.assignedAt = Date.now();
-    // NEVER touch a.status here — only cycleServiceStatus / setAssignmentStatus may change it
   });
   entry.services = entry.assignments.map(a => a.serviceId);
-  entry.totalCost = entry.assignments.reduce((s, a) => s + (a.cost||0), 0);
-  // Re-derive entry status from per-service statuses
+  // Save items
+  entry.items = [];
+  document.querySelectorAll('#group-assign-content [data-item-id]').forEach(row => {
+    const itemId = row.dataset.itemId;
+    const qty   = parseInt(row.querySelector('.item-qty')?.value) || 1;
+    const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
+    if (price > 0) entry.items.push({ itemId, qty, price });
+  });
+  // Save fees
+  const svcSubtotal = entry.assignments.reduce((s, a) => s + (a.cost||0), 0);
+  entry.fees = [];
+  document.querySelectorAll('#group-assign-content [data-fee-id]').forEach(row => {
+    const feeId = row.dataset.feeId;
+    const feeType = row.dataset.feeType;
+    const feeVal  = parseFloat(row.dataset.feeValue) || 0;
+    let amount = feeType === 'percent'
+      ? Math.round(svcSubtotal * feeVal) / 100
+      : parseFloat(row.querySelector('.fee-amount')?.value) || 0;
+    if (amount > 0) entry.fees.push({ feeId, amount, type: feeType });
+  });
+  const itemTotal = (entry.items||[]).reduce((s,i)=>s+(i.price*(i.qty||1)),0);
+  const feeTotal  = (entry.fees ||[]).reduce((s,f)=>s+(f.amount||0),0);
+  entry.totalCost = entry.assignments.reduce((s,a)=>s+(a.cost||0),0) + itemTotal + feeTotal;
   entry.status = deriveEntryStatus(entry);
   setTimeout(updateGroupTotal, 0);
 }
@@ -8246,8 +8613,8 @@ function renderGroupAssignContent() {
     `;
   }).join('');
 
-  // Service picker for this guest — only show visible (non-hidden) services
-  const svcPicker = SERVICES.filter(s => isServiceVisibleOnCheckin(s.id)).map(s => {
+  // Service picker — only show dash-visible services
+  const svcPicker = SERVICES.filter(s => isServiceVisibleOnDash(s.id)).map(s => {
     const selected = entry.services.includes(s.id);
     return `
       <button type="button" onclick="toggleGroupService('${s.id}')" id="gsvc-btn-${s.id}"
@@ -8258,6 +8625,59 @@ function renderGroupAssignContent() {
       </button>
     `;
   }).join('');
+
+  // Items rows (no tech/station, just cost)
+  const itemRows = ITEMS.map(item => {
+    const existing = (entry.items || []).find(i => i.itemId === item.id) || {};
+    return `
+      <div class="bg-surface-container-low rounded-xl p-4 border border-surface-container-high mb-3" data-item-id="${item.id}">
+        <div class="flex items-center justify-between">
+          <div class="font-headline font-semibold text-on-surface text-sm">${item.label}
+            <span class="ml-2 text-[10px] font-body text-outline-variant uppercase tracking-widest">Retail Item</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">Qty</label>
+            <input type="text" inputmode="numeric" value="${existing.qty || ''}" placeholder="1"
+              class="item-qty w-12 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body text-center focus:outline-none focus:border-primary"
+              oninput="updateGroupTotal()">
+            <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">$</label>
+            <input type="text" inputmode="decimal" value="${existing.price != null && existing.price !== 0 ? existing.price : (item.price || '')}" placeholder="${item.price || '0.00'}"
+              class="item-price w-16 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer"
+              onfocus="openNumpad(this,'${item.label}')"
+              onclick="openNumpad(this,'${item.label}')"
+              oninput="updateGroupTotal()">
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Fees rows (flat $ or % of service subtotal)
+  const feeRows = FEES.map(fee => {
+    const existing = (entry.fees || []).find(f => f.feeId === fee.id) || {};
+    const feeLabel = fee.type === 'percent' ? `${fee.value}%` : `$${fee.value.toFixed(2)}`;
+    return `
+      <div class="bg-surface-container-low rounded-xl p-4 border border-surface-container-high mb-3" data-fee-id="${fee.id}" data-fee-type="${fee.type}" data-fee-value="${fee.value}">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="font-headline font-semibold text-on-surface text-sm">${fee.label}
+              <span class="ml-2 text-[10px] font-body text-outline-variant uppercase tracking-widest">${fee.type === 'percent' ? 'Percent Fee' : 'Flat Fee'}</span>
+            </div>
+            ${fee.type === 'percent' ? `<div class="text-xs text-on-surface-variant mt-0.5">${feeLabel} of service subtotal</div>` : ''}
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">$</label>
+            <input type="text" inputmode="decimal" value="${existing.amount != null && existing.amount !== 0 ? existing.amount : ''}" placeholder="${fee.type==='flat'?fee.value.toFixed(2):'auto'}"
+              class="fee-amount w-20 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer"
+              ${fee.type==='percent' ? 'readonly' : ''}
+              onfocus="if(!this.readOnly) openNumpad(this,'${fee.label}')"
+              onclick="if(!this.readOnly) openNumpad(this,'${fee.label}')"
+              oninput="updateGroupTotal()">
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const hasSupplement = ITEMS.length > 0 || FEES.length > 0;
 
   content.innerHTML = `
     <div class="flex items-center gap-2 mb-3">
@@ -8270,6 +8690,11 @@ function renderGroupAssignContent() {
       <div class="grid grid-cols-4 gap-2 mb-4">${svcPicker}</div>
     </div>
     ${serviceRows}
+    ${hasSupplement ? `
+      <div class="border-t border-surface-container-high mt-2 pt-3 mb-2">
+        <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-3">Items &amp; Fees</div>
+        ${itemRows}${feeRows}
+      </div>` : ''}
     <div class="border-t border-surface-container-high pt-3 flex items-center justify-between">
       <span class="font-body font-semibold text-on-surface text-sm">Subtotal</span>
       <span id="group-subtotal" class="font-headline font-bold text-primary">$0.00</span>
@@ -8296,22 +8721,36 @@ function toggleGroupService(sid) {
 }
 
 function updateGroupTotal() {
-  // Current tab subtotal
-  const costs = [...document.querySelectorAll('#group-assign-content .assign-cost')].map(i => parseFloat(i.value) || 0);
-  const subtotal = costs.reduce((a, b) => a + b, 0);
-  const subtotalEl = document.getElementById('group-subtotal');
-  if (subtotalEl) subtotalEl.textContent = `$${subtotal.toFixed(2)}`;
-
-  // Party total — sum saved totals for all tabs except current (which uses live inputs)
+  const svcCosts = [...document.querySelectorAll('#group-assign-content .assign-cost')].map(i=>parseFloat(i.value)||0);
+  const svcSubtotal = svcCosts.reduce((a,b)=>a+b,0);
+  const itemTotal = [...document.querySelectorAll('#group-assign-content [data-item-id]')].reduce((sum,row)=>{
+    const qty = parseInt(row.querySelector('.item-qty')?.value)||1;
+    const price = parseFloat(row.querySelector('.item-price')?.value)||0;
+    return sum + price*qty;
+  },0);
+  let feeTotal = 0;
+  document.querySelectorAll('#group-assign-content [data-fee-id]').forEach(row=>{
+    const feeType = row.dataset.feeType;
+    const feeVal  = parseFloat(row.dataset.feeValue)||0;
+    const inp = row.querySelector('.fee-amount');
+    if (feeType==='percent') {
+      const computed = Math.round(svcSubtotal*feeVal)/100;
+      if (inp) inp.value = computed>0?computed.toFixed(2):'';
+      feeTotal += computed;
+    } else { feeTotal += parseFloat(inp?.value)||0; }
+  });
+  const subtotal = svcSubtotal + itemTotal + feeTotal;
+  const el = document.getElementById('group-subtotal');
+  if (el) el.textContent = `$${subtotal.toFixed(2)}`;
   const currentId = groupAssignEntries[activeGroupTab];
   let partyTotal = subtotal;
-  groupAssignEntries.forEach((id, i) => {
-    if (i === activeGroupTab) return; // already counted above
-    const e = queue.find(x => String(x.id) === id);
-    if (e) partyTotal += (e.totalCost || 0);
+  groupAssignEntries.forEach((id,i)=>{
+    if (i===activeGroupTab) return;
+    const e = queue.find(x=>String(x.id)===id);
+    if (e) partyTotal += (e.totalCost||0);
   });
-  const partyEl = document.getElementById('group-party-total');
-  if (partyEl) partyEl.textContent = `$${partyTotal.toFixed(2)}`;
+  const pel = document.getElementById('group-party-total');
+  if (pel) pel.textContent = `$${partyTotal.toFixed(2)}`;
 }
 
 function closeGroupAssignModal() {
@@ -8654,25 +9093,53 @@ async function syncSquare() {
 async function squarePullServices() {
   if (!squareConfig) return;
   try {
-    const res = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=ITEM`);
-    if (!res.ok) return;
-    const data = await res.json();
-    const items = data.objects || [];
-    let added = 0;
-    items.forEach(item => {
-      const name = item.item_data?.name;
-      if (!name) return;
-      const id = `sq-${item.id}`;
-      if (!SERVICES.find(s => s.id === id || s.label.toLowerCase() === name.toLowerCase())) {
-        const abbr = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4);
-        SERVICES.push({ id, label: name, abbr, squareItemId: item.id });
-        added++;
-      }
-    });
-    if (added > 0) {
-      saveServicesToStorage();
-      showToast(`${added} service${added > 1 ? 's' : ''} imported from Square`);
+    // Pull Services (Service Library in Square)
+    const svcRes = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=SERVICE`);
+    if (svcRes.ok) {
+      const svcData = await svcRes.json();
+      let addedSvc = 0;
+      (svcData.objects || []).forEach(item => {
+        const name = item.item_data?.name;
+        if (!name) return;
+        // Route "Service Fee" (and anything with fee/charge in name) to FEES
+        const lname = name.toLowerCase();
+        if (lname.includes('fee') || lname.includes('charge') || lname.includes('surcharge')) {
+          const id = `sq-fee-${item.id}`;
+          if (!FEES.find(f => f.id === id || f.label.toLowerCase() === lname)) {
+            FEES.push({ id, label: name, type: 'flat', value: 0, squareItemId: item.id });
+          }
+          return;
+        }
+        const id = `sq-${item.id}`;
+        if (!SERVICES.find(s => s.id === id || s.label.toLowerCase() === lname)) {
+          const abbr = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4);
+          SERVICES.push({ id, label: name, abbr, squareItemId: item.id });
+          addedSvc++;
+        }
+      });
+      if (addedSvc > 0) { saveServicesToStorage(); showToast(`${addedSvc} service${addedSvc>1?'s':''} imported from Square`); }
     }
+
+    // Pull Items (Item Library in Square)
+    const itemRes = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=ITEM`);
+    if (itemRes.ok) {
+      const itemData = await itemRes.json();
+      let addedItems = 0;
+      (itemData.objects || []).forEach(item => {
+        const name = item.item_data?.name;
+        if (!name) return;
+        const id = `sq-item-${item.id}`;
+        if (!ITEMS.find(i => i.id === id || i.label.toLowerCase() === name.toLowerCase())) {
+          const abbr = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4);
+          const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
+          ITEMS.push({ id, label: name, abbr, price: price ? price / 100 : 0, squareItemId: item.id });
+          addedItems++;
+        }
+      });
+      if (addedItems > 0) { saveItems(); showToast(`${addedItems} item${addedItems>1?'s':''} imported from Square`); }
+    }
+
+    saveFees();
   } catch(e) {
     console.warn('Could not pull Square catalog:', e);
   }
@@ -9029,7 +9496,7 @@ function showHistoricalEntryModal() {
 
   // Populate services
   const svcGrid = document.getElementById('hist-services');
-  svcGrid.innerHTML = SERVICES.filter(s => isServiceVisibleOnCheckin(s.id)).map(s =>
+  svcGrid.innerHTML = SERVICES.filter(s => isServiceVisibleOnDash(s.id)).map(s =>
     `<button type="button" onclick="toggleHistService('${s.id}',this)"
       class="px-3 py-2 rounded-xl border-2 border-surface-container-high text-xs font-body font-semibold text-on-surface-variant hover:border-primary transition-all"
       data-sid="${s.id}">${s.label}</button>`
@@ -9365,13 +9832,17 @@ function calRenderGrid() {
   document.getElementById('cal-loading').classList.add('hidden');
   grid.classList.remove('hidden');
 
-  const START_HOUR = 6, END_HOUR = 22;
+  const _calCfg = JSON.parse(localStorage.getItem('muse_cal_hours') || 'null');
+  const START_HOUR = _calCfg?.start ?? 6;
+  const END_HOUR   = _calCfg?.end   ?? 22;
   const SLOT_MINS  = _calSlotMins || 30;
   const SLOTS      = (END_HOUR - START_HOUR) * (60 / SLOT_MINS);
   const SLOT_H     = _calSlotH   || 52;
   const HEADER_H   = 48;
   const TIME_W     = 64;
-  const COL_W      = Math.max(160, Math.floor((window.innerWidth - TIME_W - 80) / visible.length));
+  // Fit columns to screen width; min 120px — only scroll if needed
+  const availW = window.innerWidth - TIME_W - 60;
+  const COL_W  = Math.max(120, Math.floor(availW / visible.length));
 
   const now     = new Date();
   const isToday = now.toDateString() === _calDate.toDateString();
@@ -9489,6 +9960,7 @@ function calRenderGrid() {
         </div>
         ${ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75">${timeStr}</div>`:''}
         ${sl&&ht>44?`<div style="font-size:9px;font-weight:700;color:${border}">${sl}</div>`:''}
+        ${ht>62&&desc&&!sl?`<div style="font-size:9px;color:${tc};opacity:0.6;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${desc.replace(/\n/g,' · ')}</div>`:''}
       </div>`;
     });
     body += '</div></div>';
@@ -9525,7 +9997,89 @@ function renderServicesEmbed() {
     </button>`;
 }
 
-// ── Google Tasks ──────────────────────────────────
+// ── Calendar Hours Setting ────────────────────────
+function saveCalHours() {
+  const start = parseInt(document.getElementById('cal-hour-start')?.value || '6');
+  const end   = parseInt(document.getElementById('cal-hour-end')?.value   || '22');
+  localStorage.setItem('muse_cal_hours', JSON.stringify({ start, end }));
+  if (document.getElementById('panel-calendar')?.classList.contains('active')) {
+    calRenderGrid();
+  }
+  showToast('Calendar hours updated ✓');
+}
+
+function initCalHoursSelectors() {
+  const cfg = JSON.parse(localStorage.getItem('muse_cal_hours') || 'null');
+  if (!cfg) return;
+  const startSel = document.getElementById('cal-hour-start');
+  const endSel   = document.getElementById('cal-hour-end');
+  if (startSel) startSel.value = String(cfg.start ?? 6);
+  if (endSel)   endSel.value   = String(cfg.end   ?? 22);
+}
+
+// ── Audit Log ─────────────────────────────────────
+function loadAuditLog() {
+  const el = document.getElementById('audit-log-content');
+  if (!el) return;
+  const log = JSON.parse(localStorage.getItem('muse_deletion_log') || '[]');
+  if (!log.length) { el.innerHTML = '<p class="text-sm text-on-surface-variant">No audit entries yet.</p>'; return; }
+  el.innerHTML = [...log].reverse().map(entry => {
+    const dt = new Date(entry.deletedAt);
+    return `<div class="bg-surface-container rounded-xl px-4 py-3 text-sm font-body border border-surface-container-high">
+      <div class="flex items-center justify-between mb-1">
+        <span class="font-semibold text-on-surface">${entry.name || '—'}</span>
+        <span class="text-xs text-outline">${dt.toLocaleDateString()} ${dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+      </div>
+      <div class="text-xs text-on-surface-variant">Deleted by ${entry.deletedBy} · $${(entry.total||0).toFixed(2)}</div>
+      ${entry.reason ? `<div class="text-xs text-outline mt-1">Reason: ${entry.reason}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+// ── Turns: "Off" status ───────────────────────────
+let turnsOffStaff = JSON.parse(localStorage.getItem('muse_turns_off') || '[]');
+function saveTurnsOff() { localStorage.setItem('muse_turns_off', JSON.stringify(turnsOffStaff)); }
+
+function toggleTurnsOffStaff(staffId) {
+  if (turnsOffStaff.includes(staffId)) {
+    turnsOffStaff = turnsOffStaff.filter(id => id !== staffId);
+  } else {
+    turnsOffStaff.push(staffId);
+    // Remove from break if they go off
+    turnsBreakStaff = turnsBreakStaff.filter(id => id !== staffId);
+    saveTurnsBreak();
+  }
+  saveTurnsOff();
+  renderTurns();
+}
+
+// ── Gift Card Sort/Filter ─────────────────────────
+let _gcSortField = 'datePurchased';
+let _gcSortDir   = 'desc';
+let _gcHideZero  = false;
+
+function setGcSort(field) {
+  if (_gcSortField === field) _gcSortDir = _gcSortDir === 'asc' ? 'desc' : 'asc';
+  else { _gcSortField = field; _gcSortDir = field === 'datePurchased' ? 'desc' : 'asc'; }
+  renderGiftCards();
+}
+
+function toggleGcHideZero() {
+  _gcHideZero = !_gcHideZero;
+  const btn = document.getElementById('gc-hide-zero-btn');
+  if (btn) btn.textContent = _gcHideZero ? 'Show $0' : 'Hide $0';
+  renderGiftCards();
+}
+
+// ── Turns: Save & Sync button handler ─────────────
+function saveTurnsAndSync() {
+  localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
+  localStorage.setItem('muse_turns_break', JSON.stringify(turnsBreakStaff));
+  localStorage.setItem('muse_turns_off',   JSON.stringify(turnsOffStaff));
+  renderTurns();
+  pushConfigToSheets();
+  showToast('Turns saved & synced ✓');
+}
 let _taskLists     = [];
 let _currentListId = null;
 
@@ -9578,23 +10132,41 @@ function renderTasks(tasks) {
     const due     = t.due ? new Date(t.due) : null;
     const dueStr  = due ? due.toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
     const overdue = due && due < new Date() && !done;
-    const lid = _currentListId;
-    return `<div class="flex items-start gap-2 px-2 py-2 rounded-xl hover:bg-surface-container transition-colors group">
+    const lid     = _currentListId;
+    return `<div class="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-container transition-colors group">
       <button onclick="toggleTask('${lid}','${t.id}','${done?'needsAction':'completed'}')"
-        class="w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors mt-0.5
-               ${done?'bg-primary border-primary':'border-outline-variant hover:border-primary'}">
-        ${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:11px;font-variation-settings:\'FILL\' 1">check</span>':''}
+        class="flex-shrink-0 transition-colors mt-0.5"
+        style="width:16px;height:16px;border-radius:50%;border:2px solid ${done?'var(--md-primary)':'var(--md-outline-variant)'};
+               background:${done?'var(--md-primary)':'transparent'};display:flex;align-items:center;justify-content:center;min-width:16px">
+        ${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;font-variation-settings:\'FILL\' 1">check</span>':''}
       </button>
-      <div class="flex-1 min-w-0">
-        <div class="text-xs font-body leading-tight ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-semibold'}">${t.title||'(no title)'}</div>
-        ${t.notes?`<div class="text-[10px] text-on-surface-variant mt-0.5 truncate">${t.notes}</div>`:''}
-        ${dueStr?`<div class="text-[10px] mt-0.5 font-semibold ${overdue?'text-error':'text-on-surface-variant'}">${overdue?'⚠ ':''}${dueStr}</div>`:''}
+      <div class="flex-1 min-w-0" style="line-height:1.3">
+        <div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}">${t.title||'(no title)'}</div>
+        ${t.notes?`<div class="text-[10px] text-on-surface-variant truncate">${t.notes}</div>`:''}
+        ${dueStr?`<div class="text-[10px] font-semibold ${overdue?'text-error':'text-on-surface-variant'}">${overdue?'⚠ ':''}${dueStr}</div>`:''}
       </div>
-      <button onclick="deleteTask('${lid}','${t.id}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all">
-        <span class="material-symbols-outlined" style="font-size:14px">close</span>
+      <button onclick="deleteTask('${lid}','${t.id}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all mt-0.5">
+        <span class="material-symbols-outlined" style="font-size:12px">close</span>
       </button>
     </div>`;
   }).join('');
+}
+
+let _tasksMinimized = false;
+function toggleTasksPanel() {
+  _tasksMinimized = !_tasksMinimized;
+  const panel = document.getElementById('cal-tasks-panel');
+  const btn   = document.getElementById('tasks-minimize-btn');
+  const body  = document.getElementById('tasks-list');
+  const sel   = document.getElementById('tasks-list-select')?.parentElement;
+  if (panel) {
+    panel.style.width = _tasksMinimized ? '36px' : '260px';
+    if (body) body.style.display = _tasksMinimized ? 'none' : '';
+    if (sel) sel.style.display = _tasksMinimized ? 'none' : '';
+  }
+  if (btn) {
+    btn.querySelector('.material-symbols-outlined').textContent = _tasksMinimized ? 'chevron_left' : 'chevron_right';
+  }
 }
 
 async function toggleTask(listId, taskId, newStatus) {
@@ -9986,8 +10558,8 @@ function apptAcSearch(input, field) {
 
   const matches = squareCustomers.filter(c => {
     const full  = ((c.given_name||'') + ' ' + (c.family_name||'')).toLowerCase();
-    const phone = (c.phone_number||'').replace(/\D/g,'');
-    if (field === 'phone') return phone.includes(val.replace(/\D/g,''));
+    const phone = (c.phone_number||c.phone||'').replace(/\D/g,'');
+    if (field === 'phone') return phone.includes(val.replace(/\D/g,'')) && val.replace(/\D/g,'').length >= 3;
     return full.startsWith(val) || (c.given_name||'').toLowerCase().startsWith(val);
   }).slice(0, 8);
 
@@ -9995,7 +10567,7 @@ function apptAcSearch(input, field) {
 
   acBox.innerHTML = matches.map(c => {
     const name  = [c.given_name, c.family_name].filter(Boolean).join(' ');
-    const phone = c.phone_number || '';
+    const phone = c.phone_number || c.phone || '';
     return `<div class="autocomplete-item" onmousedown="apptAcFill('${name.replace(/'/g,"\\'")}','${phone.replace(/'/g,"\\'")}')">
       <span class="ac-name">${name}</span>
       ${phone ? `<span class="ac-phone">${phone}</span>` : ''}
@@ -10028,7 +10600,7 @@ function _buildTechOptions(selectedCalId) {
 
 function _buildSvcOptions(selectedSvcId) {
   return '<option value="">— Service —</option>' +
-    SERVICES.filter(s => isServiceVisibleOnCheckin(s.id))
+    SERVICES.filter(s => isServiceVisibleOnDash(s.id))
       .map(s => `<option value="${s.id}" ${s.id === selectedSvcId ? 'selected' : ''}>${s.label}</option>`).join('');
 }
 
@@ -10257,16 +10829,20 @@ function renderCalSelectorList() {
   const list = document.getElementById('cal-selector-list');
   if (!list || _calCalendars.length === 0) return;
   list.innerHTML = _calCalendars.map((c, i) => `
-    <div class="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-surface-container cursor-grab select-none"
+    <div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none"
          draggable="true" data-cal-idx="${i}"
          ondragstart="calDragStart(event,${i})"
          ondragover="calDragOver(event)"
-         ondrop="calDrop(event,${i})">
-      <span class="material-symbols-outlined text-outline-variant" style="font-size:14px">drag_indicator</span>
+         ondrop="calDrop(event,${i})"
+         onclick="toggleCalCalendar('${c.id}',${_calHidden.has(c.id)})">
+      <span class="material-symbols-outlined text-outline-variant" style="font-size:14px;flex-shrink:0">drag_indicator</span>
       <div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div>
       <span class="flex-grow text-sm font-body text-on-surface">${c.name}</span>
-      <input type="checkbox" ${!_calHidden.has(c.id) ? 'checked' : ''} onchange="toggleCalCalendar('${c.id}',this.checked)"
-        class="w-4 h-4 accent-primary" onclick="event.stopPropagation()">
+      <div style="width:18px;height:18px;border-radius:4px;border:2px solid ${_calHidden.has(c.id)?'var(--md-outline-variant)':'var(--md-primary)'};
+                  background:${_calHidden.has(c.id)?'transparent':'var(--md-primary)'};flex-shrink:0;display:flex;align-items:center;justify-content:center"
+           onclick="event.stopPropagation();toggleCalCalendar('${c.id}',${_calHidden.has(c.id)})">
+        ${!_calHidden.has(c.id)?'<span class="material-symbols-outlined text-on-primary" style="font-size:12px;font-variation-settings:\'FILL\' 1">check</span>':''}
+      </div>
     </div>`).join('');
   const visCount = _calCalendars.filter(c => !_calHidden.has(c.id)).length;
   const lbl = document.getElementById('cal-selector-label');
