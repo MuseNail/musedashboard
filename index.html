@@ -776,7 +776,7 @@ tailwind.config = {
                 <span class="material-symbols-outlined" style="font-size:16px">tune</span>
                 <span id="cal-selector-label">Calendars</span>
               </button>
-              <div id="cal-selector-dropdown" class="hidden absolute right-0 top-10 z-50 rounded-xl shadow-2xl border border-surface-container-high p-3 min-w-48 space-y-1" style="background:var(--md-surface);border:1px solid var(--md-outline-variant)">
+              <div id="cal-selector-dropdown" class="hidden absolute right-0 top-10 z-50 rounded-xl shadow-2xl p-3 min-w-48 space-y-1" style="background:#ffffff;border:1.5px solid var(--md-outline-variant);box-shadow:0 8px 32px rgba(0,0,0,0.18)">
                 <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2">Show/Hide Calendars</div>
                 <div id="cal-selector-list"></div>
                 <div class="border-t border-surface-container-high mt-2 pt-2 flex gap-2">
@@ -1514,14 +1514,7 @@ tailwind.config = {
       <span id="assign-total" class="text-xl font-headline font-bold text-primary">$0.00</span>
     </div>
     <div class="flex flex-col gap-2">
-      <div class="flex gap-2">
-        <button onclick="saveAssignments()" class="flex-1 border-2 border-primary text-primary hover:bg-primary hover:text-on-primary py-3 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">Save</button>
-        <button id="assign-advance-btn" onclick="saveAndAdvanceStatus()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95 flex items-center justify-center gap-2">
-          <span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span>
-          <span id="assign-advance-label">In Service</span>
-        </button>
-      </div>
-      <!-- Push to Square button removed — Terminal API integration planned for future release -->
+      <button onclick="saveAssignments()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">Save</button>
     </div>
   </div>
 </div>
@@ -2128,7 +2121,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = ""; // No default logo — upload one in Settings → Business Logo
-const APP_VERSION  = 'v1.46';
+const APP_VERSION  = 'v1.48';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 
@@ -6219,7 +6212,7 @@ function renderTurnsTechGrid() {
             (turnLabel ? '<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="opacity:0.75">'+turnLabel+'</span>' : '') +
           '</div>' +
           '<div class="text-[10px] opacity-90 leading-tight">'+svcLabel+(station?' · '+station:'')+(costStr?' · '+costStr:'')+'</div>' +
-          '<div class="text-[9px] opacity-60">'+timeStr+(e.phone?' · '+e.phone:'')+'</div>' +
+          '<div class="text-[9px] opacity-60">'+timeStr+'</div>' +
           '</button></div>';
       } else {
         return '<div class="flex-shrink-0 w-[150px] px-1 turns-drop-zone" data-tech-id="'+staffId+'" data-slot="'+slotIdx+'">' +
@@ -6314,7 +6307,6 @@ function renderTurnsQueue() {
       '<span class="font-headline font-semibold text-on-surface text-sm">'+e.name+'</span>' + groupLbl +
       '<span class="text-[10px] font-body text-on-surface-variant ml-1">'+timeStr+'</span></div>' +
       serviceContent +
-      (e.phone?'<div class="text-[10px] text-outline">'+e.phone+'</div>':'') +
       '</div></div></div>';
   }
 
@@ -8405,14 +8397,6 @@ function showAssignModal(entryId) {
   // Render assignment rows for currently selected services
   renderAssignRows(entry);
 
-  // Set advance button label
-  const advLabel = document.getElementById('assign-advance-label');
-  if (advLabel) advLabel.textContent = entry.status === 'inservice' ? 'Mark Done' : 'In Service';
-
-  // Hide advance button if ticket is done (reopen path instead)
-  const advBtn = document.getElementById('assign-advance-btn');
-  if (advBtn) advBtn.style.display = entry.status === 'done' ? 'none' : '';
-
   document.getElementById('assign-modal').classList.remove('hidden');
   document.getElementById('assign-modal').style.display = 'flex';
 }
@@ -10100,7 +10084,16 @@ async function calLoadAndRender(silent) {
       } catch(e) { _calEvents[cal.id] = []; }
     }));
 
+    // Preserve scroll position across re-renders (auto-sync should not jump to top)
+    const gbBefore = document.getElementById('cal-grid-body');
+    const savedScroll = gbBefore ? gbBefore.scrollTop : null;
     calRenderGrid();
+    if (savedScroll !== null) {
+      requestAnimationFrame(() => {
+        const gbAfter = document.getElementById('cal-grid-body');
+        if (gbAfter) gbAfter.scrollTop = savedScroll;
+      });
+    }
     renderCalSelectorList();
     calUpdateDateInput();
   } catch(err) {
@@ -10186,7 +10179,7 @@ function calRenderGrid() {
   visible.forEach((cal, colIdx) => {
     const events = _calEvents[cal.id] || [];
     const isLast = colIdx === visible.length - 1;
-    body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'}">`;
+    body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'};min-height:${SLOTS*SLOT_H}px">`;
     body += `<div style="position:relative;height:${SLOTS*SLOT_H}px">`;
 
     // Slot lines
@@ -10272,9 +10265,12 @@ function calRenderGrid() {
 
   grid.innerHTML = `<div style="display:flex;flex-direction:column;height:100%;min-height:0">${hdr}${body}</div>`;
 
-  // Scroll to 8am
+  // Scroll to 1 hour before current time (or start of day if early morning)
   const gb = document.getElementById('cal-grid-body');
-  if (gb) gb.scrollTop = Math.max(0,(8-START_HOUR)*(60/SLOT_MINS)*SLOT_H - 10);
+  if (gb) {
+    const scrollToHour = Math.max(START_HOUR, now.getHours() - 1);
+    gb.scrollTop = Math.max(0, (scrollToHour - START_HOUR) * (60 / SLOT_MINS) * SLOT_H - 10);
+  }
 }
 // ── Settings embedded panels ─────────────────────
 function renderStaffEmbed() {
@@ -10437,9 +10433,9 @@ function renderTasks(tasks) {
     return `<div class="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-container transition-colors group">
       <button onclick="toggleTask('${lid}','${t.id}','${done?'needsAction':'completed'}')"
         class="flex-shrink-0 transition-colors mt-0.5"
-        style="width:16px;height:16px;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};
-               background:${done?'#1a5252':'#ffffff'};display:flex;align-items:center;justify-content:center;min-width:16px">
-        ${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;font-variation-settings:\'FILL\' 1">check</span>':''}
+        style="width:16px;height:16px;min-width:16px;min-height:16px;aspect-ratio:1/1;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};
+               background:${done?'#1a5252':'#ffffff'};display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box">
+        ${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;line-height:1;font-variation-settings:\'FILL\' 1">check</span>':''}
       </button>
       <div class="flex-1 min-w-0" style="line-height:1.3">
         <div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}">${t.title||'(no title)'}</div>
@@ -10582,16 +10578,9 @@ function calAdjustZoom(direction) {
   const current = levels.findIndex(l => l.slotMins === _calSlotMins);
   const next = Math.max(0, Math.min(levels.length - 1, current + direction));
   if (next === current) return;
-  const gb = document.getElementById('cal-grid-body');
-  const scrollRatio = gb ? gb.scrollTop / (gb.scrollHeight || 1) : 0;
   _calSlotMins = levels[next].slotMins;
   _calSlotH    = levels[next].slotH;
-  calRenderGrid();
-  // Restore scroll position proportionally
-  requestAnimationFrame(() => {
-    const newGb = document.getElementById('cal-grid-body');
-    if (newGb) newGb.scrollTop = scrollRatio * newGb.scrollHeight;
-  });
+  calRenderGridPreserveScroll();
 }
 const CAL_SYNC_INTERVAL = 60000; // sync calendar every 60 seconds when tab is open
 
@@ -10662,20 +10651,33 @@ function toggleCalSelector() {
   }
 }
 
-// renderCalSelectorList defined below with drag-to-reorder support
+// calRenderGrid wrapper that preserves the current scroll position.
+// Use for re-renders triggered by filter changes, auto-sync, column reorder —
+// any case where the user didn't explicitly navigate to a new date.
+function calRenderGridPreserveScroll() {
+  const gb = document.getElementById('cal-grid-body');
+  const saved = gb ? gb.scrollTop : null;
+  calRenderGrid();
+  if (saved !== null) {
+    requestAnimationFrame(() => {
+      const newGb = document.getElementById('cal-grid-body');
+      if (newGb) newGb.scrollTop = saved;
+    });
+  }
+}
 
 function toggleCalCalendar(calId, show) {
   if (show) _calHidden.delete(calId); else _calHidden.add(calId);
   localStorage.setItem('gcal_hidden', JSON.stringify([..._calHidden]));
   renderCalSelectorList();
-  calRenderGrid();
+  calRenderGridPreserveScroll();
 }
 
 function calSelectAll(show) {
   if (show) _calHidden.clear(); else _calCalendars.forEach(c => _calHidden.add(c.id));
   localStorage.setItem('gcal_hidden', JSON.stringify([..._calHidden]));
   renderCalSelectorList();
-  calRenderGrid();
+  calRenderGridPreserveScroll();
 }
 
 // ── Cross-device token sharing via Sheets ──────────
@@ -10716,8 +10718,28 @@ function calEventClick(e, calId, eventId, title, desc, isAppt) {
   const startDt  = new Date(ev.start.dateTime || ev.start.date);
   const phoneMatch = desc.match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
   const phone    = phoneMatch ? phoneMatch[1] : '';
-  const firstName = title.split(/[\s—–-]/)[0].toLowerCase();
-  const queueMatch = queue.find(q => q.name && q.name.toLowerCase().startsWith(firstName) && firstName.length > 1);
+  const rawPhone = phone.replace(/\D/g, '');
+
+  // Match to an existing queue entry — three levels, most to least reliable:
+  // 1. calEventId — exact match, catches cross-device duplicates reliably
+  // 2. Phone — matches on shared phone number
+  // 3. Full name — only when neither side has phone, never first-name-only
+  let queueMatch = queue.find(q => q.calEventId && q.calEventId === eventId);
+
+  if (!queueMatch && rawPhone) {
+    queueMatch = queue.find(q => {
+      const qPhone = (q.phone || '').replace(/\D/g, '');
+      return qPhone && qPhone === rawPhone;
+    });
+  }
+  if (!queueMatch) {
+    const fullName = title.trim().toLowerCase();
+    if (fullName.length > 2) {
+      queueMatch = queue.find(q =>
+        q.name && q.name.trim().toLowerCase() === fullName && !(rawPhone && (q.phone||'').replace(/\D/g,''))
+      );
+    }
+  }
 
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-[85] flex items-center justify-center bg-on-surface/40 px-4';
@@ -10814,6 +10836,14 @@ function calQuickCheckin(calId, eventId) {
   const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
   if (!ev) return;
 
+  // Guard: don't create a duplicate if this appointment is already in the queue
+  // (can happen if another device checked in while this popup was open)
+  const alreadyIn = queue.find(q => q.calEventId === eventId || (q.isAppointment && q.name === (ev.summary||'Guest') && q.status !== 'done'));
+  if (alreadyIn) {
+    showToast(`${ev.summary || 'Guest'} is already checked in`);
+    return;
+  }
+
   const cal   = _calCalendars.find(c => c.id === calId);
   const title = ev.summary || 'Guest';
 
@@ -10830,7 +10860,7 @@ function calQuickCheckin(calId, eventId) {
   // Match tech
   const tech = STAFF.find(s => s.name.toLowerCase() === (cal?.name||'').toLowerCase());
 
-  // Build a queue entry
+  // Build a queue entry — store calEventId so duplicate detection works across devices
   const entry = {
     id:            Date.now() * 1000 + Math.floor(Math.random() * 1000),
     name:          title,
@@ -10842,6 +10872,7 @@ function calQuickCheckin(calId, eventId) {
     isNew:         true,
     skipSquare:    false,
     groupId:       null,
+    calEventId:    eventId, // stored so other devices can detect this appointment is already checked in
     assignments:   tech ? [{ serviceId: svcs[0]||'', techId: tech.id, status:'waiting', cost:0, assignedAt: Date.now() }] : [],
   };
 
@@ -11170,7 +11201,7 @@ function calDrop(e, targetIdx) {
   _calDragIdx = null;
   saveCalOrder();
   renderCalSelectorList();
-  calRenderGrid();
+  calRenderGridPreserveScroll();
 }
 
 async function deleteAppt(calIdParam, eventIdParam) {
