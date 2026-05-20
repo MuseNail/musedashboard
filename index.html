@@ -2238,8 +2238,9 @@ function saveServicesToStorage() {
 }
 function saveStaffToStorage() {
   localStorage.setItem('muse_staff', JSON.stringify(STAFF));
-  _configWriteTime = Date.now(); // lock immediately so poll doesn't overwrite
-  setTimeout(() => pushConfigToSheets(), 1000); // sync to Sheets for other devices
+  _configWriteTime = Date.now();
+  console.log(`[Config] saveStaffToStorage — _configWriteTime set, STAFF count: ${STAFF.length}`);
+  setTimeout(() => pushConfigToSheets(), 1000);
 }
 
 // ── Init ─────────────────────────────────────────
@@ -6726,12 +6727,14 @@ async function pushConfigToSheets() {
         try { config[k] = JSON.parse(v); } catch(e) { config[k] = v; }
       }
     });
+    console.log(`[Config] pushConfigToSheets — keys: ${Object.keys(config).join(', ')}, muse_staff length: ${JSON.stringify(config.muse_staff || []).length}`);
     await fetch(`${SHEETS_PROXY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'saveConfig', config }),
     });
-  } catch(e) { /* silent */ }
+    console.log('[Config] pushConfigToSheets — done');
+  } catch(e) { console.error('[Config] pushConfigToSheets failed:', e); }
 }
 
 async function loadConfigFromSheets() {
@@ -6740,8 +6743,6 @@ async function loadConfigFromSheets() {
     const data = await res.json();
     if (!data.success || !data.config) return { changed: false, recordsUpdatedAt: null };
 
-    // If this device pushed config less than 10 seconds ago, Sheets may not have
-    // finished writing yet. Skip overwriting local data to prevent undoing changes.
     const msSinceWrite = Date.now() - _configWriteTime;
     if (msSinceWrite < 10000) {
       console.log(`[Config] Skipping poll overwrite — wrote ${Math.round(msSinceWrite/1000)}s ago`);
@@ -6752,16 +6753,17 @@ async function loadConfigFromSheets() {
     CONFIG_KEYS.forEach(k => {
       if (data.config[k] !== undefined) {
         const remote = k === 'muse_logo'
-          ? String(data.config[k])           // logo is raw string
-          : JSON.stringify(data.config[k]);  // everything else is JSON
+          ? String(data.config[k])
+          : JSON.stringify(data.config[k]);
         const local = localStorage.getItem(k);
         if (local !== remote) {
+          // Diagnostic: log exactly which key is being overwritten and why
+          console.warn(`[Config] OVERWRITING ${k} | msSinceWrite:${msSinceWrite} | localLen:${local?.length ?? 'null'} | remoteLen:${remote.length}`);
           localStorage.setItem(k, remote);
           changed = true;
         }
       }
     });
-    // recordsUpdatedAt is returned alongside config — no extra HTTP call needed
     return { changed, recordsUpdatedAt: data.recordsUpdatedAt || null };
   } catch(e) { return { changed: false, recordsUpdatedAt: null }; }
 }
