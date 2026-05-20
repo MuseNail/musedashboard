@@ -2308,7 +2308,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   // ── end clearData handler ─────────────────────────────────────────────────
 
-  checkAppVersion();
+  // Check if a newer version is deployed — fetches live file bypassing CDN cache.
+  // If a newer version exists, reloads automatically. Must run first.
+  await checkAppVersion();
   // 1. Load from localStorage instantly (offline fallback)
   queue = loadQueueFromStorage();
   renderQueue(); // show local data immediately while fetching
@@ -5769,11 +5771,29 @@ function localDateStr(date) {
 
 function todayStr() { return localDateStr(new Date()); }
 
-function checkAppVersion() {
-  const stored = localStorage.getItem('muse_app_version');
-  if (stored !== APP_VERSION) {
-    // Future: add data migration logic here if schema changes
-    localStorage.setItem('muse_app_version', APP_VERSION);
+// ── Version freshness check ───────────────────────────────────────────────
+// Fetches the live index.html with a cache-busting timestamp, extracts the
+// APP_VERSION string from it, and forces a reload if it differs from what's
+// currently running. This bypasses both browser cache and GitHub's CDN cache,
+// so every device always runs the latest deployed version within one page load.
+async function checkAppVersion() {
+  try {
+    const res  = await fetch(window.location.pathname + '?_cv=' + Date.now(), {
+      cache: 'no-store',
+      headers: { 'pragma': 'no-cache', 'cache-control': 'no-cache' }
+    });
+    if (!res.ok) return;
+    const text  = await res.text();
+    const match = text.match(/const APP_VERSION\s*=\s*'([^']+)'/);
+    if (!match) return;
+    const liveVersion = match[1];
+    if (liveVersion !== APP_VERSION) {
+      console.log(`[Version] Running ${APP_VERSION}, live is ${liveVersion} — reloading`);
+      // Replace so the back button doesn't loop
+      window.location.replace(window.location.pathname + '?_v=' + Date.now());
+    }
+  } catch(e) {
+    // Offline or fetch failed — silently continue with cached version
   }
 }
 
