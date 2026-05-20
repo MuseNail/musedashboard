@@ -424,7 +424,7 @@ tailwind.config = {
         <span class="sync-dot" id="cal-sync-dot" style="background:#adb3b5"></span>
         <span id="cal-sync-text">Calendar</span>
       </div>
-      <span class="text-[10px] font-body text-outline-variant select-none" title="musedashboard v1.39">v1.39</span>
+      <span id="app-version-badge" class="text-[10px] font-body text-outline-variant select-none" title="musedashboard"></span>
       <button onclick="exportAllToSheets()" title="Export to Sheets" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">upload_file</span>
       </button>
@@ -5772,28 +5772,28 @@ function localDateStr(date) {
 function todayStr() { return localDateStr(new Date()); }
 
 // ── Version freshness check ───────────────────────────────────────────────
-// Fetches the live index.html with a cache-busting timestamp, extracts the
-// APP_VERSION string from it, and forces a reload if it differs from what's
-// currently running. This bypasses both browser cache and GitHub's CDN cache,
-// so every device always runs the latest deployed version within one page load.
+// Fetches version.json (a tiny separate file in the repo) with no-store cache.
+// Browsers don't aggressively cache separate files the way they cache index.html,
+// and no-store ensures GitHub's CDN always serves the fresh copy.
+// If the version in version.json differs from what's running, reloads immediately.
+// You must update version.json alongside index.html on every deploy.
 async function checkAppVersion() {
+  // Always show the running version immediately — even before the fetch completes
+  const badge = document.getElementById('app-version-badge');
+  if (badge) { badge.textContent = APP_VERSION; badge.title = 'musedashboard ' + APP_VERSION; }
   try {
-    const res  = await fetch(window.location.pathname + '?_cv=' + Date.now(), {
+    const res = await fetch('/musedashboard/version.json?_=' + Date.now(), {
       cache: 'no-store',
       headers: { 'pragma': 'no-cache', 'cache-control': 'no-cache' }
     });
     if (!res.ok) return;
-    const text  = await res.text();
-    const match = text.match(/const APP_VERSION\s*=\s*'([^']+)'/);
-    if (!match) return;
-    const liveVersion = match[1];
-    if (liveVersion !== APP_VERSION) {
-      console.log(`[Version] Running ${APP_VERSION}, live is ${liveVersion} — reloading`);
-      // Replace so the back button doesn't loop
-      window.location.replace(window.location.pathname + '?_v=' + Date.now());
+    const data = await res.json();
+    if (data.version && data.version !== APP_VERSION) {
+      console.log(`[Version] Running ${APP_VERSION}, live is ${data.version} — reloading`);
+      window.location.replace(window.location.pathname);
     }
   } catch(e) {
-    // Offline or fetch failed — silently continue with cached version
+    // Offline or fetch failed — silently continue with current version
   }
 }
 
