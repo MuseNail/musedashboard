@@ -788,12 +788,14 @@ tailwind.config = {
                 <span class="material-symbols-outlined" style="font-size:16px">tune</span>
                 <span id="cal-selector-label">Calendars</span>
               </button>
-              <div id="cal-selector-dropdown" class="hidden absolute right-0 top-10 z-50 rounded-xl shadow-2xl p-3 min-w-48 space-y-1" style="background:#ffffff;border:1.5px solid var(--md-outline-variant);box-shadow:0 8px 32px rgba(0,0,0,0.18)">
-                <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2">Show/Hide Calendars</div>
-                <div id="cal-selector-list"></div>
-                <div class="border-t border-surface-container-high mt-2 pt-2 flex gap-2">
-                  <button onclick="calSelectAll(true)" class="flex-1 text-xs font-body text-primary underline">All</button>
-                  <button onclick="calSelectAll(false)" class="flex-1 text-xs font-body text-outline underline">None</button>
+              <div id="cal-selector-dropdown" class="hidden absolute right-0 top-10 z-50 rounded-xl shadow-2xl p-3 min-w-56" style="background:#ffffff;border:1.5px solid var(--md-outline-variant);box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+                <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 px-1">Show / Hide &amp; Reorder</div>
+                <div id="cal-selector-list" class="space-y-0.5 mb-2"></div>
+                <div class="border-t border-surface-container-high pt-2 flex gap-2">
+                  <button onclick="calDraftSelectAll(true)" class="text-xs font-body text-primary hover:underline px-1">All</button>
+                  <button onclick="calDraftSelectAll(false)" class="text-xs font-body text-outline hover:underline px-1 mr-auto">None</button>
+                  <button onclick="calSelectorCancel()" class="px-3 py-1.5 rounded-lg border border-surface-container-high text-xs font-body font-semibold text-on-surface-variant hover:bg-surface-container transition-colors">Cancel</button>
+                  <button onclick="calSelectorSave()" class="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-body font-semibold hover:bg-primary-dim transition-colors">Save</button>
                 </div>
               </div>
             </div>
@@ -2141,7 +2143,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = ""; // No default logo — upload one in Settings → Business Logo
-const APP_VERSION  = 'v1.52';
+const APP_VERSION  = 'v1.53';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 
@@ -2498,9 +2500,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const el = document.getElementById(id);
         if (el && !el.classList.contains('hidden')) { fn(); return; }
       }
-      // Close calendar selector dropdown if open
+      // Close calendar selector dropdown if open — discard draft
       const calDD = document.getElementById('cal-selector-dropdown');
-      if (calDD && !calDD.classList.contains('hidden')) { calDD.classList.add('hidden'); return; }
+      if (calDD && !calDD.classList.contains('hidden')) {
+        _calSelectorDraft = null;
+        calDD.classList.add('hidden');
+        return;
+      }
       // Screen-level Esc navigation
       const checkin = document.getElementById('screen-checkin');
       if (checkin && checkin.classList.contains('active')) { goTo('screen-welcome'); return; }
@@ -10450,15 +10456,15 @@ function calRenderGrid() {
   // ── Scrollable body ──
   let body = `<div id="cal-grid-body" style="display:flex;flex:1;overflow:auto;min-width:${TIME_W + COL_W * visible.length}px">`;
 
-  // Time column
+  // Time column — labels only, no horizontal slot lines (those live in the tech columns)
   body += `<div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)">`;
   for (let s = 0; s < SLOTS; s++) {
     const h = Math.floor((START_HOUR * 60 + s * SLOT_MINS) / 60);
     const m = (START_HOUR * 60 + s * SLOT_MINS) % 60;
     const isHour = m === 0;
     const label = isHour ? `${h>12?h-12:(h===0?12:h)} ${h>=12?'PM':'AM'}` : (SLOT_MINS<=15&&m===30?`${h>12?h-12:(h===0?12:h)}:30`:'');
-    body += `<div style="height:${SLOT_H}px;display:flex;align-items:flex-start;padding:${isHour?'3px':'1px'} 8px 0;
-                          border-top:${isHour?'1.5px solid rgba(0,0,0,0.15)':'1px solid rgba(0,0,0,0.06)'}">
+    // No border-top on time column slots — horizontal lines only appear inside tech columns
+    body += `<div style="height:${SLOT_H}px;display:flex;align-items:flex-start;padding:${isHour?'3px':'1px'} 8px 0">
       ${label?`<span style="font-size:10px;font-family:var(--font-body);font-weight:${isHour?'600':'400'};color:var(--md-on-surface-variant);white-space:nowrap;margin-top:-6px">${label}</span>`:''}
     </div>`;
   }
@@ -10467,8 +10473,13 @@ function calRenderGrid() {
   // Tech columns
   visible.forEach((cal, colIdx) => {
     const events = _calEvents[cal.id] || [];
-    const isLast = colIdx === visible.length - 1;
-    body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'};min-height:${SLOTS*SLOT_H}px">`;
+    const isLast  = colIdx === visible.length - 1;
+    const isFirst = colIdx === 0;
+    // First column gets a left border to visually separate from the time gutter
+    // Last column has no right border
+    const leftBorder  = isFirst ? 'border-left:2px solid rgba(0,0,0,0.12);' : '';
+    const rightBorder = isLast  ? '' : 'border-right:2px solid rgba(0,0,0,0.12);';
+    body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;${leftBorder}${rightBorder}min-height:${SLOTS*SLOT_H}px">`;
     body += `<div style="position:relative;height:${SLOTS*SLOT_H}px">`;
 
     // Slot lines
@@ -10927,16 +10938,26 @@ function toggleCalSelector() {
   const dd = document.getElementById('cal-selector-dropdown');
   if (!dd) return;
   const isHidden = dd.classList.contains('hidden');
-  // Close on outside click
   if (isHidden) {
+    // Reset draft to current live state each time the dropdown opens
+    _calSelectorDraft = {
+      order:  _calCalendars.map(c => c.id),
+      hidden: new Set(_calHidden),
+    };
+    renderCalSelectorList();
     dd.classList.remove('hidden');
     setTimeout(() => {
       document.addEventListener('click', function closeDD(e) {
-        if (!dd.contains(e.target)) { dd.classList.add('hidden'); document.removeEventListener('click', closeDD); }
+        if (!dd.contains(e.target)) {
+          dd.classList.add('hidden');
+          _calSelectorDraft = null; // discard draft on outside click
+          document.removeEventListener('click', closeDD);
+        }
       });
     }, 10);
   } else {
     dd.classList.add('hidden');
+    _calSelectorDraft = null;
   }
 }
 
@@ -11574,39 +11595,106 @@ function saveCalOrder() {
 function renderCalSelectorList() {
   const list = document.getElementById('cal-selector-list');
   if (!list || _calCalendars.length === 0) return;
-  list.innerHTML = _calCalendars.map((c, i) => `
+
+  // Initialize draft from current live state if not already open
+  if (!_calSelectorDraft) {
+    _calSelectorDraft = {
+      order:  _calCalendars.map(c => c.id),
+      hidden: new Set(_calHidden),
+    };
+  }
+
+  // Build display order from draft
+  const draftCals = _calSelectorDraft.order
+    .map(id => _calCalendars.find(c => c.id === id))
+    .filter(Boolean);
+
+  list.innerHTML = draftCals.map((c, i) => {
+    const isHidden = _calSelectorDraft.hidden.has(c.id);
+    return `
     <div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none"
          draggable="true" data-cal-idx="${i}"
-         ondragstart="calDragStart(event,${i})"
-         ondragover="calDragOver(event)"
-         ondrop="calDrop(event,${i})"
-         onclick="toggleCalCalendar('${c.id}',${_calHidden.has(c.id)})">
-      <span class="material-symbols-outlined text-outline-variant" style="font-size:14px;flex-shrink:0">drag_indicator</span>
+         ondragstart="calDraftDragStart(event,${i})"
+         ondragover="calDraftDragOver(event)"
+         ondrop="calDraftDrop(event,${i})">
+      <span class="material-symbols-outlined" style="font-size:14px;flex-shrink:0;color:#6b7280;cursor:grab">drag_indicator</span>
       <div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div>
-      <span class="flex-grow text-sm font-body text-on-surface">${c.name}</span>
-      <div style="width:18px;height:18px;border-radius:4px;border:2px solid ${_calHidden.has(c.id)?'var(--md-outline-variant)':'var(--md-primary)'};
-                  background:${_calHidden.has(c.id)?'transparent':'var(--md-primary)'};flex-shrink:0;display:flex;align-items:center;justify-content:center"
-           onclick="event.stopPropagation();toggleCalCalendar('${c.id}',${_calHidden.has(c.id)})">
-        ${!_calHidden.has(c.id)?'<span class="material-symbols-outlined text-on-primary" style="font-size:12px;font-variation-settings:\'FILL\' 1">check</span>':''}
+      <span class="flex-grow text-sm font-body text-on-surface" onclick="calDraftToggle('${c.id}')">${c.name}</span>
+      <div onclick="calDraftToggle('${c.id}')"
+           style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;
+                  border:2.5px solid ${isHidden?'#9ca3af':'#1a5252'};
+                  background:${isHidden?'#ffffff':'#1a5252'}">
+        ${!isHidden?'<span class="material-symbols-outlined" style="font-size:13px;color:#ffffff;font-variation-settings:\'FILL\' 1;line-height:1">check</span>':''}
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+
+  // Count visible in draft
+  const visCount = draftCals.filter(c => !_calSelectorDraft.hidden.has(c.id)).length;
+  const lbl = document.getElementById('cal-selector-label');
+  if (lbl) lbl.textContent = visCount === _calCalendars.length ? 'Calendars' : `${visCount}/${_calCalendars.length}`;
+}
+
+// Toggle visibility of a calendar in the draft (does not apply live)
+function calDraftToggle(calId) {
+  if (!_calSelectorDraft) return;
+  if (_calSelectorDraft.hidden.has(calId)) _calSelectorDraft.hidden.delete(calId);
+  else _calSelectorDraft.hidden.add(calId);
+  renderCalSelectorList();
+}
+
+// Apply draft to live state and close dropdown
+function calSelectorSave() {
+  if (!_calSelectorDraft) return;
+  // Apply order
+  const ordered = [];
+  _calSelectorDraft.order.forEach(id => {
+    const c = _calCalendars.find(x => x.id === id);
+    if (c) ordered.push(c);
+  });
+  _calCalendars.forEach(c => { if (!ordered.find(x => x.id === c.id)) ordered.push(c); });
+  _calCalendars = ordered;
+  saveCalOrder();
+  // Apply visibility
+  _calHidden = new Set(_calSelectorDraft.hidden);
+  localStorage.setItem('gcal_hidden', JSON.stringify([..._calHidden]));
+  // Reset draft
+  _calSelectorDraft = null;
+  // Close dropdown
+  const dd = document.getElementById('cal-selector-dropdown');
+  if (dd) { dd.classList.add('hidden'); dd.style.display = ''; }
+  renderCalSelectorList();
+  calRenderGridPreserveScroll();
   const visCount = _calCalendars.filter(c => !_calHidden.has(c.id)).length;
   const lbl = document.getElementById('cal-selector-label');
   if (lbl) lbl.textContent = visCount === _calCalendars.length ? 'Calendars' : `${visCount}/${_calCalendars.length}`;
 }
 
-let _calDragIdx = null;
-function calDragStart(e, i) { _calDragIdx = i; e.dataTransfer.effectAllowed = 'move'; }
-function calDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
-function calDrop(e, targetIdx) {
-  e.preventDefault();
-  if (_calDragIdx === null || _calDragIdx === targetIdx) return;
-  const moved = _calCalendars.splice(_calDragIdx, 1)[0];
-  _calCalendars.splice(targetIdx, 0, moved);
-  _calDragIdx = null;
-  saveCalOrder();
+// Discard draft without applying
+function calSelectorCancel() {
+  _calSelectorDraft = null;
+  const dd = document.getElementById('cal-selector-dropdown');
+  if (dd) { dd.classList.add('hidden'); dd.style.display = ''; }
   renderCalSelectorList();
-  calRenderGridPreserveScroll();
+}
+
+// Select/deselect all in the draft
+function calDraftSelectAll(show) {
+  if (!_calSelectorDraft) return;
+  if (show) _calSelectorDraft.hidden.clear();
+  else _calCalendars.forEach(c => _calSelectorDraft.hidden.add(c.id));
+  renderCalSelectorList();
+}
+// Drag handlers for the draft (reorder within draft only)
+function calDraftDragStart(e, i) { _calDragIdx = i; e.dataTransfer.effectAllowed = 'move'; }
+function calDraftDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+function calDraftDrop(e, targetIdx) {
+  e.preventDefault();
+  if (_calDragIdx === null || _calDragIdx === targetIdx || !_calSelectorDraft) return;
+  const moved = _calSelectorDraft.order.splice(_calDragIdx, 1)[0];
+  _calSelectorDraft.order.splice(targetIdx, 0, moved);
+  _calDragIdx = null;
+  renderCalSelectorList();
 }
 
 async function deleteAppt(calIdParam, eventIdParam) {
