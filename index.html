@@ -213,7 +213,7 @@ tailwind.config = {
     border-bottom: 1px solid #dde2e5;
   }
   .autocomplete-item:last-child { border-bottom: none; }
-  .autocomplete-item:hover { background: #dde2e5; }
+  .autocomplete-item:hover, .autocomplete-item.ac-highlighted { background: #dde2e5; }
   .autocomplete-item .ac-name { font-weight: 600; font-family: 'Manrope', sans-serif; color:#000; }
   .autocomplete-item .ac-phone { font-size: 11px; color: #4a5258; margin-top: 1px; }
   .ac-input-wrap { position: relative; }
@@ -541,7 +541,7 @@ tailwind.config = {
         </div>
 
         <!-- Revenue breakdown by type -->
-        <div class="grid grid-cols-3 gap-3 mb-5">
+        <div class="grid grid-cols-2 gap-3 mb-3">
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-svc-total">$0.00</div>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Services</div>
@@ -553,6 +553,10 @@ tailwind.config = {
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-fees-total">$0.00</div>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Fees</div>
+          </div>
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
+            <div class="text-lg font-headline font-extrabold" style="color:#c53030" id="rpt-discount-total">-$0.00</div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Discounts</div>
           </div>
         </div>
 
@@ -567,6 +571,10 @@ tailwind.config = {
         <!-- Items breakdown -->
         <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Retail Items Breakdown</h3>
         <div id="rpt-items-breakdown" class="space-y-2 mb-5"></div>
+
+        <!-- Fees breakdown -->
+        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Fees Breakdown</h3>
+        <div id="rpt-fees-breakdown" class="space-y-2 mb-5"></div>
 
         <!-- Drill-down detail panel (hidden by default) -->
         <div id="rpt-drill-panel" class="hidden mt-5">
@@ -2011,7 +2019,8 @@ tailwind.config = {
       </button>
     </div>
     <div class="space-y-4">
-      <!-- Phone first, then first/last — same pattern as check-in modal -->
+      <!-- Primary contact (required) -->
+      <div class="text-[11px] font-body font-semibold text-primary uppercase tracking-widest mb-1">Primary Guest</div>
       <div class="ac-input-wrap">
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone Number</label>
         <input id="appt-phone" type="tel" placeholder="(555) 000-0000" autocomplete="off"
@@ -2036,6 +2045,13 @@ tailwind.config = {
       </div>
       <!-- Hidden combined name field for backward compat -->
       <input type="hidden" id="appt-name">
+
+      <!-- Additional guests -->
+      <div id="appt-extra-guests"></div>
+      <button type="button" onclick="apptAddGuest()" class="flex items-center gap-1.5 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
+        <span class="material-symbols-outlined" style="font-size:14px">person_add</span> Add another guest
+      </button>
+
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Date *</label>
@@ -2059,7 +2075,7 @@ tailwind.config = {
       <!-- Service lines: each row = service + technician -->
       <div>
         <div class="flex items-center justify-between mb-2">
-          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest">Services & Technicians</label>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest">Services &amp; Technicians</label>
           <button type="button" onclick="addApptServiceLine()" class="flex items-center gap-1 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
             <span class="material-symbols-outlined" style="font-size:14px">add</span> Add service
           </button>
@@ -2125,7 +2141,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = ""; // No default logo — upload one in Settings → Business Logo
-const APP_VERSION  = 'v1.50';
+const APP_VERSION  = 'v1.52';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 
@@ -2198,7 +2214,7 @@ let pinBuffer = "";
 let squareConfig = JSON.parse(localStorage.getItem('muse_sq_config') || 'null');
 
 // Services — editable, persisted to localStorage and synced from Sheets on load
-let SERVICES = JSON.parse(localStorage.getItem('muse_services') || 'null') || [];
+let SERVICES = dedupByLabel(JSON.parse(localStorage.getItem('muse_services') || 'null') || []);
 
 // Staff — editable, persisted to localStorage and synced from Sheets on load
 let STAFF = JSON.parse(localStorage.getItem('muse_staff') || 'null') || [];
@@ -3414,6 +3430,9 @@ function saveService() {
   const editId   = document.getElementById('service-edit-id').value;
   if (!label) { showToast('Please enter a service name.'); return; }
   if (!abbr)  { showToast('Please enter an abbreviation.'); return; }
+  // Prevent duplicate labels (case-insensitive)
+  const duplicate = SERVICES.find(s => s.label.toLowerCase() === label.toLowerCase() && s.id !== editId);
+  if (duplicate) { showToast(`"${label}" already exists as a service.`); return; }
   if (editId) {
     const svc = SERVICES.find(s => s.id === editId);
     if (svc) { svc.label = label; svc.abbr = abbr; svc.baseCost = baseCost; }
@@ -3784,35 +3803,54 @@ async function sendCheckinRow(entry) {
     const checkinTime = (entry.checkinTime instanceof Date ? entry.checkinTime : new Date(entry.checkinTime)).toISOString();
     const isDone      = entry.status === 'done';
     const completedAt = isDone && !entry.completedAt
-      ? new Date().toISOString()           // first time marked done
+      ? new Date().toISOString()
       : isDone && entry.completedAt
         ? (entry.completedAt instanceof Date ? entry.completedAt.toISOString() : entry.completedAt)
-        : null;                            // not done (waiting/inservice/reopened) — clear it
+        : null;
 
-    // Persist the completedAt on the entry so it survives re-renders
     if (isDone && !entry.completedAt) entry.completedAt = completedAt;
-    const staff       = [...new Set(
+
+    const staff    = [...new Set(
       (entry.assignments||[]).filter(a=>a.techId)
         .map(a => STAFF.find(s=>s.id===a.techId)?.name)
         .filter(Boolean)
     )].join(', ');
+    const stations = [...new Set(
+      (entry.assignments||[]).filter(a=>a.station).map(a=>a.station)
+    )].join(', ');
+
+    // Compute component totals for separate columns in Sheets
+    const svcTotal  = (entry.assignments||[]).reduce((s,a)=>s+(a.cost||0),0);
+    const discount  = entry.discount || 0;
+    const itemsWithLabels = (entry.items||[]).map(i => ({
+      ...i, label: ITEMS.find(x=>x.id===i.itemId)?.label || i.itemId
+    }));
+    const feesWithLabels = (entry.fees||[]).map(f => ({
+      ...f, label: FEES.find(x=>x.id===f.feeId)?.label || f.feeId
+    }));
 
     await fetch(SHEETS_PROXY, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        action:      'checkinRow',
-        entryId:     String(entry.id),
+        action:       'checkinRow',
+        entryId:      String(entry.id),
         checkinTime,
         completedAt,
-        name:        entry.name,
-        phone:       entry.phone || '',
-        services:    entry.services.map(sid => SERVICES.find(s=>s.id===sid)?.label || sid),
-        type:        entry.isAppointment ? 'Appointment' : 'Walk-In',
-        status:      entry.status || 'waiting',
+        name:         entry.name,
+        phone:        entry.phone || '',
+        services:     entry.services.map(sid => SERVICES.find(s=>s.id===sid)?.label || sid),
+        type:         entry.isAppointment ? 'Appointment' : 'Walk-In',
+        status:       entry.status || 'waiting',
         staff,
-        total:       entry.totalCost ? Number(entry.totalCost) : 0,
-        loggedBy:    activeUser ? activeUser.name : '',
+        stations,
+        svcTotal,
+        items:        itemsWithLabels,
+        fees:         feesWithLabels,
+        discount,
+        discountNote: entry.discountNote || '',
+        total:        entry.totalCost ? Number(entry.totalCost) : 0,
+        loggedBy:     activeUser ? activeUser.name : '',
       }),
     });
   } catch(e) {
@@ -3896,9 +3934,11 @@ function saveRecord(entry) {
     assignments:   entry.assignments || [],
     items:         entry.items || [],
     fees:          entry.fees || [],
+    discount:      entry.discount || 0,
+    discountNote:  entry.discountNote || '',
     totalCost:     entry.totalCost || 0,
     checkinTime:   entry.checkinTime instanceof Date ? entry.checkinTime.toISOString() : entry.checkinTime,
-    completedAt:   entry.completedAt,  // persisted so sendCheckinRow uses correct timestamp
+    completedAt:   entry.completedAt,
     status:        entry.status,
     isAppointment: entry.isAppointment || false,
     loggedBy:      activeUser ? activeUser.name : '',
@@ -3934,6 +3974,8 @@ function buildCombinedRecords() {
       assignments:   e.assignments || [],
       items:         e.items || [],
       fees:          e.fees || [],
+      discount:      e.discount || 0,
+      discountNote:  e.discountNote || '',
       totalCost:     e.totalCost || 0,
       checkinTime:   e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
       completedAt:   e.completedAt || null,
@@ -4001,11 +4043,12 @@ function runReport() {
     return d >= from && d <= to && r.status === 'done';
   });
 
-  // Totals — broken down by services, items, fees
-  const svcTotal   = filtered.reduce((s, r) => s + (r.assignments||[]).reduce((a, x) => a + (x.cost||0), 0), 0);
-  const itemsTotal = filtered.reduce((s, r) => s + (r.items||[]).reduce((a, x) => a + (x.price||0)*(x.qty||0), 0), 0);
-  const feesTotal  = filtered.reduce((s, r) => s + (r.fees||[]).reduce((a, x) => a + (x.amount||0), 0), 0);
-  const totalIncome = filtered.reduce((s, r) => s + (r.totalCost || 0), 0);
+  // Totals — broken down by services, items, fees, discount
+  const svcTotal      = filtered.reduce((s, r) => s + (r.assignments||[]).reduce((a, x) => a + (x.cost||0), 0), 0);
+  const itemsTotal    = filtered.reduce((s, r) => s + (r.items||[]).reduce((a, x) => a + (x.price||0)*(x.qty||0), 0), 0);
+  const feesTotal     = filtered.reduce((s, r) => s + (r.fees||[]).reduce((a, x) => a + (x.amount||0), 0), 0);
+  const discountTotal = filtered.reduce((s, r) => s + (r.discount||0), 0);
+  const totalIncome   = filtered.reduce((s, r) => s + (r.totalCost || 0), 0);
   const guestCount  = filtered.length;
   const avgTicket   = guestCount > 0 ? totalIncome / guestCount : 0;
 
@@ -4015,9 +4058,11 @@ function runReport() {
   const svcEl   = document.getElementById('rpt-svc-total');
   const itmEl   = document.getElementById('rpt-items-total');
   const feeEl   = document.getElementById('rpt-fees-total');
+  const discEl  = document.getElementById('rpt-discount-total');
   if (svcEl)  svcEl.textContent   = `$${svcTotal.toFixed(2)}`;
   if (itmEl)  itmEl.textContent   = `$${itemsTotal.toFixed(2)}`;
   if (feeEl)  feeEl.textContent   = `$${feesTotal.toFixed(2)}`;
+  if (discEl) discEl.textContent  = discountTotal > 0 ? `-$${discountTotal.toFixed(2)}` : '-$0.00';
 
   // Date label
   const fmt = d => d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
@@ -4158,6 +4203,41 @@ function runReport() {
         </div>
       `;
     }).join('');
+  }
+
+  // Per-fees breakdown
+  const feeMap = {};
+  filtered.forEach(r => {
+    (r.fees || []).forEach(f => {
+      if (!f.feeId) return;
+      if (!feeMap[f.feeId]) feeMap[f.feeId] = { total: 0, count: 0 };
+      feeMap[f.feeId].total += f.amount || 0;
+      feeMap[f.feeId].count++;
+    });
+  });
+  const feesBreakdown = document.getElementById('rpt-fees-breakdown');
+  if (feesBreakdown) {
+    const feeEntries = Object.entries(feeMap).sort((a,b) => b[1].total - a[1].total);
+    if (feeEntries.length === 0) {
+      feesBreakdown.innerHTML = '<p class="text-sm font-body text-on-surface-variant py-2">No fees charged in this period.</p>';
+    } else {
+      feesBreakdown.innerHTML = feeEntries.map(([feeId, data]) => {
+        const fee = FEES.find(f => f.id === feeId);
+        return `
+          <div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(26,82,82,0.10)">
+                <span class="material-symbols-outlined" style="font-size:16px;color:#1a5252">receipt</span>
+              </div>
+              <div>
+                <div class="font-headline font-semibold text-on-surface text-sm">${fee?.label || feeId}</div>
+                <div class="text-xs font-body text-on-surface-variant">${data.count} time${data.count !== 1 ? 's' : ''} charged</div>
+              </div>
+            </div>
+            <div class="font-headline font-bold text-on-surface">$${data.total.toFixed(2)}</div>
+          </div>`;
+      }).join('');
+    }
   }
 
   // Store current filtered data for export
@@ -4683,13 +4763,13 @@ function buildDropdown(customers, dropdownId, guestIdx, phoneId, firstId, lastId
   const dropdown = document.getElementById(dropdownId);
   if (!dropdown) return;
   if (customers.length === 0) { dropdown.classList.add('hidden'); return; }
-  dropdown.innerHTML = customers.map(c => {
+  dropdown.innerHTML = customers.map((c, i) => {
     const digits = c.phone.replace(/\D/g,'').replace(/^1(\d{10})$/, '$1').slice(0,10);
     const displayPhone = digits.length === 10
       ? `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`
       : c.phone;
     return `
-    <div class="autocomplete-item" onmousedown="fillFromCustomer(
+    <div class="autocomplete-item" data-ac-idx="${i}" onmousedown="fillFromCustomer(
       {id:'${c.id}',phone:'${c.phone.replace(/'/g,"\\'")}',given_name:'${c.given_name.replace(/'/g,"\\'")}',family_name:'${c.family_name.replace(/'/g,"\\'")}'},
       ${guestIdx}, '', '${phoneId}', '${firstId}', '${lastId}'
     )">
@@ -4698,6 +4778,48 @@ function buildDropdown(customers, dropdownId, guestIdx, phoneId, firstId, lastId
     </div>
   `}).join('');
   dropdown.classList.remove('hidden');
+
+  // Attach keyboard navigation to the input that triggered this dropdown
+  const input = document.getElementById(phoneId) || document.getElementById(firstId);
+  if (input) _attachAcKeyNav(input, dropdown, (idx) => {
+    fillFromCustomer(
+      { id: customers[idx].id, phone: customers[idx].phone, given_name: customers[idx].given_name, family_name: customers[idx].family_name },
+      guestIdx, '', phoneId, firstId, lastId
+    );
+  });
+}
+
+// Attaches arrow-key + Enter navigation to an autocomplete input/dropdown pair.
+// Removes itself when dropdown is hidden.
+function _attachAcKeyNav(input, dropdown, onSelect) {
+  let activeIdx = -1;
+  function highlight(idx) {
+    const items = dropdown.querySelectorAll('.autocomplete-item');
+    items.forEach((el, i) => el.classList.toggle('ac-highlighted', i === idx));
+    activeIdx = idx;
+  }
+  function handler(e) {
+    if (dropdown.classList.contains('hidden')) { input.removeEventListener('keydown', handler); return; }
+    const items = dropdown.querySelectorAll('.autocomplete-item');
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      highlight(Math.min(activeIdx + 1, items.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlight(Math.max(activeIdx - 1, 0));
+    } else if (e.key === 'Enter' && activeIdx >= 0) {
+      e.preventDefault();
+      onSelect(activeIdx);
+      input.removeEventListener('keydown', handler);
+    } else if (e.key === 'Escape') {
+      dropdown.classList.add('hidden');
+      input.removeEventListener('keydown', handler);
+    }
+  }
+  // Remove any previous handler before attaching
+  input._acKeyHandler && input.removeEventListener('keydown', input._acKeyHandler);
+  input._acKeyHandler = handler;
+  input.addEventListener('keydown', handler);
 }
 
 // ── Auto Capitalize ───────────────────────────────
@@ -4714,16 +4836,16 @@ let hiddenDashServices    = JSON.parse(localStorage.getItem('muse_hidden_dash_se
 let showDoneInQueue = true; // toggle for showing/hiding done cards in queue tab
 
 // Retail items — synced from Square Item Library, also editable locally
-let ITEMS = JSON.parse(localStorage.getItem('muse_items') || 'null') || [
+let ITEMS = dedupByLabel(JSON.parse(localStorage.getItem('muse_items') || 'null') || [
   { id: 'item-cuticle-oil',       label: 'Cuticle Oil',       abbr: 'CO',  price: 0 },
   { id: 'item-small-cuticle-oil', label: 'Small Cuticle Oil', abbr: 'SCO', price: 0 },
   { id: 'item-gift-card',         label: 'Gift Card',         abbr: 'GC',  price: 0 },
-];
+]);
 
 // Fees — flat dollar amount or percent of service subtotal
-let FEES = JSON.parse(localStorage.getItem('muse_fees') || 'null') || [
+let FEES = dedupByLabel(JSON.parse(localStorage.getItem('muse_fees') || 'null') || [
   { id: 'fee-service', label: 'Service Fee', type: 'flat', value: 0 },
-];
+]);
 
 function saveItems() {
   localStorage.setItem('muse_items', JSON.stringify(ITEMS));
@@ -4801,12 +4923,23 @@ function renderSettingsItems() {
 
 function addItemRow() {
   ITEMS.push({ id: 'item-' + Date.now(), label: '', abbr: '', price: 0 });
+  saveItems();
   renderSettingsItems();
 }
 function removeItem(i) {
   ITEMS.splice(i, 1);
   saveItems();
   renderSettingsItems();
+}
+function saveItemInline(i) {
+  const row = document.querySelectorAll('#settings-items-list > div')[i];
+  if (!row) return;
+  const label = row.querySelector('input:first-child')?.value.trim() || '';
+  if (!label) { showToast('Item name cannot be blank.'); return; }
+  // Check for duplicate label (excluding self)
+  const dup = ITEMS.find((it, idx) => idx !== i && it.label.toLowerCase() === label.toLowerCase());
+  if (dup) { showToast(`"${label}" already exists as an item.`); return; }
+  saveItems();
 }
 
 // ── Fees settings render ──────────────────────────
@@ -4834,12 +4967,22 @@ function renderSettingsFees() {
 
 function addFeeRow() {
   FEES.push({ id: 'fee-' + Date.now(), label: '', type: 'flat', value: 0 });
+  saveFees();
   renderSettingsFees();
 }
 function removeFee(i) {
   FEES.splice(i, 1);
   saveFees();
   renderSettingsFees();
+}
+function saveFeeInline(i) {
+  const row = document.querySelectorAll('#settings-fees-list > div')[i];
+  if (!row) return;
+  const label = row.querySelector('input:first-child')?.value.trim() || '';
+  if (!label) { showToast('Fee name cannot be blank.'); return; }
+  const dup = FEES.find((f, idx) => idx !== i && f.label.toLowerCase() === label.toLowerCase());
+  if (dup) { showToast(`"${label}" already exists as a fee.`); return; }
+  saveFees();
 }
 let inactiveStaff = JSON.parse(localStorage.getItem('muse_inactive_staff') || '[]');
 
@@ -6752,7 +6895,19 @@ const CONFIG_KEYS = [
   'muse_items', 'muse_fees',
 ];
 
-// Tracks the last time THIS device pushed config to Sheets.
+// ── Deduplication helper ──────────────────────────
+// Removes duplicate entries by label (case-insensitive), keeping the first occurrence.
+// Applied whenever services/items/fees are loaded from Sheets or localStorage to prevent
+// duplicate sync cycles from accumulating entries.
+function dedupByLabel(arr) {
+  const seen = new Set();
+  return arr.filter(item => {
+    const key = (item.label || '').toLowerCase().trim();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 // loadConfigFromSheets skips overwriting if this device wrote the row,
 // with a 10s fallback for slow writes where DEVICE_ID may not match yet.
 let _configWriteTime = 0;
@@ -7114,7 +7269,7 @@ function startSheetsPolling() {
         const servicesRaw = localStorage.getItem('muse_services');
         const fdUsersRaw  = localStorage.getItem('muse_fd_users');
         if (staffRaw)    { try { const s = JSON.parse(staffRaw);    if (s.length) STAFF            = s; } catch(e){} }
-        if (servicesRaw) { try { const s = JSON.parse(servicesRaw); if (s.length) SERVICES         = s; } catch(e){} }
+        if (servicesRaw) { try { const s = JSON.parse(servicesRaw); if (s.length) SERVICES         = dedupByLabel(s); } catch(e){} }
         if (fdUsersRaw)  { try { const s = JSON.parse(fdUsersRaw);  if (s.length) FRONT_DESK_USERS = s; } catch(e){} }
         // Turns order: only apply if a different device wrote it (same guard as queue poll)
         const turnsRaw = localStorage.getItem('muse_turns_order');
@@ -7128,9 +7283,9 @@ function startSheetsPolling() {
           } catch(e){}
         }
         const itemsRaw = localStorage.getItem('muse_items');
-        if (itemsRaw) { try { const t = JSON.parse(itemsRaw); if (Array.isArray(t) && t.length) ITEMS = t; } catch(e){} }
+        if (itemsRaw) { try { const t = JSON.parse(itemsRaw); if (Array.isArray(t) && t.length) ITEMS = dedupByLabel(t); } catch(e){} }
         const feesRaw = localStorage.getItem('muse_fees');
-        if (feesRaw) { try { const t = JSON.parse(feesRaw); if (Array.isArray(t) && t.length) FEES = t; } catch(e){} }
+        if (feesRaw) { try { const t = JSON.parse(feesRaw); if (Array.isArray(t) && t.length) FEES = dedupByLabel(t); } catch(e){} }
         // Hidden dash services — update in-memory AND re-render if Settings panel is open
         const hDashRaw = localStorage.getItem('muse_hidden_dash_services');
         if (hDashRaw) {
@@ -8535,7 +8690,7 @@ function renderAssignRows(entry) {
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
             <input type="text" inputmode="decimal"
               placeholder="${svc.baseCost != null ? Number(svc.baseCost).toFixed(2) : '0.00'}"
-              value="${assignment.cost != null && assignment.cost !== 0 ? assignment.cost : ''}"
+              value="${assignment.cost != null && assignment.cost !== 0 ? assignment.cost : (svc.baseCost != null && svc.baseCost > 0 ? Number(svc.baseCost).toFixed(2) : '')}"
               class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
               onfocus="openNumpad(this,'Cost — ' + '${svc.label}')"
               onclick="openNumpad(this,'Cost — ' + '${svc.label}')"
@@ -8875,9 +9030,25 @@ function saveCurrentGroupTabInputs() {
       : parseFloat(rawInput) || 0;
     if (amount > 0) entry.fees.push({ feeId, amount, type: feeType });
   });
-  const itemTotal = (entry.items||[]).reduce((s,i)=>s+(i.price*(i.qty||1)),0);
+  const itemTotal = (entry.items||[]).reduce((s,i)=>s+(i.price*(i.qty||0)),0);
   const feeTotal  = (entry.fees ||[]).reduce((s,f)=>s+(f.amount||0),0);
-  entry.totalCost = entry.assignments.reduce((s,a)=>s+(a.cost||0),0) + itemTotal + feeTotal;
+
+  // Discount — flat dollar or percent of service subtotal
+  const discountTypeEl  = document.querySelector('#group-assign-content .discount-type-select');
+  const discountInputEl = document.querySelector('#group-assign-content .discount-input');
+  const discountNoteEl  = document.querySelector('#group-assign-content .discount-note-input');
+  const discountType    = discountTypeEl?.value || 'flat';
+  const discountInput   = parseFloat(discountInputEl?.value) || 0;
+  const discountNote    = discountNoteEl?.value?.trim() || '';
+  const svcSub          = entry.assignments.reduce((s,a)=>s+(a.cost||0),0);
+  const discountAmt     = discountType === 'percent'
+    ? Math.round(svcSub * discountInput / 100 * 100) / 100
+    : discountInput;
+  entry.discount     = discountAmt;
+  entry.discountNote = discountNote;
+
+  entry.totalCost = svcSub + itemTotal + feeTotal - discountAmt;
+  if (entry.totalCost < 0) entry.totalCost = 0;
   entry.status = deriveEntryStatus(entry);
   setTimeout(updateGroupTotal, 0);
 }
@@ -8940,7 +9111,7 @@ function renderGroupAssignContent() {
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
             <input type="text" inputmode="decimal"
               placeholder="${svc.baseCost != null ? Number(svc.baseCost).toFixed(2) : '0.00'}"
-              value="${assignment.cost != null && assignment.cost !== 0 ? assignment.cost : ''}"
+              value="${assignment.cost != null && assignment.cost !== 0 ? assignment.cost : (svc.baseCost != null && svc.baseCost > 0 ? Number(svc.baseCost).toFixed(2) : '')}"
               class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
               onfocus="openNumpad(this,'Cost — ' + '${svc.label}')"
               onclick="openNumpad(this,'Cost — ' + '${svc.label}')"
@@ -9033,6 +9204,29 @@ function renderGroupAssignContent() {
         <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-3">Items &amp; Fees</div>
         ${itemRows}${feeRows}
       </div>` : ''}
+    <!-- Discount row — always shown, defaults to 0 -->
+    <div class="border-t border-surface-container-high pt-3 mb-2">
+      <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2">Discount</div>
+      <div class="bg-surface-container-low rounded-xl p-3 border border-surface-container-high">
+        <div class="flex items-center gap-2 mb-2">
+          <select class="discount-type-select bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-xs font-body focus:outline-none focus:border-primary" onchange="updateGroupTotal()">
+            <option value="flat">$ Off</option>
+            <option value="percent">% Off</option>
+          </select>
+          <input type="text" inputmode="decimal"
+            class="discount-input flex-1 bg-surface-container border border-surface-container-high rounded-lg px-3 py-1.5 text-sm font-body text-right focus:outline-none focus:border-primary cursor-pointer"
+            value="${entry.discount && entry.discount > 0 ? entry.discount : ''}"
+            placeholder="0"
+            onfocus="openNumpad(this,'Discount')"
+            onclick="openNumpad(this,'Discount')"
+            oninput="updateGroupTotal()">
+        </div>
+        <input type="text" maxlength="60"
+          class="discount-note-input w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-1.5 text-xs font-body focus:outline-none focus:border-primary"
+          value="${entry.discountNote || ''}"
+          placeholder="Reason (optional)">
+      </div>
+    </div>
     <div class="border-t border-surface-container-high pt-3 flex items-center justify-between">
       <span class="font-body font-semibold text-on-surface text-sm">Subtotal</span>
       <span id="group-subtotal" class="font-headline font-bold text-primary">$0.00</span>
@@ -9077,7 +9271,17 @@ function updateGroupTotal() {
       feeTotal += computed;
     } else { feeTotal += parseFloat(inp?.value)||0; }
   });
-  const subtotal = svcSubtotal + itemTotal + feeTotal;
+
+  // Read discount from the discount row
+  const discountTypeEl = document.querySelector('#group-assign-content .discount-type-select');
+  const discountInpEl  = document.querySelector('#group-assign-content .discount-input');
+  const discountType   = discountTypeEl?.value || 'flat';
+  const discountInput  = parseFloat(discountInpEl?.value) || 0;
+  const discountAmt    = discountType === 'percent'
+    ? Math.round(svcSubtotal * discountInput / 100 * 100) / 100
+    : discountInput;
+
+  const subtotal = Math.max(0, svcSubtotal + itemTotal + feeTotal - discountAmt);
   const el = document.getElementById('group-subtotal');
   if (el) el.textContent = `$${subtotal.toFixed(2)}`;
   const currentId = groupAssignEntries[activeGroupTab];
@@ -9449,6 +9653,7 @@ async function squarePullServices() {
           if (!FEES.find(f => f.id === id || f.label.toLowerCase() === lname)) {
             const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
             FEES.push({ id, label: name, type: 'flat', value: price ? price / 100 : 0, squareItemId: item.id });
+            // Don't save yet — will be saved in the consolidated push at the end
           }
           return;
         }
@@ -9460,7 +9665,11 @@ async function squarePullServices() {
           addedSvc++;
         }
       });
-      if (addedSvc > 0) { saveServicesToStorage(); showToast(`${addedSvc} service${addedSvc>1?'s':''} imported from Square`); }
+      if (addedSvc > 0) {
+        // Don't push yet — wait until items and fees are also done to batch into one push
+        localStorage.setItem('muse_services', JSON.stringify(SERVICES));
+        showToast(`${addedSvc} service${addedSvc>1?'s':''} imported from Square`);
+      }
     }
 
     // Pull Items (Item Library in Square) — retail products only, never add to SERVICES
@@ -9482,10 +9691,16 @@ async function squarePullServices() {
           addedItems++;
         }
       });
-      if (addedItems > 0) { saveItems(); showToast(`${addedItems} item${addedItems>1?'s':''} imported from Square`); }
+      if (addedItems > 0) {
+        localStorage.setItem('muse_items', JSON.stringify(ITEMS));
+        showToast(`${addedItems} item${addedItems>1?'s':''} imported from Square`);
+      }
     }
 
-    saveFees();
+    // Single consolidated push — saves services, items, and fees in one Sheets write
+    localStorage.setItem('muse_fees', JSON.stringify(FEES));
+    _configWriteTime = Date.now();
+    setTimeout(() => pushConfigToSheets(), 500);
   } catch(e) {
     console.warn('Could not pull Square catalog:', e);
   }
@@ -10980,15 +11195,22 @@ function apptAcSearch(input, field) {
 
   if (!matches.length) { acBox.classList.add('hidden'); return; }
 
-  acBox.innerHTML = matches.map(c => {
+  acBox.innerHTML = matches.map((c, i) => {
     const name  = [c.given_name, c.family_name].filter(Boolean).join(' ');
     const phone = c.phone_number || c.phone || '';
-    return `<div class="autocomplete-item" onmousedown="apptAcFill('${name.replace(/'/g,"\\'")}','${phone.replace(/'/g,"\\'")}')">
+    return `<div class="autocomplete-item" data-ac-idx="${i}" onmousedown="apptAcFill('${name.replace(/'/g,"\\'")}','${phone.replace(/'/g,"\\'")}')">
       <span class="ac-name">${name}</span>
       ${phone ? `<span class="ac-phone">${phone}</span>` : ''}
     </div>`;
   }).join('');
   acBox.classList.remove('hidden');
+  // Keyboard navigation
+  const matchesCopy = matches;
+  _attachAcKeyNav(input, acBox, (idx) => {
+    const c = matchesCopy[idx];
+    const name = [c.given_name, c.family_name].filter(Boolean).join(' ');
+    apptAcFill(name, c.phone_number || c.phone || '');
+  });
 }
 
 function apptAcFill(name, phone) {
@@ -10997,10 +11219,97 @@ function apptAcFill(name, phone) {
   document.getElementById('appt-last').value  = parts.slice(1).join(' ') || '';
   document.getElementById('appt-phone').value = phone;
   document.getElementById('appt-name').value  = name;
-  // Format phone
   const phoneEl = document.getElementById('appt-phone');
   if (phoneEl) formatPhone(phoneEl);
   ['appt-ac-phone','appt-ac-first'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.classList.add('hidden'); el.innerHTML = ''; }
+  });
+}
+
+// ── Appointment extra guests ───────────────────────
+let _apptExtraGuests = []; // [{ first, last, phone }]
+
+function apptAddGuest() {
+  const idx = _apptExtraGuests.length;
+  _apptExtraGuests.push({ first: '', last: '', phone: '' });
+  renderApptExtraGuests();
+}
+
+function apptRemoveGuest(idx) {
+  _apptExtraGuests.splice(idx, 1);
+  renderApptExtraGuests();
+}
+
+function renderApptExtraGuests() {
+  const container = document.getElementById('appt-extra-guests');
+  if (!container) return;
+  container.innerHTML = _apptExtraGuests.map((g, idx) => `
+    <div class="border border-surface-container-high rounded-xl p-3 mb-2 bg-surface-container-low" data-appt-guest="${idx}">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[11px] font-body font-semibold text-primary uppercase tracking-widest">Guest ${idx + 2}</span>
+        <button type="button" onclick="apptRemoveGuest(${idx})" class="text-outline-variant hover:text-error transition-colors">
+          <span class="material-symbols-outlined" style="font-size:16px">close</span>
+        </button>
+      </div>
+      <div class="ac-input-wrap mb-2">
+        <input type="tel" placeholder="Phone (optional)" autocomplete="off"
+          id="appt-extra-phone-${idx}"
+          oninput="apptExtraAcSearch(this,${idx},'phone')"
+          class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant">
+        <div id="appt-extra-ac-phone-${idx}" class="autocomplete-list hidden"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-2">
+        <div class="ac-input-wrap">
+          <input type="text" placeholder="First Name *" autocomplete="off"
+            id="appt-extra-first-${idx}"
+            oninput="apptExtraAcSearch(this,${idx},'first'); autoCapitalize(this)"
+            class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant">
+          <div id="appt-extra-ac-first-${idx}" class="autocomplete-list hidden"></div>
+        </div>
+        <input type="text" placeholder="Last Name"
+          id="appt-extra-last-${idx}"
+          oninput="autoCapitalize(this)"
+          class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant">
+      </div>
+    </div>
+  `).join('');
+}
+
+function apptExtraAcSearch(input, idx, field) {
+  if (field === 'phone') formatPhone(input);
+  const val = input.value.trim().toLowerCase();
+  const acId = field === 'phone' ? `appt-extra-ac-phone-${idx}` : `appt-extra-ac-first-${idx}`;
+  const acBox = document.getElementById(acId);
+  if (!acBox) return;
+  if (!val || val.length < 2) { acBox.classList.add('hidden'); acBox.innerHTML=''; return; }
+  const matches = squareCustomers.filter(c => {
+    const full  = ((c.given_name||'') + ' ' + (c.family_name||'')).toLowerCase();
+    const phone = (c.phone_number||c.phone||'').replace(/\D/g,'');
+    if (field === 'phone') return phone.includes(val.replace(/\D/g,'')) && val.replace(/\D/g,'').length >= 3;
+    return full.startsWith(val) || (c.given_name||'').toLowerCase().startsWith(val);
+  }).slice(0, 6);
+  if (!matches.length) { acBox.classList.add('hidden'); return; }
+  acBox.innerHTML = matches.map(c => {
+    const name = [c.given_name, c.family_name].filter(Boolean).join(' ');
+    const phone = c.phone_number || c.phone || '';
+    return `<div class="autocomplete-item" onmousedown="apptExtraAcFill(${idx},'${name.replace(/'/g,"\\'")}','${phone.replace(/'/g,"\\'")}')">
+      <span class="ac-name">${name}</span>
+      ${phone ? `<span class="ac-phone">${phone}</span>` : ''}
+    </div>`;
+  }).join('');
+  acBox.classList.remove('hidden');
+}
+
+function apptExtraAcFill(idx, name, phone) {
+  const parts = name.trim().split(' ');
+  const firstEl = document.getElementById(`appt-extra-first-${idx}`);
+  const lastEl  = document.getElementById(`appt-extra-last-${idx}`);
+  const phoneEl = document.getElementById(`appt-extra-phone-${idx}`);
+  if (firstEl) firstEl.value = parts[0] || '';
+  if (lastEl)  lastEl.value  = parts.slice(1).join(' ') || '';
+  if (phoneEl) { phoneEl.value = phone; formatPhone(phoneEl); }
+  [`appt-extra-ac-phone-${idx}`,`appt-extra-ac-first-${idx}`].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.classList.add('hidden'); el.innerHTML = ''; }
   });
@@ -11056,8 +11365,11 @@ function updateApptLine(i, field, val) {
 }
 
 function showNewApptModal(calId, hour, minute, techName) {
-  _apptEditId = null;
-  _apptLines  = [];
+  _apptEditId     = null;
+  _apptLines      = [];
+  _apptExtraGuests = [];
+  const eg = document.getElementById('appt-extra-guests');
+  if (eg) eg.innerHTML = '';
   document.getElementById('appt-modal-title').textContent = 'New Appointment';
   document.getElementById('appt-event-id').value  = '';
   document.getElementById('appt-cal-id').value    = calId || '';
@@ -11135,6 +11447,9 @@ function closeApptModal() {
   document.getElementById('appt-modal').classList.add('hidden');
   document.getElementById('appt-modal').style.display = '';
   _apptEditId = null;
+  _apptExtraGuests = [];
+  const eg = document.getElementById('appt-extra-guests');
+  if (eg) eg.innerHTML = '';
 }
 
 async function saveAppt() {
@@ -11205,11 +11520,27 @@ async function saveAppt() {
     if (_apptEditId) {
       await gapi.client.calendar.events.update({ calendarId: apptCalId, eventId: _apptEditId, resource: eventBody });
     } else {
-      // If multiple techs, create one event per tech calendar
+      // Create one event per tech calendar for the primary guest
       const uniqueCals = [...new Set(linesWithTech.map(l=>l.calId))];
       await Promise.all(uniqueCals.map(cid =>
         gapi.client.calendar.events.insert({ calendarId: cid, resource: eventBody })
       ));
+
+      // Create additional calendar events for extra guests (one per guest, on the primary tech's calendar)
+      for (const g of _apptExtraGuests) {
+        const gFirst = document.getElementById(`appt-extra-first-${_apptExtraGuests.indexOf(g)}`)?.value.trim() || g.first;
+        const gLast  = document.getElementById(`appt-extra-last-${_apptExtraGuests.indexOf(g)}`)?.value.trim() || g.last;
+        const gPhone = document.getElementById(`appt-extra-phone-${_apptExtraGuests.indexOf(g)}`)?.value.trim() || g.phone;
+        const gName  = [gFirst, gLast].filter(Boolean).join(' ');
+        if (!gFirst) continue;
+        const gEventBody = {
+          summary:     gName,
+          description: [gPhone, notes].filter(Boolean).join('\n'),
+          start: { dateTime: startDt.toISOString() },
+          end:   { dateTime: endDt.toISOString() },
+        };
+        await gapi.client.calendar.events.insert({ calendarId: primaryCalId, resource: gEventBody });
+      }
     }
     closeApptModal();
     await calLoadAndRender();
