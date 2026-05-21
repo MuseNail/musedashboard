@@ -1,0 +1,24 @@
+name             = "musedashboard"
+main             = "worker.js"
+compatibility_date = "2024-11-20"
+
+# ── R2 bucket binding ─────────────────────────────────────────────────────────
+# Create the bucket first:  wrangler r2 bucket create musedashboard-photos
+[[r2_buckets]]
+binding     = "PHOTOS_BUCKET"
+bucket_name = "musedashboard-photos"
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+# Set each secret once via the CLI — never commit secret values to this file:
+#
+#   wrangler secret put SHEETS_URL
+#   wrangler secret put SQUARE_TOKEN
+#
+# SHEETS_URL    — Google Apps Script doPost endpoint (the /exec URL)
+# SQUARE_TOKEN  — Square access token (sandbox or production)
+
+# ── Optional environment variables ────────────────────────────────────────────
+# [vars]
+# SQUARE_BASE_URL = "https://connect.squareup.com"
+# Uncomment and set to the sandbox URL during testing:
+# SQUARE_BASE_URL = "https://connect.squareupsandbox.com"

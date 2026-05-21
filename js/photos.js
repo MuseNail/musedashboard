@@ -1,14 +1,45 @@
-﻿// Logo data URL — in-memory; loaded from Sheets on startup via loadConfigFromSheets()
+// Logo R2 URL — in-memory; loaded from Sheets config on startup via loadConfigFromSheets()
 let _logoData = null;
-// Photo cache — keyed as 'staff_ID' or 'fduser_ID'; loaded from Sheets via loadPhotosFromSheets()
+// Photo cache — keyed as 'staff_{id}' or 'fduser_{id}'; values are R2 URLs
 const _photoCache = {};
+
+// ── R2 Helpers ─────────────────────────────────────
+// Converts a base64 data URL to binary and PUTs it to R2 via the worker.
+// Returns the CDN URL of the uploaded object, or null on failure.
+async function _uploadToR2(key, dataUrl, mimeType) {
+  try {
+    const [, b64] = dataUrl.split(',');
+    const binary  = atob(b64);
+    const bytes   = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const res = await fetch(`${PHOTOS_PROXY}/${key}`, {
+      method:  'PUT',
+      body:    bytes,
+      headers: { 'Content-Type': mimeType },
+    });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    return data.url || null;
+  } catch(e) {
+    console.warn('[Photos] Upload failed:', e);
+    return null;
+  }
+}
+
+async function _deleteFromR2(key) {
+  try {
+    await fetch(`${PHOTOS_PROXY}/${key}`, { method: 'DELETE' });
+  } catch(e) {
+    console.warn('[Photos] Delete failed:', e);
+  }
+}
+
 
 // ── Logo Upload & Crop ─────────────────────────────
 function handleLogoUpload(input) {
   const file = input.files[0];
   if (!file) return;
 
-  // Set crop target to logo mode
   _photoCropTarget   = { type: 'logo', id: 'business' };
   _photoCropImg      = null;
   _photoCropRotation = 0;
@@ -19,7 +50,6 @@ function handleLogoUpload(input) {
   const cropArea = document.querySelector('#photo-crop-modal .relative.mb-4');
   if (cropArea) cropArea.style.height = '200px';
 
-  // Open modal
   document.getElementById('photo-crop-zoom').value = 1;
   document.getElementById('photo-crop-canvas').classList.add('hidden');
   document.getElementById('photo-crop-placeholder').classList.remove('hidden');
@@ -30,7 +60,6 @@ function handleLogoUpload(input) {
   document.getElementById('photo-crop-modal').classList.remove('hidden');
   document.getElementById('photo-crop-modal').style.display = 'flex';
 
-  // Load the image
   const reader = new FileReader();
   reader.onload = ev => {
     const img = new Image();
@@ -52,11 +81,13 @@ function handleLogoUpload(input) {
 }
 
 function removeLogo() {
+  _deleteFromR2('logo_business').catch(() => {});
+  delete _photoCache['logo_business'];
   _logoData = null;
   _configWriteTime = Date.now();
   setTimeout(() => pushConfigToSheets(), 500);
   setLogo();
-  showToast('Logo removed — using default');
+  showToast('Logo removed');
 }
 
 // Re-open crop modal with the already-saved logo for re-cropping
@@ -70,7 +101,6 @@ function recropLogo() {
   _photoCropZoom     = 1;
   _photoCropOffset   = { x: 0, y: 0 };
 
-  // Switch preview area to wide rectangular shape
   const cropArea = document.querySelector('#photo-crop-modal .relative.mb-4');
   if (cropArea) cropArea.style.height = '200px';
 
@@ -102,105 +132,81 @@ function recropLogo() {
 
 
 // ── Photo Storage ─────────────────────────────────
-// Photos are stored separately from staff data to avoid bloating config sync.
-// Each photo is stored as its own localStorage key: muse_photo_staff_ID or muse_photo_fduser_ID
+// Photos live in Cloudflare R2. _photoCache holds the R2 URLs for the session.
+// URLs are synced to Sheets config (muse_photos) so other devices can load them.
 
 function getPhotoKey(type, id) {
-  return `muse_photo_${type}_${id}`;
+  return `${type}_${id}`;
 }
 
-function savePhotoToStorage(type, id, dataUrl) {
-  _photoCache[type + '_' + id] = dataUrl;
-  pushPhotosToSheets();
+// Upload a photo to R2 and cache the resulting URL.
+// Returns the URL on success, null on failure.
+async function savePhotoToStorage(type, id, dataUrl) {
+  const key      = getPhotoKey(type, id);
+  const mimeType = type === 'logo' ? 'image/png' : 'image/jpeg';
+  const url      = await _uploadToR2(key, dataUrl, mimeType);
+  if (!url) return null;
+  _photoCache[key] = url;
+  _configWriteTime = Date.now();
+  setTimeout(() => pushConfigToSheets(), 1000);
+  return url;
 }
 
 function loadPhotoFromStorage(type, id) {
-  return _photoCache[type + '_' + id] || null;
+  return _photoCache[getPhotoKey(type, id)] || null;
 }
 
 function removePhotoFromStorage(type, id) {
-  delete _photoCache[type + '_' + id];
-  pushPhotosToSheets();
+  const key = getPhotoKey(type, id);
+  _deleteFromR2(key).catch(() => {});
+  delete _photoCache[key];
+  _configWriteTime = Date.now();
+  setTimeout(() => pushConfigToSheets(), 1000);
 }
 
-// Collect all photos into one object for Sheets backup
+// Returns { 'staff_ID': url, 'fduser_ID': url } for all cached photos.
+// Used by pushConfigToSheets to persist URL references across devices.
 function getAllPhotos() {
   const photos = {};
   STAFF.forEach(s => {
-    const p = loadPhotoFromStorage('staff', s.id);
-    if (p) photos['staff_' + s.id] = p;
+    const url = _photoCache['staff_' + s.id];
+    if (url) photos['staff_' + s.id] = url;
   });
   FRONT_DESK_USERS.forEach(u => {
-    const p = loadPhotoFromStorage('fduser', u.id);
-    if (p) photos['fduser_' + u.id] = p;
+    const url = _photoCache['fduser_' + u.id];
+    if (url) photos['fduser_' + u.id] = url;
   });
   return photos;
 }
 
-// Restore photos from a backup object
+// Restore photo URLs from config into _photoCache.
+// Called by loadPhotosFromSheets; values are R2 URLs, not base64.
 function restorePhotos(photos) {
   if (!photos) return;
-  Object.entries(photos).forEach(([key, dataUrl]) => {
-    const [, type, ...idParts] = key.split('_');
-    const id = idParts.join('_');
-    if (type && id && dataUrl) _photoCache[type + '_' + id] = dataUrl;
-  });
+  Object.assign(_photoCache, photos);
   applyPhotosToObjects();
 }
 
-// Apply stored photos to in-memory STAFF and FRONT_DESK_USERS
+// Apply cached photo URLs to in-memory STAFF and FRONT_DESK_USERS objects.
 function applyPhotosToObjects() {
   STAFF.forEach(s => {
-    const p = loadPhotoFromStorage('staff', s.id);
-    if (p) s.photo = p; else delete s.photo;
+    const url = loadPhotoFromStorage('staff', s.id);
+    if (url) s.photo = url; else delete s.photo;
   });
   FRONT_DESK_USERS.forEach(u => {
-    const p = loadPhotoFromStorage('fduser', u.id);
-    if (p) u.photo = p; else delete u.photo;
+    const url = loadPhotoFromStorage('fduser', u.id);
+    if (url) u.photo = url; else delete u.photo;
   });
-}
-
-let _photoSyncTimer = null;
-async function pushPhotosToSheets() {
-  if (_photoSyncTimer) clearTimeout(_photoSyncTimer);
-  _photoSyncTimer = setTimeout(async () => {
-    try {
-      const photos = getAllPhotos();
-      if (Object.keys(photos).length === 0) return;
-      await fetch(SHEETS_PROXY, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'saveConfig', config: { muse_photos: photos }, device: DEVICE_ID }),
-      });
-    } catch(e) { /* silent */ }
-  }, 2000);
-}
-
-// Accepts pre-fetched config data from the poll to avoid a second loadConfig HTTP call.
-// Falls back to its own fetch if called standalone (e.g. on startup).
-async function loadPhotosFromSheets(preloadedData) {
-  try {
-    let data = preloadedData;
-    if (!data) {
-      const res = await fetch(`${SHEETS_PROXY}?action=loadConfig&_=${Date.now()}`);
-      data = await res.json();
-    }
-    if (data.success && data.config?.muse_photos) {
-      restorePhotos(data.config.muse_photos);
-      return true;
-    }
-  } catch(e) { /* silent */ }
-  return false;
 }
 
 
 // ── Photo Crop ─────────────────────────────────────────────────────────────────
-let _photoCropTarget  = null; // { type: 'staff'|'fduser', id }
-let _photoCropImg     = null; // Image object
+let _photoCropTarget   = null; // { type: 'staff'|'fduser'|'logo', id }
+let _photoCropImg      = null; // Image object
 let _photoCropRotation = 0;
-let _photoCropZoom    = 1;
-let _photoCropDrag    = null; // { startX, startY, offsetX, offsetY }
-let _photoCropOffset  = { x: 0, y: 0 };
+let _photoCropZoom     = 1;
+let _photoCropDrag     = null; // { startX, startY, offsetX, offsetY }
+let _photoCropOffset   = { x: 0, y: 0 };
 
 function showPhotoUpload(type, id) {
   _photoCropTarget   = { type, id };
@@ -234,16 +240,11 @@ function showPhotoUpload(type, id) {
   }
 }
 
-// Also keep old showStaffPhotoModal as alias for backward compatibility
-// showStaffPhotoModal defined below
-
 function closePhotoCrop() {
   document.getElementById('photo-crop-modal').classList.add('hidden');
   document.getElementById('photo-crop-modal').style.display = '';
-  // Reset preview area height (logo mode changes it to wide)
   const cropArea = document.querySelector('#photo-crop-modal .relative.mb-4');
   if (cropArea) cropArea.style.height = '240px';
-  // Reset title
   const h2 = document.querySelector('#photo-crop-modal h2');
   if (h2) h2.textContent = 'Upload Photo';
   _photoCropTarget = null; _photoCropImg = null;
@@ -280,12 +281,10 @@ function updatePhotoCrop() {
   const isLogo = _photoCropTarget?.type === 'logo';
 
   if (isLogo) {
-    // Rectangular crop for logos — 3:2 aspect ratio, no circular clip
     const W = 600, H = 300;
     canvas.width  = W;
     canvas.height = H;
     const ctx = canvas.getContext('2d');
-    // Transparent background — preserve PNG alpha
     ctx.clearRect(0, 0, W, H);
     ctx.save();
     ctx.translate(W/2 + _photoCropOffset.x, H/2 + _photoCropOffset.y);
@@ -298,7 +297,6 @@ function updatePhotoCrop() {
     ctx.drawImage(_photoCropImg, -dw/2, -dh/2, dw, dh);
     ctx.restore();
   } else {
-    // Square + circular clip for staff/fduser photos
     const SIZE = 300;
     canvas.width = canvas.height = SIZE;
     const ctx = canvas.getContext('2d');
@@ -343,48 +341,48 @@ function attachCropDrag() {
     _photoCropOffset.y = dragStart.oy + (e.clientY - dragStart.y);
     updatePhotoCrop();
   });
-  newCanvas.addEventListener('pointerup',   () => { dragStart = null; });
+  newCanvas.addEventListener('pointerup',     () => { dragStart = null; });
   newCanvas.addEventListener('pointercancel', () => { dragStart = null; });
 }
 
-function savePhotoCrop() {
+async function savePhotoCrop() {
   const canvas = document.getElementById('photo-crop-canvas');
   if (!canvas || !_photoCropTarget) return;
   const { type, id } = _photoCropTarget;
 
-  // For logos: save as PNG to preserve transparency — no white background
-  let dataUrl;
   if (type === 'logo') {
-    dataUrl = canvas.toDataURL('image/png');
-    _logoData = dataUrl;
+    const dataUrl = canvas.toDataURL('image/png');
     closePhotoCrop();
+    showToast('Uploading logo…');
+    const url = await savePhotoToStorage('logo', 'business', dataUrl);
+    if (!url) { showToast('Logo upload failed — check connection'); return; }
+    _logoData = url;
     setLogo();
-    _configWriteTime = Date.now();
-    setTimeout(() => pushConfigToSheets(), 500);
     showToast('Logo saved ✓');
     return;
   }
 
-  dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  closePhotoCrop();
+  showToast('Uploading photo…');
 
-  // Save photo to its own storage key
-  savePhotoToStorage(type, id, dataUrl);
+  const url = await savePhotoToStorage(type, id, dataUrl);
+  if (!url) { showToast('Photo upload failed — check connection'); return; }
 
-  // Apply to in-memory object
   if (type === 'staff') {
     const st = STAFF.find(s => s.id === id);
-    if (st) { st.photo = dataUrl; saveStaffToStorage(); renderStaffList(); renderSchedule(); renderTurns(); updateLoggedInDisplay(); }
+    if (st) { st.photo = url; saveStaffToStorage(); renderStaffList(); renderSchedule(); renderTurns(); updateLoggedInDisplay(); }
   } else if (type === 'fduser') {
     const u = FRONT_DESK_USERS.find(x => x.id === id);
-    if (u) { u.photo = dataUrl; saveFdUsersToStorage(); renderFdUsersList(); updateLoggedInDisplay(); }
+    if (u) { u.photo = url; saveFdUsersToStorage(); renderFdUsersList(); updateLoggedInDisplay(); }
   }
-  closePhotoCrop();
   showToast('Photo saved ✓');
 }
 
 function clearPhotoCrop() {
   if (!_photoCropTarget) return;
   const { type, id } = _photoCropTarget;
+  closePhotoCrop();
 
   removePhotoFromStorage(type, id);
 
@@ -395,24 +393,19 @@ function clearPhotoCrop() {
     const u = FRONT_DESK_USERS.find(x => x.id === id);
     if (u) { delete u.photo; saveFdUsersToStorage(); renderFdUsersList(); updateLoggedInDisplay(); }
   }
-  closePhotoCrop();
   showToast('Photo removed');
 }
 
-// Keep old functions as aliases
-// closeStaffPhotoModal defined below
-// saveStaffPhoto and clearStaffPhoto defined below
 
-
+// ── Staff Photo Modal ──────────────────────────────
+// Legacy modal kept for the staff list UI flow. Routes into the shared crop modal.
 
 function showStaffPhotoModal(staffId) {
-  staffPhotoTargetId = staffId;
-  staffPhotoDataUrl  = null;
   const st = STAFF.find(s => s.id === staffId);
   if (!st) return;
   document.getElementById('staff-photo-target-id').value = staffId;
   document.getElementById('staff-photo-initial').textContent = st.name.charAt(0).toUpperCase();
-  const preview = document.getElementById('staff-photo-preview');
+  const preview   = document.getElementById('staff-photo-preview');
   const recropBtn = document.getElementById('staff-recrop-btn');
   if (st.photo) {
     preview.innerHTML = `<img src="${st.photo}" class="w-full h-full object-cover rounded-full">`;
@@ -429,24 +422,19 @@ function showStaffPhotoModal(staffId) {
 function closeStaffPhotoModal() {
   document.getElementById('staff-photo-modal').classList.add('hidden');
   document.getElementById('staff-photo-modal').style.display = '';
-  staffPhotoTargetId = null;
-  staffPhotoDataUrl  = null;
 }
 
-// Re-crop existing staff photo
 function recropStaffPhoto() {
   const id = document.getElementById('staff-photo-target-id').value;
   if (!id) return;
   const existing = loadPhotoFromStorage('staff', id);
   if (!existing) { showToast('No photo to re-crop'); return; }
   closeStaffPhotoModal();
-  // Open the crop modal with existing photo
   showPhotoUpload('staff', id);
-  // Pre-load existing photo
   const img = new Image();
   img.onload = () => {
-    _photoCropImg = img;
-    _photoCropZoom = 1;
+    _photoCropImg    = img;
+    _photoCropZoom   = 1;
     _photoCropOffset = { x: 0, y: 0 };
     document.getElementById('photo-crop-zoom').value = 1;
     document.getElementById('photo-crop-canvas').classList.remove('hidden');
@@ -463,16 +451,14 @@ function handleStaffPhotoUpload(input) {
   if (!file) return;
   if (file.size > 2 * 1024 * 1024) { showToast('Photo must be under 2MB.'); return; }
   const id = document.getElementById('staff-photo-target-id').value;
-  // Close simple modal and open crop modal
   closeStaffPhotoModal();
   showPhotoUpload('staff', id);
-  // Load the file into crop modal
   const reader = new FileReader();
   reader.onload = ev => {
     const img = new Image();
     img.onload = () => {
-      _photoCropImg = img;
-      _photoCropZoom = 1;
+      _photoCropImg    = img;
+      _photoCropZoom   = 1;
       _photoCropOffset = { x: 0, y: 0 };
       document.getElementById('photo-crop-zoom').value = 1;
       document.getElementById('photo-crop-canvas').classList.remove('hidden');
@@ -488,9 +474,9 @@ function handleStaffPhotoUpload(input) {
 }
 
 function saveStaffPhoto() {
-  const st = STAFF.find(s => s.id === staffPhotoTargetId);
+  const id = document.getElementById('staff-photo-target-id').value;
+  const st = STAFF.find(s => s.id === id);
   if (!st) return;
-  if (staffPhotoDataUrl) st.photo = staffPhotoDataUrl;
   saveStaffToStorage();
   closeStaffPhotoModal();
   renderStaffList();
@@ -499,8 +485,10 @@ function saveStaffPhoto() {
 }
 
 function clearStaffPhoto() {
-  const st = STAFF.find(s => s.id === staffPhotoTargetId);
+  const id = document.getElementById('staff-photo-target-id').value;
+  const st = STAFF.find(s => s.id === id);
   if (!st) return;
+  removePhotoFromStorage('staff', id);
   delete st.photo;
   saveStaffToStorage();
   closeStaffPhotoModal();
@@ -508,5 +496,3 @@ function clearStaffPhoto() {
   renderSchedule();
   showToast('Photo removed');
 }
-
-

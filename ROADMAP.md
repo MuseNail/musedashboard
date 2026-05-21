@@ -13,8 +13,8 @@ The app is undergoing an architecture-first rebuild. Phases are done in order. T
 | 0 | Known bugs (pre-refactor) | Documented — 1 requires explicit fix, 2 resolve with Phase 1 |
 | Split | Extract single file → modules | ✅ Complete (v1.54) |
 | 1 | localStorage Cleanup | ✅ Complete (v1.55) |
-| 2 | Cloudflare R2 for Photos | 🔄 Next |
-| 3 | Durable Objects WebSocket Sync | Planned |
+| 2 | Cloudflare R2 for Photos | ✅ Complete (v1.56) |
+| 3 | Durable Objects WebSocket Sync | 🔄 Next |
 | 4 | Workers KV for Fast Config Reads | Planned |
 | 5 | Cron Jobs + Twilio SMS + Gmail | Planned |
 | 6 | Square POS Deep Link Integration | Planned |
@@ -87,21 +87,28 @@ Saving turns order wrote to localStorage then triggered a config push. The 5-sec
 
 ---
 
-## Phase 2 — Cloudflare R2 for Photos and Report Exports
+## Phase 2 — Cloudflare R2 for Photos and Report Exports ✅ Complete (v1.56)
 
 **Goal:** Move base64 staff photos and logo out of the Google Sheets config blob into Cloudflare R2 object storage. Also enable report exports to be saved as R2 objects with shareable download links.
 
 **Why:** Photos bloat the config sync payload significantly. R2 gives proper binary storage with a CDN URL per object.
 
-### Changes needed
+### What changed
 
-- Cloudflare Worker: add R2 bucket binding
-- New Worker routes: `PUT /photos/{key}`, `GET /photos/{key}`, `DELETE /photos/{key}`
-- `savePhotoToStorage()` → uploads to R2, stores CDN URL in `_photoCache` instead of base64
-- `loadPhotoFromStorage()` → returns the R2 URL (used directly as `<img src>`)
-- `pushPhotosToSheets()` replaced by direct R2 upload in `savePhotoToStorage()`
-- Report export functions gain a "Save to R2 / Copy link" option alongside the existing download
-- `js/photos.js` will be substantially rewritten — entire file is the scope of this phase
+- `cloudflare/worker.js` — new file: complete worker with `/sheets`, `/square`, and `/photos` R2 routes
+- `cloudflare/wrangler.toml` — new file: R2 bucket binding and secrets template
+- `js/config.js` — added `PHOTOS_PROXY` constant
+- `js/photos.js` — complete rewrite: `_uploadToR2`/`_deleteFromR2` helpers; `savePhotoToStorage()` now async (uploads to R2, returns URL); `removePhotoFromStorage()` deletes from R2; `pushPhotosToSheets()` removed; `restorePhotos()` bug fixed (was broken destructuring, now `Object.assign`); `getAllPhotos()` returns URL dict; logo flows through `savePhotoToStorage('logo','business',…)`
+- `js/sync.js` — `pushConfigToSheets()` now includes `muse_photos` (URL dict, not base64)
+- `js/reports.js` — `exportReportLink()` uploads HTML report to R2 and copies URL to clipboard
+- `index.html` — "Copy Link" button added to report export row
+
+### Deployment steps (one-time)
+
+1. `wrangler r2 bucket create musedashboard-photos`
+2. `wrangler secret put SHEETS_URL` (paste the Apps Script doPost URL)
+3. `wrangler secret put SQUARE_TOKEN`
+4. `wrangler deploy cloudflare/worker.js` from the repo root
 
 ---
 
@@ -196,15 +203,15 @@ Saving turns order wrote to localStorage then triggered a config push. The 5-sec
 The long-term stack evolution:
 
 ```
-Current (v1.55)
-  GitHub Pages → Cloudflare Worker (proxy) → Apps Script → Sheets
-  (config/settings in JS memory; Sheets is sole source of truth for config)
+Current (v1.56)
+  GitHub Pages → Cloudflare Worker (proxy + R2) → Apps Script → Sheets
+  (config/settings in JS memory; photos/reports in R2; Sheets is source of truth for config)
 
 After Phase 1 ✅
   Same infra — localStorage eliminated as config store
 
-After Phase 2
-  + Cloudflare R2 (photo/report storage)
+After Phase 2 ✅
+  + Cloudflare R2 (photo/report storage; URLs synced via config blob)
 
 After Phase 3
   + Cloudflare Durable Objects (real-time WebSocket hub, replaces polling)

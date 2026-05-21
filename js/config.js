@@ -1,9 +1,10 @@
 ﻿// ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = ""; // No default logo — upload one in Settings → Business Logo
-const APP_VERSION  = 'v1.55';
+const APP_VERSION  = 'v1.56';
 const APP_NAME     = 'musedashboard';
-const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
+const SQUARE_PROXY  = "https://musedashboard.musenailandspa.workers.dev/square";
+const PHOTOS_PROXY  = "https://musedashboard.musenailandspa.workers.dev/photos";
 
 
 // ── Global State ─────────────────────────────────

@@ -715,6 +715,105 @@ function exportReportPDF() {
   showToast('PDF report opened — use Print → Save as PDF');
 }
 
+// Upload the report as an HTML file to R2 and copy the shareable URL to clipboard.
+async function exportReportLink() {
+  const d = window._currentReportData;
+  if (!d || d.filtered.length === 0) { showToast('No data to export.'); return; }
+
+  const fmt    = dt => new Date(dt).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+  const fmtT   = dt => new Date(dt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const period = d.from.toDateString() === d.to.toDateString()
+    ? fmt(d.from)
+    : `${fmt(d.from)} – ${fmt(d.to)}`;
+
+  const staffEntries = Object.entries(d.staffMap).sort((a,b) => b[1].income - a[1].income);
+  const totalComm    = staffEntries.reduce((sum, [tid, data]) => {
+    const t = STAFF.find(s=>s.id===tid);
+    return sum + (t?.commission != null ? data.income * t.commission / 100 : 0);
+  }, 0);
+  const shopKeeps = d.totalIncome - totalComm;
+
+  const staffRows = staffEntries.map(([tid, data]) => {
+    const t    = STAFF.find(s=>s.id===tid);
+    const comm = t?.commission != null ? (data.income * t.commission / 100) : null;
+    const turns = data.fullTurns + data.halfTurns;
+    return `<tr>
+      <td>${t?.name||'Unknown'}</td><td>${data.count}</td>
+      <td>${turns}t${data.bonusTurns>0?' +'+data.bonusTurns+'b':''}</td>
+      <td>$${data.income.toFixed(2)}</td>
+      <td>${t?.commission!=null?t.commission+'%':'—'}</td>
+      <td>${comm!=null?'$'+comm.toFixed(2):'—'}</td>
+      <td>${comm!=null?'$'+(data.income-comm).toFixed(2):'—'}</td>
+    </tr>`;
+  }).join('');
+
+  const txRows = d.filtered.map(r => {
+    const dt = new Date(r.checkinTime);
+    const staffNames = [...new Set((r.assignments||[]).filter(a=>a.techId).map(a=>STAFF.find(s=>s.id===a.techId)?.name||'').filter(Boolean))].join(', ');
+    return `<tr>
+      <td>${dt.toLocaleDateString()}</td><td>${fmtT(dt)}</td>
+      <td>${r.name}</td>
+      <td>${r.services.map(sid=>SERVICES.find(s=>s.id===sid)?.label||sid).join(', ')}</td>
+      <td>${staffNames||'—'}</td>
+      <td>$${(r.totalCost||0).toFixed(2)}</td><td>${r.status}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Report ${period}</title>
+    <style>
+      body{font-family:Arial,sans-serif;font-size:12px;color:#222;margin:24px}
+      .report-header{display:flex;align-items:center;gap:16px;margin-bottom:8px}
+      .report-logo{width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0}
+      h1{color:#1a5252;font-size:20px;margin:0 0 2px}h2{color:#1a5252;font-size:14px;margin:20px 0 8px;border-bottom:2px solid #1a5252;padding-bottom:4px}
+      .summary{display:flex;gap:24px;margin:12px 0 20px;flex-wrap:wrap}
+      .card{background:#f5f5f5;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center}
+      .card .val{font-size:20px;font-weight:bold;color:#1a5252}.card .lbl{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.5px}
+      .card.amber .val{color:#a05000}
+      table{width:100%;border-collapse:collapse;margin-bottom:16px}
+      th{background:#1a5252;color:white;padding:6px 8px;text-align:left;font-size:11px}
+      td{padding:5px 8px;border-bottom:1px solid #e0e0e0;font-size:11px}
+      tr:nth-child(even) td{background:#fafafa}
+      .footer{margin-top:24px;font-size:10px;color:#999;text-align:center}
+    </style></head><body>
+    <div class="report-header">
+      ${(_logoData||LOGO_PATH)?`<img src="${_logoData||LOGO_PATH}" class="report-logo" onerror="this.style.display='none'">`:''}
+      <div><h1>Muse Nails &amp; Spa — Daily Report</h1><p style="color:#666;margin:0">${period}</p></div>
+    </div>
+    <div class="summary">
+      <div class="card"><div class="val">$${d.totalIncome.toFixed(2)}</div><div class="lbl">Total Billed</div></div>
+      <div class="card"><div class="val">${d.guestCount}</div><div class="lbl">Guests Served</div></div>
+      <div class="card"><div class="val">$${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}</div><div class="lbl">Avg Ticket</div></div>
+      <div class="card"><div class="val">$${shopKeeps.toFixed(2)}</div><div class="lbl">Shop Keeps</div></div>
+      <div class="card amber"><div class="val">$${totalComm.toFixed(2)}</div><div class="lbl">Commission Owed</div></div>
+    </div>
+    <h2>Staff Breakdown</h2>
+    <table><thead><tr><th>Technician</th><th>Services</th><th>Turns</th><th>Billed</th><th>Comm %</th><th>Commission</th><th>Shop Keeps</th></tr></thead>
+    <tbody>${staffRows}</tbody></table>
+    <h2>Transactions (${d.filtered.length})</h2>
+    <table><thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Services</th><th>Staff</th><th>Total</th><th>Status</th></tr></thead>
+    <tbody>${txRows}</tbody></table>
+    <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div>
+  </body></html>`;
+
+  showToast('Uploading report…');
+  const key = `reports/${localDateStr(d.from)}.html`;
+  try {
+    const res  = await fetch(`${PHOTOS_PROXY}/${key}`, {
+      method:  'PUT',
+      body:    new TextEncoder().encode(html),
+      headers: { 'Content-Type': 'text/html;charset=utf-8' },
+    });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    const url  = data.url;
+    try { await navigator.clipboard.writeText(url); } catch(e) { /* clipboard unavailable — URL shown in toast */ }
+    showToast('Link copied to clipboard ✓');
+  } catch(e) {
+    console.warn('[Report] R2 upload failed:', e);
+    showToast('Upload failed — check connection');
+  }
+}
+
 async function exportReportSheets() {
   const d = window._currentReportData;
   if (!d || d.filtered.length === 0) { showToast('No data to export.'); return; }

@@ -294,6 +294,8 @@ async function pushConfigToSheets() {
     if (turnsTechOrder.length)                config.muse_turns_order          = turnsTechOrder;
     if (ITEMS.length)                         config.muse_items                = ITEMS;
     if (FEES.length)                          config.muse_fees                 = FEES;
+    const photos = getAllPhotos();
+    if (Object.keys(photos).length)           config.muse_photos               = photos;
     await fetch(`${SHEETS_PROXY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
