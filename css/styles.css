@@ -1,0 +1,192 @@
+﻿  * { box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+  h1,h2,h3,.font-headline { font-family: 'Manrope', sans-serif; }
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
+
+  /* Screen transitions */
+  .screen { display: none; min-height: 100vh; }
+  .screen.active { display: flex; flex-direction: column; }
+
+  /* Clock */
+  #clock-display { font-variant-numeric: tabular-nums; }
+
+  /* Service button selected state */
+  .service-btn.selected {
+    background-color: #2a6868 !important;
+    color: #e0fffe !important;
+    border-color: #2a6868 !important;
+  }
+
+  /* Scrollbar hide */
+  .no-scroll::-webkit-scrollbar { display: none; }
+  .no-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Queue badge pulse */
+  @keyframes pulse-ring {
+    0% { box-shadow: 0 0 0 0 rgba(42,104,104,0.35); }
+    70% { box-shadow: 0 0 0 8px rgba(42,104,104,0); }
+    100% { box-shadow: 0 0 0 0 rgba(42,104,104,0); }
+  }
+  .pulse { animation: pulse-ring 2s infinite; }
+
+  /* Fade in */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fade-up { animation: fadeUp 0.4s ease forwards; }
+
+  /* Status badges */
+  .badge-waiting { background: #f5c870; color: #3a2800; }
+  .badge-inservice { background: #8fd4d3; color: #0a2e2e; }
+  .badge-done { background: #b4bec2; color: #000000; }
+  .badge-appointment { background: #1a5252; color: #ffffff; }
+
+  /* Dashboard top nav tabs */
+  .dash-tab { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:10px; cursor:pointer; font-family:'Inter',sans-serif; font-size:13px; font-weight:600; color:#1a1a1a; transition:background 0.15s; border:none; background:transparent; white-space:nowrap; }
+  .dash-tab:hover { background:#d0d6da; }
+  .dash-tab.active { background:#1a5252; color:#ffffff; }
+  .dash-tab.active .material-symbols-outlined { color:#ffffff; }
+
+  /* Report range buttons */
+  .rng-btn.active { background:#1a5252 !important; color:#ffffff !important; }
+
+  /* Tablet / iPad responsive scaling */
+  @media (max-width: 1024px) {
+    #panel-turns .flex-shrink-0[style*="width:380px"] { width: 300px !important; }
+    .turns-slot-row .flex-shrink-0 { width: 130px !important; }
+    #turns-tech-grid .w-\[155px\] { width: 130px !important; }
+  }
+
+  /* ── iPad / tablet (≤1180px) ─────────────────────
+     13" iPad Pro portrait = 1024px, landscape = 1366px.
+     At ≤1180px we hide nav tab text labels (keep icons)
+     to prevent the header from overflowing.              */
+  @media (max-width: 1180px) {
+    /* Nav tabs: icon only, no text */
+    .dash-tab span:not(.material-symbols-outlined) { display: none !important; }
+    .dash-tab { padding: 8px 10px !important; gap: 0 !important; }
+    /* Hide "Square synced" text, keep dot */
+    #sync-label { display: none !important; }
+    /* Shrink action icon buttons slightly */
+    .dash-tab .material-symbols-outlined { font-size: 20px !important; }
+    /* Logged-in user: hide name, keep avatar */
+    #logged-in-name { display: none !important; }
+  }
+
+  /* ── Galaxy Tab S9 portrait + iPad 11" portrait (≤820px) ──
+     Tab S9 portrait CSS viewport ≈ 753px
+     iPad 11" portrait CSS viewport = 820px
+     Customer screen needs bigger touch targets & readable text.
+     Dashboard header gets tighter.                            */
+  @media (max-width: 820px) {
+    /* Customer welcome screen — larger buttons */
+    #screen-welcome .text-2xl { font-size: 1.35rem !important; }
+    #screen-welcome .py-7 { padding-top: 1.25rem !important; padding-bottom: 1.25rem !important; }
+    /* Check-in form — full width, bigger service grid */
+    #guests-container .grid-cols-4 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+    /* Dashboard turns grid tighter */
+    #panel-turns .flex-shrink-0[style*="width:300px"] { width: 220px !important; }
+    /* Modals: full width on small screens */
+    .fixed.inset-0 > div[class*="max-w-"] { margin: 0.5rem !important; }
+  }
+
+  /* ── Galaxy Tab S9 portrait specifically (≤760px) ──
+     Slightly narrower than iPad 11" — push a bit further */
+  @media (max-width: 760px) {
+    /* Service buttons in check-in: 3-col → 2-col */
+    #guests-container .grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    /* Sync indicators: hide both text labels */
+    #sheets-sync-text { display: none !important; }
+  }
+  @media (max-width: 768px) {
+    #panel-turns .flex-shrink-0[style*="width:380px"] { width: 260px !important; }
+    .w-\[165px\] { width: 130px !important; }
+    .dash-tab { font-size: 11px !important; padding: 6px 10px !important; }
+    .dash-tab .material-symbols-outlined { font-size: 15px !important; }
+  }
+  /* Turns drag-drop — smooth feel */
+  .turns-draggable { cursor: grab; }
+  .turns-draggable:active { cursor: grabbing; }
+  .turns-filled-slot { cursor: grab; transition: opacity 0.15s; }
+  .turns-filled-slot:active { cursor: grabbing; }
+  .turns-drag-ghost { 
+    border-radius: 12px; 
+    box-shadow: 0 12px 40px rgba(0,0,0,0.25); 
+    transform: rotate(2deg) scale(1.02);
+    transition: none !important;
+  }
+  .turns-drop-highlight { 
+    border-color: #1a5252 !important; 
+    background: rgba(26,82,82,0.1) !important;
+    transform: scale(1.02);
+    transition: transform 0.1s, background 0.1s;
+  }
+  /* Touch-friendly tap targets */
+  @media (pointer: coarse) {
+    .turns-empty-slot { min-height: 60px !important; }
+    .q-action-btn { min-width: 48px !important; min-height: 48px !important; }
+    button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+    input, select, textarea { touch-action: manipulation; }
+    /* Remove 300ms tap delay on all interactive elements */
+    a, button, label, select, input[type="checkbox"], input[type="radio"] {
+      touch-action: manipulation;
+    }
+    /* Larger tap targets for service/status buttons */
+    .numpad-key { min-height: 56px !important; }
+  }
+
+  /* Queue action buttons — large touch targets */
+  .q-action-btn { display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:50%; border:none; cursor:pointer; transition:background 0.15s; flex-shrink:0; }
+  .q-action-btn:active { transform:scale(0.92); }
+
+  /* Dashboard panels */
+  .dash-panel { display:none; }
+  .dash-panel.active { display:block; }
+
+  /* Autocomplete dropdown */
+  .autocomplete-list {
+    position: absolute; z-index: 200;
+    background: #f5f7f8; border: 1px solid #c2cacd;
+    border-radius: 0.75rem; box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    max-height: 220px; overflow-y: auto;
+    width: 100%; top: calc(100% + 4px); left: 0;
+  }
+  .autocomplete-item {
+    padding: 10px 14px; cursor: pointer;
+    font-family: 'Inter', sans-serif; font-size: 14px;
+    color: #000000; transition: background 0.1s;
+    border-bottom: 1px solid #dde2e5;
+  }
+  .autocomplete-item:last-child { border-bottom: none; }
+  .autocomplete-item:hover, .autocomplete-item.ac-highlighted { background: #dde2e5; }
+  .autocomplete-item .ac-name { font-weight: 600; font-family: 'Manrope', sans-serif; color:#000; }
+  .autocomplete-item .ac-phone { font-size: 11px; color: #4a5258; margin-top: 1px; }
+  .ac-input-wrap { position: relative; }
+
+  /* Square sync indicator */
+  .sync-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .sync-dot.ok { background:#2a6868; }
+  .sync-dot.pending { background:#f8cf83; }
+  .sync-dot.error { background:#a83836; }
+
+  /* iPad optimized touch targets */
+  button { min-height: 44px; }
+
+  /* Subtle noise texture on surface */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: -1;
+    background: #f8f9fa;
+    pointer-events: none;
+  }
+
+  /* Input focus */
+  input:focus { outline: none; border-color: #2a6868; }
+  
+  /* Guest card animation */
+  .guest-card { animation: fadeUp 0.3s ease forwards; }
+
+  /* Queue row hover */
+  .queue-row:hover { background: #f1f4f5; }
+  .queue-row { transition: background 0.15s; }
