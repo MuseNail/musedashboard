@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(cd \"C:\\\\Users\\\\cpach\\\\Documents\\\\GitHub\\\\musedashboard\"; powershell.exe -NonInteractive -File \".\\\\split.ps1\")",
+      "Bash(git checkout *)",
+      "PowerShell(cd \"C:\\\\Users\\\\cpach\\\\Documents\\\\GitHub\\\\musedashboard\"; \\(Get-Content index.html\\).Count)",
+      "PowerShell(Get-Command python3, py, node, npx 2>$null)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp"
+    ]
+  }
+}

@@ -1,4 +1,9 @@
-﻿// ── Logo Upload & Crop ─────────────────────────────
+﻿// Logo data URL — in-memory; loaded from Sheets on startup via loadConfigFromSheets()
+let _logoData = null;
+// Photo cache — keyed as 'staff_ID' or 'fduser_ID'; loaded from Sheets via loadPhotosFromSheets()
+const _photoCache = {};
+
+// ── Logo Upload & Crop ─────────────────────────────
 function handleLogoUpload(input) {
   const file = input.files[0];
   if (!file) return;
@@ -47,14 +52,16 @@ function handleLogoUpload(input) {
 }
 
 function removeLogo() {
-  localStorage.removeItem('muse_logo');
+  _logoData = null;
+  _configWriteTime = Date.now();
+  setTimeout(() => pushConfigToSheets(), 500);
   setLogo();
   showToast('Logo removed — using default');
 }
 
 // Re-open crop modal with the already-saved logo for re-cropping
 function recropLogo() {
-  const existing = localStorage.getItem('muse_logo');
+  const existing = _logoData;
   if (!existing) { showToast('No logo uploaded yet.'); return; }
 
   _photoCropTarget   = { type: 'logo', id: 'business' };
@@ -103,17 +110,16 @@ function getPhotoKey(type, id) {
 }
 
 function savePhotoToStorage(type, id, dataUrl) {
-  localStorage.setItem(getPhotoKey(type, id), dataUrl);
-  // Also back up to Sheets (async, silent)
+  _photoCache[type + '_' + id] = dataUrl;
   pushPhotosToSheets();
 }
 
 function loadPhotoFromStorage(type, id) {
-  return localStorage.getItem(getPhotoKey(type, id)) || null;
+  return _photoCache[type + '_' + id] || null;
 }
 
 function removePhotoFromStorage(type, id) {
-  localStorage.removeItem(getPhotoKey(type, id));
+  delete _photoCache[type + '_' + id];
   pushPhotosToSheets();
 }
 
@@ -137,9 +143,8 @@ function restorePhotos(photos) {
   Object.entries(photos).forEach(([key, dataUrl]) => {
     const [, type, ...idParts] = key.split('_');
     const id = idParts.join('_');
-    if (type && id && dataUrl) localStorage.setItem(getPhotoKey(type, id), dataUrl);
+    if (type && id && dataUrl) _photoCache[type + '_' + id] = dataUrl;
   });
-  // Apply photos to STAFF and FRONT_DESK_USERS objects
   applyPhotosToObjects();
 }
 
@@ -351,10 +356,9 @@ function savePhotoCrop() {
   let dataUrl;
   if (type === 'logo') {
     dataUrl = canvas.toDataURL('image/png');
-    localStorage.setItem('muse_logo', dataUrl);
+    _logoData = dataUrl;
     closePhotoCrop();
     setLogo();
-    // Push to Sheets so other devices get the logo
     _configWriteTime = Date.now();
     setTimeout(() => pushConfigToSheets(), 500);
     showToast('Logo saved ✓');

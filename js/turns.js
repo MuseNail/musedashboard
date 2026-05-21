@@ -35,7 +35,7 @@ function setAssignmentStatus(entry, serviceId, newStatus) {
 // ── Turns Tab ─────────────────────────────────────
 let turnsAssignTarget = null;
 let turnsViewingHistory = null;
-let turnsTechOrder = JSON.parse(localStorage.getItem('muse_turns_order') || '[]');
+let turnsTechOrder = [];
 let turnsHistory   = JSON.parse(localStorage.getItem('muse_turns_history') || '{}');
 
 function saveTurnsHistory() { localStorage.setItem('muse_turns_history', JSON.stringify(turnsHistory)); }
@@ -60,14 +60,12 @@ function archiveTurnsForToday() {
   keys.forEach(k => pruned[k] = turnsHistory[k]);
   turnsHistory = pruned;
   saveTurnsHistory();
-  // Reset tech order — empty array, save immediately
   turnsTechOrder = [];
-  localStorage.setItem('muse_turns_order', JSON.stringify([]));
 }
 
-// Staff break status for turns tab (separate from schedule)
-let turnsBreakStaff = JSON.parse(localStorage.getItem('muse_turns_break') || '[]');
-function saveTurnsBreak() { localStorage.setItem('muse_turns_break', JSON.stringify(turnsBreakStaff)); }
+// Staff break status for turns tab (separate from schedule) — in-memory only
+let turnsBreakStaff = [];
+function saveTurnsBreak() { /* in-memory — no local write needed */ }
 
 function cycleTechStatus(event, staffId) {
   event.stopPropagation();
@@ -193,8 +191,6 @@ function renderTurnsTechGrid() {
   const grid = document.getElementById('turns-tech-grid');
   if (!grid) return;
   if (turnsViewingHistory) { renderTurnsHistoryView(); return; }
-
-  turnsTechOrder = JSON.parse(localStorage.getItem('muse_turns_order') || '[]');
 
   const todayLabel = document.getElementById('turns-date-label');
   if (todayLabel) todayLabel.textContent = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
@@ -760,8 +756,8 @@ function setupTurnsDragDrop() { /* no-op — drag handled by event delegation ab
 
 
 // ── Turns: "Off" status ───────────────────────────
-let turnsOffStaff = JSON.parse(localStorage.getItem('muse_turns_off') || '[]');
-function saveTurnsOff() { localStorage.setItem('muse_turns_off', JSON.stringify(turnsOffStaff)); }
+let turnsOffStaff = [];
+function saveTurnsOff() { /* in-memory — no local write needed */ }
 
 function toggleTurnsOffStaff(staffId) {
   if (turnsOffStaff.includes(staffId)) {
@@ -779,9 +775,6 @@ function toggleTurnsOffStaff(staffId) {
 
 // ── Turns: Save & Sync button handler ─────────────
 function saveTurnsAndSync() {
-  localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
-  localStorage.setItem('muse_turns_break', JSON.stringify(turnsBreakStaff));
-  localStorage.setItem('muse_turns_off',   JSON.stringify(turnsOffStaff));
   renderTurns();
   _configWriteTime = Date.now();
   pushConfigToSheets();

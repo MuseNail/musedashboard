@@ -1,4 +1,7 @@
-﻿// ── Queue Persistence ──────────────────────────────
+﻿// ── Queue State ────────────────────────────────────
+let queue = [];
+
+// ── Queue Persistence ──────────────────────────────
 const QUEUE_STORAGE_KEY = 'muse_live_queue';
 const QUEUE_DATE_KEY    = 'muse_live_queue_date';
 
@@ -112,8 +115,7 @@ function clearQueueHistory() {
 
 function setLogo() {
   // Use custom logo if saved, otherwise fall back to hardcoded LOGO_PATH
-  const customLogo = localStorage.getItem('muse_logo');
-  const logoSrc = customLogo || LOGO_PATH;
+  const logoSrc = _logoData || LOGO_PATH;
   ['logo-welcome','logo-checkin','logo-desk'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -1710,8 +1712,6 @@ async function squarePullServices() {
         }
       });
       if (addedSvc > 0) {
-        // Don't push yet — wait until items and fees are also done to batch into one push
-        localStorage.setItem('muse_services', JSON.stringify(SERVICES));
         showToast(`${addedSvc} service${addedSvc>1?'s':''} imported from Square`);
       }
     }
@@ -1736,13 +1736,11 @@ async function squarePullServices() {
         }
       });
       if (addedItems > 0) {
-        localStorage.setItem('muse_items', JSON.stringify(ITEMS));
         showToast(`${addedItems} item${addedItems>1?'s':''} imported from Square`);
       }
     }
 
     // Single consolidated push — saves services, items, and fees in one Sheets write
-    localStorage.setItem('muse_fees', JSON.stringify(FEES));
     _configWriteTime = Date.now();
     setTimeout(() => pushConfigToSheets(), 500);
   } catch(e) {

@@ -78,27 +78,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   //    On a fresh/cleared device this is the only source of staff and service data.
   setSheetsIndicator('syncing');
   const { changed: configChanged } = await loadConfigFromSheets();
-  if (configChanged) {
-    const staffRaw    = localStorage.getItem('muse_staff');
-    const servicesRaw = localStorage.getItem('muse_services');
-    const fdUsersRaw  = localStorage.getItem('muse_fd_users');
-    if (staffRaw)    { const s = JSON.parse(staffRaw);    if (s.length) STAFF             = s; }
-    if (servicesRaw) { const s = JSON.parse(servicesRaw); if (s.length) SERVICES          = s; }
-    if (fdUsersRaw)  { const s = JSON.parse(fdUsersRaw);  if (s.length) FRONT_DESK_USERS  = s; }
-    const turnsRaw = localStorage.getItem('muse_turns_order');
-    if (turnsRaw) { try { const t = JSON.parse(turnsRaw); if (Array.isArray(t)) turnsTechOrder = t; } catch(e){} }
-    const itemsRaw = localStorage.getItem('muse_items');
-    if (itemsRaw) { try { const t = JSON.parse(itemsRaw); if (Array.isArray(t) && t.length) ITEMS = t; } catch(e){} }
-    const feesRaw = localStorage.getItem('muse_fees');
-    if (feesRaw) { try { const t = JSON.parse(feesRaw); if (Array.isArray(t) && t.length) FEES = t; } catch(e){} }
-    const hiddenDashRaw = localStorage.getItem('muse_hidden_dash_services');
-    if (hiddenDashRaw) { try { hiddenDashServices = JSON.parse(hiddenDashRaw); } catch(e){} }
-    const hCheckinRaw = localStorage.getItem('muse_hidden_services');
-    if (hCheckinRaw) { try { hiddenCheckinServices = JSON.parse(hCheckinRaw); } catch(e){} }
-    const inactiveRaw = localStorage.getItem('muse_inactive_staff');
-    if (inactiveRaw) { try { inactiveStaff = JSON.parse(inactiveRaw); } catch(e){} }
-    setLogo();
-  }
+  if (configChanged) setLogo();
 
   // 2. Load queue from localStorage (instant offline fallback) then render
   queue = loadQueueFromStorage();
@@ -466,6 +446,12 @@ async function checkAppVersion() {
     const data = await res.json();
     if (data.version && data.version !== APP_VERSION) {
       console.log(`[Version] Running ${APP_VERSION}, live is ${data.version} — reloading`);
+      const PERMANENT_KEYS = new Set([
+        'muse_device_id','muse_live_queue','muse_live_queue_date','muse_queue_archive',
+        'muse_turns_history','muse_records','muse_deletion_log','muse_customers',
+        'muse_sq_config','muse_last_backup','muse_cal_hours','gcal_token','gcal_hidden','gcal_order',
+      ]);
+      Object.keys(localStorage).forEach(k => { if (!PERMANENT_KEYS.has(k)) localStorage.removeItem(k); });
       window.location.replace(window.location.pathname);
     }
   } catch(e) {
@@ -474,22 +460,27 @@ async function checkAppVersion() {
 }
 
 
-// Loaded from localStorage; defaults match original values
+// Turn config and bonus services — in-memory; loaded from Sheets on startup
+let _turnConfig    = {};
+let _bonusServices = [];
+
 function getTurnConfig() {
   const defaults = { fullMin: 28, halfMin: 12 };
-  try {
-    const stored = JSON.parse(localStorage.getItem('muse_turn_config') || 'null');
-    return stored ? { ...defaults, ...stored } : defaults;
-  } catch { return defaults; }
+  return Object.keys(_turnConfig).length ? { ...defaults, ..._turnConfig } : defaults;
 }
-function saveTurnConfig(cfg) { localStorage.setItem('muse_turn_config', JSON.stringify(cfg)); }
+function saveTurnConfig(cfg) {
+  _turnConfig = cfg;
+  _configWriteTime = Date.now();
+  setTimeout(() => pushConfigToSheets(), 500);
+}
 
 // Check if a serviceId is flagged as always-bonus
-function isAlwaysBonusService(serviceId) {
-  const bonusIds = JSON.parse(localStorage.getItem('muse_bonus_services') || '[]');
-  return bonusIds.includes(serviceId);
+function isAlwaysBonusService(serviceId) { return _bonusServices.includes(serviceId); }
+function saveBonusServices(ids) {
+  _bonusServices = ids;
+  _configWriteTime = Date.now();
+  setTimeout(() => pushConfigToSheets(), 500);
 }
-function saveBonusServices(ids) { localStorage.setItem('muse_bonus_services', JSON.stringify(ids)); }
 
 // Classify a cost+serviceId into turn type using current config
 function classifyTurn(cost, serviceId) {
@@ -682,13 +673,11 @@ function onTechReorderEnd(e) {
 
 function checkAllTechs() {
   turnsTechOrder = STAFF.map(s => s.id);
-  localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   showTurnsTechSelector();
 }
 
 function uncheckAllTechs() {
   turnsTechOrder = [];
-  localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   showTurnsTechSelector();
 }
 
@@ -698,13 +687,10 @@ function toggleTurnsTechOrder(staffId) {
   } else {
     turnsTechOrder.push(staffId);
   }
-  localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
   showTurnsTechSelector();
 }
 
 function saveTurnsTechOrder() {
-  localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
-  turnsTechOrder = JSON.parse(localStorage.getItem('muse_turns_order') || '[]');
   closeTurnsTechModal();
   renderTurns();
   _configWriteTime = Date.now();
@@ -712,9 +698,7 @@ function saveTurnsTechOrder() {
   showToast(turnsTechOrder.length + ' technician' + (turnsTechOrder.length !== 1 ? 's' : '') + ' in today\'s rotation');
 }
 
-function saveTurnsTechOrderToStorage() {
-  localStorage.setItem('muse_turns_order', JSON.stringify(turnsTechOrder));
-}
+function saveTurnsTechOrderToStorage() { /* in-memory — order is pushed via pushConfigToSheets() */ }
 
 function closeTurnsTechModal() {
   document.getElementById('turns-tech-modal').classList.add('hidden');

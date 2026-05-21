@@ -1,13 +1,10 @@
 ﻿// ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = ""; // No default logo — upload one in Settings → Business Logo
-const APP_VERSION  = 'v1.54';
+const APP_VERSION  = 'v1.55';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 
-
-// ── State ────────────────────────────────────────
-let queue = [];
 
 // ── Global State ─────────────────────────────────
 let squareCustomers = [];
@@ -33,31 +30,27 @@ let currentFilter = 'all';
 let pinBuffer = "";
 let squareConfig = JSON.parse(localStorage.getItem('muse_sq_config') || 'null');
 
-// Services — editable, persisted to localStorage and synced from Sheets on load
-let SERVICES = dedupByLabel(JSON.parse(localStorage.getItem('muse_services') || 'null') || []);
+// Services — in-memory; loaded from Sheets on startup via loadConfigFromSheets()
+let SERVICES = [];
 
-// Staff — editable, persisted to localStorage and synced from Sheets on load
-let STAFF = JSON.parse(localStorage.getItem('muse_staff') || 'null') || [];
+// Staff — in-memory; loaded from Sheets on startup via loadConfigFromSheets()
+let STAFF = [];
 
-// Front desk users — each has a name, role, and PIN
-let FRONT_DESK_USERS = JSON.parse(localStorage.getItem('muse_fd_users') || 'null') || [
+// Front desk users — default admin kept as fallback when Sheets has no data yet
+let FRONT_DESK_USERS = [
   { id: "admin", name: "Manager", pin: "1234", role: "admin" },
 ];
-let activeUser = null; // currently logged-in front desk user
 
 function saveFrontDeskUsers() {
-  localStorage.setItem('muse_fd_users', JSON.stringify(FRONT_DESK_USERS));
   _configWriteTime = Date.now(); // lock immediately so poll doesn't overwrite
   setTimeout(() => pushConfigToSheets(), 1000);
 }
 function saveFdUsersToStorage() { saveFrontDeskUsers(); }
 function saveServicesToStorage() {
-  localStorage.setItem('muse_services', JSON.stringify(SERVICES));
   _configWriteTime = Date.now(); // lock immediately so poll doesn't overwrite
   setTimeout(() => pushConfigToSheets(), 1000);
 }
 function saveStaffToStorage() {
-  localStorage.setItem('muse_staff', JSON.stringify(STAFF));
   _configWriteTime = Date.now();
   setTimeout(() => pushConfigToSheets(), 1000);
 }

@@ -90,7 +90,7 @@ function deleteService(id) {
 // ── Dashboard service visibility ──────────────────
 function isServiceVisibleOnDash(id) { return !hiddenDashServices.includes(id); }
 function saveHiddenDashServices() {
-  localStorage.setItem('muse_hidden_dash_services', JSON.stringify(hiddenDashServices));
+  // in-memory — no local write; callers invoke pushConfigToSheets() directly
 }
 function toggleDashService(id) {
   if (hiddenDashServices.includes(id)) hiddenDashServices = hiddenDashServices.filter(x => x !== id);

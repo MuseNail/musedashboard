@@ -1,9 +1,7 @@
 ﻿// ── Gift Cards ────────────────────────────────────
-let giftCards = JSON.parse(localStorage.getItem('muse_gift_cards') || 'null') || [];
+let giftCards = [];
 
-function saveGiftCardsToStorage() {
-  localStorage.setItem('muse_gift_cards', JSON.stringify(giftCards));
-}
+function saveGiftCardsToStorage() { /* in-memory — gift cards synced to Sheets via exportGiftCardsSheets() */ }
 
 function showDashPanelGiftCards() {
   renderGiftCards();
@@ -81,7 +79,7 @@ function saveGiftCard() {
 function deleteGiftCard(id) {
   showWarnModal('Delete gift card?', 'This will permanently remove this gift card record.', () => {
     giftCards = giftCards.filter(g => g.id !== id);
-    saveGiftCardsToStorage();
+    exportGiftCardsSheets();
     renderGiftCards();
     showToast('Gift card deleted');
   });
@@ -337,30 +335,41 @@ function confirmDeleteTransaction() {
 }
 
 function exportAllData() {
-  const allKeys = [
+  const permanentKeys = [
     'muse_records', 'muse_queue_archive', 'muse_turns_history',
-    'muse_live_queue', 'muse_live_queue_date',
-    'muse_staff', 'muse_services', 'muse_fd_users',
-    'muse_schedule', 'muse_sq_config',
-    'muse_hidden_services', 'muse_inactive_staff',
-    'muse_turns_order', 'muse_turns_break', 'muse_turns_off', 'muse_deletion_log',
+    'muse_live_queue', 'muse_live_queue_date', 'muse_deletion_log',
   ];
   const backup = {
     exportedAt: new Date().toISOString(),
     appVersion: APP_NAME + '-' + APP_VERSION,
     data: {},
-    photos: getAllPhotos(), // stored separately to avoid localStorage size limits
+    photos: getAllPhotos(),
   };
-  allKeys.forEach(key => {
+
+  // Permanent keys from localStorage
+  permanentKeys.forEach(key => {
     const val = localStorage.getItem(key);
     if (!val) return;
-    if (key === 'muse_logo') {
-      backup.data[key] = val; // raw base64 string, not JSON
-    } else {
-      try { backup.data[key] = JSON.parse(val); } catch(e) { backup.data[key] = val; }
-    }
+    try { backup.data[key] = JSON.parse(val); } catch(e) { backup.data[key] = val; }
   });
-  // Also include in-memory queue
+
+  // In-memory config vars
+  if (STAFF.length)                           backup.data['muse_staff']               = STAFF;
+  if (SERVICES.length)                        backup.data['muse_services']            = SERVICES;
+  if (FRONT_DESK_USERS.length)                backup.data['muse_fd_users']            = FRONT_DESK_USERS;
+  if (ITEMS.length)                           backup.data['muse_items']               = ITEMS;
+  if (FEES.length)                            backup.data['muse_fees']                = FEES;
+  if (Object.keys(scheduleData).length)       backup.data['muse_schedule']            = scheduleData;
+  if (turnsTechOrder.length)                  backup.data['muse_turns_order']         = turnsTechOrder;
+  if (hiddenCheckinServices.length)           backup.data['muse_hidden_services']     = hiddenCheckinServices;
+  if (inactiveStaff.length)                   backup.data['muse_inactive_staff']      = inactiveStaff;
+  if (_logoData)                              backup.data['muse_logo']                = _logoData;
+
+  // Square config still lives in localStorage (permanent key)
+  const sqCfg = localStorage.getItem('muse_sq_config');
+  if (sqCfg) { try { backup.data['muse_sq_config'] = JSON.parse(sqCfg); } catch(e) { backup.data['muse_sq_config'] = sqCfg; } }
+
+  // In-memory queue
   backup.data['muse_live_queue'] = queue.map(e => ({
     ...e,
     checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
@@ -376,7 +385,6 @@ function exportAllData() {
   a.click();
   URL.revokeObjectURL(url);
 
-  // Record last backup time
   const now = new Date().toLocaleString('en-US', {month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit'});
   localStorage.setItem('muse_last_backup', now);
   const lbl = document.getElementById('last-backup-label');
@@ -400,31 +408,41 @@ function importAllData(input) {
       );
       if (!confirmImport) return;
 
-      // Write all keys to localStorage
-      Object.entries(backup.data).forEach(([key, val]) => {
-        if (key === 'muse_logo') {
-          if (typeof val === 'string') localStorage.setItem(key, val);
-        } else {
-          localStorage.setItem(key, typeof val === 'string' ? val : JSON.stringify(val));
-        }
+      const d = backup.data;
+
+      // Restore permanent keys to localStorage
+      ['muse_records','muse_queue_archive','muse_turns_history','muse_live_queue','muse_live_queue_date','muse_deletion_log'].forEach(key => {
+        if (d[key] !== undefined) localStorage.setItem(key, typeof d[key] === 'string' ? d[key] : JSON.stringify(d[key]));
       });
-      // Restore photos from backup
+      if (d.muse_sq_config !== undefined) localStorage.setItem('muse_sq_config', typeof d.muse_sq_config === 'string' ? d.muse_sq_config : JSON.stringify(d.muse_sq_config));
+
+      // Restore in-memory config vars directly from backup
+      if (d.muse_staff?.length)               STAFF                = d.muse_staff;
+      if (d.muse_services?.length)            SERVICES             = dedupByLabel(d.muse_services);
+      if (d.muse_fd_users?.length)            FRONT_DESK_USERS     = d.muse_fd_users;
+      if (d.muse_items?.length)               ITEMS                = dedupByLabel(d.muse_items);
+      if (d.muse_fees?.length)                FEES                 = dedupByLabel(d.muse_fees);
+      if (d.muse_schedule)                    scheduleData         = d.muse_schedule;
+      if (Array.isArray(d.muse_turns_order))  turnsTechOrder       = d.muse_turns_order;
+      if (d.muse_hidden_services)             hiddenCheckinServices = d.muse_hidden_services;
+      if (d.muse_inactive_staff)              inactiveStaff        = d.muse_inactive_staff;
+      if (typeof d.muse_logo === 'string')    _logoData            = d.muse_logo;
+
+      // Restore photos
       if (backup.photos) restorePhotos(backup.photos);
 
-      // Refresh critical in-memory variables before reload (guards against slow reload)
-      try { const s = JSON.parse(localStorage.getItem('muse_staff')    || 'null'); if (s?.length) STAFF            = s; } catch(e){}
-      try { const s = JSON.parse(localStorage.getItem('muse_services') || 'null'); if (s?.length) SERVICES         = s; } catch(e){}
-      try { const s = JSON.parse(localStorage.getItem('muse_fd_users') || 'null'); if (s?.length) FRONT_DESK_USERS = s; } catch(e){}
-      try { const s = JSON.parse(localStorage.getItem('muse_items')    || 'null'); if (s?.length) ITEMS            = s; } catch(e){}
-      try { const s = JSON.parse(localStorage.getItem('muse_fees')     || 'null'); if (s?.length) FEES             = s; } catch(e){}
-      try { const t = JSON.parse(localStorage.getItem('muse_turns_order') || 'null'); if (Array.isArray(t)) turnsTechOrder = t; } catch(e){}
+      // Reload transactional data
       allRecords = JSON.parse(localStorage.getItem('muse_records') || '[]');
-
-      // Reload queue from restored data
       queue = loadQueueFromStorage();
       renderQueue();
       updateStats();
       renderTurns();
+      setLogo();
+
+      // Push restored config to Sheets
+      _configWriteTime = Date.now();
+      setTimeout(() => pushConfigToSheets(), 1000);
+
       showToast('Backup restored — reloading…');
       setTimeout(() => location.reload(), 1500);
     } catch (err) {
@@ -433,7 +451,7 @@ function importAllData(input) {
     }
   };
   reader.readAsText(file);
-  input.value = ''; // reset input
+  input.value = '';
 }
 
 // Show last backup date in settings when panel opens
@@ -476,9 +494,8 @@ function saveTurnThresholds() {
 function renderBonusServicesList() {
   const el = document.getElementById('bonus-services-list');
   if (!el) return;
-  const bonusIds = JSON.parse(localStorage.getItem('muse_bonus_services') || '[]');
   el.innerHTML = SERVICES.map(s => {
-    const isBonus = bonusIds.includes(s.id);
+    const isBonus = _bonusServices.includes(s.id);
     return `<label class="flex items-center gap-3 p-3 rounded-xl cursor-pointer hover:bg-surface-container transition-colors ${isBonus ? 'bg-primary/10 border border-primary/30' : 'border border-transparent'}">
       <input type="checkbox" class="w-4 h-4 accent-primary" ${isBonus ? 'checked' : ''} onchange="toggleBonusService('${s.id}', this.checked)">
       <span class="font-body font-semibold text-on-surface text-sm">${s.label}</span>
@@ -489,7 +506,7 @@ function renderBonusServicesList() {
 }
 
 function toggleBonusService(serviceId, checked) {
-  const ids = JSON.parse(localStorage.getItem('muse_bonus_services') || '[]');
+  const ids = [..._bonusServices];
   if (checked && !ids.includes(serviceId)) ids.push(serviceId);
   else if (!checked) { const i = ids.indexOf(serviceId); if (i > -1) ids.splice(i,1); }
   saveBonusServices(ids);

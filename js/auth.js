@@ -1,4 +1,7 @@
-﻿// ── Logged-in User Display ────────────────────────
+﻿// ── Auth State ───────────────────────────────────
+let activeUser = null;
+
+// ── Logged-in User Display ────────────────────────
 function updateLoggedInDisplay() {
   const nameEl   = document.getElementById('logged-in-name');
   const avatarEl = document.getElementById('logged-in-avatar');

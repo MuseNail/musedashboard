@@ -684,7 +684,7 @@ function exportReportPDF() {
     </style>
   </head><body>
     <div class="report-header">
-      ${(localStorage.getItem('muse_logo') || LOGO_PATH) ? `<img src="${localStorage.getItem('muse_logo') || LOGO_PATH}" class="report-logo" onerror="this.style.display='none'">` : ''}
+      ${(_logoData || LOGO_PATH) ? `<img src="${_logoData || LOGO_PATH}" class="report-logo" onerror="this.style.display='none'">` : ''}
       <div>
         <h1>Muse Nails &amp; Spa — Daily Report</h1>
         <p style="color:#666;margin:0">${period}</p>

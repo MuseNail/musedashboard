@@ -1,38 +1,30 @@
 ﻿// ── Settings Panel ────────────────────────────────
-// Persist which services are shown on customer-facing check-in
-let hiddenCheckinServices = JSON.parse(localStorage.getItem('muse_hidden_services') || '[]');
-let hiddenDashServices    = JSON.parse(localStorage.getItem('muse_hidden_dash_services') || '[]');
+// Services visible on customer-facing check-in — in-memory; loaded from Sheets
+let hiddenCheckinServices = [];
+let hiddenDashServices    = [];
 let showDoneInQueue = true; // toggle for showing/hiding done cards in queue tab
 
-// Retail items — synced from Square Item Library, also editable locally
-let ITEMS = dedupByLabel(JSON.parse(localStorage.getItem('muse_items') || 'null') || [
-  { id: 'item-cuticle-oil',       label: 'Cuticle Oil',       abbr: 'CO',  price: 0 },
-  { id: 'item-small-cuticle-oil', label: 'Small Cuticle Oil', abbr: 'SCO', price: 0 },
-  { id: 'item-gift-card',         label: 'Gift Card',         abbr: 'GC',  price: 0 },
-]);
+// Retail items — in-memory; loaded from Sheets on startup
+let ITEMS = [];
 
-// Fees — flat dollar amount or percent of service subtotal
-let FEES = dedupByLabel(JSON.parse(localStorage.getItem('muse_fees') || 'null') || [
-  { id: 'fee-service', label: 'Service Fee', type: 'flat', value: 0 },
-]);
+// Fees — in-memory; loaded from Sheets on startup
+let FEES = [];
 
 function saveItems() {
-  localStorage.setItem('muse_items', JSON.stringify(ITEMS));
   _configWriteTime = Date.now();
   setTimeout(() => pushConfigToSheets(), 500);
 }
 function saveFees() {
-  localStorage.setItem('muse_fees', JSON.stringify(FEES));
   _configWriteTime = Date.now();
   setTimeout(() => pushConfigToSheets(), 500);
 }
 
 
 // ── Staff & Service Visibility ─────────────────────────────────────────────────
-let inactiveStaff = JSON.parse(localStorage.getItem('muse_inactive_staff') || '[]');
+let inactiveStaff = [];
 
 
-function saveInactiveStaff()  { localStorage.setItem('muse_inactive_staff',  JSON.stringify(inactiveStaff));  }
+function saveInactiveStaff() { /* in-memory — callers push via pushConfigToSheets() */ }
 
 function isStaffActive(id) { return !inactiveStaff.includes(id); }
 function getActiveStaff()  { return STAFF.filter(s => isStaffActive(s.id)); }
@@ -50,9 +42,7 @@ function isServiceVisibleOnCheckin(id) {
   return !hiddenCheckinServices.includes(id);
 }
 
-function saveHiddenServices() {
-  localStorage.setItem('muse_hidden_services', JSON.stringify(hiddenCheckinServices));
-}
+function saveHiddenServices() { /* in-memory — callers push via pushConfigToSheets() */ }
 
 function toggleSettingsSection(sectionId) {
   const section = document.getElementById(sectionId);

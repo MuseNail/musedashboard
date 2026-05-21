@@ -122,13 +122,12 @@ const SCHEDULE_COLORS = {
   vacation: { bg: '#adb3b5', text: '#000000', label: 'Vacation' },
 };
 
-// scheduleData: { 'YYYY-MM-DD': { staffId: status } }
-let scheduleData = JSON.parse(localStorage.getItem('muse_schedule') || '{}');
+// scheduleData: { 'YYYY-MM-DD': { staffId: status } } — in-memory; loaded from Sheets
+let scheduleData = {};
 let scheduleWeekStart = getWeekStart(new Date());
 let schedulePickerTarget = null; // { date, staffId }
 
 function saveScheduleData() {
-  localStorage.setItem('muse_schedule', JSON.stringify(scheduleData));
   _configWriteTime = Date.now();
   setTimeout(() => pushConfigToSheets(), 1000);
 }
