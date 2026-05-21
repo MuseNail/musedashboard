@@ -562,7 +562,11 @@ tailwind.config = {
 
         <!-- Service breakdown -->
         <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Services Breakdown</h3>
-        <div id="rpt-services-breakdown" class="space-y-2"></div>
+        <div id="rpt-services-breakdown" class="space-y-2 mb-5"></div>
+
+        <!-- Items breakdown -->
+        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Retail Items Breakdown</h3>
+        <div id="rpt-items-breakdown" class="space-y-2 mb-5"></div>
 
         <!-- Drill-down detail panel (hidden by default) -->
         <div id="rpt-drill-panel" class="hidden mt-5">
@@ -2121,7 +2125,7 @@ tailwind.config = {
 // ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = ""; // No default logo — upload one in Settings → Business Logo
-const APP_VERSION  = 'v1.48';
+const APP_VERSION  = 'v1.50';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY = "https://musedashboard.musenailandspa.workers.dev/square";
 
@@ -2258,7 +2262,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       'muse_records', 'muse_live_queue', 'muse_live_queue_date',
       'muse_queue_archive', 'muse_turns_history',
       'muse_turns_break', 'muse_turns_off', 'muse_turns_order',
-      'muse_deletion_log', 'muse_logo',  // logo cleared so it re-syncs from Sheets
+      'muse_deletion_log', 'muse_logo', 'muse_records_updated_at',
     ];
 
     function attemptClear() {
@@ -2335,16 +2339,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Also load photos, records, and gift cards in parallel
   const [, , , result] = await Promise.all([
     loadPhotosFromSheets().then(() => applyPhotosToObjects()),
-    // Records: try blob (App Config row 4) first — it's the authoritative cross-device source.
-    // Fall back to Transaction Log if blob is empty (e.g. first deploy before any completions).
+    // Records: try blob (App Config row 4) first — authoritative cross-device source.
+    // On startup we always attempt to load if we have no local timestamp (fresh device),
+    // or if the remote is newer. Falls back to Transaction Log if blob is empty.
     (async () => {
-      let ok = await pullRecordsIfNewer(null, true); // force=true to load regardless of timestamp
+      const forceOnFresh = !_lastRecordsUpdate; // always load on first-ever startup
+      let ok = await pullRecordsIfNewer(null, forceOnFresh);
       if (!ok) ok = await loadRecordsFromSheets();
       if (ok) {
         const activePanel = document.querySelector('.dash-panel.active');
         if (activePanel) {
           const id = activePanel.id;
-          if (id === 'panel-reports')       renderReports();
+          if (id === 'panel-reports')       runReport();
           if (id === 'panel-transactions')  renderTransactions();
         }
       }
@@ -2525,14 +2531,17 @@ function scheduleMidnightReset() {
       const snapshot = {
         id: String(e.id), name: e.name, phone: e.phone||'',
         services: e.services, assignments: e.assignments||[],
+        items: e.items||[], fees: e.fees||[],
         totalCost: e.totalCost||0,
         checkinTime: e.checkinTime instanceof Date ? e.checkinTime.toISOString() : e.checkinTime,
+        completedAt: e.completedAt || null,
         status: e.status, isAppointment: e.isAppointment||false,
       };
       if (existing >= 0) allRecords[existing] = snapshot;
       else allRecords.push(snapshot);
     });
     localStorage.setItem('muse_records', JSON.stringify(allRecords));
+    scheduleRecordsPush(); // push end-of-day records so other devices see the full history
 
     // Clear the live queue for the new day
     turnsBreakStaff = [];
@@ -3994,7 +4003,7 @@ function runReport() {
 
   // Totals — broken down by services, items, fees
   const svcTotal   = filtered.reduce((s, r) => s + (r.assignments||[]).reduce((a, x) => a + (x.cost||0), 0), 0);
-  const itemsTotal = filtered.reduce((s, r) => s + (r.items||[]).reduce((a, x) => a + (x.price||0)*(x.qty||1), 0), 0);
+  const itemsTotal = filtered.reduce((s, r) => s + (r.items||[]).reduce((a, x) => a + (x.price||0)*(x.qty||0), 0), 0);
   const feesTotal  = filtered.reduce((s, r) => s + (r.fees||[]).reduce((a, x) => a + (x.amount||0), 0), 0);
   const totalIncome = filtered.reduce((s, r) => s + (r.totalCost || 0), 0);
   const guestCount  = filtered.length;
@@ -4153,6 +4162,41 @@ function runReport() {
 
   // Store current filtered data for export
   window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap };
+
+  // Per-items breakdown
+  const itemMap = {};
+  filtered.forEach(r => {
+    (r.items || []).forEach(x => {
+      if (!x.itemId || !x.qty || x.qty <= 0) return;
+      if (!itemMap[x.itemId]) itemMap[x.itemId] = { revenue: 0, qty: 0 };
+      itemMap[x.itemId].revenue += (x.price || 0) * (x.qty || 0);
+      itemMap[x.itemId].qty    += x.qty || 0;
+    });
+  });
+  const itemBreakdown = document.getElementById('rpt-items-breakdown');
+  if (itemBreakdown) {
+    const itemEntries = Object.entries(itemMap).sort((a, b) => b[1].revenue - a[1].revenue);
+    if (itemEntries.length === 0) {
+      itemBreakdown.innerHTML = '<p class="text-sm font-body text-on-surface-variant py-2">No retail items sold in this period.</p>';
+    } else {
+      itemBreakdown.innerHTML = itemEntries.map(([itemId, data]) => {
+        const item = ITEMS.find(i => i.id === itemId);
+        return `
+          <div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(92,64,16,0.12)">
+                <span class="text-xs font-headline font-bold" style="color:#5c4010">${item?.abbr || '?'}</span>
+              </div>
+              <div>
+                <div class="font-headline font-semibold text-on-surface text-sm">${item?.label || itemId}</div>
+                <div class="text-xs font-body text-on-surface-variant">${data.qty} unit${data.qty !== 1 ? 's' : ''} sold</div>
+              </div>
+            </div>
+            <div class="font-headline font-bold text-on-surface">$${data.revenue.toFixed(2)}</div>
+          </div>`;
+      }).join('');
+    }
+  }
 }
 
 // ── Report Drill-Down ─────────────────────────────
@@ -5734,7 +5778,12 @@ function getTechStatusColor(staffId) {
 }
 
 function getActiveTechEntries(staffId) {
-  return queue.filter(e => e.status === 'inservice' && (e.assignments||[]).some(a => a.techId === staffId));
+  // A tech is "in service" only when THEIR specific assignment is inservice — not done.
+  // An entry with multiple services may have one tech done and another still working.
+  return queue.filter(e =>
+    e.status === 'inservice' &&
+    (e.assignments||[]).some(a => a.techId === staffId && getAssignmentStatus(e, a) === 'inservice')
+  );
 }
 
 // All assignments for a tech today — one entry per service assignment, ordered by ASSIGNMENT time (not checkin)
@@ -6779,7 +6828,7 @@ let _isSyncing         = false;
 // ── allRecords cross-device sync ──────────────────
 // _lastRecordsUpdate: ISO timestamp of the records blob this device last wrote or received.
 // Used to skip the pull when the Sheets timestamp hasn't advanced.
-let _lastRecordsUpdate = null;
+let _lastRecordsUpdate = localStorage.getItem('muse_records_updated_at') || null;
 let _recordsPushTimer  = null; // debounce handle for pushRecordsToSheets
 
 // Debounce queue writes by 500ms — fast enough for near-instant cross-device sync
@@ -6811,8 +6860,8 @@ async function pushRecordsToSheets() {
     });
     const data = await res.json();
     if (data.success) {
-      // Store the exact timestamp we wrote so pullRecordsIfNewer skips our own push
       _lastRecordsUpdate = data.updatedAt;
+      localStorage.setItem('muse_records_updated_at', _lastRecordsUpdate);
     }
   } catch(e) {
     console.warn('[Records] Push failed:', e);
@@ -6838,6 +6887,7 @@ async function pullRecordsIfNewer(serverUpdatedAt, force) {
     if (!data.success || !data.records || data.records.length === 0) return false;
 
     _lastRecordsUpdate = data.updatedAt;
+    localStorage.setItem('muse_records_updated_at', _lastRecordsUpdate);
 
     // Merge: re-apply any local deletions the remote may not know about yet,
     // and keep any local-only records (e.g. created between push cycles)
@@ -6941,12 +6991,11 @@ async function pollSheets() {
     const sheetsTime = result.updatedAt ? new Date(result.updatedAt).getTime() : 0;
     const localTime  = _lastSheetsUpdate ? new Date(_lastSheetsUpdate).getTime() : 0;
 
-    // Accept if: timestamp is newer, OR queue size differs (catches missed updates)
-    // OR local queue is empty (fresh device / cleared localStorage — always sync)
-    const isNewer   = sheetsTime > localTime;
-    const sizeDiff  = result.queue.length !== queue.length;
+    // Accept update if: timestamp is newer OR local queue is empty (fresh/cleared device)
+    // sizeDiff alone is NOT sufficient — a stale remote with different count would overwrite newer local data
+    const isNewer    = sheetsTime > localTime;
     const localEmpty = queue.length === 0;
-    const needsSync = isNewer || sizeDiff || localEmpty;
+    const needsSync  = isNewer || localEmpty;
 
     // SAFETY: never replace a non-empty queue with an empty one during polling
     // Apply deleted IDs from the queue payload — cross-device delete sync
@@ -8805,20 +8854,25 @@ function saveCurrentGroupTabInputs() {
   entry.items = [];
   document.querySelectorAll('#group-assign-content [data-item-id]').forEach(row => {
     const itemId = row.dataset.itemId;
-    const qty   = parseInt(row.querySelector('.item-qty')?.value) || 1;
+    const qty   = parseInt(row.querySelector('.item-qty')?.value) || 0;
     const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
-    if (price > 0) entry.items.push({ itemId, qty, price });
+    if (price > 0 && qty > 0) entry.items.push({ itemId, qty, price });
   });
-  // Save fees
+  // Save fees — only include fees where staff explicitly entered an amount.
+  // Percent fees auto-calculate a placeholder but should NOT be saved unless
+  // staff deliberately confirms them by typing a value.
   const svcSubtotal = entry.assignments.reduce((s, a) => s + (a.cost||0), 0);
   entry.fees = [];
   document.querySelectorAll('#group-assign-content [data-fee-id]').forEach(row => {
-    const feeId = row.dataset.feeId;
+    const feeId   = row.dataset.feeId;
     const feeType = row.dataset.feeType;
     const feeVal  = parseFloat(row.dataset.feeValue) || 0;
+    const rawInput = row.querySelector('.fee-amount')?.value;
+    // Only add fee if staff typed an explicit value — empty field means "not applied"
+    if (!rawInput || rawInput.trim() === '') return;
     let amount = feeType === 'percent'
-      ? Math.round(svcSubtotal * feeVal / 100 * 100) / 100  // feeVal is whole number e.g. 15 for 15%
-      : parseFloat(row.querySelector('.fee-amount')?.value) || 0;
+      ? Math.round(svcSubtotal * feeVal / 100 * 100) / 100
+      : parseFloat(rawInput) || 0;
     if (amount > 0) entry.fees.push({ feeId, amount, type: feeType });
   });
   const itemTotal = (entry.items||[]).reduce((s,i)=>s+(i.price*(i.qty||1)),0);
@@ -9008,7 +9062,7 @@ function updateGroupTotal() {
   const svcCosts = [...document.querySelectorAll('#group-assign-content .assign-cost')].map(i=>parseFloat(i.value)||0);
   const svcSubtotal = svcCosts.reduce((a,b)=>a+b,0);
   const itemTotal = [...document.querySelectorAll('#group-assign-content [data-item-id]')].reduce((sum,row)=>{
-    const qty = parseInt(row.querySelector('.item-qty')?.value)||1;
+    const qty = parseInt(row.querySelector('.item-qty')?.value)||0;
     const price = parseFloat(row.querySelector('.item-price')?.value)||0;
     return sum + price*qty;
   },0);
@@ -9373,7 +9427,10 @@ async function syncSquare() {
   }
 }
 
-// Pull catalog items from Square and merge into SERVICES
+// Pull catalog items from Square and merge into SERVICES, ITEMS, FEES
+// Square returns ITEM type for retail products and SERVICE type for services.
+// We keep them strictly separated — ITEM catalog objects → ITEMS only,
+// SERVICE catalog objects → SERVICES or FEES (if name contains fee/charge).
 async function squarePullServices() {
   if (!squareConfig) return;
   try {
@@ -9385,15 +9442,17 @@ async function squarePullServices() {
       (svcData.objects || []).forEach(item => {
         const name = item.item_data?.name;
         if (!name) return;
-        // Route "Service Fee" (and anything with fee/charge in name) to FEES
         const lname = name.toLowerCase();
+        // Route fee/charge/surcharge names to FEES
         if (lname.includes('fee') || lname.includes('charge') || lname.includes('surcharge')) {
           const id = `sq-fee-${item.id}`;
           if (!FEES.find(f => f.id === id || f.label.toLowerCase() === lname)) {
-            FEES.push({ id, label: name, type: 'flat', value: 0, squareItemId: item.id });
+            const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
+            FEES.push({ id, label: name, type: 'flat', value: price ? price / 100 : 0, squareItemId: item.id });
           }
           return;
         }
+        // Add to SERVICES — never to ITEMS (strict separation)
         const id = `sq-${item.id}`;
         if (!SERVICES.find(s => s.id === id || s.label.toLowerCase() === lname)) {
           const abbr = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4);
@@ -9404,7 +9463,7 @@ async function squarePullServices() {
       if (addedSvc > 0) { saveServicesToStorage(); showToast(`${addedSvc} service${addedSvc>1?'s':''} imported from Square`); }
     }
 
-    // Pull Items (Item Library in Square)
+    // Pull Items (Item Library in Square) — retail products only, never add to SERVICES
     const itemRes = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=ITEM`);
     if (itemRes.ok) {
       const itemData = await itemRes.json();
@@ -9412,8 +9471,11 @@ async function squarePullServices() {
       (itemData.objects || []).forEach(item => {
         const name = item.item_data?.name;
         if (!name) return;
+        // Skip anything that looks like a service — it belongs in SERVICES not ITEMS
+        const lname = name.toLowerCase();
+        if (SERVICES.find(s => s.label.toLowerCase() === lname)) return;
         const id = `sq-item-${item.id}`;
-        if (!ITEMS.find(i => i.id === id || i.label.toLowerCase() === name.toLowerCase())) {
+        if (!ITEMS.find(i => i.id === id || i.label.toLowerCase() === lname)) {
           const abbr = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4);
           const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
           ITEMS.push({ id, label: name, abbr, price: price ? price / 100 : 0, squareItemId: item.id });
@@ -9543,23 +9605,30 @@ async function squarePullCustomers() {
 }
 
 async function squareUpsertCustomer(entry) {
-  // Need at minimum a name to create a Square customer
   if (!entry.name || entry.name.trim() === '-') return;
-  // Need Square to be reachable — SQUARE_PROXY is always available even without squareConfig
-  try {
-    const rawPhone = (entry.phone || '').replace(/\D/g, '');
+  const nameParts = entry.name.trim().split(/\s+/);
+  const firstName  = nameParts[0] || '';
+  const lastName   = nameParts.slice(1).join(' ') || '';
+  const rawPhone   = (entry.phone || '').replace(/\D/g, '');
 
-    // Check local cache first
+  // Only sync to Square if we can uniquely identify the customer.
+  // First name only with no phone → skip to avoid creating duplicates
+  // for walk-ins who share a common first name.
+  if (!rawPhone && !lastName) return;
+
+  try {
     let existingId = null;
+
+    // 1. Check local cache by phone
     if (rawPhone && squareCustomers.length > 0) {
       const cached = squareCustomers.find(c => {
-        const cp = (c.phone||'').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
-        return cp === rawPhone || cp === rawPhone.replace(/^1/, '');
+        const cp = (c.phone||'').replace(/\D/g,'').replace(/^1(\d{10})$/,'$1');
+        return cp === rawPhone || cp === rawPhone.replace(/^1/,'');
       });
       if (cached) existingId = cached.id;
     }
 
-    // If not in cache and we have a phone, search Square
+    // 2. Search Square by phone if not in cache
     if (!existingId && rawPhone) {
       try {
         const searchRes = await fetch(`${SQUARE_PROXY}/v2/customers/search`, {
@@ -9571,20 +9640,27 @@ async function squareUpsertCustomer(entry) {
           const sd = await searchRes.json();
           existingId = sd?.customers?.[0]?.id || null;
         }
-      } catch(e) { /* search failed — will create new */ }
+      } catch(e) { /* search failed */ }
     }
 
-    const nameParts = entry.name.trim().split(/\s+/);
+    // 3. No phone — search local cache by full name to avoid duplicate
+    if (!existingId && !rawPhone && lastName) {
+      const cached = squareCustomers.find(c =>
+        (c.given_name||'').toLowerCase() === firstName.toLowerCase() &&
+        (c.family_name||'').toLowerCase() === lastName.toLowerCase()
+      );
+      if (cached) existingId = cached.id;
+    }
+
     const svcLabels = (entry.services || []).map(sid => SERVICES.find(s => s.id === sid)?.label || sid).join(', ');
     const payload = {
-      given_name:   nameParts[0] || '',
-      family_name:  nameParts.slice(1).join(' ') || '',
+      given_name:  firstName,
+      family_name: lastName,
       note: `Last check-in: ${new Date().toLocaleDateString()}${svcLabels ? ' | Services: ' + svcLabels : ''}`,
     };
     if (rawPhone) payload.phone_number = entry.phone;
 
     if (existingId) {
-      // Update existing
       const res = await fetch(`${SQUARE_PROXY}/v2/customers/${existingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -9598,10 +9674,10 @@ async function squareUpsertCustomer(entry) {
         }
       }
     } else {
-      // Create new — idempotency key prevents duplicates on retry
+      // Stable idempotency key — phone (best) or full name (no timestamp, prevents duplicates on retry)
       const iKey = rawPhone
         ? `muse-customer-${rawPhone}`
-        : `muse-customer-${nameParts[0].toLowerCase()}-${Date.now()}`;
+        : `muse-customer-${firstName.toLowerCase()}-${lastName.toLowerCase()}`;
       const res = await fetch(`${SQUARE_PROXY}/v2/customers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -9611,11 +9687,9 @@ async function squareUpsertCustomer(entry) {
         const data = await res.json();
         const c = data.customer;
         if (c) {
-          // Add to local cache so autocomplete shows them immediately
           squareCustomers.push({ id: c.id, given_name: c.given_name||'', family_name: c.family_name||'', phone: c.phone_number||'', display: entry.name });
           customerDirectory.push({ squareId: c.id, firstName: c.given_name||'', lastName: c.family_name||'', phone: c.phone_number||'', email: '', note: c.note||'' });
           localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
-          console.log('[Square] Created customer:', entry.name);
         }
       }
     }
