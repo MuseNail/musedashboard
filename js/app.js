@@ -449,7 +449,8 @@ async function checkAppVersion() {
       const PERMANENT_KEYS = new Set([
         'muse_device_id','muse_live_queue','muse_live_queue_date','muse_queue_archive',
         'muse_turns_history','muse_records','muse_deletion_log','muse_customers',
-        'muse_sq_config','muse_last_backup','muse_cal_hours','gcal_token','gcal_hidden','gcal_order',
+        'muse_sq_config','muse_last_backup','muse_cal_hours','muse_records_updated_at',
+        'gcal_token','gcal_hidden','gcal_order',
       ]);
       Object.keys(localStorage).forEach(k => { if (!PERMANENT_KEYS.has(k)) localStorage.removeItem(k); });
       window.location.replace(window.location.pathname);
