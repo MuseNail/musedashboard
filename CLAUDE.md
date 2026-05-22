@@ -8,11 +8,53 @@ This file contains rules and context for AI coding assistants working on this pr
 
 A salon management PWA for Muse Nails & Spa. It runs in a browser on an iPad at the front desk and on technician-facing devices.
 
-The app is currently in **rebuild mode** — not deployed — while phases 2–7 are in progress. It will relaunch with fresh operational data. Historical transaction records, queue archives, and turn history are **intentionally not being migrated**. The app starts clean on relaunch.
+The app is **live and in active operational use**. All planned phases (Split through Phase 7) are complete. The current development mode is **operational optimization** — improving the existing production system, not rebuilding it.
 
-Build priorities (in order): clean architecture, stable sync, good modularity, future scalability.
+Priorities (in order): data integrity, operational stability, UX refinement, performance.
 
-Treat all changes as production-quality — no placeholders, no half-finished implementations.
+Treat all changes as production-quality — no placeholders, no half-finished implementations. Real customer and financial data is at stake.
+
+---
+
+## Production Data Integrity — PERMANENT RULES
+
+The app is in active operational use. These rules are non-negotiable and take precedence over any desire for architectural cleanliness.
+
+1. **Never remove or rename** persistent storage keys, R2 objects, Durable Object schemas, Sheets columns, or synced config structures without:
+   - explicit approval from the user
+   - a migration plan
+   - a rollback strategy
+
+2. **Never perform automatic data cleanup or data resets.** The "Clear All Records" button exists for intentional use by the operator — never trigger it automatically.
+
+3. **Never remove backward compatibility** for persisted operational data unless a verified migration exists and has been approved.
+
+4. **All future changes must preserve:**
+   - Customer records and directory
+   - Queue state and archive
+   - Transaction records / reports / history
+   - Appointments and calendar data
+   - Staff data and schedules
+   - Settings and config
+   - Gift cards
+   - Photos and logos
+   - Audit and history data
+
+5. **All future schema/storage changes must include:**
+   - Migration planning (how existing data moves forward)
+   - Rollback planning (how to revert without data loss)
+   - Backup strategy (export before applying)
+   - Failure recovery strategy
+
+6. **Stability and data integrity take priority over aggressive refactoring.**
+
+7. **Future improvements should favor:**
+   - Additive enhancements (new fields, new optional features)
+   - Safe migrations (readable by old code until migration is complete)
+   - Reversible changes
+   - Incremental evolution
+   
+   **NOT:** large rewrites, destructive cleanup, architecture resets.
 
 ---
 
@@ -70,6 +112,7 @@ No server-side logic, no dynamic routes, no build artifacts. All output must be 
 | App init, navigation, version check | `js/app.js` |
 | Styles | `css/styles.css` |
 | HTML structure | `index.html` |
+| Cloudflare Worker (proxy, R2, DO, KV, Cron) | `cloudflare/worker.js` |
 
 **Do not edit inline JS or CSS in `index.html`.** The `<style>` block and `<script>` block no longer exist in index.html — CSS is in `css/styles.css` and JS is in `js/*.js`.
 
@@ -77,7 +120,7 @@ No server-side logic, no dynamic routes, no build artifacts. All output must be 
 
 ## localStorage — Permanent Keys (Never Remove)
 
-These keys are the durable data layer. They persist across reloads and are backed up to Sheets. Never delete, rename, or stop reading these keys without a migration plan.
+These keys are the durable data layer. They persist across reloads and are backed up to Sheets. Never delete, rename, or stop reading these keys without a migration plan and explicit approval.
 
 | Key | Purpose |
 |---|---|
@@ -96,13 +139,13 @@ These keys are the durable data layer. They persist across reloads and are backe
 | `gcal_hidden` | Hidden calendar columns preference |
 | `gcal_order` | Calendar column order preference |
 
-All other localStorage keys were removed in Phase 1 (v1.55). Do not add new `localStorage.setItem` calls for config or settings — use the in-memory variable and call `pushConfigToSheets()` to persist.
+Do not add new `localStorage.setItem` calls for config or settings — use the in-memory variable and call `pushConfigToSheets()` to persist.
 
 ---
 
 ## Config Sync — How It Works
 
-All mutable settings (staff, services, items, fees, photos, etc.) live in JS memory for the session and are backed up to Google Sheets App Config row 2. **Do not use localStorage for config or settings** — Phase 1 removed that layer entirely.
+All mutable settings (staff, services, items, fees, photos, etc.) live in JS memory for the session and are backed up to Google Sheets App Config row 2. **Do not use localStorage for config or settings.**
 
 - `pushConfigToSheets()` — reads the current in-memory vars (`STAFF`, `SERVICES`, `ITEMS`, `FEES`, `_logoData`, `turnsTechOrder`, etc.) and POSTs them to Sheets. Sets `_configWriteTime = Date.now()` as a lock so the next poll doesn't immediately overwrite a just-saved value.
 - `loadConfigFromSheets()` — fetches config from Sheets and writes directly into the in-memory vars. Skips overwriting if `DEVICE_ID` matches the writer or if `_configWriteTime` is within 10 seconds (slow-write safety net). Returns `{ changed, recordsUpdatedAt, _raw }`.
@@ -126,13 +169,13 @@ Treat these with extra care — bugs here affect real financial data or break th
 
 ---
 
-## Build Philosophy
+## Development Philosophy
 
-- **Architecture first.** Clean architecture, stable sync, and good modularity take precedence over preserving existing patterns. Historical data migration is explicitly out of scope — the app relaunches fresh.
-- **One phase at a time.** Complete and verify each phase before starting the next.
-- **No backwards-compatibility shims.** If something is removed, remove it cleanly. No re-export aliases, no `_legacy` wrappers.
+- **Data integrity first.** The app is live. No change is worth corrupting customer or financial data.
+- **Additive by default.** Add new fields and features rather than reworking existing structures.
 - **No premature abstraction.** Don't generalize for hypothetical future needs. Three similar functions is fine.
 - **No comments explaining what the code does.** Only comment the WHY when it's non-obvious (a hidden constraint, a subtle invariant, a specific bug workaround).
+- **One verifiable change at a time.** Verify each change against the live app before moving to the next.
 
 ---
 
@@ -144,12 +187,10 @@ The `FEES` array is separate from `SERVICES` and `ITEMS`. Fees have their own UI
 
 ## Deployment Rules
 
-1. The app is in rebuild mode and is not live. Do not push to `main` until phases 2–7 are complete. The app will relaunch with fresh operational data — no historical records are being imported.
-2. When ready to deploy: bump `APP_VERSION` in `js/config.js`, `version.json`, and `CACHE_NAME` in `sw.js`, then push to `main`.
-3. GitHub Pages auto-deploys. All connected sessions auto-reload within 15 seconds via `checkAppVersion()`.
-4. Never push a version where `APP_VERSION` and `version.json` disagree — this causes reload loops.
-5. The service worker caches all JS and CSS by CACHE_NAME. If you change JS/CSS without bumping CACHE_NAME, returning users will get stale cached files until they manually clear the browser cache.
-6. Before deploying, add `icons/icon-192.png` and `icons/icon-512.png` to the repo (see `icons/README.md`).
+1. **Always bump all three version files together:** `js/config.js` (APP_VERSION), `version.json`, and `sw.js` (CACHE_NAME). A mismatch causes reload loops. A stale CACHE_NAME means users get stale cached files.
+2. GitHub Pages auto-deploys on push to `main`. All connected sessions auto-reload within 15 seconds via `checkAppVersion()`.
+3. **Cloudflare Worker changes** require a separate `wrangler deploy` from the `cloudflare/` directory — they are not deployed by GitHub Pages.
+4. Never push a breaking change without a tested rollback path.
 
 ---
 
@@ -160,7 +201,7 @@ Each JS section begins with a marker comment of the form:
 // ── Section Name ────────────────────────────────
 ```
 
-These markers use Unicode box-drawing characters (U+2500 `─`). `split.ps1` uses them to route code to files. If you add a new major section to any JS file, follow this convention so the tooling can process it.
+These markers use Unicode box-drawing characters (U+2500 `─`). If you add a new major section to any JS file, follow this convention.
 
 ---
 
@@ -168,10 +209,12 @@ These markers use Unicode box-drawing characters (U+2500 `─`). `split.ps1` use
 
 | File | Purpose |
 |---|---|
-| `ROADMAP.md` | Phase 1–7 plans and current status |
+| `ROADMAP.md` | Completed phase history + post-launch optimization roadmap |
 | `README.md` | Project overview and architecture |
 | `manifest.json` | PWA manifest (name, icons, display mode, theme color) |
 | `sw.js` | Service worker — precache + offline fallback; CACHE_NAME must match APP_VERSION |
-| `icons/` | PWA launcher icons (192px + 512px PNG); see `icons/README.md` |
-| `split.ps1` | PowerShell script that extracted the original single-file app into modules (one-time use; committed for reference) |
+| `icons/` | PWA launcher icons (192px + 512px PNG) |
+| `cloudflare/worker.js` | Cloudflare Worker — Square proxy, R2 photos, KV config cache, DO WebSocket, Cron |
+| `cloudflare/wrangler.toml` | Worker configuration, bindings, cron schedule |
+| `split.ps1` / `split.js` | One-time extraction scripts (original monolith → modules); committed for historical reference only |
 | `muse-sheets-script.gs` | Google Apps Script — not in this repo, deployed separately |
