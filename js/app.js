@@ -465,7 +465,17 @@ async function checkAppVersion() {
     if (!res.ok) return;
     const data = await res.json();
     if (data.version && data.version !== APP_VERSION) {
+      // Guard against infinite reload loops caused by the service worker still serving
+      // a cached config.js with the old APP_VERSION after a soft reload. If we already
+      // triggered a reload for this target version and the mismatch persists, the SW
+      // hasn't updated its cache yet — stop looping and show a badge hint instead.
+      const alreadyTriedFor = sessionStorage.getItem('_pendingVersion');
+      if (alreadyTriedFor === data.version) {
+        if (badge) { badge.textContent = APP_VERSION + ' ↻'; badge.title = `Update to ${data.version} pending — hard refresh (Ctrl+Shift+R) to apply`; }
+        return;
+      }
       console.log(`[Version] Running ${APP_VERSION}, live is ${data.version} — reloading`);
+      sessionStorage.setItem('_pendingVersion', data.version);
       const PERMANENT_KEYS = new Set([
         'muse_device_id','muse_live_queue','muse_live_queue_date','muse_queue_archive',
         'muse_turns_history','muse_records','muse_deletion_log','muse_customers',
@@ -474,6 +484,9 @@ async function checkAppVersion() {
       ]);
       Object.keys(localStorage).forEach(k => { if (!PERMANENT_KEYS.has(k)) localStorage.removeItem(k); });
       window.location.replace(window.location.pathname);
+    } else {
+      // Versions match — clear any stale reload guard from a previous update cycle
+      sessionStorage.removeItem('_pendingVersion');
     }
   } catch(e) {
     // Offline or fetch failed — silently continue with current version

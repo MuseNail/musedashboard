@@ -188,7 +188,7 @@ The `FEES` array is separate from `SERVICES` and `ITEMS`. Fees have their own UI
 ## Deployment Rules
 
 1. **Always bump all three version files together:** `js/config.js` (APP_VERSION), `version.json`, and `sw.js` (CACHE_NAME). A mismatch causes reload loops. A stale CACHE_NAME means users get stale cached files.
-2. GitHub Pages auto-deploys on push to `main`. All connected sessions auto-reload within 15 seconds via `checkAppVersion()`.
+2. GitHub Pages auto-deploys on push to `main`. On next page load each session detects the new version via `checkAppVersion()` and auto-reloads once. If the service worker cache hasn't caught up yet, a `↻` badge appears — the user can hard refresh (`Ctrl+Shift+R`) to force it. A `sessionStorage` guard (`_pendingVersion`) prevents infinite reload loops when the SW is slow to update.
 3. **Cloudflare Worker changes** require a separate `wrangler deploy` from the `cloudflare/` directory — they are not deployed by GitHub Pages.
 4. Never push a breaking change without a tested rollback path.
 

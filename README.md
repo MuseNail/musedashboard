@@ -3,7 +3,7 @@
 Salon management PWA for Muse Nails & Spa. Manages a live customer queue, technician turn rotation, check-in kiosk, appointments, transactions, gift cards, staff, and settings. Hosted on GitHub Pages with a Cloudflare Worker edge layer and Google Sheets as the durable data store.
 
 **Live URL:** https://musenail.github.io/musedashboard
-**Current version:** v1.71
+**Current version:** v1.73
 **Status:** Production — operational optimization mode
 
 ---
@@ -101,7 +101,7 @@ version.json              — { "version": "vX.XX" } — checked by all clients 
 4. Update `CACHE_NAME` in `sw.js` to match
 5. Commit and push to `main`
 6. GitHub Pages deploys automatically (usually < 60 seconds)
-7. All connected browser sessions detect the version change via `checkAppVersion()` and auto-reload within 15 seconds
+7. On next page load, each browser session detects the version change via `checkAppVersion()` and auto-reloads once. If the service worker cache hasn't updated yet, a `↻` badge appears — hard refresh (`Ctrl+Shift+R`) to force it
 
 **For Cloudflare Worker changes** (files in `cloudflare/`):
 ```

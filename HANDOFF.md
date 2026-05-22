@@ -850,7 +850,7 @@ function sendDailySummary(dateStr, stats) {
 
 ## Step 5 — Current project state (read this after all files)
 
-**Version:** v1.72 (production)
+**Version:** v1.73 (production)
 **Status:** Live and in production use. Operational optimization mode.
 
 ### What was completed in the session before this one
@@ -863,7 +863,10 @@ function sendDailySummary(dateStr, stats) {
 **Post-launch stabilization (v1.72):**
 - `README.md`, `ROADMAP.md`, `CLAUDE.md` rewritten to reflect production status
 - Deleted obsolete files: `split.ps1`, `split.js`, `icons/generate-icons.html`
-- Version bumped to v1.72 in `js/config.js`, `version.json`, `sw.js`
+
+**Reload loop fix (v1.73):**
+- `js/app.js` — `checkAppVersion()` now uses a `sessionStorage` guard (`_pendingVersion`) to prevent infinite reload loops. Previously, a regular reload (not hard refresh) after a version bump would loop indefinitely because the service worker kept serving cached `config.js` with the old `APP_VERSION`. Now: first mismatch → sets the guard and reloads once; if still mismatched on the reloaded page → stops, shows `v1.XX ↻` badge with "hard refresh to apply" tooltip; when versions match → clears the guard.
+- `README.md`, `CLAUDE.md` — corrected the "auto-reload within 15 seconds" claim; `checkAppVersion()` only runs at page load, not on a timer.
 
 **Pending user action (not a code task):**
 - User needs to run the "Clear All Records" button on each device (iPad, Android, each desktop browser profile) before starting real production transactions, to eliminate old test records from localStorage. Records in Sheets can be cleared manually from the Google Sheet directly.
