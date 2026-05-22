@@ -86,6 +86,13 @@ async function squarePullServices() {
   try {
     // Pull Services (Service Library in Square)
     const svcRes = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=SERVICE`);
+    if (!svcRes.ok) {
+      let detail = `HTTP ${svcRes.status}`;
+      try { const e = await svcRes.json(); detail = e.errors?.[0]?.detail || e.errors?.[0]?.category || detail; } catch {}
+      showToast(`Square catalog (services): ${detail}`);
+      console.warn('Square catalog/service error:', svcRes.status, detail);
+      return;
+    }
     if (svcRes.ok) {
       const svcData = await svcRes.json();
       let addedSvc = 0;
@@ -119,6 +126,13 @@ async function squarePullServices() {
 
     // Pull Items (Item Library in Square) — retail products only, never add to SERVICES
     const itemRes = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=ITEM`);
+    if (!itemRes.ok) {
+      let detail = `HTTP ${itemRes.status}`;
+      try { const e = await itemRes.json(); detail = e.errors?.[0]?.detail || e.errors?.[0]?.category || detail; } catch {}
+      showToast(`Square catalog (items): ${detail}`);
+      console.warn('Square catalog/item error:', itemRes.status, detail);
+      return;
+    }
     if (itemRes.ok) {
       const itemData = await itemRes.json();
       let addedItems = 0;

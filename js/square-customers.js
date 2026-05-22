@@ -303,7 +303,13 @@ async function squarePullStaff() {
   if (!squareConfig) { showToast('Square not configured.'); return; }
   try {
     const res = await fetch(`${SQUARE_PROXY}/v2/team-members?status=ACTIVE&limit=200`);
-    if (!res.ok) { showToast('Could not reach Square team members API.'); return; }
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
+      try { const e = await res.json(); detail = e.errors?.[0]?.detail || e.errors?.[0]?.category || detail; } catch {}
+      showToast(`Square team members: ${detail}`);
+      console.warn('Square team members error:', res.status, detail);
+      return;
+    }
     const data = await res.json();
     const members = data.team_members || [];
     let added = 0;
