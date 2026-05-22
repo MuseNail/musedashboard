@@ -14,8 +14,8 @@ The app is undergoing an architecture-first rebuild. Phases are done in order. T
 | Split | Extract single file → modules | ✅ Complete (v1.54) |
 | 1 | localStorage Cleanup | ✅ Complete (v1.55) |
 | 2 | Cloudflare R2 for Photos | ✅ Complete (v1.56) |
-| 3 | Durable Objects WebSocket Sync | 🔄 Next |
-| 4 | Workers KV for Fast Config Reads | Planned |
+| 3 | Durable Objects WebSocket Sync | ✅ Complete (v1.57) |
+| 4 | Workers KV for Fast Config Reads | 🔄 Next |
 | 5 | Cron Jobs + Twilio SMS + Gmail | Planned |
 | 6 | Square POS Deep Link Integration | Planned |
 | 7 | PWA Polish | Planned |

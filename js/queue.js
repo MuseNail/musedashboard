@@ -137,8 +137,8 @@ function setLogo() {
   const placeholder = document.getElementById('logo-settings-placeholder');
   const recropBtn = document.getElementById('logo-recrop-btn');
   if (preview) {
-    if (customLogo) {
-      preview.innerHTML = `<img src="${customLogo}" class="w-full h-full object-contain">`;
+    if (_logoData) {
+      preview.innerHTML = `<img src="${_logoData}" class="w-full h-full object-contain">`;
       if (recropBtn) recropBtn.classList.remove('hidden');
     } else {
       preview.innerHTML = `<img src="${LOGO_PATH}" class="w-full h-full object-contain" onerror="this.style.display='none'"><span class="material-symbols-outlined text-2xl text-on-surface-variant" id="logo-settings-placeholder">store</span>`;
