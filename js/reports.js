@@ -139,7 +139,8 @@ function runReport() {
   const feesTotal     = filtered.reduce((s, r) => s + (r.fees||[]).reduce((a, x) => a + (x.amount||0), 0), 0);
   const discountTotal = filtered.reduce((s, r) => s + (r.discount||0), 0);
   const totalIncome   = filtered.reduce((s, r) => s + (r.totalCost || 0), 0);
-  const guestCount  = filtered.length;
+  // Refunds are not guest visits — only count 'done' records for guest count and avg ticket
+  const guestCount  = filtered.filter(r => r.status === 'done').length;
   const avgTicket   = guestCount > 0 ? totalIncome / guestCount : 0;
 
   document.getElementById('rpt-total-income').textContent = `$${totalIncome.toFixed(2)}`;
@@ -153,6 +154,12 @@ function runReport() {
   if (itmEl)  itmEl.textContent   = `$${itemsTotal.toFixed(2)}`;
   if (feeEl)  feeEl.textContent   = `$${feesTotal.toFixed(2)}`;
   if (discEl) discEl.textContent  = discountTotal > 0 ? `-$${discountTotal.toFixed(2)}` : '-$0.00';
+  // Refunds tile — only visible when the period contains refund records
+  const refundsTotal = filtered.filter(r => r.status === 'refund').reduce((s, r) => s + (r.totalCost || 0), 0);
+  const refundsRow = document.getElementById('rpt-refunds-row');
+  const refundsEl  = document.getElementById('rpt-refunds-total');
+  if (refundsRow) refundsRow.classList.toggle('hidden', refundsTotal === 0);
+  if (refundsEl && refundsTotal !== 0) refundsEl.textContent = `-$${Math.abs(refundsTotal).toFixed(2)}`;
 
   // Date label
   const fmt = d => d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});

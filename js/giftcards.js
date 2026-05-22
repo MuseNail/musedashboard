@@ -455,6 +455,26 @@ function importAllData(input) {
   input.value = '';
 }
 
+function confirmClearAllRecords() {
+  showWarnModal(
+    'Clear All Records?',
+    'This permanently wipes every transaction record from this device and pushes the empty state to Sheets. Export a backup first if you need to keep this data.',
+    () => {
+      allRecords = [];
+      localStorage.setItem('muse_records', '[]');
+      localStorage.removeItem('muse_deletion_log');
+      localStorage.removeItem('muse_queue_archive');
+      localStorage.removeItem('muse_turns_history');
+      // Push empty records to Sheets immediately so other devices can sync
+      scheduleRecordsPush();
+      renderTransactions?.();
+      runReport?.();
+      showToast('All records cleared ✓');
+    }
+  );
+}
+
+
 // Show last backup date in settings when panel opens
 function renderSettingsPanel() {
   renderSettingsServiceVisibility();
