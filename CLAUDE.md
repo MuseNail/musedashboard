@@ -164,8 +164,8 @@ Treat these with extra care — bugs here affect real financial data or break th
 - **`allRecords` sync** (`sync.js`) — transaction records are financial data; never truncate or overwrite without merge logic
 - **`muse_deletion_log`** — cross-device delete sync; if broken, deleted records can reappear
 - **Queue persistence** (`queue.js`) — losing the queue during business hours is a critical failure
-- **`checkAppVersion`** (`app.js`) — triggers auto-reload on all connected devices; a bug here can cause reload loops
-- **Version bump** — always bump `js/config.js` (APP_VERSION), `version.json`, and `sw.js` (CACHE_NAME) together; a mismatch between config.js and version.json causes infinite reload loops; a stale CACHE_NAME in sw.js means the old service worker cache is never purged
+- **`checkAppVersion`** (`app.js`) — on version mismatch: unregisters the SW (so next load fetches all files fresh), then calls `window.location.replace()`. A `sessionStorage` guard (`_pendingVersion`) prevents infinite loops if the unregister fails. If the `↻` badge appears after the auto-reload, hard refresh (`Ctrl+Shift+R`) is the reliable fallback.
+- **Version bump** — always bump `js/config.js` (APP_VERSION), `version.json`, and `sw.js` (CACHE_NAME) together; a mismatch between config.js and version.json causes reload loops; a stale CACHE_NAME means the old SW cache is never purged
 
 ---
 
@@ -188,7 +188,7 @@ The `FEES` array is separate from `SERVICES` and `ITEMS`. Fees have their own UI
 ## Deployment Rules
 
 1. **Always bump all three version files together:** `js/config.js` (APP_VERSION), `version.json`, and `sw.js` (CACHE_NAME). A mismatch causes reload loops. A stale CACHE_NAME means users get stale cached files.
-2. GitHub Pages auto-deploys on push to `main`. On next page load each session detects the new version via `checkAppVersion()` and auto-reloads once. If the service worker cache hasn't caught up yet, a `↻` badge appears — the user can hard refresh (`Ctrl+Shift+R`) to force it. A `sessionStorage` guard (`_pendingVersion`) prevents infinite reload loops when the SW is slow to update.
+2. GitHub Pages auto-deploys on push to `main`. On next page load each session detects the new version via `checkAppVersion()`, unregisters the SW, and reloads once so all files come fresh from the network. If the `↻` badge appears after the auto-reload, hard refresh (`Ctrl+Shift+R`) is the reliable fallback. Known limitation: on some devices/browsers the first reload after a version bump may still serve stale files; hard refresh always resolves it.
 3. **Cloudflare Worker changes** require a separate `wrangler deploy` from the `cloudflare/` directory — they are not deployed by GitHub Pages.
 4. Never push a breaking change without a tested rollback path.
 

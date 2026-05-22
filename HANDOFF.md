@@ -850,7 +850,7 @@ function sendDailySummary(dateStr, stats) {
 
 ## Step 5 — Current project state (read this after all files)
 
-**Version:** v1.73 (production)
+**Version:** v1.79 (production)
 **Status:** Live and in production use. Operational optimization mode.
 
 ### What was completed in the session before this one
@@ -864,9 +864,17 @@ function sendDailySummary(dateStr, stats) {
 - `README.md`, `ROADMAP.md`, `CLAUDE.md` rewritten to reflect production status
 - Deleted obsolete files: `split.ps1`, `split.js`, `icons/generate-icons.html`
 
-**Reload loop fix (v1.73):**
-- `js/app.js` — `checkAppVersion()` now uses a `sessionStorage` guard (`_pendingVersion`) to prevent infinite reload loops. Previously, a regular reload (not hard refresh) after a version bump would loop indefinitely because the service worker kept serving cached `config.js` with the old `APP_VERSION`. Now: first mismatch → sets the guard and reloads once; if still mismatched on the reloaded page → stops, shows `v1.XX ↻` badge with "hard refresh to apply" tooltip; when versions match → clears the guard.
-- `README.md`, `CLAUDE.md` — corrected the "auto-reload within 15 seconds" claim; `checkAppVersion()` only runs at page load, not on a timer.
+**Version update reliability work (v1.73–v1.79):**
+
+Multiple iterations to fix the reload loop that occurred after version bumps. History:
+- v1.73: added `sessionStorage` guard (`_pendingVersion`) — stopped infinite loop but ↻ badge still required hard refresh
+- v1.75: tried wiping all SW caches before reload — caused 15s stutter (all 20 files re-fetched)
+- v1.76: `sw.js` makes `config.js` network-first; targeted cache eviction (config.js only) — still stuttered on transition
+- v1.78: `checkAppVersion()` now **unregisters the SW** before reloading — removes the SW entirely so the next load fetches all files straight from the network; `sessionStorage` guard kept as fallback
+
+**Current known limitation:** On some devices/browsers, the first regular reload after a version bump may still show the `↻` badge (old version + "hard refresh to apply"). Hard refresh (`Ctrl+Shift+R`) always works. This is a lower-priority issue deferred in favor of production use.
+
+`checkAppVersion()` is called **once at page load only** — there is no polling interval. Version changes are detected on the next page load, not while the app is sitting open.
 
 **Pending user action (not a code task):**
 - User needs to run the "Clear All Records" button on each device (iPad, Android, each desktop browser profile) before starting real production transactions, to eliminate old test records from localStorage. Records in Sheets can be cleared manually from the Google Sheet directly.
