@@ -807,6 +807,9 @@ function calQuickCheckin(calId, eventId) {
   saveQueueToStorage();
   pushQueueToSheets();
   exportToSheets(entry);
+  // Sync customer to Square (same as kiosk + manual-add check-in paths).
+  // No-op if no phone (guard in squareUpsertCustomer) or Square not configured.
+  squareUpsertCustomer(entry);
   renderQueue();
   updateStats();
   renderTurns();

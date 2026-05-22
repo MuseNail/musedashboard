@@ -1814,12 +1814,14 @@ async function pushOrderToSquare(entry) {
       if (cached?.squareId) {
         customerId = cached.squareId;
       } else {
-        // Not in local cache — fall back to Square API search
+        // Not in local cache — fall back to Square API search (must use E.164 format)
         try {
+          const digits10 = rawPhone.replace(/^1(\d{10})$/, '$1');
+          const phoneE164 = `+1${digits10}`;
           const searchRes = await fetch(`${SQUARE_PROXY}/v2/customers/search`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query: { filter: { phone_number: { exact: entry.phone } } } }),
+            body: JSON.stringify({ query: { filter: { phone_number: { exact: phoneE164 } } } }),
           });
           if (searchRes.ok) {
             const sd = await searchRes.json();
@@ -1873,10 +1875,10 @@ async function squareUpsertCustomer(entry) {
   const lastName   = nameParts.slice(1).join(' ') || '';
   const rawPhone   = (entry.phone || '').replace(/\D/g, '');
 
-  // Only sync to Square if we can uniquely identify the customer.
-  // First name only with no phone → skip to avoid creating duplicates
-  // for walk-ins who share a common first name.
-  if (!rawPhone && !lastName) return;
+  // Require a phone number to create or update a Square profile.
+  // Profiles without a phone can't receive SMS, can't be found by future phone search,
+  // and will produce a duplicate on the next visit when the customer provides a phone.
+  if (!rawPhone) return;
 
   try {
     let existingId = null;
@@ -1891,27 +1893,22 @@ async function squareUpsertCustomer(entry) {
     }
 
     // 2. Search Square by phone if not in cache
+    // Square stores numbers in E.164 format (+15551234567) — the exact filter does not
+    // normalize display formats like (555) 123-4567, so we must send E.164 explicitly.
     if (!existingId && rawPhone) {
       try {
+        const digits10 = rawPhone.replace(/^1(\d{10})$/, '$1'); // strip leading 1 if 11 digits
+        const phoneE164 = `+1${digits10}`;
         const searchRes = await fetch(`${SQUARE_PROXY}/v2/customers/search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: { filter: { phone_number: { exact: entry.phone } } } })
+          body: JSON.stringify({ query: { filter: { phone_number: { exact: phoneE164 } } } })
         });
         if (searchRes.ok) {
           const sd = await searchRes.json();
           existingId = sd?.customers?.[0]?.id || null;
         }
       } catch(e) { /* search failed */ }
-    }
-
-    // 3. No phone — search local cache by full name to avoid duplicate
-    if (!existingId && !rawPhone && lastName) {
-      const cached = squareCustomers.find(c =>
-        (c.given_name||'').toLowerCase() === firstName.toLowerCase() &&
-        (c.family_name||'').toLowerCase() === lastName.toLowerCase()
-      );
-      if (cached) existingId = cached.id;
     }
 
     const svcLabels = (entry.services || []).map(sid => SERVICES.find(s => s.id === sid)?.label || sid).join(', ');
