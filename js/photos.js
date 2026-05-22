@@ -180,11 +180,33 @@ function getAllPhotos() {
 }
 
 // Restore photo URLs from config into _photoCache.
-// Called by loadPhotosFromSheets; values are R2 URLs, not base64.
+// Values are R2 URLs, not base64.
 function restorePhotos(photos) {
   if (!photos) return;
   Object.assign(_photoCache, photos);
   applyPhotosToObjects();
+}
+
+// Extract photo URLs from a pre-fetched config response and apply them to the cache.
+// Called by app.js on startup and by the config poll timer in sync.js.
+// rawConfig is the full response object from loadConfigFromSheets (_raw).
+// When called without args (app.js startup path), fetches config fresh.
+async function loadPhotosFromSheets(rawConfig) {
+  if (rawConfig?.config?.muse_photos) {
+    restorePhotos(rawConfig.config.muse_photos);
+    return true;
+  }
+  // No raw config passed — fetch a fresh copy just to get the photo URLs
+  try {
+    const res  = await fetch(`${SHEETS_PROXY}?action=loadConfig&_=${Date.now()}`);
+    const data = await res.json();
+    if (!data.success || !data.config?.muse_photos) return false;
+    restorePhotos(data.config.muse_photos);
+    return true;
+  } catch(e) {
+    console.warn('[Photos] Load failed:', e);
+    return false;
+  }
 }
 
 // Apply cached photo URLs to in-memory STAFF and FRONT_DESK_USERS objects.
