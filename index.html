@@ -1782,48 +1782,27 @@ tailwind.config = {
      HISTORICAL TRANSACTION ENTRY MODAL (admin only)
 ═══════════════════════════════════════════════ -->
 <div id="historical-modal" class="fixed inset-0 z-[80] hidden items-center justify-center bg-on-surface/40 px-4">
-  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto no-scroll">
+  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-xl shadow-2xl max-h-[92vh] overflow-y-auto no-scroll">
+
+    <!-- Header -->
     <div class="flex items-center justify-between mb-5">
-      <h2 class="text-xl font-headline font-bold text-on-surface">Add Historical Transaction</h2>
+      <h2 id="hist-modal-title" class="text-xl font-headline font-bold text-on-surface">Add Historical Transaction</h2>
       <button onclick="closeHistoricalModal()" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center">
         <span class="material-symbols-outlined text-on-surface-variant">close</span>
       </button>
     </div>
-    <div class="space-y-4">
+
+    <div class="space-y-5">
+
+      <!-- Date / Time / Type -->
       <div class="grid grid-cols-2 gap-3">
         <div>
-          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Date</label>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Date (past dates only)</label>
           <input type="date" id="hist-date" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
         </div>
         <div>
           <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Time</label>
           <input type="time" id="hist-time" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
-        </div>
-      </div>
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Customer Name</label>
-        <input type="text" id="hist-name" placeholder="Full name" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
-      </div>
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
-        <input type="tel" id="hist-phone" placeholder="(555) 000-0000" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
-      </div>
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Services</label>
-        <div id="hist-services" class="grid grid-cols-3 gap-2"></div>
-      </div>
-      <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Technician</label>
-          <select id="hist-tech" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
-            <option value="">— Select tech —</option>
-          </select>
-        </div>
-        <div>
-          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Total ($)</label>
-          <input type="text" inputmode="decimal" readonly id="hist-total" placeholder="0.00"
-            class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none cursor-pointer"
-            onclick="openNumpad(this, 'Total Amount')" onfocus="openNumpad(this, 'Total Amount')">
         </div>
       </div>
       <div>
@@ -1835,9 +1814,82 @@ tailwind.config = {
             class="flex-1 py-2 rounded-xl border-2 border-outline-variant bg-transparent text-on-surface font-body font-semibold text-sm transition-all">Appointment</button>
         </div>
       </div>
+
+      <!-- Customer -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Customer Name *</label>
+          <input type="text" id="hist-name" placeholder="Full name" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+        </div>
+        <div>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
+          <input type="tel" id="hist-phone" placeholder="(555) 000-0000" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+        </div>
+      </div>
+
+      <!-- Services -->
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Services</label>
+        <div id="hist-services" class="flex flex-wrap gap-2"></div>
+      </div>
+
+      <!-- Per-service assignments (tech + cost) -->
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Staff &amp; Cost per Service</label>
+        <div id="hist-assignments" class="bg-surface-container rounded-xl px-3 py-1">
+          <p class="text-xs font-body text-on-surface-variant italic py-2">Select at least one service above to assign staff.</p>
+        </div>
+      </div>
+
+      <!-- Retail Items (optional) -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest">Retail Items</label>
+          <button type="button" onclick="addHistItem()"
+            class="flex items-center gap-1 text-xs font-body font-semibold text-primary hover:bg-primary/10 rounded-lg px-2 py-1 transition-colors">
+            <span class="material-symbols-outlined" style="font-size:14px">add</span> Add Item
+          </button>
+        </div>
+        <div id="hist-items"></div>
+      </div>
+
+      <!-- Fees (optional) -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest">Fees</label>
+          <button type="button" onclick="addHistFee()"
+            class="flex items-center gap-1 text-xs font-body font-semibold text-primary hover:bg-primary/10 rounded-lg px-2 py-1 transition-colors">
+            <span class="material-symbols-outlined" style="font-size:14px">add</span> Add Fee
+          </button>
+        </div>
+        <div id="hist-fees"></div>
+      </div>
+
+      <!-- Discount -->
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Discount ($)</label>
+          <input type="text" inputmode="decimal" id="hist-discount" placeholder="0.00"
+            oninput="_computeHistTotal()"
+            class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+        </div>
+        <div>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Discount Reason</label>
+          <input type="text" id="hist-discount-note" placeholder="Optional note"
+            class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+        </div>
+      </div>
+
+      <!-- Auto-calculated total -->
+      <div class="bg-primary/10 rounded-xl px-4 py-3 flex items-center justify-between border border-primary/20">
+        <span class="text-sm font-body font-semibold text-on-surface">Total (auto-calculated)</span>
+        <span id="hist-total-display" class="text-xl font-headline font-bold text-primary">$0.00</span>
+      </div>
+
       <button onclick="saveHistoricalTransaction()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">
         Save Transaction
       </button>
+
     </div>
   </div>
 </div>

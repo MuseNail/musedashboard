@@ -535,6 +535,11 @@ function renderTransactions() {
           </div>
           <div class="text-right ml-4 flex-shrink-0 flex flex-col items-end gap-2">
             <div class="text-lg font-headline font-extrabold text-primary">$${(r.totalCost||0).toFixed(2)}</div>
+            ${activeUser?.role === 'admin' && new Date(r.checkinTime) < new Date(new Date().setHours(0,0,0,0)) ? `
+            <button onclick="showHistoricalEntryModal('${r.id}')"
+              class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10">
+              <span class="material-symbols-outlined" style="font-size:14px">edit</span> Edit
+            </button>` : ''}
             <button onclick="initiateDeleteTransaction('${r.id}')"
               class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-error transition-colors px-2 py-1 rounded-lg hover:bg-error/10">
               <span class="material-symbols-outlined" style="font-size:14px">delete</span> Delete
@@ -858,35 +863,73 @@ async function exportReportSheets() {
 
 
 // ── Historical Transaction Entry (admin only) ──────
-let _histType = 'Walk-In';
-let _histServices = [];
+let _histMode         = 'add';  // 'add' | 'edit'
+let _histEditId       = null;
+let _histType         = 'Walk-In';
+let _histSelectedSvcs = [];     // ordered list of selected service IDs
+let _histAssignments  = {};     // svcId → {techId, station, cost}
+let _histItems        = [];     // [{itemId, qty, price}]
+let _histFees         = [];     // [{feeId, amount}]
 
-function showHistoricalEntryModal() {
-  if (!['admin'].includes(activeUser?.role)) { showToast('Admin access required'); return; }
-  // Pre-fill date/time to today/now
-  const now = new Date();
-  document.getElementById('hist-date').value = todayStr();
-  document.getElementById('hist-time').value = now.toTimeString().slice(0,5);
-  document.getElementById('hist-name').value = '';
-  document.getElementById('hist-phone').value = '';
-  document.getElementById('hist-total').value = '';
-  _histServices = [];
-  _histType = 'Walk-In';
-  setHistType('Walk-In');
+function showHistoricalEntryModal(editId) {
+  if (activeUser?.role !== 'admin') { showToast('Admin access required'); return; }
+  _histMode         = editId ? 'edit' : 'add';
+  _histEditId       = editId || null;
+  _histSelectedSvcs = [];
+  _histAssignments  = {};
+  _histItems        = [];
+  _histFees         = [];
 
-  // Populate services
-  const svcGrid = document.getElementById('hist-services');
-  svcGrid.innerHTML = SERVICES.filter(s => isServiceVisibleOnDash(s.id)).map(s =>
-    `<button type="button" onclick="toggleHistService('${s.id}',this)"
-      class="px-3 py-2 rounded-xl border-2 border-surface-container-high text-xs font-body font-semibold text-on-surface-variant hover:border-primary transition-all"
-      data-sid="${s.id}">${s.label}</button>`
-  ).join('');
+  // max date = yesterday (past dates only; today's records go through the live queue)
+  const yest = new Date(); yest.setDate(yest.getDate() - 1);
+  const yesterdayStr = localDateStr(yest);
+  document.getElementById('hist-date').max = yesterdayStr;
 
-  // Populate tech dropdown
-  const techSel = document.getElementById('hist-tech');
-  techSel.innerHTML = '<option value="">— Select tech —</option>' +
-    getActiveStaff().map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  const title = document.getElementById('hist-modal-title');
 
+  if (_histMode === 'edit') {
+    const rec = allRecords.find(r => String(r.id) === String(editId));
+    if (!rec) { showToast('Record not found'); return; }
+    const dt = rec.checkinTime instanceof Date ? rec.checkinTime : new Date(rec.checkinTime);
+    if (localDateStr(dt) >= todayStr()) {
+      showToast("Today's records are edited through the live queue"); return;
+    }
+    if (title) title.textContent = 'Edit Transaction';
+    document.getElementById('hist-date').value          = localDateStr(dt);
+    document.getElementById('hist-time').value          = dt.toTimeString().slice(0, 5);
+    document.getElementById('hist-name').value          = rec.name || '';
+    document.getElementById('hist-phone').value         = rec.phone || '';
+    document.getElementById('hist-discount').value      = rec.discount > 0 ? rec.discount : '';
+    document.getElementById('hist-discount-note').value = rec.discountNote || '';
+    _histSelectedSvcs = [...(rec.services || [])];
+    rec.assignments.forEach(a => {
+      if (a.serviceId) _histAssignments[a.serviceId] = { techId: a.techId || '', station: a.station || '', cost: a.cost || 0 };
+    });
+    // Legacy: assignments with no serviceId — map to first selected service if unmatched
+    const noSvcAsgns = rec.assignments.filter(a => !a.serviceId);
+    if (noSvcAsgns.length > 0 && _histSelectedSvcs.length > 0 && !_histAssignments[_histSelectedSvcs[0]]) {
+      _histAssignments[_histSelectedSvcs[0]] = { techId: noSvcAsgns[0].techId || '', station: '', cost: noSvcAsgns[0].cost || 0 };
+    }
+    _histItems = (rec.items || []).map(i => ({ itemId: i.itemId, qty: i.qty || 1, price: i.price || 0 }));
+    _histFees  = (rec.fees  || []).map(f => ({ feeId: f.feeId, amount: f.amount || 0 }));
+    _histType  = rec.isAppointment ? 'Appointment' : 'Walk-In';
+  } else {
+    if (title) title.textContent = 'Add Historical Transaction';
+    document.getElementById('hist-date').value          = yesterdayStr;
+    document.getElementById('hist-time').value          = '12:00';
+    document.getElementById('hist-name').value          = '';
+    document.getElementById('hist-phone').value         = '';
+    document.getElementById('hist-discount').value      = '';
+    document.getElementById('hist-discount-note').value = '';
+    _histType = 'Walk-In';
+  }
+
+  setHistType(_histType);
+  _renderHistServices();
+  _renderHistAssignments();
+  _renderHistItems();
+  _renderHistFees();
+  _computeHistTotal();
   document.getElementById('historical-modal').classList.remove('hidden');
   document.getElementById('historical-modal').style.display = 'flex';
 }
@@ -896,84 +939,248 @@ function closeHistoricalModal() {
   document.getElementById('historical-modal').style.display = '';
 }
 
-function toggleHistService(sid, btn) {
-  if (_histServices.includes(sid)) {
-    _histServices = _histServices.filter(s => s !== sid);
-    btn.classList.remove('border-primary', 'bg-primary/10', 'text-primary');
-    btn.classList.add('border-surface-container-high', 'text-on-surface-variant');
-  } else {
-    _histServices.push(sid);
-    btn.classList.add('border-primary', 'bg-primary/10', 'text-primary');
-    btn.classList.remove('border-surface-container-high', 'text-on-surface-variant');
-  }
-}
-
 function setHistType(type) {
   _histType = type;
-  ['Walk-In','Appointment'].forEach(t => {
-    const btn = document.getElementById('hist-type-' + (t === 'Walk-In' ? 'walkin' : 'appt'));
-    if (t === type) {
-      btn.classList.add('bg-primary','text-on-primary','border-primary');
-      btn.classList.remove('bg-transparent','border-outline-variant','text-on-surface');
-    } else {
-      btn.classList.remove('bg-primary','text-on-primary','border-primary');
-      btn.classList.add('bg-transparent','border-outline-variant','text-on-surface');
-    }
+  ['Walk-In', 'Appointment'].forEach(t => {
+    const el = document.getElementById(t === 'Walk-In' ? 'hist-type-walkin' : 'hist-type-appt');
+    if (!el) return;
+    const on = t === type;
+    el.classList.toggle('bg-primary',          on);
+    el.classList.toggle('text-on-primary',     on);
+    el.classList.toggle('border-primary',      on);
+    el.classList.toggle('bg-transparent',      !on);
+    el.classList.toggle('border-outline-variant', !on);
+    el.classList.toggle('text-on-surface',     !on);
   });
 }
 
-function saveHistoricalTransaction() {
-  const name  = document.getElementById('hist-name').value.trim();
-  const phone = document.getElementById('hist-phone').value.trim();
-  const total = parseFloat(document.getElementById('hist-total').value) || 0;
-  const techId = document.getElementById('hist-tech').value;
-  const dateVal = document.getElementById('hist-date').value;
-  const timeVal = document.getElementById('hist-time').value;
+function toggleHistService(sid, btn) {
+  const idx = _histSelectedSvcs.indexOf(sid);
+  if (idx >= 0) {
+    _histSelectedSvcs.splice(idx, 1);
+    delete _histAssignments[sid];
+    btn.classList.remove('border-primary', 'bg-primary/10', 'text-primary');
+    btn.classList.add('border-surface-container-high', 'text-on-surface-variant');
+  } else {
+    _histSelectedSvcs.push(sid);
+    const svc = SERVICES.find(s => s.id === sid);
+    _histAssignments[sid] = { techId: '', station: '', cost: svc?.baseCost || 0 };
+    btn.classList.add('border-primary', 'bg-primary/10', 'text-primary');
+    btn.classList.remove('border-surface-container-high', 'text-on-surface-variant');
+  }
+  _renderHistAssignments();
+  _computeHistTotal();
+}
 
-  if (!name) { showToast('Enter a customer name'); return; }
-  if (!dateVal) { showToast('Select a date'); return; }
+function _renderHistServices() {
+  const el = document.getElementById('hist-services');
+  if (!el) return;
+  el.innerHTML = SERVICES.filter(s => isServiceVisibleOnDash(s.id)).map(s => {
+    const sel = _histSelectedSvcs.includes(s.id);
+    return `<button type="button" onclick="toggleHistService('${s.id}',this)"
+      class="px-3 py-2 rounded-xl border-2 text-xs font-body font-semibold transition-all ${sel
+        ? 'border-primary bg-primary/10 text-primary'
+        : 'border-surface-container-high text-on-surface-variant hover:border-primary'}">${s.label}</button>`;
+  }).join('');
+}
 
-  const checkinTime = new Date(`${dateVal}T${timeVal || '12:00'}:00`);
-  const entryId = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+function _renderHistAssignments() {
+  const el = document.getElementById('hist-assignments');
+  if (!el) return;
+  if (_histSelectedSvcs.length === 0) {
+    el.innerHTML = '<p class="text-xs font-body text-on-surface-variant italic">Select at least one service above to assign staff.</p>';
+    return;
+  }
+  el.innerHTML = _histSelectedSvcs.map(sid => {
+    const svc  = SERVICES.find(s => s.id === sid);
+    const asgn = _histAssignments[sid] || { techId: '', station: '', cost: 0 };
+    const techOpts = '<option value="">— Tech —</option>' +
+      getActiveStaff().map(t => `<option value="${t.id}" ${asgn.techId === t.id ? 'selected' : ''}>${t.name}</option>`).join('');
+    return `
+      <div class="flex items-center gap-2 py-2 border-b border-surface-container-high last:border-0">
+        <div class="w-24 flex-shrink-0 text-xs font-body font-semibold text-on-surface truncate">${svc?.label || sid}</div>
+        <select onchange="_histAssignments['${sid}'].techId=this.value"
+          class="flex-1 min-w-0 border border-surface-container-high bg-transparent rounded-lg px-2 py-1.5 text-xs font-body focus:border-primary outline-none">${techOpts}</select>
+        <input type="text" inputmode="decimal" placeholder="$0.00" value="${asgn.cost > 0 ? asgn.cost : ''}"
+          oninput="_histAssignments['${sid}'].cost=parseFloat(this.value)||0;_computeHistTotal()"
+          class="w-20 border border-surface-container-high bg-transparent rounded-lg px-2 py-1.5 text-xs font-body text-right focus:border-primary outline-none">
+      </div>`;
+  }).join('');
+}
 
-  const assignments = _histServices.length > 0
-    ? _histServices.map(sid => ({
-        serviceId: sid, techId: techId || '',
-        status: 'done', cost: total / Math.max(_histServices.length, 1),
-        assignedAt: checkinTime.getTime(),
-      }))
-    : total > 0 ? [{ serviceId: '', techId: techId || '', status: 'done', cost: total, assignedAt: checkinTime.getTime() }] : [];
+function addHistItem() {
+  const first = ITEMS.find(i => !_histItems.some(x => x.itemId === i.id)) || ITEMS[0];
+  if (!first) { showToast('No items configured'); return; }
+  _histItems.push({ itemId: first.id, qty: 1, price: first.price || 0 });
+  _renderHistItems();
+  _computeHistTotal();
+}
 
-  const record = {
-    id:            String(entryId),
-    name,
-    phone:         phone || '',
-    services:      _histServices,
-    assignments,
-    totalCost:     total,
-    checkinTime:   checkinTime.toISOString(),
-    completedAt:   checkinTime.toISOString(),
-    status:        'done',
-    isAppointment: _histType === 'Appointment',
-    loggedBy:      activeUser?.name || 'Admin',
-  };
+function removeHistItem(idx) {
+  _histItems.splice(idx, 1);
+  _renderHistItems();
+  _computeHistTotal();
+}
 
-  // Add to allRecords
-  allRecords.push(record);
-  localStorage.setItem('muse_records', JSON.stringify(allRecords));
+function _renderHistItems() {
+  const el = document.getElementById('hist-items');
+  if (!el) return;
+  if (_histItems.length === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = _histItems.map((item, i) => {
+    const opts = ITEMS.map(x => `<option value="${x.id}" ${item.itemId === x.id ? 'selected' : ''}>${x.label}</option>`).join('');
+    return `
+      <div class="flex items-center gap-2 mb-1">
+        <select onchange="(function(sel){_histItems[${i}].itemId=sel.value;const x=ITEMS.find(a=>a.id===sel.value);if(x)_histItems[${i}].price=x.price||0;_renderHistItems();_computeHistTotal();})(this)"
+          class="flex-1 min-w-0 border border-surface-container-high bg-transparent rounded-lg px-2 py-1.5 text-xs font-body focus:border-primary outline-none">${opts}</select>
+        <input type="number" min="1" value="${item.qty}" placeholder="Qty"
+          oninput="_histItems[${i}].qty=parseInt(this.value)||1;_computeHistTotal()"
+          class="w-12 border border-surface-container-high bg-transparent rounded-lg px-2 py-1.5 text-xs font-body text-center focus:border-primary outline-none">
+        <input type="text" inputmode="decimal" value="${item.price > 0 ? item.price : ''}" placeholder="$0"
+          oninput="_histItems[${i}].price=parseFloat(this.value)||0;_computeHistTotal()"
+          class="w-16 border border-surface-container-high bg-transparent rounded-lg px-2 py-1.5 text-xs font-body text-right focus:border-primary outline-none">
+        <button onclick="removeHistItem(${i})" class="flex-shrink-0 text-error hover:bg-error/10 rounded-lg p-1">
+          <span class="material-symbols-outlined" style="font-size:16px">close</span>
+        </button>
+      </div>`;
+  }).join('');
+}
 
-  // Push to Sheets — exportToSheets writes both Transaction Log row AND Check-Ins row.
-  // Do NOT call sendCheckinRow separately here — exportToSheets already calls it internally.
-  const entry = {
-    ...record,
-    checkinTime: checkinTime,
-    completedAt: checkinTime,
-  };
-  exportToSheets(entry);
+function addHistFee() {
+  const first = FEES[0];
+  if (!first) { showToast('No fees configured'); return; }
+  _histFees.push({ feeId: first.id, amount: first.value || 0 });
+  _renderHistFees();
+  _computeHistTotal();
+}
 
-  closeHistoricalModal();
-  renderTransactions();
-  showToast('Historical transaction saved ✓');
+function removeHistFee(idx) {
+  _histFees.splice(idx, 1);
+  _renderHistFees();
+  _computeHistTotal();
+}
+
+function _renderHistFees() {
+  const el = document.getElementById('hist-fees');
+  if (!el) return;
+  if (_histFees.length === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = _histFees.map((fee, i) => {
+    const opts = FEES.map(f => `<option value="${f.id}" ${fee.feeId === f.id ? 'selected' : ''}>${f.label}</option>`).join('');
+    return `
+      <div class="flex items-center gap-2 mb-1">
+        <select onchange="(function(sel){_histFees[${i}].feeId=sel.value;const f=FEES.find(x=>x.id===sel.value);if(f)_histFees[${i}].amount=f.value||0;_renderHistFees();_computeHistTotal();})(this)"
+          class="flex-1 min-w-0 border border-surface-container-high bg-transparent rounded-lg px-2 py-1.5 text-xs font-body focus:border-primary outline-none">${opts}</select>
+        <input type="text" inputmode="decimal" value="${fee.amount > 0 ? fee.amount : ''}" placeholder="$0"
+          oninput="_histFees[${i}].amount=parseFloat(this.value)||0;_computeHistTotal()"
+          class="w-20 border border-surface-container-high bg-transparent rounded-lg px-2 py-1.5 text-xs font-body text-right focus:border-primary outline-none">
+        <button onclick="removeHistFee(${i})" class="flex-shrink-0 text-error hover:bg-error/10 rounded-lg p-1">
+          <span class="material-symbols-outlined" style="font-size:16px">close</span>
+        </button>
+      </div>`;
+  }).join('');
+}
+
+function _computeHistTotal() {
+  const svcTotal   = _histSelectedSvcs.reduce((s, sid) => s + (parseFloat(_histAssignments[sid]?.cost) || 0), 0);
+  const itemsTotal = _histItems.reduce((s, i) => s + (i.qty || 0) * (i.price || 0), 0);
+  const feesTotal  = _histFees.reduce((s, f) => s + (parseFloat(f.amount) || 0), 0);
+  const discount   = parseFloat(document.getElementById('hist-discount')?.value) || 0;
+  const total      = Math.max(0, svcTotal + itemsTotal + feesTotal - discount);
+  const el = document.getElementById('hist-total-display');
+  if (el) el.textContent = `$${total.toFixed(2)}`;
+  return total;
+}
+
+async function saveHistoricalTransaction() {
+  const name         = document.getElementById('hist-name').value.trim();
+  const phone        = document.getElementById('hist-phone').value.trim();
+  const dateVal      = document.getElementById('hist-date').value;
+  const timeVal      = document.getElementById('hist-time').value || '12:00';
+  const discount     = parseFloat(document.getElementById('hist-discount').value) || 0;
+  const discountNote = document.getElementById('hist-discount-note').value.trim();
+
+  if (!name)    { showToast('Customer name is required'); return; }
+  if (!dateVal) { showToast('Date is required'); return; }
+  // Enforce past-dates-only — today's records belong in the live queue
+  if (dateVal >= todayStr()) { showToast('Date must be before today'); return; }
+
+  const checkinTime = new Date(`${dateVal}T${timeVal}:00`);
+  const total       = _computeHistTotal();
+
+  const assignments = _histSelectedSvcs.map(sid => ({
+    serviceId:  sid,
+    techId:     _histAssignments[sid]?.techId  || '',
+    station:    _histAssignments[sid]?.station || '',
+    cost:       parseFloat(_histAssignments[sid]?.cost) || 0,
+    status:     'done',
+    assignedAt: checkinTime.getTime(),
+  }));
+  // Fallback: no services selected but total > 0 — create a generic assignment
+  if (assignments.length === 0 && total > 0) {
+    assignments.push({ serviceId: '', techId: '', station: '', cost: total, status: 'done', assignedAt: checkinTime.getTime() });
+  }
+
+  const items = _histItems.filter(i => i.itemId && i.qty > 0).map(i => ({ itemId: i.itemId, qty: i.qty, price: i.price }));
+  const fees  = _histFees.filter(f => f.feeId && f.amount > 0).map(f => ({ feeId: f.feeId, amount: f.amount }));
+
+  if (_histMode === 'edit') {
+    const idx = allRecords.findIndex(r => String(r.id) === String(_histEditId));
+    if (idx < 0) { showToast('Record not found'); return; }
+
+    const updated = {
+      ...allRecords[idx],
+      name, phone,
+      services:      _histSelectedSvcs,
+      assignments, items, fees,
+      discount, discountNote,
+      totalCost:     total,
+      checkinTime:   checkinTime.toISOString(),
+      completedAt:   allRecords[idx].completedAt || checkinTime.toISOString(),
+      isAppointment: _histType === 'Appointment',
+      loggedBy:      activeUser?.name || 'Admin',
+    };
+    allRecords[idx] = updated;
+    localStorage.setItem('muse_records', JSON.stringify(allRecords));
+    scheduleRecordsPush();
+
+    // Update Transaction Log row and Check-Ins row in Sheets
+    const entry = { ...updated, checkinTime, completedAt: new Date(updated.completedAt) };
+    updateSheetsRow(entry);
+    sendCheckinRow(entry);
+
+    closeHistoricalModal();
+    renderTransactions();
+    if (document.getElementById('panel-reports')?.classList.contains('active')) runReport();
+    showToast('Transaction updated ✓');
+  } else {
+    const entryId = String(Date.now() * 1000 + Math.floor(Math.random() * 1000));
+    const record  = {
+      id:            entryId,
+      name, phone,
+      services:      _histSelectedSvcs,
+      assignments, items, fees,
+      discount, discountNote,
+      totalCost:     total,
+      checkinTime:   checkinTime.toISOString(),
+      completedAt:   checkinTime.toISOString(),
+      status:        'done',
+      isAppointment: _histType === 'Appointment',
+      loggedBy:      activeUser?.name || 'Admin',
+    };
+    allRecords.push(record);
+    localStorage.setItem('muse_records', JSON.stringify(allRecords));
+    scheduleRecordsPush();
+
+    // exportToSheets appends a Transaction Log row (initial, total=0) and a Check-Ins row.
+    // updateSheetsRow immediately patches the Transaction Log row with correct total and detail.
+    const entry = { ...record, checkinTime, completedAt: checkinTime };
+    await exportToSheets(entry);
+    updateSheetsRow(entry);
+
+    closeHistoricalModal();
+    renderTransactions();
+    if (document.getElementById('panel-reports')?.classList.contains('active')) runReport();
+    showToast('Historical transaction saved ✓');
+  }
 }
 
 // Show/hide "Add Historical" button based on role
@@ -981,5 +1188,4 @@ function updateHistoricalButtonVisibility() {
   const btn = document.getElementById('add-historical-btn');
   if (btn) btn.classList.toggle('hidden', activeUser?.role !== 'admin');
 }
-
 
