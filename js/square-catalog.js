@@ -88,7 +88,13 @@ async function squarePullServices() {
     const svcRes = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=SERVICE`);
     if (!svcRes.ok) {
       let detail = `HTTP ${svcRes.status}`;
-      try { const e = await svcRes.json(); detail = e.errors?.[0]?.detail || e.errors?.[0]?.category || detail; } catch {}
+      try {
+        const e = await svcRes.json();
+        console.warn('[Square] catalog/service raw error body:', JSON.stringify(e));
+        detail = e.errors?.[0]?.detail || e.errors?.[0]?.code || e.errors?.[0]?.category || detail;
+      } catch(parseErr) {
+        console.warn('[Square] catalog/service error body was not JSON:', parseErr);
+      }
       showToast(`Square catalog (services): ${detail}`);
       console.warn('Square catalog/service error:', svcRes.status, detail);
       return;
