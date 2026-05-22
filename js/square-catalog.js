@@ -84,39 +84,43 @@ function updateSyncLabel(state, label) {
 async function squarePullServices() {
   if (!squareConfig) return;
   try {
-    // Pull Services (Service Library in Square)
-    const svcRes = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=SERVICE`);
-    if (!svcRes.ok) {
-      let detail = `HTTP ${svcRes.status}`;
+    // Square stores both services and retail items as ITEM type.
+    // Services are distinguished by product_type === 'APPOINTMENTS_SERVICE'.
+    // A single ITEM request replaces the old two-request approach (SERVICE type
+    // is not a valid CatalogObjectType in Square's current API).
+    const res = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=ITEM`);
+    if (!res.ok) {
+      let detail = `HTTP ${res.status}`;
       try {
-        const e = await svcRes.json();
-        console.warn('[Square] catalog/service raw error body:', JSON.stringify(e));
+        const e = await res.json();
         detail = e.errors?.[0]?.detail || e.errors?.[0]?.code || e.errors?.[0]?.category || detail;
-      } catch(parseErr) {
-        console.warn('[Square] catalog/service error body was not JSON:', parseErr);
-      }
-      showToast(`Square catalog (services): ${detail}`);
-      console.warn('Square catalog/service error:', svcRes.status, detail);
+      } catch {}
+      showToast(`Square catalog: ${detail}`);
+      console.warn('Square catalog error:', res.status, detail);
       return;
     }
-    if (svcRes.ok) {
-      const svcData = await svcRes.json();
-      let addedSvc = 0;
-      (svcData.objects || []).forEach(item => {
-        const name = item.item_data?.name;
-        if (!name) return;
-        const lname = name.toLowerCase();
-        // Route fee/charge/surcharge names to FEES
-        if (lname.includes('fee') || lname.includes('charge') || lname.includes('surcharge')) {
-          const id = `sq-fee-${item.id}`;
-          if (!FEES.find(f => f.id === id || f.label.toLowerCase() === lname)) {
-            const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
-            FEES.push({ id, label: name, type: 'flat', value: price ? price / 100 : 0, squareItemId: item.id });
-            // Don't save yet — will be saved in the consolidated push at the end
-          }
-          return;
+
+    const data = await res.json();
+    let addedSvc = 0, addedItems = 0;
+
+    (data.objects || []).forEach(item => {
+      const name = item.item_data?.name;
+      if (!name) return;
+      const lname = name.toLowerCase();
+      const isService = item.item_data?.product_type === 'APPOINTMENTS_SERVICE';
+
+      // Fee/charge/surcharge names always route to FEES regardless of product type
+      if (lname.includes('fee') || lname.includes('charge') || lname.includes('surcharge')) {
+        const id = `sq-fee-${item.id}`;
+        if (!FEES.find(f => f.id === id || f.label.toLowerCase() === lname)) {
+          const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
+          FEES.push({ id, label: name, type: 'flat', value: price ? price / 100 : 0, squareItemId: item.id });
         }
-        // Add to SERVICES — never to ITEMS (strict separation)
+        return;
+      }
+
+      if (isService) {
+        // Appointments service → SERVICES
         const id = `sq-${item.id}`;
         if (!SERVICES.find(s => s.id === id || s.label.toLowerCase() === lname)) {
           const abbr = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4);
@@ -124,29 +128,8 @@ async function squarePullServices() {
           SERVICES.push({ id, label: name, abbr, squareItemId: item.id, squareVariationId: variationId });
           addedSvc++;
         }
-      });
-      if (addedSvc > 0) {
-        showToast(`${addedSvc} service${addedSvc>1?'s':''} imported from Square`);
-      }
-    }
-
-    // Pull Items (Item Library in Square) — retail products only, never add to SERVICES
-    const itemRes = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=ITEM`);
-    if (!itemRes.ok) {
-      let detail = `HTTP ${itemRes.status}`;
-      try { const e = await itemRes.json(); detail = e.errors?.[0]?.detail || e.errors?.[0]?.category || detail; } catch {}
-      showToast(`Square catalog (items): ${detail}`);
-      console.warn('Square catalog/item error:', itemRes.status, detail);
-      return;
-    }
-    if (itemRes.ok) {
-      const itemData = await itemRes.json();
-      let addedItems = 0;
-      (itemData.objects || []).forEach(item => {
-        const name = item.item_data?.name;
-        if (!name) return;
-        // Skip anything that looks like a service — it belongs in SERVICES not ITEMS
-        const lname = name.toLowerCase();
+      } else {
+        // Retail item → ITEMS (skip if already tracked as a service)
         if (SERVICES.find(s => s.label.toLowerCase() === lname)) return;
         const id = `sq-item-${item.id}`;
         if (!ITEMS.find(i => i.id === id || i.label.toLowerCase() === lname)) {
@@ -155,11 +138,12 @@ async function squarePullServices() {
           ITEMS.push({ id, label: name, abbr, price: price ? price / 100 : 0, squareItemId: item.id });
           addedItems++;
         }
-      });
-      if (addedItems > 0) {
-        showToast(`${addedItems} item${addedItems>1?'s':''} imported from Square`);
       }
-    }
+    });
+
+    if (addedSvc > 0)   showToast(`${addedSvc} service${addedSvc>1?'s':''} imported from Square`);
+    if (addedItems > 0) showToast(`${addedItems} item${addedItems>1?'s':''} imported from Square`);
+    if (addedSvc === 0 && addedItems === 0) showToast('Catalog already up to date');
 
     // Single consolidated push — saves services, items, and fees in one Sheets write
     _configWriteTime = Date.now();
