@@ -248,7 +248,7 @@ tailwind.config = {
       <button onclick="goTo('screen-welcome')" title="Customer Screen" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">tablet</span>
       </button>
-      <button onclick="showWarnModal('Log out?','You will need to re-enter your PIN.',() => { activeUser=null; goTo(\'screen-dashboard-login\'); })" id="logged-in-user-btn"
+      <button onclick="showWarnModal('Log out?','You will need to re-enter your PIN.',() => { activeUser=null; goTo(\'screen-welcome\'); showPinModal(); })" id="logged-in-user-btn"
         class="flex items-center gap-2 px-2.5 rounded-full bg-surface-container hover:bg-surface-container-high transition-colors" style="height:32px">
         <div id="logged-in-avatar" class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary text-xs font-headline font-bold flex-shrink-0">?</div>
         <span id="logged-in-name" class="text-xs font-body font-semibold text-on-surface">Manager</span>
@@ -303,9 +303,6 @@ tailwind.config = {
             </button>
             <button onclick="exportReportPDF()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF
-            </button>
-            <button onclick="exportReportSheets()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">upload</span> Sheets
             </button>
             <button onclick="exportReportLink()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">link</span> Copy Link

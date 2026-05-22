@@ -845,48 +845,6 @@ async function exportReportLink() {
   }
 }
 
-async function exportReportSheets() {
-  const d = window._currentReportData;
-  if (!d || d.filtered.length === 0) { showToast('No data to export.'); return; }
-  showToast('Exporting report to Google Sheets…');
-  try {
-    const payload = {
-      action: 'report',
-      sheetId: '1VesuEJxRyH-RIwdTp33u2ulKYNCXIbHZ5EU-PxJteqo',
-      from: d.from.toLocaleDateString(),
-      to: d.to.toLocaleDateString(),
-      totalIncome: d.totalIncome.toFixed(2),
-      guestCount: d.guestCount,
-      avgTicket: (d.totalIncome / Math.max(d.guestCount,1)).toFixed(2),
-      rows: d.filtered.map(r => {
-        const dt = new Date(r.checkinTime);
-        const staffNames = (r.assignments||[]).map(a => STAFF.find(s=>s.id===a.techId)?.name).filter(Boolean).join(', ');
-        return {
-          date: dt.toLocaleDateString(),
-          time: dt.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),
-          name: r.name, phone: r.phone,
-          services: r.services.map(sid => SERVICES.find(s=>s.id===sid)?.label||sid).join(', '),
-          type: r.isAppointment ? 'Appointment' : 'Walk-In',
-          staff: staffNames,
-          total: r.totalCost ? `$${r.totalCost.toFixed(2)}` : '$0.00',
-          status: r.status,
-        };
-      }),
-      staffBreakdown: Object.entries(d.staffMap).map(([techId, data]) => {
-        const tech = STAFF.find(s=>s.id===techId);
-        const comm = tech?.commission != null ? (data.income * tech.commission / 100) : 0;
-        return { name: tech?.name||'Unknown', count: data.count, income: data.income.toFixed(2), commissionPct: tech?.commission||0, commissionEarned: comm.toFixed(2) };
-      }),
-    };
-    await fetch(PROXY_SHEETS, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    showToast('Report sent to Google Sheets!');
-  } catch(e) { showToast('Failed to export report.'); console.warn(e); }
-}
-
 
 // ── Historical Transaction Entry (admin only) ──────
 let _histMode         = 'add';  // 'add' | 'edit'

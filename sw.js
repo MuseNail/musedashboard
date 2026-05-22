@@ -1,7 +1,7 @@
 // ── Service Worker ────────────────────────────────
 // Cache name must match APP_VERSION. Bump this whenever APP_VERSION changes
 // in js/config.js so old caches are purged on the next activation.
-const CACHE_NAME = 'muse-v1.79';
+const CACHE_NAME = 'muse-v2.00';
 
 // Static assets to precache on install.
 // All paths are absolute from the GitHub Pages origin.
