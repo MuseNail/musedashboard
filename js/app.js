@@ -465,17 +465,19 @@ async function checkAppVersion() {
     if (!res.ok) return;
     const data = await res.json();
     if (data.version && data.version !== APP_VERSION) {
-      // Guard against infinite reload loops caused by the service worker still serving
-      // a cached config.js with the old APP_VERSION after a soft reload. If we already
-      // triggered a reload for this target version and the mismatch persists, the SW
-      // hasn't updated its cache yet — stop looping and show a badge hint instead.
+      // sessionStorage guard — secondary safety net against any residual loop
       const alreadyTriedFor = sessionStorage.getItem('_pendingVersion');
       if (alreadyTriedFor === data.version) {
         if (badge) { badge.textContent = APP_VERSION + ' ↻'; badge.title = `Update to ${data.version} pending — hard refresh (Ctrl+Shift+R) to apply`; }
         return;
       }
-      console.log(`[Version] Running ${APP_VERSION}, live is ${data.version} — reloading`);
+      console.log(`[Version] Running ${APP_VERSION}, live is ${data.version} — clearing SW cache and reloading`);
       sessionStorage.setItem('_pendingVersion', data.version);
+      // Wipe all SW caches before reloading. Without this, a soft reload serves the
+      // stale config.js (old APP_VERSION) from the SW cache on every reload, causing
+      // an infinite loop. Clearing caches forces the next load to fetch fresh files
+      // from the network, so APP_VERSION matches version.json immediately.
+      try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}
       const PERMANENT_KEYS = new Set([
         'muse_device_id','muse_live_queue','muse_live_queue_date','muse_queue_archive',
         'muse_turns_history','muse_records','muse_deletion_log','muse_customers',
