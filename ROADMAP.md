@@ -15,9 +15,9 @@ The app is undergoing an architecture-first rebuild. Phases are done in order. T
 | 1 | localStorage Cleanup | ✅ Complete (v1.55) |
 | 2 | Cloudflare R2 for Photos | ✅ Complete (v1.56) |
 | 3 | Durable Objects WebSocket Sync | ✅ Complete (v1.57) |
-| 4 | Workers KV for Fast Config Reads | 🔄 Next |
-| 5 | Cron Jobs + Twilio SMS + Gmail | Planned |
-| 6 | Square POS Deep Link Integration | Planned |
+| 4 | Workers KV for Fast Config Reads | ✅ Complete (v1.58) |
+| 5 | Cron + Gmail Daily Archive | ✅ Complete (v1.59) |
+| 6 | Square POS Deep Link Integration | 🔄 Next |
 | 7 | PWA Polish | Planned |
 
 ---
@@ -145,25 +145,28 @@ Saving turns order wrote to localStorage then triggered a config push. The 5-sec
 
 ---
 
-## Phase 5 — Cron Jobs + Twilio SMS + Gmail API
+## Phase 5 — Cron + Gmail Daily Archive ✅ Complete (v1.59)
 
-**Goal:** Automate end-of-day archiving (fixing Phase 0 Bug 1 at the infrastructure level), appointment reminders, and daily summary emails.
+**Goal:** Automate end-of-day archiving (fixing Phase 0 Bug 1 at the infrastructure level) and send a daily summary email to the manager. SMS reminders are handled natively by Square Bookings (Phase 6) — no Twilio needed.
 
-### Components
+### What changed
 
-**Cloudflare Workers Cron Trigger**
-- Fires at 4:05 AM daily
-- Calls Apps Script to archive the day's queue and turns to history sheets
-- Eliminates the fragile browser `setTimeout` entirely (permanent fix for Phase 0 Bug 1)
+- `cloudflare/wrangler.toml` — added `[triggers] crons = ["5 11 * * *"]` (11:05 AM UTC = 4:05 AM PDT)
+- `cloudflare/worker.js` — added `_runMidnightArchive(env)` helper and `scheduled(event, env, ctx)` handler; cron calls Apps Script `archiveDay` action with Pacific-time date
+- `muse-sheets-script.gs` — bumped to v1.10; added `archiveDay`, `getDayStats`, `sendDailySummary` functions; daily summary email sent via `GmailApp.sendEmail()` to `MANAGER_EMAIL`; fixed TXLOG Entry ID column (col 21, not 14)
+- `js/config.js` + `version.json` — bumped to v1.59
 
-**Twilio SMS**
-- Appointment reminder: text fires X hours before the scheduled appointment time
-- Optional: "your tech is ready" notification when customer reaches the front of the queue
-- Requires Twilio `account_sid`, `auth_token`, and a Twilio phone number
+### How it works
 
-**Gmail API**
-- Daily summary email to manager: total customers, revenue, tech breakdown
-- Sent via Google Apps Script's `GmailApp.sendEmail()` — no extra credentials needed beyond the existing Apps Script deployment
+1. Cloudflare Cron fires at 4:05 AM Pacific every night
+2. Worker POSTs `{ action: 'archiveDay', clientDate }` to Apps Script
+3. Apps Script reads the Check-Ins tab for that date, computes totals by tech, sends Gmail summary, then clears the live queue
+4. Eliminates the fragile browser `setTimeout` entirely (permanent fix for Phase 0 Bug 1)
+
+### Deployment steps (one-time)
+
+1. Paste `muse-sheets-script-v1.10.gs` into the Apps Script editor, set `MANAGER_EMAIL`, deploy as new version and re-authorize Gmail scope
+2. `wrangler deploy worker.js` from `cloudflare/` directory
 
 ---
 
@@ -219,9 +222,9 @@ After Phase 3
 After Phase 4
   + Cloudflare Workers KV (fast config read cache)
 
-After Phase 5
+After Phase 5 ✅
   + Cloudflare Cron Triggers (midnight archival)
-  + Twilio (SMS reminders)
+  + Gmail daily summary (via Apps Script GmailApp)
 
 After Phase 6
   + Square API two-way sync

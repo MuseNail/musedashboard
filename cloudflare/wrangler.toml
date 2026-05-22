@@ -1,6 +1,12 @@
-name             = "musedashboard"
-main             = "worker.js"
+name               = "musedashboard"
+main               = "worker.js"
 compatibility_date = "2024-11-20"
+
+# ── Cron Trigger ───────────────────────────────────────────────────────────────
+# Fires at 11:05 AM UTC = 4:05 AM PDT (summer) / 3:05 AM PST (winter)
+# Calls Apps Script to archive the day and send the daily summary email.
+[triggers]
+crons = ["5 11 * * *"]
 
 # ── R2 bucket binding ─────────────────────────────────────────────────────────
 # Create the bucket first:  wrangler r2 bucket create musedashboard-photos

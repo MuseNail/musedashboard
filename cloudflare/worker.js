@@ -36,6 +36,27 @@ function json(data, status = 200) {
   });
 }
 
+// Called by the Cron Trigger at 4:05 AM Pacific every night.
+// Forwards an archiveDay request to Apps Script, which computes the day's
+// stats, sends the Gmail summary, and clears the live queue.
+async function _runMidnightArchive(env) {
+  const sheetsUrl = (env.SHEETS_URL || '').trim();
+  if (!sheetsUrl) return;
+  // clientDate in Pacific Time so Apps Script uses the right day
+  const clientDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+  try {
+    const res = await fetch(sheetsUrl, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ action: 'archiveDay', clientDate }),
+    });
+    const data = await res.json();
+    console.log('[Cron] archiveDay:', JSON.stringify(data));
+  } catch(e) {
+    console.error('[Cron] archiveDay failed:', e.message);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url    = new URL(request.url);
@@ -179,6 +200,10 @@ export default {
     }
 
     return json({ error: 'Not found' }, 404);
+  },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(_runMidnightArchive(env));
   },
 };
 
