@@ -25,14 +25,15 @@ There is no npm, no bundler, no transpiler, and no intention to add one. Do not 
 Vanilla JS only. No React, Vue, Svelte, Alpine, or any other component framework. Tailwind CDN is already present for layout utilities — do not add more libraries.
 
 ### No ES modules
-All 16 JS files share a single global scope via ordered `<script src>` tags. Do not add `type="module"` to any script tag, do not use `import`/`export`. Variables defined in one file are available in all files loaded after it.
+All 18 JS files share a single global scope via ordered `<script src>` tags. Do not add `type="module"` to any script tag, do not use `import`/`export`. Variables defined in one file are available in all files loaded after it.
 
 ### Load order is a hard constraint
 The `<script>` tag order in `index.html` is:
 
 ```
 utils.js → config.js → sync.js → photos.js → auth.js → catalog.js →
-square.js → staff.js → checkin.js → queue.js → turns.js → reports.js →
+square-customers.js → square-catalog.js → square-pos.js →
+staff.js → checkin.js → queue.js → turns.js → reports.js →
 giftcards.js → calendar.js → settings.js → app.js
 ```
 
@@ -55,7 +56,9 @@ No server-side logic, no dynamic routes, no build artifacts. All output must be 
 | Photos / logo | `js/photos.js` |
 | Auth / PIN | `js/auth.js` |
 | Services, Items, Fees CRUD | `js/catalog.js` |
-| Square integration | `js/square.js` |
+| Square customers, directory, upsert | `js/square-customers.js` |
+| Square config modal, catalog pull/push | `js/square-catalog.js` |
+| Square POS deep link, orders, appointments, bookings | `js/square-pos.js` |
 | Staff management | `js/staff.js` |
 | Check-in kiosk | `js/checkin.js` |
 | Queue and queue modals | `js/queue.js` |
