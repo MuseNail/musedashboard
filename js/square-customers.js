@@ -302,7 +302,11 @@ async function saveEditCustomer() {
 async function squarePullStaff() {
   if (!squareConfig) { showToast('Square not configured.'); return; }
   try {
-    const res = await fetch(`${SQUARE_PROXY}/v2/team-members?status=ACTIVE&limit=200`);
+    const res = await fetch(`${SQUARE_PROXY}/v2/team-members/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: { filter: { status: 'ACTIVE' } }, limit: 200 }),
+    });
     if (!res.ok) {
       let detail = `HTTP ${res.status}`;
       try { const e = await res.json(); detail = e.errors?.[0]?.detail || e.errors?.[0]?.category || detail; } catch {}

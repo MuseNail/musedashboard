@@ -193,7 +193,11 @@ async function syncSquareAppointments() {
 async function loadSquareBookingTeamMembers() {
   if (!squareConfig) return;
   try {
-    const res = await fetch(`${SQUARE_PROXY}/v2/team-members?status=ACTIVE&limit=200`);
+    const res = await fetch(`${SQUARE_PROXY}/v2/team-members/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: { filter: { status: 'ACTIVE' } }, limit: 200 }),
+    });
     if (!res.ok) return;
     const data = await res.json();
     const members = data.team_members || [];
