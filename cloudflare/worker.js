@@ -181,7 +181,12 @@ export default {
       headers.set('Authorization',  `Bearer ${env.SQUARE_TOKEN}`);
       headers.set('Square-Version', '2024-11-20');
       headers.set('Content-Type',   'application/json');
+      // Strip browser-context headers so Square sees a clean server-to-server call.
+      // Forwarding Origin/Referer causes Square to reject certain endpoints (e.g. catalog)
+      // with "invalid cross-origin request".
       headers.delete('host');
+      headers.delete('origin');
+      headers.delete('referer');
 
       const hasBody = method !== 'GET' && method !== 'HEAD';
       const upstream = await fetch(squareUrl, {
