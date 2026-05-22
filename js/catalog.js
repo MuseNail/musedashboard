@@ -64,16 +64,20 @@ function saveService() {
   // Prevent duplicate labels (case-insensitive)
   const duplicate = SERVICES.find(s => s.label.toLowerCase() === label.toLowerCase() && s.id !== editId);
   if (duplicate) { showToast(`"${label}" already exists as a service.`); return; }
+  let changedSvc;
   if (editId) {
-    const svc = SERVICES.find(s => s.id === editId);
-    if (svc) { svc.label = label; svc.abbr = abbr; svc.baseCost = baseCost; }
+    changedSvc = SERVICES.find(s => s.id === editId);
+    if (changedSvc) { changedSvc.label = label; changedSvc.abbr = abbr; changedSvc.baseCost = baseCost; }
   } else {
-    SERVICES.push({ id: `svc-${Date.now()}`, label, abbr, baseCost });
+    changedSvc = { id: `svc-${Date.now()}`, label, abbr, baseCost };
+    SERVICES.push(changedSvc);
   }
   saveServicesToStorage();
   closeServiceModal();
   renderServicesList();
   showToast(editId ? 'Service updated' : `"${label}" added`);
+  // Fire-and-forget: sync to Square catalog if configured
+  if (squareConfig && changedSvc) squarePushService(changedSvc);
 }
 
 function deleteService(id) {
@@ -145,7 +149,10 @@ function renderSettingsItems() {
           onchange="ITEMS[${i}].price=parseFloat(this.value)||0; saveItems()"
           class="w-16 bg-transparent border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:border-primary outline-none text-right">
       </div>
-      <button onclick="removeItem(${i})" class="text-outline-variant hover:text-error transition-colors">
+      ${squareConfig ? `<button onclick="squarePushItem(ITEMS[${i}])" title="Push to Square" class="text-outline-variant hover:text-primary transition-colors flex-shrink-0">
+        <span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span>
+      </button>` : ''}
+      <button onclick="removeItem(${i})" class="text-outline-variant hover:text-error transition-colors flex-shrink-0">
         <span class="material-symbols-outlined" style="font-size:16px">delete</span>
       </button>
     </div>`).join('') || '<p class="text-sm text-on-surface-variant py-2">No items yet.</p>';

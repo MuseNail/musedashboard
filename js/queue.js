@@ -249,6 +249,7 @@ function buildQueueRow(e) {
           ${e.status === 'inservice' ? `
             <button onclick="updateStatus('${id}','waiting')" title="Back to Waiting" class="${btnCls}" style="background:#f5c870;color:#3a2800;"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
             <button onclick="tryAdvanceStatus('${id}','done')" title="Done" class="${btnCls}" style="background:#c2cacd;color:#333;"><span class="material-symbols-outlined" style="font-size:19px">check_circle</span></button>` : ''}
+          ${e.status === 'done' && squareConfig && e.totalCost > 0 ? `<button onclick="openSquarePOS('${id}')" title="Pay in Square POS" class="${btnCls}" style="background:#1b5e3b;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">point_of_sale</span></button>` : ''}
           ${e.status === 'done' ? `<button onclick="confirmReopen('${id}')" title="Reopen" class="${btnCls} bg-surface-container hover:bg-secondary-container text-outline-variant"><span class="material-symbols-outlined" style="font-size:19px">undo</span></button>` : ''}
           <button onclick="removeFromQueue('${id}')" title="Remove" class="${btnCls} bg-surface-container hover:bg-error/20 text-outline hover:text-error"><span class="material-symbols-outlined" style="font-size:17px">close</span></button>
         </div>

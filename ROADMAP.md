@@ -17,7 +17,7 @@ The app is undergoing an architecture-first rebuild. Phases are done in order. T
 | 3 | Durable Objects WebSocket Sync | ✅ Complete (v1.57) |
 | 4 | Workers KV for Fast Config Reads | ✅ Complete (v1.58) |
 | 5 | Cron + Gmail Daily Archive | ✅ Complete (v1.59) |
-| 6 | Square POS Deep Link Integration | 🔄 Next |
+| 6 | Square POS Deep Link + Catalog Push | ✅ Complete (v1.60) |
 | 7 | PWA Polish | Planned |
 
 ---
@@ -170,19 +170,28 @@ Saving turns order wrote to localStorage then triggered a config push. The 5-sec
 
 ---
 
-## Phase 6 — Square POS Deep Link Integration
+## Phase 6 — Square POS Deep Link + Catalog Push ✅ Complete (v1.60)
 
-**Goal:** Tighter integration with Square so completed transactions can open directly in Square POS for payment, and the Square catalog stays in sync with `SERVICES` and `ITEMS`.
+**Goal:** Tighter integration with Square — payment handoff from the dashboard to Square POS, and bidirectional catalog sync so services and items created in the dashboard are pushed to Square.
 
-**Current state:** Square sync already pulls catalog items and staff from Square. `squareConfig` holds `locationId`. A proxy exists at `SQUARE_PROXY`.
+### What changed
 
-### Changes needed
+- `js/square.js` — added `openSquarePOS(entryId)`, `openSquarePOSFromModal()`, `squarePushService(svc)`, `squarePushItem(item)`
+- `js/queue.js` — "Pay in Square POS" button on done queue cards (only when `squareConfig` is set and `totalCost > 0`)
+- `js/catalog.js` — auto-push to Square catalog on `saveService()`; per-row Square push button on each item in Settings
+- `index.html` — restored "Create Square Ticket" + "Pay in Square POS" buttons in group assign modal footer
 
-- Square Developer Portal: create an app, get `client_id`
-- Deep link format: `squareup://pos/take-payment?…` (Square SDK URL scheme)
-- On "Mark Done": offer an "Open in Square" button that pre-fills amount and line items
-- Catalog sync: push `SERVICES` and `ITEMS` changes back to Square catalog (currently one-way pull only)
-- **Fees stay app-only** — fees are not sent to Square. They are tracked in the dashboard's records only, not as Square catalog items.
+### How each piece works
+
+**Deep link (`openSquarePOS`):** Opens the Square POS iPad app with the customer's total pre-filled. Uses `squareup://pos/take-payment?amount_money=X&currency_code=USD`. Links the payment to the Square customer record if matched by phone. No `client_id` needed for basic launch — Square POS must be installed on the device.
+
+**Create Square Ticket (`saveGroupAndPushSquare`):** Creates an open order in Square via the API. The order appears as an open ticket in Square POS. Works without switching apps; staff processes it in Square POS.
+
+**Catalog push (`squarePushService` / `squarePushItem`):**
+- New service/item (no `squareItemId`): created in Square catalog via `batch-upsert`; returned ID stored back on the object and synced to Sheets
+- Existing service/item (has `squareItemId`): GETs current version, PATCHes name + pricing
+- Services use `product_type: APPOINTMENTS_SERVICE` so they appear in the Square Services library
+- **Fees are never pushed** — fees are app-only per architecture rules
 
 ---
 
@@ -226,8 +235,9 @@ After Phase 5 ✅
   + Cloudflare Cron Triggers (midnight archival)
   + Gmail daily summary (via Apps Script GmailApp)
 
-After Phase 6
-  + Square API two-way sync
+After Phase 6 ✅
+  + Square POS deep link (pay handoff)
+  + Catalog push (SERVICES + ITEMS → Square, bidirectional)
 
 After Phase 7
   + Service Worker (offline support, PWA install)

@@ -368,5 +368,160 @@ async function squarePullStaff() {
 }
 
 
+// ── Square POS Deep Link ──────────────────────────
+// Opens Square POS on the iPad with the total pre-filled.
+// Requires Square POS app to be installed.
+function openSquarePOS(entryId) {
+  const entry = queue.find(e => String(e.id) === String(entryId));
+  if (!entry) return;
+  const cents = Math.round((entry.totalCost || 0) * 100);
+  if (cents <= 0) { showToast('No total — assign a price first.'); return; }
+  let url = `squareup://pos/take-payment?amount_money=${cents}&currency_code=USD`;
+  // Link the payment to the Square customer record if we have a match by phone
+  if (entry.phone) {
+    const match = customerDirectory.find(c => c.phone && c.phone.replace(/\D/g,'').endsWith(entry.phone.replace(/\D/g,'')));
+    if (match?.squareId) url += `&customer_id=${encodeURIComponent(match.squareId)}`;
+  }
+  window.location.href = url;
+}
+
+// Called from the group assign modal footer — saves the current tab first
+function openSquarePOSFromModal() {
+  saveCurrentGroupTabInputs();
+  const entryId = groupAssignEntries[activeGroupTab];
+  if (entryId) openSquarePOS(entryId);
+}
 
 
+// ── Square Catalog Push ───────────────────────────
+// Pushes a service or retail item to Square catalog (create or update).
+// Fees are never pushed — they are app-only per architecture rules.
+
+async function squarePushService(svc) {
+  if (!squareConfig || !svc) return;
+  try {
+    if (svc.squareItemId) {
+      // Update existing — GET to retrieve version (required for optimistic lock), then POST
+      const getRes = await fetch(`${SQUARE_PROXY}/v2/catalog/object/${svc.squareItemId}`);
+      if (!getRes.ok) { showToast('Square: could not fetch existing service.'); return; }
+      const obj = (await getRes.json()).object;
+      if (!obj) return;
+      obj.item_data.name = svc.label;
+      if (obj.item_data.variations?.[0]?.item_variation_data) {
+        const vd = obj.item_data.variations[0].item_variation_data;
+        vd.pricing_type = svc.baseCost > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING';
+        if (svc.baseCost > 0) vd.price_money = { amount: Math.round(svc.baseCost * 100), currency: 'USD' };
+        else delete vd.price_money;
+      }
+      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/object`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idempotency_key: `muse-svc-upd-${svc.id}-${Date.now()}`, object: obj }),
+      });
+      if (res.ok) showToast(`"${svc.label}" updated in Square ✓`);
+      else console.warn('[Square] Service update failed:', await res.json());
+    } else {
+      // Create new service in Square catalog
+      const tempId = `#muse-${svc.id}`;
+      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/batch-upsert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotency_key: `muse-svc-${svc.id}-${Date.now()}`,
+          batches: [{ objects: [{
+            type: 'ITEM',
+            id:   tempId,
+            item_data: {
+              name:         svc.label,
+              product_type: 'APPOINTMENTS_SERVICE',
+              variations: [{
+                type: 'ITEM_VARIATION',
+                id:   `${tempId}-var`,
+                item_variation_data: {
+                  item_id:      tempId,
+                  name:         'Regular',
+                  pricing_type: svc.baseCost > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING',
+                  ...(svc.baseCost > 0 ? { price_money: { amount: Math.round(svc.baseCost * 100), currency: 'USD' } } : {}),
+                },
+              }],
+            },
+          }] }],
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const mapping = (data.id_mappings || []).find(m => m.client_object_id === tempId);
+        if (mapping?.object_id) { svc.squareItemId = mapping.object_id; saveServicesToStorage(); }
+        showToast(`"${svc.label}" added to Square ✓`);
+      } else {
+        console.warn('[Square] Service create failed:', await res.json());
+      }
+    }
+  } catch(e) {
+    console.warn('[Square] Catalog push failed:', e);
+  }
+}
+
+async function squarePushItem(item) {
+  if (!squareConfig || !item) return;
+  try {
+    if (item.squareItemId) {
+      // Update existing
+      const getRes = await fetch(`${SQUARE_PROXY}/v2/catalog/object/${item.squareItemId}`);
+      if (!getRes.ok) { showToast('Square: could not fetch existing item.'); return; }
+      const obj = (await getRes.json()).object;
+      if (!obj) return;
+      obj.item_data.name = item.label;
+      if (obj.item_data.variations?.[0]?.item_variation_data) {
+        const vd = obj.item_data.variations[0].item_variation_data;
+        vd.pricing_type = item.price > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING';
+        if (item.price > 0) vd.price_money = { amount: Math.round(item.price * 100), currency: 'USD' };
+        else delete vd.price_money;
+      }
+      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/object`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idempotency_key: `muse-item-upd-${item.id}-${Date.now()}`, object: obj }),
+      });
+      if (res.ok) showToast(`"${item.label}" updated in Square ✓`);
+      else console.warn('[Square] Item update failed:', await res.json());
+    } else {
+      // Create new retail item in Square catalog
+      const tempId = `#muse-${item.id}`;
+      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/batch-upsert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idempotency_key: `muse-item-${item.id}-${Date.now()}`,
+          batches: [{ objects: [{
+            type: 'ITEM',
+            id:   tempId,
+            item_data: {
+              name: item.label,
+              variations: [{
+                type: 'ITEM_VARIATION',
+                id:   `${tempId}-var`,
+                item_variation_data: {
+                  item_id:      tempId,
+                  name:         'Regular',
+                  pricing_type: item.price > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING',
+                  ...(item.price > 0 ? { price_money: { amount: Math.round(item.price * 100), currency: 'USD' } } : {}),
+                },
+              }],
+            },
+          }] }],
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const mapping = (data.id_mappings || []).find(m => m.client_object_id === tempId);
+        if (mapping?.object_id) { item.squareItemId = mapping.object_id; saveItems(); }
+        showToast(`"${item.label}" added to Square ✓`);
+      } else {
+        console.warn('[Square] Item create failed:', await res.json());
+      }
+    }
+  } catch(e) {
+    console.warn('[Square] Catalog push failed:', e);
+  }
+}
