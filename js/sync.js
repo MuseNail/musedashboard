@@ -301,6 +301,8 @@ async function pushConfigToSheets() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'saveConfig', config, device: DEVICE_ID }),
     });
+    // Broadcast to other connected devices so they apply the update instantly
+    _wsSend({ type: 'config', config, device: DEVICE_ID });
   } catch(e) { console.warn('[Config] Push failed:', e); }
 }
 
@@ -355,6 +357,7 @@ async function loadConfigFromSheets() {
 // Writes are debounced 2s to avoid conflicts.
 
 const SHEETS_PROXY  = 'https://musedashboard.musenailandspa.workers.dev/sheets';
+const WS_URL        = 'wss://musedashboard.musenailandspa.workers.dev/ws';
 const POLL_INTERVAL = 5000; // 5 seconds
 const DEVICE_ID     = (() => {
   let id = localStorage.getItem('muse_device_id');
@@ -366,6 +369,130 @@ let _sheetsWriteTimer  = null;
 let _lastSheetsUpdate  = null; // ISO string of last known Sheets queue update time
 let _pollTimer         = null;
 let _isSyncing         = false;
+
+// ── WebSocket Real-Time Sync ──────────────────────────────────────────────────
+// The Durable Object at /ws is a stateless broadcast hub. When any device writes
+// queue or config to Sheets, it also sends the payload via WS so all other
+// connected devices apply the update instantly without waiting for the next poll.
+// Polling remains active as a durability fallback — WS is additive, not a replacement.
+
+let _ws             = null;
+let _wsConnected    = false;
+let _wsReconnect    = null; // setTimeout handle for reconnect delay
+let _wsPingInterval = null; // setInterval handle for keepalive pings
+
+function _wsConnect() {
+  if (_ws && (_ws.readyState === WebSocket.OPEN || _ws.readyState === WebSocket.CONNECTING)) return;
+  try { _ws = new WebSocket(WS_URL); } catch(e) { _wsScheduleReconnect(); return; }
+
+  _ws.onopen = () => {
+    _wsConnected = true;
+    console.log('[WS] Connected');
+    // Keepalive ping every 20s — Cloudflare closes idle WS connections after ~100s
+    _wsPingInterval = setInterval(() => { if (_wsConnected) _wsSend({ type: 'ping' }); }, 20000);
+  };
+
+  _ws.onmessage = ({ data }) => {
+    let msg;
+    try { msg = JSON.parse(data); } catch { return; }
+    _wsHandleMessage(msg);
+  };
+
+  _ws.onclose = _ws.onerror = () => {
+    _wsConnected = false;
+    clearInterval(_wsPingInterval);
+    _wsPingInterval = null;
+    _wsScheduleReconnect();
+    console.log('[WS] Disconnected — polling is active fallback');
+  };
+}
+
+function _wsScheduleReconnect() {
+  if (_wsReconnect) return;
+  _wsReconnect = setTimeout(() => { _wsReconnect = null; _wsConnect(); }, 5000);
+}
+
+function _wsSend(msg) {
+  if (!_wsConnected || !_ws) return false;
+  try { _ws.send(JSON.stringify(msg)); return true; } catch { return false; }
+}
+
+function _wsHandleMessage(msg) {
+  if (msg.type === 'pong') return;
+
+  // Queue update from another device — apply immediately
+  if (msg.type === 'queue' && msg.device !== DEVICE_ID) {
+    const incoming = Array.isArray(msg.queue)
+      ? msg.queue.map(e => ({ ...e, checkinTime: e.checkinTime instanceof Date ? e.checkinTime : new Date(e.checkinTime) }))
+      : [];
+
+    // Never replace a non-empty local queue with an empty remote one mid-session
+    if (incoming.length === 0 && queue.length > 0) return;
+
+    // Apply cross-device deletions carried in the payload
+    if (msg.deletedIds?.length) {
+      msg.deletedIds.forEach(id => {
+        const existing = allRecords.find(r => String(r.id) === String(id));
+        if (existing && existing.status !== 'deleted') existing.status = 'deleted';
+        else if (!existing) allRecords.push({ id: String(id), status: 'deleted', name: '', totalCost: 0, services: [], assignments: [] });
+      });
+      localStorage.setItem('muse_records', JSON.stringify(allRecords));
+    }
+
+    _lastSheetsUpdate = msg.updatedAt || new Date().toISOString();
+    queue = incoming;
+
+    if (msg.turnsOrder && Array.isArray(msg.turnsOrder) && JSON.stringify(msg.turnsOrder) !== JSON.stringify(turnsTechOrder)) {
+      turnsTechOrder = msg.turnsOrder;
+    }
+
+    const today = todayStr();
+    localStorage.setItem(QUEUE_DATE_KEY, today);
+    localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(serializeQueue(queue)));
+    requestAnimationFrame(() => { renderQueue(); updateStats(); renderTurns(); setSheetsIndicator('ok'); });
+    console.log('[WS] Queue from', msg.device, '—', incoming.length, 'customers');
+  }
+
+  // Config update from another device — apply immediately
+  if (msg.type === 'config' && msg.device !== DEVICE_ID) {
+    const c = msg.config || {};
+    let changed = false;
+    if (c.muse_staff?.length && JSON.stringify(c.muse_staff) !== JSON.stringify(STAFF))
+      { STAFF = c.muse_staff; changed = true; }
+    if (c.muse_services?.length && JSON.stringify(c.muse_services) !== JSON.stringify(SERVICES))
+      { SERVICES = dedupByLabel(c.muse_services); changed = true; }
+    if (c.muse_fd_users?.length && JSON.stringify(c.muse_fd_users) !== JSON.stringify(FRONT_DESK_USERS))
+      { FRONT_DESK_USERS = c.muse_fd_users; changed = true; }
+    if (c.muse_items?.length && JSON.stringify(c.muse_items) !== JSON.stringify(ITEMS))
+      { ITEMS = dedupByLabel(c.muse_items); changed = true; }
+    if (c.muse_fees?.length && JSON.stringify(c.muse_fees) !== JSON.stringify(FEES))
+      { FEES = dedupByLabel(c.muse_fees); changed = true; }
+    if (c.muse_schedule && JSON.stringify(c.muse_schedule) !== JSON.stringify(scheduleData))
+      { scheduleData = c.muse_schedule; changed = true; }
+    if (c.muse_turn_config && JSON.stringify(c.muse_turn_config) !== JSON.stringify(_turnConfig))
+      { _turnConfig = c.muse_turn_config; changed = true; }
+    if (c.muse_bonus_services && JSON.stringify(c.muse_bonus_services) !== JSON.stringify(_bonusServices))
+      { _bonusServices = c.muse_bonus_services; changed = true; }
+    if (c.muse_hidden_services && JSON.stringify(c.muse_hidden_services) !== JSON.stringify(hiddenCheckinServices))
+      { hiddenCheckinServices = c.muse_hidden_services; changed = true; }
+    if (c.muse_hidden_dash_services && JSON.stringify(c.muse_hidden_dash_services) !== JSON.stringify(hiddenDashServices))
+      { hiddenDashServices = c.muse_hidden_dash_services; changed = true; }
+    if (c.muse_inactive_staff && JSON.stringify(c.muse_inactive_staff) !== JSON.stringify(inactiveStaff))
+      { inactiveStaff = c.muse_inactive_staff; changed = true; }
+    if (c.muse_logo && c.muse_logo !== _logoData)
+      { _logoData = c.muse_logo; changed = true; }
+    if (Array.isArray(c.muse_turns_order) && JSON.stringify(c.muse_turns_order) !== JSON.stringify(turnsTechOrder))
+      { turnsTechOrder = c.muse_turns_order; changed = true; }
+    if (changed) {
+      setLogo();
+      renderTurns();
+      if (document.getElementById('settings-dash-service-visibility')?.offsetParent !== null) renderSettingsDashServiceVisibility();
+      if (document.getElementById('settings-service-visibility')?.offsetParent !== null) renderSettingsServiceVisibility();
+      if (document.getElementById('settings-active-staff')?.offsetParent !== null) renderSettingsActiveStaff();
+    }
+    console.log('[WS] Config from', msg.device);
+  }
+}
 
 
 // ── allRecords cross-device sync ──────────────────
@@ -491,6 +618,16 @@ async function pushQueueToSheets() {
     if (data.success) {
       _lastSheetsUpdate = data.updatedAt || now;
       setSheetsIndicator('ok');
+      // Broadcast to other connected devices — instant update, no poll lag
+      _wsSend({
+        type:       'queue',
+        queue:      serializeQueue(queue),
+        date:       clientDate,
+        updatedAt:  _lastSheetsUpdate,
+        device:     DEVICE_ID,
+        turnsOrder: turnsTechOrder,
+        deletedIds: allRecords.filter(r => r.status === 'deleted').map(r => String(r.id)),
+      });
     } else throw new Error(data.error || 'Save failed');
   } catch(err) {
     setSheetsIndicator('error');
@@ -645,6 +782,8 @@ let _configPollTimer = null;
 const CONFIG_POLL_INTERVAL = 15000; // 15 seconds — syncs logo, photos, staff, services across devices
 
 function startSheetsPolling() {
+  // Attempt real-time WebSocket sync; polling remains as the durability fallback
+  _wsConnect();
   if (_pollTimer) return;
   _pollTimer = setInterval(pollSheets, POLL_INTERVAL);
   // Also poll config+photos every 15s so logo/photos/settings sync across devices

@@ -8,6 +8,16 @@ compatibility_date = "2024-11-20"
 binding     = "PHOTOS_BUCKET"
 bucket_name = "musedashboard-photos"
 
+# ── Durable Object binding ─────────────────────────────────────────────────────
+# Enables real-time WebSocket sync. Migrations run automatically on deploy.
+[[durable_objects.bindings]]
+name       = "SALON_DO"
+class_name = "MuseSalonDO"
+
+[[migrations]]
+tag                = "v1"
+new_sqlite_classes = ["MuseSalonDO"]
+
 # ── Secrets ───────────────────────────────────────────────────────────────────
 # Set each secret once via the CLI — never commit secret values to this file:
 #

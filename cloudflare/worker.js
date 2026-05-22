@@ -81,9 +81,16 @@ export default {
       return json({ error: 'Method not allowed' }, 405);
     }
 
+    // ── WebSocket / Durable Object Route ─────────────────────────────────────
+    if (path === '/ws') {
+      const id   = env.SALON_DO.idFromName('muse');
+      const stub = env.SALON_DO.get(id);
+      return stub.fetch(request);
+    }
+
     // ── Sheets Proxy ──────────────────────────────────────────────────────────
     if (path === '/sheets' || path === '/sheets/') {
-      const sheetsUrl = env.SHEETS_URL;
+      const sheetsUrl = (env.SHEETS_URL || '').trim();
       if (!sheetsUrl) return json({ error: 'SHEETS_URL not configured' }, 500);
 
       // GET with query string (e.g. ?action=loadConfig&_=timestamp) — forward as GET
@@ -95,13 +102,16 @@ export default {
       const init = { method, headers: { 'Content-Type': 'application/json' } };
       if (method === 'POST') init.body = await request.text();
 
-      const upstream = await fetch(targetUrl, init);
-      const text     = await upstream.text();
-
-      return new Response(text, {
-        status:  upstream.status,
-        headers: corsHeaders({ 'Content-Type': 'application/json' }),
-      });
+      try {
+        const upstream = await fetch(targetUrl, init);
+        const text     = await upstream.text();
+        return new Response(text, {
+          status:  upstream.status,
+          headers: corsHeaders({ 'Content-Type': 'application/json' }),
+        });
+      } catch(e) {
+        return json({ error: 'Sheets proxy error', detail: e.message }, 502);
+      }
     }
 
     // ── Square Proxy ──────────────────────────────────────────────────────────
@@ -135,3 +145,50 @@ export default {
     return json({ error: 'Not found' }, 404);
   },
 };
+
+// ── Durable Object ─────────────────────────────────────────────────────────────
+// One instance per salon (keyed by idFromName('muse')).
+// Stateless broadcast hub — no persistent state, just relays messages to all
+// connected WebSocket clients so queue/config changes are instant across devices.
+// Sheets remains the durable source of truth; the DO just eliminates poll lag.
+export class MuseSalonDO {
+  constructor(state, env) {
+    this.sockets = new Set();
+  }
+
+  async fetch(request) {
+    const upgrade = request.headers.get('Upgrade');
+    if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
+      return new Response('Expected WebSocket upgrade', { status: 426 });
+    }
+    const pair             = new WebSocketPair();
+    const [client, server] = Object.values(pair);
+    this.handleSession(server);
+    return new Response(null, { status: 101, webSocket: client });
+  }
+
+  handleSession(ws) {
+    ws.accept();
+    this.sockets.add(ws);
+
+    ws.addEventListener('message', ({ data }) => {
+      let msg;
+      try { msg = JSON.parse(data); } catch { return; }
+
+      if (msg.type === 'ping') {
+        try { ws.send(JSON.stringify({ type: 'pong' })); } catch {}
+        return;
+      }
+
+      // Broadcast to all OTHER connected clients (1 = WebSocket.OPEN)
+      for (const socket of this.sockets) {
+        if (socket !== ws && socket.readyState === 1) {
+          try { socket.send(data); } catch {}
+        }
+      }
+    });
+
+    ws.addEventListener('close', () => this.sockets.delete(ws));
+    ws.addEventListener('error', () => this.sockets.delete(ws));
+  }
+}
