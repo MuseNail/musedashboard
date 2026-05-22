@@ -109,6 +109,22 @@ export default {
       return stub.fetch(request);
     }
 
+    // ── App State (Durable Object source of truth) ───────────────────────────
+    // GET  /state/snapshot  → full state snapshot { state, seq, schemaVersion }
+    // POST /state/mutate    → apply a mutation { op, payload, mutationId } → { applied, seq }
+    // HTTP fallback for the new client; the DO also serves these over /ws.
+    if (path === '/state/snapshot' || path === '/state/mutate') {
+      const id    = env.SALON_DO.idFromName('muse');
+      const stub  = env.SALON_DO.get(id);
+      const doRes = await stub.fetch(request);
+      // Re-wrap with CORS so cross-origin clients (GitHub Pages, local dev) are allowed.
+      const body  = await doRes.text();
+      return new Response(body, {
+        status:  doRes.status,
+        headers: corsHeaders({ 'Content-Type': 'application/json' }),
+      });
+    }
+
     // ── Sheets Proxy ──────────────────────────────────────────────────────────
     if (path === '/sheets' || path === '/sheets/') {
       const sheetsUrl = (env.SHEETS_URL || '').trim();
@@ -212,32 +228,74 @@ export default {
   },
 };
 
-// ── Durable Object ─────────────────────────────────────────────────────────────
-// One instance per salon (keyed by idFromName('muse')).
-// Stateless broadcast hub — no persistent state, just relays messages to all
-// connected WebSocket clients so queue/config changes are instant across devices.
-// Sheets remains the durable source of truth; the DO just eliminates poll lag.
+// ── Durable Object — Single Source of Truth ─────────────────────────────────────
+// One instance per salon (keyed by idFromName('muse')). Holds canonical app state
+// in SQLite-backed DO storage (state.storage.*). Single writer ⇒ atomic per-key
+// writes, no blob overwrite, no conflict guards. Clients hydrate via `snapshot`
+// and mutate via typed `mutate` messages; changes broadcast to all peers.
+//
+// Storage key layout:
+//   config:<field>   one key per config field (staff, services, turns_order, …)
+//   queue:<id>       live queue entries
+//   record:<id>      transaction records
+//   giftcard:<id>    gift cards
+//   deletion:<id>    soft-delete markers
+//   mut:<mutationId> idempotency markers (value = seq); pruned in alarm()
+//   meta:seq         monotonic change counter
+//
+// Wire protocol (over /ws, JSON):
+//   client→DO: {type:'hello'} | {type:'mutate',op,payload,mutationId,device} | {type:'ping'}
+//   DO→client: {type:'snapshot',state,seq} | {type:'applied',mutationId,seq}
+//              | {type:'change',op,payload,seq,device} | {type:'pong'}
+// HTTP fallback: GET /state/snapshot, POST /state/mutate.
+//
+// During the v2.00 transition the DO ALSO relays any legacy message verbatim
+// (the current production client sends {type:'queue'|'config'}), so the live app
+// keeps working until the new client cuts over. Remove the legacy relay after cutover.
 export class MuseSalonDO {
   constructor(state, env) {
+    this.state = state;
+    this.env   = env;
     this.sockets = new Set();
+    this.SCHEMA_VERSION = 1;
+    this.BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6h
   }
 
   async fetch(request) {
+    const url     = new URL(request.url);
     const upgrade = request.headers.get('Upgrade');
-    if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
-      return new Response('Expected WebSocket upgrade', { status: 426 });
+
+    if (upgrade && upgrade.toLowerCase() === 'websocket') {
+      const pair             = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      this.handleSession(server);
+      return new Response(null, { status: 101, webSocket: client });
     }
-    const pair             = new WebSocketPair();
-    const [client, server] = Object.values(pair);
-    this.handleSession(server);
-    return new Response(null, { status: 101, webSocket: client });
+
+    // HTTP fallback API (used by the client when the WebSocket is unavailable)
+    if (url.pathname === '/state/snapshot') {
+      const snap = await this.buildSnapshot();
+      return new Response(JSON.stringify(snap), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (url.pathname === '/state/mutate' && request.method === 'POST') {
+      let msg;
+      try { msg = await request.json(); } catch { return new Response(JSON.stringify({ error: 'bad json' }), { status: 400 }); }
+      const res = await this.applyMutation(msg, null);
+      return new Response(JSON.stringify(res), {
+        status: res.error ? 400 : 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response('Expected WebSocket upgrade or /state/*', { status: 426 });
   }
 
   handleSession(ws) {
     ws.accept();
     this.sockets.add(ws);
 
-    ws.addEventListener('message', ({ data }) => {
+    ws.addEventListener('message', async ({ data }) => {
       let msg;
       try { msg = JSON.parse(data); } catch { return; }
 
@@ -246,7 +304,22 @@ export class MuseSalonDO {
         return;
       }
 
-      // Broadcast to all OTHER connected clients (1 = WebSocket.OPEN)
+      // New protocol: hydrate
+      if (msg.type === 'hello') {
+        const snap = await this.buildSnapshot();
+        try { ws.send(JSON.stringify({ type: 'snapshot', state: snap.state, seq: snap.seq, schemaVersion: snap.schemaVersion })); } catch {}
+        return;
+      }
+
+      // New protocol: mutate (apply → ack sender → broadcast change to peers)
+      if (msg.type === 'mutate') {
+        const res = await this.applyMutation(msg, ws);
+        try { ws.send(JSON.stringify({ type: 'applied', mutationId: msg.mutationId, seq: res.seq, error: res.error })); } catch {}
+        return;
+      }
+
+      // Legacy relay — current production client ({type:'queue'|'config'}).
+      // Broadcast verbatim to all OTHER clients. Remove after cutover.
       for (const socket of this.sockets) {
         if (socket !== ws && socket.readyState === 1) {
           try { socket.send(data); } catch {}
@@ -256,5 +329,121 @@ export class MuseSalonDO {
 
     ws.addEventListener('close', () => this.sockets.delete(ws));
     ws.addEventListener('error', () => this.sockets.delete(ws));
+  }
+
+  async nextSeq() {
+    const cur  = (await this.state.storage.get('meta:seq')) || 0;
+    const next = cur + 1;
+    await this.state.storage.put('meta:seq', next);
+    return next;
+  }
+
+  // Apply a mutation to storage, stamp a seq, dedupe by mutationId, broadcast.
+  async applyMutation(msg, fromWs) {
+    const { op, payload, mutationId } = msg || {};
+    if (!op || !payload) return { error: 'missing op or payload' };
+
+    // Idempotency: a replayed mutation (offline outbox) returns the original seq.
+    if (mutationId) {
+      const seen = await this.state.storage.get('mut:' + mutationId);
+      if (seen) return { applied: true, seq: seen, dedup: true };
+    }
+
+    try {
+      switch (op) {
+        case 'config.set':
+          await this.state.storage.put('config:' + payload.key, payload.value);
+          break;
+        case 'turns.order':
+          await this.state.storage.put('config:turns_order', payload.order);
+          break;
+        case 'queue.upsert':
+          await this.state.storage.put('queue:' + payload.entry.id, payload.entry);
+          break;
+        case 'queue.remove':
+          await this.state.storage.delete('queue:' + payload.id);
+          break;
+        case 'record.save':
+          await this.state.storage.put('record:' + payload.record.id, payload.record);
+          break;
+        case 'record.delete': {
+          const existing = await this.state.storage.get('record:' + payload.id);
+          if (existing) await this.state.storage.put('record:' + payload.id, { ...existing, status: 'deleted' });
+          await this.state.storage.put('deletion:' + payload.id, {
+            id: payload.id, reason: payload.reason || '', by: payload.by || '', at: new Date().toISOString(),
+          });
+          break;
+        }
+        case 'giftcard.save':
+          await this.state.storage.put('giftcard:' + payload.card.id, payload.card);
+          break;
+        case 'giftcard.delete':
+          await this.state.storage.delete('giftcard:' + payload.id);
+          break;
+        default:
+          return { error: 'unknown op: ' + op };
+      }
+    } catch (e) {
+      return { error: 'apply failed: ' + (e && e.message || String(e)) };
+    }
+
+    const seq = await this.nextSeq();
+    if (mutationId) await this.state.storage.put('mut:' + mutationId, seq);
+
+    // Broadcast the change to every OTHER connected client.
+    const change = JSON.stringify({ type: 'change', op, payload, seq, device: msg.device || null });
+    for (const socket of this.sockets) {
+      if (socket !== fromWs && socket.readyState === 1) {
+        try { socket.send(change); } catch {}
+      }
+    }
+
+    await this.ensureBackupScheduled();
+    return { applied: true, seq };
+  }
+
+  // Assemble the full state from storage (prefix scans skip mut:/meta: keys).
+  async buildSnapshot() {
+    const state = { config: {}, queue: [], records: [], giftcards: [], deletions: [] };
+    const cfg = await this.state.storage.list({ prefix: 'config:' });
+    for (const [k, v] of cfg) state.config[k.slice('config:'.length)] = v;
+    const q = await this.state.storage.list({ prefix: 'queue:' });
+    for (const [, v] of q) state.queue.push(v);
+    const r = await this.state.storage.list({ prefix: 'record:' });
+    for (const [, v] of r) state.records.push(v);
+    const g = await this.state.storage.list({ prefix: 'giftcard:' });
+    for (const [, v] of g) state.giftcards.push(v);
+    const d = await this.state.storage.list({ prefix: 'deletion:' });
+    for (const [, v] of d) state.deletions.push(v);
+    const seq = (await this.state.storage.get('meta:seq')) || 0;
+    return { state, seq, schemaVersion: this.SCHEMA_VERSION };
+  }
+
+  async ensureBackupScheduled() {
+    const cur = await this.state.storage.getAlarm();
+    if (cur === null) await this.state.storage.setAlarm(Date.now() + this.BACKUP_INTERVAL_MS);
+  }
+
+  // Periodic backup of the full snapshot to R2 + idempotency-marker pruning.
+  async alarm() {
+    try {
+      const snap = await this.buildSnapshot();
+      const ts   = new Date().toISOString().replace(/[:.]/g, '-');
+      if (this.env.PHOTOS_BUCKET) {
+        await this.env.PHOTOS_BUCKET.put('backups/state-' + ts + '.json', JSON.stringify(snap), {
+          httpMetadata: { contentType: 'application/json' },
+        });
+      }
+      // Bound the idempotency markers: keep the newest ~2000 by seq.
+      const muts = await this.state.storage.list({ prefix: 'mut:' });
+      if (muts.size > 4000) {
+        const sorted   = [...muts.entries()].sort((a, b) => a[1] - b[1]); // oldest seq first
+        const toDelete = sorted.slice(0, sorted.length - 2000).map(e => e[0]);
+        for (let i = 0; i < toDelete.length; i += 128) {
+          await this.state.storage.delete(toDelete.slice(i, i + 128));
+        }
+      }
+    } catch (e) { /* swallow — backup is best-effort */ }
+    await this.state.storage.setAlarm(Date.now() + this.BACKUP_INTERVAL_MS);
   }
 }

@@ -8,15 +8,26 @@ This file contains rules and context for AI coding assistants working on this pr
 
 A salon management PWA for Muse Nails & Spa. It runs in a browser on an iPad at the front desk and on technician-facing devices.
 
-The app is **live and in active operational use**. All planned phases (Split through Phase 7) are complete. The current development mode is **operational optimization** — improving the existing production system, not rebuilding it.
+The app is **live and in active operational use**. All planned phases (Split through Phase 7) are complete.
 
-Priorities (in order): data integrity, operational stability, UX refinement, performance.
+> ## ⚡ Development Posture (v2.00+) — SUPERSEDES the rules below where they conflict
+>
+> A deliberate strategic decision (v2.00) changed the operating constraints:
+>
+> - **Primary goal: build the most stable app and the most stable operational workflow.** Stability and correctness are now the top priority — above preserving the current architecture or data.
+> - **Structural changes, big rewrites, and architecture resets are SANCTIONED** where they materially improve stability. The "additive-only / no rewrites / no build step / no ES modules" rules below are no longer hard constraints — treat them as *current-state description*, not prohibitions.
+> - **The current production data is expendable.** A one-time clean migration or reset to reach the stable architecture is acceptable and pre-approved. (The *final* design must still be durable in daily operation — stability includes not losing customer/financial data during normal use.)
+> - **Decision rule going forward:** when choosing between a band-aid that preserves the status quo and a structural change that makes the system fundamentally more stable, prefer the structural change. Still verify correctness rigorously and stage/validate big changes — stability demands it.
+>
+> The "Production Data Integrity — PERMANENT RULES" and "Architecture Rules" sections below describe the *outgoing* system. Follow them only until superseded by the v2.00 architecture work, and do not let them block sanctioned restructuring.
 
-Treat all changes as production-quality — no placeholders, no half-finished implementations. Real customer and financial data is at stake.
+Treat all changes as production-quality — no placeholders, no half-finished implementations.
 
 ---
 
-## Production Data Integrity — PERMANENT RULES
+## Production Data Integrity — PERMANENT RULES  *(SUPERSEDED by Development Posture v2.00 — see top of file)*
+
+> ⚠️ As of v2.00 these are **no longer non-negotiable**. Current data is expendable for a one-time clean migration, and structural changes are sanctioned. The rules below remain useful guidance for the *final* stable design (which must still be durable in daily operation), but they must not block the re-architecture.
 
 The app is in active operational use. These rules are non-negotiable and take precedence over any desire for architectural cleanliness.
 
