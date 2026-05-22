@@ -93,18 +93,54 @@ export default {
       const sheetsUrl = (env.SHEETS_URL || '').trim();
       if (!sheetsUrl) return json({ error: 'SHEETS_URL not configured' }, 500);
 
-      // GET with query string (e.g. ?action=loadConfig&_=timestamp) — forward as GET
-      // POST with JSON body — forward as POST
+      // Read body once — streams can only be consumed once
+      const bodyText   = method === 'POST' ? await request.text() : null;
+      let   parsedBody = null;
+      if (bodyText) { try { parsedBody = JSON.parse(bodyText); } catch {} }
+
+      const isLoadConfig = method === 'GET' && url.searchParams.get('action') === 'loadConfig';
+      const isSaveConfig = parsedBody?.action === 'saveConfig';
+
+      // KV fast path — serve loadConfig from cache, skipping Apps Script entirely
+      if (isLoadConfig && env.CONFIG_KV) {
+        try {
+          const cached = await env.CONFIG_KV.get('config');
+          if (cached) {
+            return new Response(cached, {
+              status:  200,
+              headers: corsHeaders({ 'Content-Type': 'application/json' }),
+            });
+          }
+        } catch {} // cache miss or KV error — fall through to Apps Script
+      }
+
       const targetUrl = method === 'GET' && url.search
         ? `${sheetsUrl}${url.search}`
         : sheetsUrl;
 
       const init = { method, headers: { 'Content-Type': 'application/json' } };
-      if (method === 'POST') init.body = await request.text();
+      if (bodyText) init.body = bodyText;
 
       try {
         const upstream = await fetch(targetUrl, init);
         const text     = await upstream.text();
+
+        // KV write-through: keep cache warm after every loadConfig or saveConfig
+        if (env.CONFIG_KV && upstream.ok) {
+          if (isLoadConfig) {
+            // Cache the authoritative Apps Script response (includes recordsUpdatedAt)
+            env.CONFIG_KV.put('config', text, { expirationTtl: 86400 });
+          } else if (isSaveConfig && parsedBody.config) {
+            // Proactively update KV so the next cold start skips Apps Script
+            env.CONFIG_KV.put('config', JSON.stringify({
+              success:          true,
+              config:           parsedBody.config,
+              device:           parsedBody.device || '',
+              recordsUpdatedAt: null,
+            }), { expirationTtl: 86400 });
+          }
+        }
+
         return new Response(text, {
           status:  upstream.status,
           headers: corsHeaders({ 'Content-Type': 'application/json' }),
