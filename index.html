@@ -8,6 +8,16 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Muse Nails & Spa — Check-In</title>
+
+<!-- PWA -->
+<link rel="manifest" href="/musedashboard/manifest.json">
+<meta name="theme-color" content="#1a5252">
+<!-- iOS PWA — Safari ignores the manifest for most of these -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Muse">
+<link rel="apple-touch-icon" href="/musedashboard/icons/icon-192.png">
+
 <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
@@ -793,6 +803,18 @@ tailwind.config = {
               <div class="text-xs font-body text-on-surface-variant" id="last-backup-label">Never</div>
             </div>
           </div>
+        </div>
+
+        <!-- Install App -->
+        <div id="pwa-install-banner" class="hidden bg-primary/10 rounded-xl border border-primary/30 px-5 py-4 mb-3 flex items-center justify-between">
+          <div>
+            <div class="font-headline font-semibold text-on-surface text-sm">Install as App</div>
+            <div class="text-xs font-body text-on-surface-variant mt-0.5">Add to home screen for full-screen, offline-ready use.</div>
+          </div>
+          <button id="pwa-install-btn" onclick="promptPwaInstall()"
+            class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary font-headline font-semibold text-sm hover:bg-primary-dim transition-colors ml-4 flex-shrink-0">
+            <span class="material-symbols-outlined" style="font-size:16px">install_mobile</span> Install
+          </button>
         </div>
 
         <!-- Collapsible: Check-In Services -->

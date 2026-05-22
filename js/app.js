@@ -263,6 +263,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
   });
+
+  registerServiceWorker();
 });
 
 
@@ -722,6 +724,47 @@ function saveTurnsTechOrderToStorage() { /* in-memory — order is pushed via pu
 function closeTurnsTechModal() {
   document.getElementById('turns-tech-modal').classList.add('hidden');
   document.getElementById('turns-tech-modal').style.display = '';
+}
+
+
+// ── PWA Service Worker & Install Prompt ───────────
+// Register service worker for offline caching and installability.
+// Must run after DOMContentLoaded — it's called at the bottom of the init block.
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('/musedashboard/sw.js')
+    .then(reg => console.log('[SW] Registered, scope:', reg.scope))
+    .catch(e  => console.warn('[SW] Registration failed:', e));
+}
+
+// Capture the beforeinstallprompt event (Chrome/Android — iOS handles install
+// differently: long-press share → Add to Home Screen).
+let _pwaInstallEvent = null;
+
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _pwaInstallEvent = e;
+  // Reveal the install banner in Settings
+  const banner = document.getElementById('pwa-install-banner');
+  if (banner) banner.classList.remove('hidden');
+});
+
+window.addEventListener('appinstalled', () => {
+  _pwaInstallEvent = null;
+  const banner = document.getElementById('pwa-install-banner');
+  if (banner) banner.classList.add('hidden');
+  showToast('App installed ✓ — open from home screen for full-screen mode');
+});
+
+function promptPwaInstall() {
+  if (!_pwaInstallEvent) return;
+  _pwaInstallEvent.prompt();
+  _pwaInstallEvent.userChoice.then(result => {
+    if (result.outcome !== 'accepted') return;
+    _pwaInstallEvent = null;
+    const banner = document.getElementById('pwa-install-banner');
+    if (banner) banner.classList.add('hidden');
+  });
 }
 
 

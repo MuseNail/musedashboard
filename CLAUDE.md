@@ -48,7 +48,7 @@ No server-side logic, no dynamic routes, no build artifacts. All output must be 
 
 | Change type | File(s) to edit |
 |---|---|
-| App version bump | `js/config.js` (APP_VERSION) + `version.json` |
+| App version bump | `js/config.js` (APP_VERSION) + `version.json` + `sw.js` (CACHE_NAME) |
 | Global constants | `js/config.js` |
 | Global state vars | `js/config.js` |
 | Utility functions | `js/utils.js` |
@@ -122,7 +122,7 @@ Treat these with extra care — bugs here affect real financial data or break th
 - **`muse_deletion_log`** — cross-device delete sync; if broken, deleted records can reappear
 - **Queue persistence** (`queue.js`) — losing the queue during business hours is a critical failure
 - **`checkAppVersion`** (`app.js`) — triggers auto-reload on all connected devices; a bug here can cause reload loops
-- **Version bump** — always bump both `js/config.js` (APP_VERSION) and `version.json` together; a mismatch causes infinite reload loops on connected devices
+- **Version bump** — always bump `js/config.js` (APP_VERSION), `version.json`, and `sw.js` (CACHE_NAME) together; a mismatch between config.js and version.json causes infinite reload loops; a stale CACHE_NAME in sw.js means the old service worker cache is never purged
 
 ---
 
@@ -145,9 +145,11 @@ The `FEES` array is separate from `SERVICES` and `ITEMS`. Fees have their own UI
 ## Deployment Rules
 
 1. The app is in rebuild mode and is not live. Do not push to `main` until phases 2–7 are complete. The app will relaunch with fresh operational data — no historical records are being imported.
-2. When ready to deploy: bump `APP_VERSION` in `js/config.js` and `version.json`, then push to `main`.
+2. When ready to deploy: bump `APP_VERSION` in `js/config.js`, `version.json`, and `CACHE_NAME` in `sw.js`, then push to `main`.
 3. GitHub Pages auto-deploys. All connected sessions auto-reload within 15 seconds via `checkAppVersion()`.
 4. Never push a version where `APP_VERSION` and `version.json` disagree — this causes reload loops.
+5. The service worker caches all JS and CSS by CACHE_NAME. If you change JS/CSS without bumping CACHE_NAME, returning users will get stale cached files until they manually clear the browser cache.
+6. Before deploying, add `icons/icon-192.png` and `icons/icon-512.png` to the repo (see `icons/README.md`).
 
 ---
 
@@ -168,5 +170,8 @@ These markers use Unicode box-drawing characters (U+2500 `─`). `split.ps1` use
 |---|---|
 | `ROADMAP.md` | Phase 1–7 plans and current status |
 | `README.md` | Project overview and architecture |
+| `manifest.json` | PWA manifest (name, icons, display mode, theme color) |
+| `sw.js` | Service worker — precache + offline fallback; CACHE_NAME must match APP_VERSION |
+| `icons/` | PWA launcher icons (192px + 512px PNG); see `icons/README.md` |
 | `split.ps1` | PowerShell script that extracted the original single-file app into modules (one-time use; committed for reference) |
 | `muse-sheets-script.gs` | Google Apps Script — not in this repo, deployed separately |
