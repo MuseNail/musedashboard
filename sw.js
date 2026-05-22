@@ -1,7 +1,7 @@
 // ── Service Worker ────────────────────────────────
 // Cache name must match APP_VERSION. Bump this whenever APP_VERSION changes
 // in js/config.js so old caches are purged on the next activation.
-const CACHE_NAME = 'muse-v1.75';
+const CACHE_NAME = 'muse-v1.76';
 
 // Static assets to precache on install.
 // All paths are absolute from the GitHub Pages origin.
@@ -68,10 +68,13 @@ self.addEventListener('fetch', event => {
   // fetches version.json with cache:'no-store'). Let those go to the network directly.
   if (req.cache === 'no-store' || req.cache === 'no-cache') return;
 
-  // Network-first for HTML and version.json so version bumps propagate immediately.
+  // Network-first for HTML, version.json, and config.js so version bumps propagate
+  // immediately. config.js carries APP_VERSION — serving it stale causes a reload
+  // loop when checkAppVersion() detects a mismatch on every soft reload.
   // Falls back to cache only when offline.
   if (
     url.pathname.endsWith('version.json') ||
+    url.pathname.endsWith('/js/config.js') ||
     url.pathname === '/musedashboard/' ||
     url.pathname.endsWith('/index.html')
   ) {

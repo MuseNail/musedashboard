@@ -471,13 +471,20 @@ async function checkAppVersion() {
         if (badge) { badge.textContent = APP_VERSION + ' ↻'; badge.title = `Update to ${data.version} pending — hard refresh (Ctrl+Shift+R) to apply`; }
         return;
       }
-      console.log(`[Version] Running ${APP_VERSION}, live is ${data.version} — clearing SW cache and reloading`);
+      console.log(`[Version] Running ${APP_VERSION}, live is ${data.version} — reloading`);
       sessionStorage.setItem('_pendingVersion', data.version);
-      // Wipe all SW caches before reloading. Without this, a soft reload serves the
-      // stale config.js (old APP_VERSION) from the SW cache on every reload, causing
-      // an infinite loop. Clearing caches forces the next load to fetch fresh files
-      // from the network, so APP_VERSION matches version.json immediately.
-      try { await Promise.all((await caches.keys()).map(k => caches.delete(k))); } catch(e) {}
+      // Evict only config.js from all SW caches. config.js carries APP_VERSION —
+      // if served stale from cache it causes a mismatch on every soft reload (loop).
+      // Deleting just this one entry avoids the 15s stutter from wiping all caches.
+      // From v1.76 onward sw.js serves config.js network-first, making this a no-op
+      // for future updates; it handles only the current SW-to-SW transition.
+      try {
+        const configUrl = location.origin + '/musedashboard/js/config.js';
+        for (const key of await caches.keys()) {
+          const c = await caches.open(key);
+          await c.delete(configUrl);
+        }
+      } catch(e) {}
       const PERMANENT_KEYS = new Set([
         'muse_device_id','muse_live_queue','muse_live_queue_date','muse_queue_archive',
         'muse_turns_history','muse_records','muse_deletion_log','muse_customers',
