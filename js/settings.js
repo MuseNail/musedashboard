@@ -204,6 +204,53 @@ function renderServicesEmbed() {
 }
 
 
+// ── Role Permissions Management ────────────────────
+const _PERM_LABELS = {
+  historicalEntry:   'Add / Edit Historical Transactions',
+  deleteTransaction: 'Delete Transactions',
+  refund:            'Issue Refunds',
+  viewReports:       'View Reports & Transactions',
+  manageStaff:       'Manage Staff',
+  manageServices:    'Manage Services & Catalog',
+};
+
+function renderRolePermissions() {
+  const el = document.getElementById('role-permissions-list');
+  if (!el) return;
+  const roles = Object.keys(ROLE_PERMISSIONS);
+  if (roles.length === 0) {
+    el.innerHTML = '<p class="text-sm font-body text-on-surface-variant">No configurable roles found.</p>';
+    return;
+  }
+  el.innerHTML = roles.map(role => `
+    <div class="mb-5 last:mb-0">
+      <div class="font-headline font-semibold text-on-surface text-sm mb-2 capitalize">${role}</div>
+      <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high overflow-hidden">
+        ${Object.entries(_PERM_LABELS).map(([perm, label]) => {
+          const enabled = ROLE_PERMISSIONS[role]?.[perm] ?? false;
+          return `
+            <div class="flex items-center justify-between px-4 py-2.5 border-b border-surface-container-high last:border-0">
+              <span class="text-sm font-body text-on-surface">${label}</span>
+              <button onclick="toggleRolePermission('${role}','${perm}')"
+                class="relative w-10 h-5 rounded-full transition-colors flex-shrink-0 ml-4 ${enabled ? 'bg-primary' : 'bg-surface-container-high'}">
+                <div class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${enabled ? 'left-5' : 'left-0.5'}"></div>
+              </button>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function toggleRolePermission(role, perm) {
+  if (!ROLE_PERMISSIONS[role]) ROLE_PERMISSIONS[role] = {};
+  ROLE_PERMISSIONS[role][perm] = !ROLE_PERMISSIONS[role][perm];
+  _configWriteTime = Date.now();
+  setTimeout(() => pushConfigToSheets(), 500);
+  renderRolePermissions();
+  showToast('Permission updated ✓');
+}
+
+
 // ── Audit Log ─────────────────────────────────────
 function loadAuditLog() {
   const el = document.getElementById('audit-log-content');

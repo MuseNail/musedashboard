@@ -223,6 +223,7 @@ let _deleteTxnId     = null;
 let _deleteTxnRecord = null;
 
 function initiateDeleteTransaction(recordId) {
+  if (!canDo('deleteTransaction')) { showToast('Permission denied'); return; }
   const fromRecords = allRecords.find(r => String(r.id) === String(recordId));
   const fromQueue   = queue.find(e => String(e.id) === String(recordId));
   _deleteTxnRecord  = fromRecords || (fromQueue ? {
@@ -461,6 +462,7 @@ function renderSettingsPanel() {
   renderSettingsActiveStaff();
   renderSettingsItems();
   renderSettingsFees();
+  renderRolePermissions();
   initCalHoursSelectors();
   const lbl = document.getElementById('last-backup-label');
   if (lbl) lbl.textContent = localStorage.getItem('muse_last_backup') || 'Never';
@@ -512,6 +514,104 @@ function toggleBonusService(serviceId, checked) {
   saveBonusServices(ids);
   renderBonusServicesList();
   showToast(checked ? 'Marked as always bonus ✓' : 'Removed from always bonus');
+}
+
+
+// ── Refunds ────────────────────────────────────────
+let _refundTxnId     = null;
+let _refundTxnRecord = null;
+
+function initiateRefund(recordId) {
+  if (!canDo('refund')) { showToast('Permission denied'); return; }
+  const rec = allRecords.find(r => String(r.id) === String(recordId));
+  if (!rec) { showToast('Record not found.'); return; }
+  if (rec.status === 'refund') { showToast('Cannot refund a refund.'); return; }
+  _refundTxnId     = String(recordId);
+  _refundTxnRecord = rec;
+
+  const nameEl     = document.getElementById('refund-txn-name');
+  const origEl     = document.getElementById('refund-txn-original');
+  const amountEl   = document.getElementById('refund-amount');
+  const reasonEl   = document.getElementById('refund-reason');
+  if (nameEl)   nameEl.textContent   = rec.name;
+  if (origEl)   origEl.textContent   = `$${(rec.totalCost||0).toFixed(2)}`;
+  if (amountEl) amountEl.value       = (rec.totalCost||0).toFixed(2);
+  if (reasonEl) reasonEl.value       = '';
+
+  document.getElementById('refund-modal').classList.remove('hidden');
+  document.getElementById('refund-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('refund-reason')?.focus(), 100);
+}
+
+function closeRefundModal() {
+  document.getElementById('refund-modal').classList.add('hidden');
+  document.getElementById('refund-modal').style.display = '';
+  _refundTxnId = null;
+  _refundTxnRecord = null;
+}
+
+function confirmRefund() {
+  const reason      = document.getElementById('refund-reason').value.trim();
+  const amountInput = parseFloat(document.getElementById('refund-amount').value) || 0;
+
+  if (!reason)        { showToast('Please enter a reason for the refund.'); return; }
+  if (amountInput <= 0)  { showToast('Refund amount must be greater than zero.'); return; }
+  if (amountInput > (_refundTxnRecord?.totalCost || 0)) {
+    showToast('Refund cannot exceed the original total.'); return;
+  }
+
+  const original = _refundTxnRecord;
+  const refundId  = String(Date.now() * 1000 + Math.floor(Math.random() * 1000));
+  const now       = new Date().toISOString();
+
+  const refundRecord = {
+    id:            refundId,
+    name:          original.name,
+    phone:         original.phone || '',
+    services:      original.services || [],
+    assignments:   [],
+    items:         [],
+    fees:          [],
+    discount:      0,
+    discountNote:  reason,
+    totalCost:     -amountInput,
+    checkinTime:   now,
+    completedAt:   now,
+    status:        'refund',
+    isAppointment: false,
+    refundOf:      _refundTxnId,
+    loggedBy:      activeUser?.name || '',
+  };
+
+  allRecords.push(refundRecord);
+  localStorage.setItem('muse_records', JSON.stringify(allRecords));
+  scheduleRecordsPush();
+
+  // Write to Transaction Log in Sheets so the record appears in the history tab
+  fetch(SHEETS_PROXY, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      action:      'append',
+      entryId:     refundId,
+      checkinTime: now,
+      name:        original.name + ' (REFUND)',
+      phone:       original.phone || '',
+      services:    (original.services || []).map(sid => SERVICES.find(s => s.id === sid)?.label || sid).join(', '),
+      type:        'Refund',
+      status:      'refund',
+      staff:       '',
+      stations:    '',
+      detail:      `REFUND by ${activeUser?.name || 'Unknown'}: ${reason}`,
+      total:       -amountInput,
+      loggedBy:    activeUser?.name || '',
+    }),
+  }).catch(() => {});
+
+  closeRefundModal();
+  renderTransactions();
+  if (document.getElementById('panel-reports')?.classList.contains('active')) runReport();
+  showToast(`Refund of $${amountInput.toFixed(2)} recorded ✓`);
 }
 
 

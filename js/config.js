@@ -1,10 +1,34 @@
 ﻿// ── Config ──────────────────────────────────────
 const STAFF_PIN = "1234"; // fallback if no front desk users configured
 const LOGO_PATH = ""; // No default logo — upload one in Settings → Business Logo
-const APP_VERSION  = 'v1.64';
+const APP_VERSION  = 'v1.65';
 const APP_NAME     = 'musedashboard';
 const SQUARE_PROXY  = "https://musedashboard.musenailandspa.workers.dev/square";
 const PHOTOS_PROXY  = "https://musedashboard.musenailandspa.workers.dev/photos";
+
+
+// ── Role Permissions ─────────────────────────────
+// Admin always has all permissions (enforced in canDo(), not here).
+// Each non-admin role has a configurable permission map.
+// Admins can edit these in Settings → Role Permissions.
+let ROLE_PERMISSIONS = {
+  manager: {
+    historicalEntry:   true,
+    deleteTransaction: true,
+    refund:            true,
+    viewReports:       true,
+    manageStaff:       true,
+    manageServices:    true,
+  },
+  frontdesk: {
+    historicalEntry:   false,
+    deleteTransaction: false,
+    refund:            false,
+    viewReports:       true,
+    manageStaff:       false,
+    manageServices:    false,
+  },
+};
 
 
 // ── Global State ─────────────────────────────────

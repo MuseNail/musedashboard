@@ -286,12 +286,9 @@ function updateStatus(id, status) {
 }
 
 function removeFromQueue(id) {
-  queue = queue.filter(e => String(e.id) !== String(id));
-  saveQueueToStorage();
-  scheduleSheetsSave();
-  renderQueue();
-  updateStats();
-  renderTurns();
+  // Delegate to initiateDeleteTransaction so removal goes through the full audit
+  // trail (reason capture, Sheets sync, cross-device deletion log). Defined in giftcards.js.
+  initiateDeleteTransaction(id);
 }
 
 function filterQueue(filter) {

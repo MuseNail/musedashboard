@@ -224,6 +224,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         ['edit-customer-modal', closeEditCustomer],
         ['photo-crop-modal',    closePhotoCrop],
         ['delete-txn-modal',    closeDeleteTxnModal],
+        ['refund-modal',        closeRefundModal],
         ['gc-modal',            closeGcModal],
         ['square-modal',        () => { document.getElementById('square-modal').classList.add('hidden'); document.getElementById('square-modal').style.display=''; }],
         ['appt-modal',          closeApptModal],
@@ -263,6 +264,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 });
+
+
+// ── Permission-Gated UI ───────────────────────────
+// Called on login/logout and after role permission changes.
+// Re-renders any currently-visible panels that have role-conditional buttons
+// so they reflect the new role without requiring a tab switch.
+function updatePermissionGatedUI() {
+  // Re-render active panels so delete/refund/edit buttons update immediately
+  const txPanel  = document.getElementById('panel-transactions');
+  const rptPanel = document.getElementById('panel-reports');
+  if (txPanel?.classList.contains('active'))  renderTransactions();
+  if (rptPanel?.classList.contains('active')) runReport();
+
+  // Role permissions section in settings — admin-only
+  const permSection = document.getElementById('settings-role-permissions');
+  if (permSection) permSection.classList.toggle('hidden', activeUser?.role !== 'admin');
+}
 
 
 // ── Daily Midnight Reset ──────────────────────────

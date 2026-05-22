@@ -277,6 +277,18 @@ function _closeNumpadModal() {
 }
 
 
+// ── Permission Helper ─────────────────────────────
+// Admin always passes every check. Other roles are evaluated against the
+// configurable ROLE_PERMISSIONS map (defined in config.js, synced via Sheets).
+// Returns false when no user is logged in or the role has no entry in the map.
+function canDo(permission) {
+  if (!activeUser) return false;
+  if (activeUser.role === 'admin') return true;
+  const perms = ROLE_PERMISSIONS[activeUser.role];
+  return perms ? !!perms[permission] : false;
+}
+
+
 // ── Toast ────────────────────────────────────────
 let toastTimer;
 function showToast(msg) {

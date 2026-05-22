@@ -19,8 +19,9 @@ function updateLoggedInDisplay() {
     avatarEl.innerHTML = '';
     avatarEl.textContent = name.charAt(0).toUpperCase();
   }
-  // Show/hide admin-only features
+  // Show/hide role-gated features
   updateHistoricalButtonVisibility();
+  updatePermissionGatedUI();
 }
 
 

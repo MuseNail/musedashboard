@@ -296,6 +296,7 @@ async function pushConfigToSheets() {
     if (FEES.length)                          config.muse_fees                 = FEES;
     const photos = getAllPhotos();
     if (Object.keys(photos).length)           config.muse_photos               = photos;
+    if (Object.keys(ROLE_PERMISSIONS).length) config.muse_role_permissions     = ROLE_PERMISSIONS;
     await fetch(`${SHEETS_PROXY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -348,6 +349,8 @@ async function loadConfigFromSheets() {
       { _logoData = c.muse_logo; changed = true; }
     if (Array.isArray(c.muse_turns_order) && JSON.stringify(c.muse_turns_order) !== JSON.stringify(turnsTechOrder))
       { turnsTechOrder = c.muse_turns_order; changed = true; }
+    if (c.muse_role_permissions && JSON.stringify(c.muse_role_permissions) !== JSON.stringify(ROLE_PERMISSIONS))
+      { ROLE_PERMISSIONS = c.muse_role_permissions; changed = true; }
     return { changed, recordsUpdatedAt: data.recordsUpdatedAt || null, _raw: data };
   } catch(e) { return { changed: false, recordsUpdatedAt: null, _raw: null }; }
 }
@@ -483,6 +486,8 @@ function _wsHandleMessage(msg) {
       { _logoData = c.muse_logo; changed = true; }
     if (Array.isArray(c.muse_turns_order) && JSON.stringify(c.muse_turns_order) !== JSON.stringify(turnsTechOrder))
       { turnsTechOrder = c.muse_turns_order; changed = true; }
+    if (c.muse_role_permissions && JSON.stringify(c.muse_role_permissions) !== JSON.stringify(ROLE_PERMISSIONS))
+      { ROLE_PERMISSIONS = c.muse_role_permissions; changed = true; }
     if (changed) {
       setLogo();
       renderTurns();
@@ -555,7 +560,22 @@ async function pullRecordsIfNewer(serverUpdatedAt, force) {
       body:    JSON.stringify({ action: 'loadRecordsBlob' }),
     });
     const data = await res.json();
-    if (!data.success || !data.records || data.records.length === 0) return false;
+    if (!data.success || !Array.isArray(data.records) || data.records.length === 0) return false;
+
+    // Blob sanity: 3-layer guard against a corrupted or accidentally-wiped Sheets blob
+    // 1. Must be a non-empty array (checked above)
+    // 2. First element must have an id field (structural check)
+    if (!data.records[0]?.id) {
+      console.warn('[Records] Blob sanity failed — first record has no id. Skipping pull.');
+      return false;
+    }
+    // 3. Non-deleted count must not drop by >90% vs. local (data-wipe guard)
+    const localNonDeleted  = allRecords.filter(r => r.status !== 'deleted').length;
+    const remoteNonDeleted = data.records.filter(r => r.status !== 'deleted').length;
+    if (localNonDeleted > 10 && remoteNonDeleted < localNonDeleted * 0.1) {
+      console.warn(`[Records] Blob sanity failed — remote has ${remoteNonDeleted} vs local ${localNonDeleted} (>90% drop). Skipping pull.`);
+      return false;
+    }
 
     _lastRecordsUpdate = data.updatedAt;
     localStorage.setItem('muse_records_updated_at', _lastRecordsUpdate);

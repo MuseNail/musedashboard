@@ -937,6 +937,20 @@ tailwind.config = {
           </div>
         </div>
 
+        <!-- Role Permissions (admin only) -->
+        <div id="settings-role-permissions" class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden hidden">
+          <button onclick="toggleSettingsSection('settings-perms-section');renderRolePermissions()" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
+            <div class="font-headline font-bold text-on-surface flex items-center gap-2">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">manage_accounts</span> Role Permissions
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="settings-perms-section-icon">expand_more</span>
+          </button>
+          <div id="settings-perms-section" class="hidden border-t border-surface-container-high px-5 py-4">
+            <p class="text-sm font-body text-on-surface-variant mb-4">Configure what each role can do. Admin always has full access and is not shown here.</p>
+            <div id="role-permissions-list"></div>
+          </div>
+        </div>
+
         <!-- Audit Log -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <button onclick="toggleSettingsSection('settings-audit-section');if(!document.getElementById('audit-log-content').children.length)loadAuditLog()" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
@@ -1771,6 +1785,41 @@ tailwind.config = {
         <button onclick="closeDeleteTxnModal()" class="flex-1 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-semibold">Cancel</button>
         <button onclick="confirmDeleteTransaction()" class="flex-1 bg-error text-white py-3 rounded-xl font-headline font-bold hover:bg-error/80 transition-all">Delete Permanently</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     REFUND MODAL
+═══════════════════════════════════════════════ -->
+<div id="refund-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
+  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl fade-up mx-4">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style="background:rgba(92,64,16,0.12)">
+        <span class="material-symbols-outlined" style="font-size:20px;color:#5c4010">undo</span>
+      </div>
+      <div>
+        <h2 class="text-lg font-headline font-bold text-on-surface">Issue Refund</h2>
+        <p class="text-xs font-body text-on-surface-variant" id="refund-txn-name">—</p>
+      </div>
+    </div>
+    <div class="bg-surface-container rounded-xl px-4 py-3 mb-4 text-sm font-body flex items-center justify-between">
+      <span class="text-on-surface-variant">Original total</span>
+      <span class="font-headline font-bold text-on-surface" id="refund-txn-original">—</span>
+    </div>
+    <div class="mb-3">
+      <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Refund Amount ($)</label>
+      <input type="text" inputmode="decimal" id="refund-amount" placeholder="0.00"
+        class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2.5 text-sm font-body text-on-surface focus:border-primary outline-none text-right font-headline font-bold">
+    </div>
+    <div class="mb-5">
+      <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Reason <span class="text-error">*</span></label>
+      <textarea id="refund-reason" rows="2" placeholder="Customer request, service issue, etc."
+        class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2.5 text-sm font-body text-on-surface focus:border-primary outline-none resize-none"></textarea>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="closeRefundModal()" class="flex-1 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-semibold">Cancel</button>
+      <button onclick="confirmRefund()" class="flex-1 py-3 rounded-xl font-headline font-bold text-white transition-all" style="background:#5c4010">Confirm Refund</button>
     </div>
   </div>
 </div>

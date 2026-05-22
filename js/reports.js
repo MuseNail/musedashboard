@@ -72,6 +72,8 @@ function buildCombinedRecords() {
   const liveIds = new Set(liveSnaps.map(r => String(r.id)));
   return [
     ...liveSnaps,
+    // allRecords: exclude deleted, exclude already-covered live IDs.
+    // 'refund' and 'done' both pass this filter — refunds are never in the live queue.
     ...allRecords.filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted'),
   ];
 }
@@ -128,7 +130,7 @@ function runReport() {
   const filtered = combined.filter(r => {
     if (r.status === 'deleted') return false;
     const d = r.checkinTime instanceof Date ? r.checkinTime : new Date(r.checkinTime);
-    return d >= from && d <= to && r.status === 'done';
+    return d >= from && d <= to && (r.status === 'done' || r.status === 'refund');
   });
 
   // Totals — broken down by services, items, fees, discount
@@ -498,7 +500,7 @@ function renderTransactions() {
     });
   }
 
-  combined = combined.filter(r => r.status === 'done');
+  combined = combined.filter(r => r.status === 'done' || r.status === 'refund');
   combined.sort((a, b) => new Date(b.checkinTime) - new Date(a.checkinTime));
 
   if (combined.length === 0) {
@@ -512,38 +514,55 @@ function renderTransactions() {
     const dt = new Date(r.checkinTime);
     const timeStr = dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     const dateStr = dt.toLocaleDateString('en-US', {month:'short', day:'numeric'});
-    const badgeClass = { waiting: 'badge-waiting', inservice: 'badge-inservice', done: 'badge-done' }[r.status] || 'badge-done';
+    const isRefund = r.status === 'refund';
+    const badgeClass = isRefund ? 'badge-refund' : ({ waiting: 'badge-waiting', inservice: 'badge-inservice', done: 'badge-done' }[r.status] || 'badge-done');
     const serviceLabels = (r.services || []).map(sid => SERVICES.find(s=>s.id===sid)?.label||sid).join(', ') || '—';
-    const assignRows = (r.assignments || []).filter(a => a.techId || a.cost).map(a => {
+    const assignRows = !isRefund && (r.assignments || []).filter(a => a.techId || a.cost).map(a => {
       const tech = STAFF.find(s => s.id === a.techId);
       const svc  = SERVICES.find(s => s.id === a.serviceId);
       return `<div class="text-[11px] font-body text-primary">${svc?.label || ''} → ${tech?.name || '—'}${a.station ? ' @ ' + a.station : ''} ${a.cost ? '· $' + a.cost.toFixed(2) : ''}</div>`;
     }).join('');
 
+    // Refund records: note about which transaction this refunds
+    const refundNote = isRefund && r.discountNote
+      ? `<div class="text-[11px] font-body text-error mt-1">Reason: ${r.discountNote}</div>` : '';
+
+    const isPast = new Date(r.checkinTime) < new Date(new Date().setHours(0,0,0,0));
+    const totalDisplay = isRefund
+      ? `<div class="text-lg font-headline font-extrabold text-error">-$${Math.abs(r.totalCost||0).toFixed(2)}</div>`
+      : `<div class="text-lg font-headline font-extrabold text-primary">$${(r.totalCost||0).toFixed(2)}</div>`;
+
     return `
-      <div class="bg-surface-container-lowest rounded-xl px-5 py-4 border border-surface-container-high">
+      <div class="bg-surface-container-lowest rounded-xl px-5 py-4 border ${isRefund ? 'border-error/30' : 'border-surface-container-high'}">
         <div class="flex items-start justify-between">
           <div class="flex-grow min-w-0">
             <div class="flex items-center gap-2 flex-wrap mb-1">
               <span class="font-headline font-bold text-on-surface">${r.name}</span>
-              <span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badgeClass}">${r.status}</span>
-              ${r.isAppointment ? '<span class="badge-appointment text-[11px] px-2 py-0.5 rounded-full font-body font-semibold">Appt</span>' : ''}
+              <span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badgeClass}">${isRefund ? 'refund' : r.status}</span>
+              ${!isRefund && r.isAppointment ? '<span class="badge-appointment text-[11px] px-2 py-0.5 rounded-full font-body font-semibold">Appt</span>' : ''}
             </div>
             <div class="text-xs font-body text-on-surface-variant mb-1">${serviceLabels}</div>
-            ${assignRows}
+            ${assignRows || ''}
+            ${refundNote}
             <div class="text-[11px] font-body text-outline mt-1">${dateStr} · ${timeStr}${r.phone ? ' · ' + r.phone : ''}</div>
           </div>
           <div class="text-right ml-4 flex-shrink-0 flex flex-col items-end gap-2">
-            <div class="text-lg font-headline font-extrabold text-primary">$${(r.totalCost||0).toFixed(2)}</div>
-            ${activeUser?.role === 'admin' && new Date(r.checkinTime) < new Date(new Date().setHours(0,0,0,0)) ? `
+            ${totalDisplay}
+            ${!isRefund && canDo('historicalEntry') && isPast ? `
             <button onclick="showHistoricalEntryModal('${r.id}')"
               class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10">
               <span class="material-symbols-outlined" style="font-size:14px">edit</span> Edit
             </button>` : ''}
+            ${!isRefund && canDo('refund') ? `
+            <button onclick="initiateRefund('${r.id}')"
+              class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-secondary transition-colors px-2 py-1 rounded-lg hover:bg-secondary/10">
+              <span class="material-symbols-outlined" style="font-size:14px">undo</span> Refund
+            </button>` : ''}
+            ${canDo('deleteTransaction') ? `
             <button onclick="initiateDeleteTransaction('${r.id}')"
               class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-error transition-colors px-2 py-1 rounded-lg hover:bg-error/10">
               <span class="material-symbols-outlined" style="font-size:14px">delete</span> Delete
-            </button>
+            </button>` : ''}
           </div>
         </div>
       </div>
@@ -872,7 +891,7 @@ let _histItems        = [];     // [{itemId, qty, price}]
 let _histFees         = [];     // [{feeId, amount}]
 
 function showHistoricalEntryModal(editId) {
-  if (activeUser?.role !== 'admin') { showToast('Admin access required'); return; }
+  if (!canDo('historicalEntry')) { showToast('Permission denied'); return; }
   _histMode         = editId ? 'edit' : 'add';
   _histEditId       = editId || null;
   _histSelectedSvcs = [];
@@ -1183,9 +1202,9 @@ async function saveHistoricalTransaction() {
   }
 }
 
-// Show/hide "Add Historical" button based on role
+// Show/hide "Add Historical" button based on role permissions
 function updateHistoricalButtonVisibility() {
   const btn = document.getElementById('add-historical-btn');
-  if (btn) btn.classList.toggle('hidden', activeUser?.role !== 'admin');
+  if (btn) btn.classList.toggle('hidden', !canDo('historicalEntry'));
 }
 
