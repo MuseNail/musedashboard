@@ -85,9 +85,10 @@ async function squarePullServices() {
   if (!squareConfig) return;
   try {
     // Square stores both services and retail items as ITEM type.
-    // Services are distinguished by product_type === 'APPOINTMENTS_SERVICE'.
-    // A single ITEM request replaces the old two-request approach (SERVICE type
-    // is not a valid CatalogObjectType in Square's current API).
+    // Items created via Square Appointments have product_type='APPOINTMENTS_SERVICE'.
+    // Items created via the Square Item Library have product_type='REGULAR' or null.
+    // We treat null/undefined product_type as a service (correct for most salon catalogs),
+    // and only classify items as retail when they have an explicit non-service product_type.
     const res = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=ITEM`);
     if (!res.ok) {
       let detail = `HTTP ${res.status}`;
@@ -103,11 +104,15 @@ async function squarePullServices() {
     const data = await res.json();
     let addedSvc = 0, addedItems = 0;
 
+    // Explicit retail product types — everything else (including null) is treated as a service
+    const RETAIL_TYPES = new Set(['REGULAR', 'FOOD_AND_BEV', 'GIFT_CARD', 'APPOINTMENTS_PREPAID_PACKAGE', 'DIGITAL']);
+
     (data.objects || []).forEach(item => {
       const name = item.item_data?.name;
       if (!name) return;
       const lname = name.toLowerCase();
-      const isService = item.item_data?.product_type === 'APPOINTMENTS_SERVICE';
+      const productType = item.item_data?.product_type;
+      const isService = !productType || productType === 'APPOINTMENTS_SERVICE';
 
       // Fee/charge/surcharge names always route to FEES regardless of product type
       if (lname.includes('fee') || lname.includes('charge') || lname.includes('surcharge')) {
@@ -129,7 +134,7 @@ async function squarePullServices() {
           addedSvc++;
         }
       } else {
-        // Retail item → ITEMS (skip if already tracked as a service)
+        // Explicit retail product type → ITEMS (skip if already tracked as a service)
         if (SERVICES.find(s => s.label.toLowerCase() === lname)) return;
         const id = `sq-item-${item.id}`;
         if (!ITEMS.find(i => i.id === id || i.label.toLowerCase() === lname)) {
