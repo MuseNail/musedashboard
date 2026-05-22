@@ -1625,6 +1625,13 @@ function confirmReopen(entryId) {
 function showSquareModal() {
   if (squareConfig) {
     document.getElementById('sq-location').value = squareConfig.locationId || '';
+    // Pre-populate team member dropdown if we already have members loaded
+    const sel = document.getElementById('sq-booking-member');
+    if (sel && sel.options.length <= 1 && squareConfig.locationId) {
+      loadSquareBookingTeamMembers();
+    } else if (sel && squareConfig.bookingTeamMemberId) {
+      sel.value = squareConfig.bookingTeamMemberId;
+    }
   }
   document.getElementById('square-modal').classList.remove('hidden');
   document.getElementById('square-modal').style.display = 'flex';
@@ -1633,7 +1640,13 @@ function showSquareModal() {
 function saveSquareConfig() {
   const locationId = document.getElementById('sq-location').value.trim();
   if (!locationId) { showToast('Please enter your Location ID.'); return; }
-  squareConfig = { locationId };
+  const sel = document.getElementById('sq-booking-member');
+  const memberId   = sel?.value || '';
+  const memberName = sel?.options[sel.selectedIndex]?.text || '';
+  squareConfig = {
+    locationId,
+    ...(memberId ? { bookingTeamMemberId: memberId, bookingTeamMemberName: memberName } : {}),
+  };
   localStorage.setItem('muse_sq_config', JSON.stringify(squareConfig));
   document.getElementById('square-modal').classList.add('hidden');
   document.getElementById('square-modal').style.display = '';
@@ -1669,7 +1682,7 @@ async function syncSquare() {
   updateSyncLabel('pending', 'Syncing…');
   showToast('Syncing with Square…');
   try {
-    await Promise.all([squarePullCustomers(), squarePullServices()]);
+    await Promise.all([loadSquareCustomers(), squarePullServices()]);
     updateSyncLabel('ok', 'Square synced');
     showToast('Square sync complete');
   } catch(e) {
@@ -1708,7 +1721,8 @@ async function squarePullServices() {
         const id = `sq-${item.id}`;
         if (!SERVICES.find(s => s.id === id || s.label.toLowerCase() === lname)) {
           const abbr = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4);
-          SERVICES.push({ id, label: name, abbr, squareItemId: item.id });
+          const variationId = item.item_data?.variations?.[0]?.id || null;
+          SERVICES.push({ id, label: name, abbr, squareItemId: item.id, squareVariationId: variationId });
           addedSvc++;
         }
       });
@@ -1789,43 +1803,40 @@ async function pushOrderToSquare(entry) {
   showToast('Creating Square ticket…');
 
   try {
-    // Look up Square customer by phone so the ticket is linked to them
+    // Look up Square customer — check local directory first to avoid an extra API call
     let customerId = null;
     if (entry.phone) {
-      try {
-        const searchRes = await fetch(`${SQUARE_PROXY}/v2/customers/search`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: { filter: { phone_number: { exact: entry.phone } } } }),
-        });
-        if (searchRes.ok) {
-          const sd = await searchRes.json();
-          customerId = sd?.customers?.[0]?.id || null;
-        }
-      } catch(e) { /* non-fatal — proceed without customer link */ }
+      const rawPhone = entry.phone.replace(/\D/g, '');
+      const cached = customerDirectory.find(c => {
+        const cp = (c.phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+        return cp && (cp === rawPhone || cp === rawPhone.replace(/^1/, ''));
+      });
+      if (cached?.squareId) {
+        customerId = cached.squareId;
+      } else {
+        // Not in local cache — fall back to Square API search
+        try {
+          const searchRes = await fetch(`${SQUARE_PROXY}/v2/customers/search`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: { filter: { phone_number: { exact: entry.phone } } } }),
+          });
+          if (searchRes.ok) {
+            const sd = await searchRes.json();
+            customerId = sd?.customers?.[0]?.id || null;
+          }
+        } catch(e) { /* non-fatal — proceed without customer link */ }
+      }
     }
 
-    // Create an OPEN order with PICKUP fulfillment
-    // This is what makes it appear as an Open Ticket in Square POS
+    // Create an open order with no fulfillment type (salon service, not retail pickup)
     const orderBody = {
       idempotency_key: `muse-${String(entry.id)}-${Date.now()}`,
       order: {
-        location_id: squareConfig.locationId,
-        state:       'OPEN',
+        location_id:  squareConfig.locationId,
+        state:        'OPEN',
         reference_id: `muse-${String(entry.id).slice(-8)}`,
-        line_items:  lineItems,
-        fulfillments: [{
-          type:  'PICKUP',
-          state: 'PROPOSED',
-          pickup_details: {
-            recipient: {
-              display_name: entry.name,
-              phone_number: entry.phone || '',
-            },
-            pickup_at: new Date(Date.now() + 30 * 60000).toISOString(), // ~30 min from now
-            note: `Check-in: ${(entry.checkinTime instanceof Date ? entry.checkinTime : new Date(entry.checkinTime)).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}`,
-          },
-        }],
+        line_items:   lineItems,
         ...(customerId ? { customer_id: customerId } : {}),
       },
     };
@@ -1855,13 +1866,6 @@ async function pushOrderToSquare(entry) {
     showToast('Could not reach Square. Check proxy.');
   }
 }
-async function squarePullCustomers() {
-  if (!squareConfig) return;
-  const res = await fetch(`${SQUARE_PROXY}/v2/customers?limit=100`);
-  if (!res.ok) throw new Error('Square API error');
-  return res.json();
-}
-
 async function squareUpsertCustomer(entry) {
   if (!entry.name || entry.name.trim() === '-') return;
   const nameParts = entry.name.trim().split(/\s+/);

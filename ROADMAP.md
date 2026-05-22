@@ -18,6 +18,7 @@ The app is undergoing an architecture-first rebuild. Phases are done in order. T
 | 4 | Workers KV for Fast Config Reads | ✅ Complete (v1.58) |
 | 5 | Cron + Gmail Daily Archive | ✅ Complete (v1.59) |
 | 6 | Square POS Deep Link + Catalog Push | ✅ Complete (v1.60) |
+| 6b | Square Audit Fixes + Bookings Push | ✅ Complete (v1.61) |
 | 7 | PWA Polish | Planned |
 
 ---
@@ -192,6 +193,28 @@ Saving turns order wrote to localStorage then triggered a config push. The 5-sec
 - Existing service/item (has `squareItemId`): GETs current version, PATCHes name + pricing
 - Services use `product_type: APPOINTMENTS_SERVICE` so they appear in the Square Services library
 - **Fees are never pushed** — fees are app-only per architecture rules
+
+---
+
+## Phase 6b — Square Audit Fixes + Bookings Push ✅ Complete (v1.61)
+
+**Goal:** Fix six confirmed bugs in the Square integration found during audit, and add Square Bookings push so calendar appointments trigger Square's native SMS reminders via a single designated team member.
+
+### Bugs fixed
+
+- **`syncSquare()` used broken stub** (`squarePullCustomers()` returned raw JSON and never updated `squareCustomers` or `customerDirectory`). Fixed: now calls `loadSquareCustomers()` — the correct function that handles pagination, maps to both arrays, and persists to localStorage.
+- **`squarePullCustomers()` stub removed** from bottom of `queue.js`.
+- **`pushOrderToSquare()` had PICKUP fulfillment** — wrong for a salon service; was creating retail pickup orders instead of open service tickets. Removed entirely; orders now create as plain open orders with no fulfillment type.
+- **`pushOrderToSquare()` always hit Square API for customer lookup** even when the local `customerDirectory` cache had the match. Fixed: checks `customerDirectory` first; only falls back to API search on cache miss.
+- **`squarePullServices()` missing `squareVariationId`** — Square Bookings API requires a variation ID, not the item ID. Fixed: now captures `item.item_data?.variations?.[0]?.id`.
+- **`squarePushService()` only stored item ID after create** — variation ID was not extracted from `id_mappings`. Fixed: now extracts both item and variation mappings and stores `squareVariationId` on the service object.
+- **`syncSquareAppointments()` used `customer_note` for name** instead of looking up the customer in `customerDirectory` by `customer_id`. Fixed: resolves name + phone from directory; falls back to `customer_note` only if no match.
+- **`syncSquareAppointments()` service matching used item ID** instead of variation ID. Fixed: now matches `squareVariationId` first.
+
+### New features
+
+- **Square Bookings push** (`squarePushBooking(calId, eventId)` in `square.js`): pushes a Google Calendar appointment to Square Bookings API. Fetches live variation version (required for optimistic lock), resolves customer from `customerDirectory`, uses a single configured "booking team member" so Square sends SMS reminders. Button appears in the calendar event popup for appointment events when Square is configured.
+- **Booking team member picker** in Square modal (`index.html`): dropdown populated from Square's team members API via `loadSquareBookingTeamMembers()`. Saved to `squareConfig.bookingTeamMemberId`.
 
 ---
 

@@ -710,6 +710,11 @@ function calEventClick(e, calId, eventId, title, desc, isAppt) {
           class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">
           Edit Event
         </button>`}
+        ${isAppt && squareConfig ? `
+        <button onclick="squarePushBooking('${calId}','${eventId}'); this.closest('.fixed').remove()"
+          class="w-full border border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors flex items-center justify-center gap-2">
+          <span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Sync to Square Bookings
+        </button>` : ''}
         <button onclick="if(confirm('Cancel this appointment?')) { deleteAppt('${calId}','${eventId}'); this.closest('.fixed').remove(); }"
           class="w-full text-error py-2 rounded-xl font-headline font-semibold text-sm hover:bg-error/10 transition-colors">
           Cancel / Delete

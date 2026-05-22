@@ -318,13 +318,22 @@ async function syncSquareAppointments() {
       if (b.status !== 'ACCEPTED' && b.status !== 'PENDING') continue;
       const entryId = 'appt-' + b.id;
       if (queue.find(e => String(e.id) === entryId)) continue; // already in queue
-      const svcName = b.appointment_segments?.[0]?.service_variation_id || 'Appointment';
-      const svc = SERVICES.find(s => s.squareItemId === svcName || s.label.toLowerCase().includes('appointment')) || SERVICES[0];
-      const name = b.customer_note || 'Appointment';
+      // Match service by variation ID (most precise) then fall back
+      const variationId = b.appointment_segments?.[0]?.service_variation_id;
+      const svc = SERVICES.find(s => s.squareVariationId === variationId)
+               || SERVICES.find(s => s.squareItemId === variationId)
+               || SERVICES[0];
+      // Resolve customer name from directory; fall back to customer_note then generic label
+      const custDir = b.customer_id
+        ? customerDirectory.find(c => c.squareId === b.customer_id)
+        : null;
+      const name = custDir
+        ? [custDir.firstName, custDir.lastName].filter(Boolean).join(' ')
+        : (b.customer_note || 'Appointment');
       queue.push({
         id:            entryId,
         name,
-        phone:         '',
+        phone:         custDir?.phone || '',
         services:      svc ? [svc.id] : [],
         status:        'waiting',
         isAppointment: true,
@@ -450,8 +459,11 @@ async function squarePushService(svc) {
       });
       if (res.ok) {
         const data = await res.json();
-        const mapping = (data.id_mappings || []).find(m => m.client_object_id === tempId);
-        if (mapping?.object_id) { svc.squareItemId = mapping.object_id; saveServicesToStorage(); }
+        const itemMapping = (data.id_mappings || []).find(m => m.client_object_id === tempId);
+        const varMapping  = (data.id_mappings || []).find(m => m.client_object_id === `${tempId}-var`);
+        if (itemMapping?.object_id) svc.squareItemId = itemMapping.object_id;
+        if (varMapping?.object_id)  svc.squareVariationId = varMapping.object_id;
+        if (itemMapping?.object_id) saveServicesToStorage();
         showToast(`"${svc.label}" added to Square ✓`);
       } else {
         console.warn('[Square] Service create failed:', await res.json());
@@ -461,6 +473,125 @@ async function squarePushService(svc) {
     console.warn('[Square] Catalog push failed:', e);
   }
 }
+
+// ── Square Bookings ───────────────────────────────
+// Load team members eligible for bookings so the Square modal can show a picker.
+async function loadSquareBookingTeamMembers() {
+  if (!squareConfig) return;
+  try {
+    const res = await fetch(`${SQUARE_PROXY}/v2/team-members?status=ACTIVE&limit=200`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const members = data.team_members || [];
+    const sel = document.getElementById('sq-booking-member');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— None (no SMS reminders) —</option>' +
+      members.map(m => {
+        const name = [m.given_name, m.family_name].filter(Boolean).join(' ');
+        const selected = m.id === squareConfig?.bookingTeamMemberId ? 'selected' : '';
+        return `<option value="${m.id}" ${selected}>${name}</option>`;
+      }).join('');
+    if (members.length === 0) {
+      showToast('No active team members found in Square.');
+    }
+  } catch(e) {
+    console.warn('[Square] Could not load team members:', e);
+    showToast('Could not load team members from Square.');
+  }
+}
+
+// Push a Google Calendar appointment to Square Bookings so Square sends SMS reminders.
+// Uses the single configured booking team member — all appointments go under one member.
+// serviceVariationVersion must be fetched live from Square (required for optimistic lock).
+async function squarePushBooking(calId, eventId) {
+  if (!squareConfig) { showToast('Square not configured.'); return; }
+  if (!squareConfig.bookingTeamMemberId) {
+    showToast('Set a booking team member in Square settings first.');
+    showSquareModal();
+    return;
+  }
+
+  const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
+  if (!ev) { showToast('Event not found.'); return; }
+
+  const startDt = new Date(ev.start.dateTime || ev.start.date);
+  const endDt   = new Date(ev.end?.dateTime   || ev.end?.date || startDt.getTime() + 3600000);
+  const durMins = Math.round((endDt - startDt) / 60000);
+
+  // Match the first named service in the event title/description to a SERVICES entry
+  const svc = SERVICES.find(s =>
+    (ev.summary || '').toLowerCase().includes(s.label.toLowerCase()) ||
+    (ev.description || '').toLowerCase().includes(s.label.toLowerCase())
+  );
+
+  // squareVariationId is required for Bookings API; squarePushBooking only works for
+  // services that have been pushed to Square (so we have the variation ID on hand).
+  if (!svc?.squareVariationId) {
+    showToast(svc
+      ? `Push "${svc.label}" to Square catalog first (Settings → Services).`
+      : 'No matching service found — check service names match your catalog.');
+    return;
+  }
+
+  // Fetch current variation version (Square requires this for the Bookings API)
+  let variationVersion;
+  try {
+    const objRes = await fetch(`${SQUARE_PROXY}/v2/catalog/object/${svc.squareVariationId}`);
+    if (!objRes.ok) { showToast('Could not fetch service version from Square.'); return; }
+    const objData = await objRes.json();
+    variationVersion = objData.object?.version;
+    if (!variationVersion) { showToast('Could not read service version from Square.'); return; }
+  } catch(e) {
+    showToast('Square catalog fetch failed: ' + e.message);
+    return;
+  }
+
+  // Resolve customer from directory (phone in description)
+  const phoneMatch = (ev.description || '').match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
+  const rawPhone = phoneMatch ? phoneMatch[1].replace(/\D/g, '') : '';
+  const custDir  = rawPhone
+    ? customerDirectory.find(c => {
+        const cp = (c.phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+        return cp && (cp === rawPhone || cp === rawPhone.replace(/^1/, ''));
+      })
+    : null;
+
+  showToast('Creating Square booking…');
+  try {
+    const bookingBody = {
+      idempotency_key: `muse-booking-${eventId}-${Date.now()}`,
+      booking: {
+        start_at:         startDt.toISOString(),
+        location_id:      squareConfig.locationId,
+        customer_note:    ev.summary || '',
+        ...(custDir?.squareId ? { customer_id: custDir.squareId } : {}),
+        appointment_segments: [{
+          duration_minutes:         durMins,
+          service_variation_id:     svc.squareVariationId,
+          service_variation_version: variationVersion,
+          team_member_id:           squareConfig.bookingTeamMemberId,
+        }],
+      },
+    };
+    const res = await fetch(`${SQUARE_PROXY}/v2/bookings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bookingBody),
+    });
+    const data = await res.json();
+    if (res.ok && data.booking?.id) {
+      showToast(`Square booking created — SMS reminder will send ✓`);
+    } else {
+      const msg = data.errors?.[0]?.detail || data.errors?.[0]?.code || JSON.stringify(data);
+      showToast('Square booking failed: ' + msg);
+      console.error('[Square] Booking error:', data);
+    }
+  } catch(e) {
+    console.error('[Square] Booking push failed:', e);
+    showToast('Could not reach Square. Check proxy.');
+  }
+}
+
 
 async function squarePushItem(item) {
   if (!squareConfig || !item) return;
