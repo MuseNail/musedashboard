@@ -1,5 +1,5 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
-export const APP_VERSION = 'v2.20';
+export const APP_VERSION = 'v2.21';
 export const APP_NAME    = 'musedashboard';
 export const STAFF_PIN   = '1234'; // fallback when no front desk users are configured
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
@@ -7,6 +7,7 @@ export const LOGO_PATH   = '';     // no default logo — upload one in Settings
 const ORIGIN = 'https://musedashboard.musenailandspa.workers.dev';
 export const SQUARE_PROXY = ORIGIN + '/square';
 export const PHOTOS_PROXY = ORIGIN + '/photos';
+export const STATE_PROXY  = ORIGIN + '/state';
 
 // Seeded into config.role_permissions on first run; also the fallback in canDo().
 export const DEFAULT_ROLE_PERMISSIONS = {

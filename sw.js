@@ -1,7 +1,7 @@
-// ── Service Worker (v2.20 — modular ES-module client) ───────────────────────
+// ── Service Worker (v2.21 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'muse-v2.20';
+const CACHE_NAME = 'muse-v2.21';
 
 const PRECACHE_URLS = [
   '/musedashboard/',
