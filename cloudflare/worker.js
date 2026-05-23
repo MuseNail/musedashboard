@@ -59,9 +59,12 @@ async function _runMidnightArchive(env) {
 
 export default {
   async fetch(request, env) {
-    const url    = new URL(request.url);
-    const path   = url.pathname;
-    const method = request.method.toUpperCase();
+    const url     = new URL(request.url);
+    const path    = url.pathname;
+    const method  = request.method.toUpperCase();
+    // Multi-salon: each location gets its own DO instance. Defaults to 'muse'
+    // so existing clients (which send no ?salon=) are unaffected.
+    const salonId = url.searchParams.get('salon') || 'muse';
 
     // CORS preflight
     if (method === 'OPTIONS') {
@@ -104,7 +107,7 @@ export default {
 
     // ── WebSocket / Durable Object Route ─────────────────────────────────────
     if (path === '/ws') {
-      const id   = env.SALON_DO.idFromName('muse');
+      const id   = env.SALON_DO.idFromName(salonId);
       const stub = env.SALON_DO.get(id);
       return stub.fetch(request);
     }
@@ -114,7 +117,7 @@ export default {
     // POST /state/mutate    → apply a mutation { op, payload, mutationId } → { applied, seq }
     // HTTP fallback for the new client; the DO also serves these over /ws.
     if (path.startsWith('/state/')) {
-      const id    = env.SALON_DO.idFromName('muse');
+      const id    = env.SALON_DO.idFromName(salonId);
       const stub  = env.SALON_DO.get(id);
       const doRes = await stub.fetch(request);
       // Re-wrap with CORS so cross-origin clients (GitHub Pages, local dev) are allowed.
@@ -229,7 +232,7 @@ export default {
 };
 
 // ── Durable Object — Single Source of Truth ─────────────────────────────────────
-// One instance per salon (keyed by idFromName('muse')). Holds canonical app state
+// One instance per salon (keyed by idFromName(salonId), default 'muse'). Holds canonical app state
 // in SQLite-backed DO storage (state.storage.*). Single writer ⇒ atomic per-key
 // writes, no blob overwrite, no conflict guards. Clients hydrate via `snapshot`
 // and mutate via typed `mutate` messages; changes broadcast to all peers.
