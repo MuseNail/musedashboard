@@ -49,7 +49,7 @@ export function openSquarePOS(entryId) {
   if (body) body.innerHTML = party.map(payCustomerBlock).join('');
   const totalEl = document.getElementById('square-confirm-total');
   if (totalEl) totalEl.textContent = `$${(cents / 100).toFixed(2)}`;
-  _pendingPay = { cents, names: party.map(e => e.name).filter(Boolean).join(', ').slice(0, 120) };
+  _pendingPay = { cents, ids: party.map(e => String(e.id)), names: party.map(e => e.name).filter(Boolean).join(', ').slice(0, 120) };
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
 }
@@ -74,6 +74,8 @@ export function proceedSquarePayment() {
     notes: `Muse${_pendingPay.names ? ' · ' + _pendingPay.names : ''}`,
     options: { supported_tender_types: ['CREDIT_CARD', 'CASH', 'OTHER', 'SQUARE_GIFT_CARD', 'CARD_ON_FILE'] },
   };
+  // Stash the party so the return tab can mark them Paid on a successful charge.
+  try { localStorage.setItem('muse_sq_pending', JSON.stringify({ ids: _pendingPay.ids || [], at: Date.now() })); } catch (e) {}
   closeSquareConfirm();
   window.location.href = `square-commerce-v1://payment/create?data=${encodeURIComponent(JSON.stringify(data))}`;
 }

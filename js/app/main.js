@@ -102,6 +102,27 @@ Object.assign(window, { goTo, showDashPanel, toggleStaffScheduleView, showStaffL
 // syncs in real time — there's no manual sync to trigger).
 window.forceSyncNow = () => utils.showToast(store.getState().connected ? 'Live — in sync' : 'Reconnecting…');
 
+// ── Square auto-paid ──────────────────────────────
+// The Square return tab writes muse_sq_paid on a successful charge; this (main)
+// tab marks those customers Paid. Triggered by the storage event (return tab
+// wrote it), regaining focus, and hydrate (covers a reopened app). IDs not yet in
+// the hydrated queue are kept for a later pass; degrades to manual Mark Paid.
+function applySquarePaidFlag() {
+  let flag; try { flag = JSON.parse(localStorage.getItem('muse_sq_paid') || 'null'); } catch (e) { return; }
+  if (!flag || !flag.ids || !flag.ids.length) return;
+  if (Date.now() - (flag.at || 0) > 10 * 60 * 1000) { localStorage.removeItem('muse_sq_paid'); return; }
+  const queue = store.getState().queue, remaining = [];
+  flag.ids.forEach(id => {
+    const e = queue.find(x => String(x.id) === String(id));
+    if (!e) { remaining.push(id); return; }                 // not hydrated yet — retry on a later trigger
+    if (!['paid', 'done'].includes(e.status)) window.updateStatus?.(String(id), 'paid');
+  });
+  if (remaining.length) localStorage.setItem('muse_sq_paid', JSON.stringify({ ids: remaining, at: flag.at }));
+  else localStorage.removeItem('muse_sq_paid');
+}
+window.addEventListener('storage', e => { if (e.key === 'muse_sq_paid' && e.newValue) applySquarePaidFlag(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) applySquarePaidFlag(); });
+
 // ── Store subscription → re-render the active panel on (remote) changes ───────
 function updateSyncIndicator(state) {
   const dot = document.getElementById('sheets-sync-dot'), text = document.getElementById('sheets-sync-text');
@@ -113,6 +134,7 @@ let _custAutoLoaded = false;
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
   if (changed === 'connection') return;
+  if (changed === 'hydrate') applySquarePaidFlag();   // apply any pending Square auto-paid once the queue loads
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay();
     // T2.17: once Square is configured, auto-load the customer directory so
@@ -225,6 +247,11 @@ function handleSquarePosReturn() {
   if (!['status', 'transaction_id', 'client_transaction_id', 'error_code'].some(k => k in p)) return false;
 
   const errored = p.status === 'error' || !!p.error_code;
+  // On a successful charge, hand the stashed party off to the main tab to mark Paid.
+  try {
+    if (!errored) { const pend = JSON.parse(localStorage.getItem('muse_sq_pending') || 'null'); if (pend && pend.ids && pend.ids.length) localStorage.setItem('muse_sq_paid', JSON.stringify({ ids: pend.ids, at: Date.now() })); }
+    localStorage.removeItem('muse_sq_pending');
+  } catch (e) {}
   document.title = 'Muse — Payment';
   document.body.innerHTML = `
     <div style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#e8ecee;font-family:-apple-system,system-ui,sans-serif;">
