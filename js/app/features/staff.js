@@ -7,11 +7,27 @@ import { SCHEDULE_COLORS } from '../config.js';
 const cfg = () => getState().config;
 const setStaff = (staff) => dispatch('config.set', { key: 'staff', value: staff });
 
+// ── Active staff (config.inactive_staff) ──────────
+export function isStaffActive(id) { return !cfg().inactive_staff.includes(id); }
+export function toggleActiveStaff(id) {
+  const inactive = cfg().inactive_staff;
+  dispatch('config.set', { key: 'inactive_staff', value: inactive.includes(id) ? inactive.filter(x => x !== id) : [...inactive, id] });
+  renderStaffList();
+}
+export function toggleAllActiveStaff() {
+  dispatch('config.set', { key: 'inactive_staff', value: cfg().inactive_staff.length === 0 ? cfg().staff.map(s => s.id) : [] });
+  renderStaffList();
+}
+
+// Re-render the list view, ensuring schedule view is hidden (settings leaf entry).
+export function renderStaffMerged() { window.showStaffListView?.(); renderStaffList(); }
+
 // ── Staff CRUD ────────────────────────────────────
 export function renderStaffList() {
   const list = document.getElementById('staff-list');
   if (!list) return;
   list.innerHTML = [...cfg().staff].sort(byName).map(st => {
+    const active = isStaffActive(st.id);
     const photoHtml = st.photo
       ? `<button onclick="showEditStaff('${st.id}')" class="flex-shrink-0 focus:outline-none"><img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border border-surface-container-high hover:opacity-80 transition-opacity"></button>`
       : `<button onclick="showEditStaff('${st.id}')" class="flex-shrink-0 focus:outline-none"><div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-primary hover:text-on-primary transition-colors"><span class="text-sm font-headline font-bold text-on-surface">${st.name.charAt(0).toUpperCase()}</span></div></button>`;
@@ -23,17 +39,23 @@ export function renderStaffList() {
       <div class="flex items-center gap-4 min-w-0">
         ${photoHtml}
         <div class="min-w-0">
-          <div class="font-headline font-semibold text-on-surface text-base">${st.name}</div>
+          <div class="font-headline font-semibold text-on-surface text-base ${active ? '' : 'line-through text-outline-variant'}">${st.name}</div>
           <div class="flex gap-3 flex-wrap mt-0.5">
             ${st.commission != null ? `<span class="text-xs font-body text-on-surface-variant">${st.commission}% commission</span>` : ''}
             <span class="text-xs font-body text-primary truncate">${staffSvcs}</span>
           </div>
         </div>
       </div>
-      <div class="flex items-center gap-1 flex-shrink-0">
-        <button onclick="showPhotoUpload('staff','${st.id}')" title="Photo" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size:18px">photo_camera</span></button>
-        <button onclick="showEditStaff('${st.id}')" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size:18px">edit</span></button>
-        <button onclick="deleteStaff('${st.id}')" class="w-9 h-9 rounded-full hover:bg-error/10 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button onclick="toggleActiveStaff('${st.id}')" title="${active ? 'Active — shown in menus' : 'Inactive — hidden from menus'}" class="flex flex-col items-center gap-1">
+          <span class="text-[9px] font-body uppercase tracking-wider ${active ? 'text-primary' : 'text-outline-variant'}">Active</span>
+          <div class="relative w-10 h-5 rounded-full transition-colors ${active ? 'bg-primary' : 'bg-surface-container-high'}"><div class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${active ? 'left-5' : 'left-0.5'}"></div></div>
+        </button>
+        <div class="flex items-center gap-1">
+          <button onclick="showPhotoUpload('staff','${st.id}')" title="Photo" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size:18px">photo_camera</span></button>
+          <button onclick="showEditStaff('${st.id}')" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size:18px">edit</span></button>
+          <button onclick="deleteStaff('${st.id}')" class="w-9 h-9 rounded-full hover:bg-error/10 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
+        </div>
       </div>
     </div>`;
   }).join('');

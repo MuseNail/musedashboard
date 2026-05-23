@@ -1,7 +1,7 @@
 // ── Settings panel ──────────────────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, byName } from '../utils.js';
+import { showToast } from '../utils.js';
 import { canDo, getActiveUser, ui } from '../session.js';
 import { DEFAULT_ROLE_PERMISSIONS } from '../config.js';
 import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
@@ -27,28 +27,6 @@ export function toggleDoneVisibility() {
   if (icon) icon.textContent = ui.showDoneInQueue ? 'visibility_off' : 'visibility';
   if (label) label.textContent = ui.showDoneInQueue ? 'Hide Done' : 'Show Done';
   window.renderQueue?.();
-}
-
-// ── Active staff (config.inactive_staff) ──────────
-export function isStaffActive(id) { return !cfg().inactive_staff.includes(id); }
-export function toggleActiveStaff(id) {
-  const inactive = cfg().inactive_staff;
-  dispatch('config.set', { key: 'inactive_staff', value: inactive.includes(id) ? inactive.filter(x => x !== id) : [...inactive, id] });
-  renderSettingsActiveStaff();
-}
-export function toggleAllActiveStaff() {
-  dispatch('config.set', { key: 'inactive_staff', value: cfg().inactive_staff.length === 0 ? cfg().staff.map(s => s.id) : [] });
-  renderSettingsActiveStaff();
-}
-export function renderSettingsActiveStaff() {
-  const container = document.getElementById('settings-active-staff');
-  if (!container) return;
-  container.innerHTML = [...cfg().staff].sort(byName).map(st => {
-    const active = isStaffActive(st.id);
-    return `<div class="flex items-center justify-between py-2 border-b border-surface-container-high last:border-0">
-      <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center"><span class="text-sm font-headline font-bold text-on-surface">${st.name.charAt(0)}</span></div><span class="font-body font-semibold text-on-surface ${active?'':'line-through text-outline-variant'}">${st.name}</span></div>
-      <button onclick="toggleActiveStaff('${st.id}')" class="relative w-12 h-6 rounded-full transition-colors ${active?'bg-primary':'bg-surface-container-high'}"><div class="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${active?'left-6':'left-0.5'}"></div></button></div>`;
-  }).join('');
 }
 
 // ── Role permissions (config.role_permissions) ────
@@ -161,21 +139,6 @@ export function completeSetup() {
 }
 export function skipSetup() { sessionStorage.setItem('muse_setup_skipped', '1'); hideSetupWizard(); showToast('Running without Square. You can connect later in Settings.'); }
 
-// ── Embedded settings panels ──────────────────────
-export function renderStaffEmbed() {
-  const el = document.getElementById('settings-staff-embed');
-  if (!el) return;
-  el.innerHTML = `<div class="text-sm font-body text-on-surface-variant mb-3">Manage staff, photos, commission rates and schedules.</div>
-    <button onclick="showDashPanel('staff')" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors mb-3"><span class="material-symbols-outlined" style="font-size:16px">open_in_full</span> Open Full Staff Manager</button>`;
-  window.renderStaffList?.();
-}
-export function renderServicesEmbed() {
-  const el = document.getElementById('settings-services-embed');
-  if (!el) return;
-  el.innerHTML = `<div class="text-sm font-body text-on-surface-variant mb-3">Add, edit or remove services and set base costs.</div>
-    <button onclick="showDashPanel('services')" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors"><span class="material-symbols-outlined" style="font-size:16px">open_in_full</span> Open Full Services Manager</button>`;
-}
-
 // ── Orchestrator ──────────────────────────────────
 // ── Settings drill-down navigation ────────────────────────────────────────────
 // Groups existing setting sections into 6 categories. Content is already rendered
@@ -187,8 +150,8 @@ const SETTINGS_NAV = [
     { label:'Fees', sub:'Flat or percentage fees', content:'fees-section' },
   ]},
   { id:'staff', title:'Staff & Access', desc:'People & permissions', items:[
-    { label:'Technicians', sub:'Manage staff, photos, commission', content:'settings-staff-section', render:'renderStaffEmbed' },
-    { label:'Active Staff', sub:'Who appears in menus', content:'active-staff-section' },
+    { label:'Technicians', sub:'Staff, photos, schedule & active toggle', content:'staff-merged-section', render:'renderStaffMerged' },
+    { label:'Front Desk Users', sub:'Dashboard PIN login accounts', content:'fdusers-merged-section', render:'renderFdUsersList' },
     { label:'Role Permissions', sub:'What each role can do', content:'settings-perms-section', adminOnly:true },
   ]},
   { id:'workflow', title:'Workflow', desc:'How the floor runs', items:[
@@ -268,7 +231,6 @@ export function settingsBack() {
 
 export function renderSettingsPanel() {
   renderServicesMerged();
-  renderSettingsActiveStaff();
   renderSettingsItems();
   renderSettingsFees();
   renderRolePermissions();
