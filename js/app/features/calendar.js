@@ -15,7 +15,7 @@ const queue = () => getState().queue;
 
 let _calGapiLoaded = false, _calGisLoaded = false, _calTokenClient = null, _calRefreshTimer = null;
 let _calDate = new Date(), _calCalendars = [], _calEvents = {};
-let _apptEditId = null, _apptLines = [], _apptExtraGuests = [];
+let _apptEditId = null, _apptLines = [], _apptExtraGuests = [], _apptEditGroupId = '';
 let _calSyncTimer = null, _calSelectorDraft = null, _calDragIdx = null;
 let _calSlotH = 52, _calSlotMins = 30, _calTouchStartDist = null;
 let _calHidden = new Set(JSON.parse(localStorage.getItem('gcal_hidden') || '[]'));
@@ -333,29 +333,54 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   document.body.appendChild(modal);
 }
 
-export function calQuickCheckin(calId, eventId) {
-  const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
-  if (!ev) return;
+// Build a queue entry from one calendar event (returns null if that person is
+// already checked in). queueGroupId links party members in the queue.
+function _buildCheckinEntry(ev, fallbackCalId, queueGroupId) {
   const title = ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || 'Guest';
-  const already = queue().find(x => x.calEventId === eventId || (x.isAppointment && x.name === title && x.status !== 'paid' && x.status !== 'done'));
-  if (already) { showToast(`${title} is already checked in`); return; }
-  const cal = _calCalendars.find(c => c.id === calId);
+  const already = queue().find(x => x.calEventId === ev.id || (x.isAppointment && x.name === title && x.status !== 'paid' && x.status !== 'done'));
+  if (already) return null;
   const rawP = _apptPhone(ev).replace(/\D/g,'');
   const phone = rawP ? rawP.replace(/^1?(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3') : '';
-  const lines = _parseApptLines(ev, calId);   // [{ svcId, calId }] — per-service tech is the line's calendar
+  const lines = _parseApptLines(ev, fallbackCalId);   // [{ svcId, calId }] — per-service tech is the line's calendar
   let svcs = lines.map(l => l.svcId).filter(Boolean);
   if (svcs.length === 0) svcs = cfg().services.filter(s => title.toLowerCase().includes(s.label.toLowerCase())).map(s => s.id);
   // Map a service line's calendar → the staff member (calendars are named per tech).
   const techForCal = cid => { const nm = (_calCalendars.find(c => c.id === cid)?.name || '').trim().toLowerCase(); return nm ? cfg().staff.find(s => (s.name||'').trim().toLowerCase() === nm) : null; };
   const now = Date.now();
   // Preserve EVERY booked service + its assigned tech (was: only svcs[0] with the event-calendar tech).
-  let assignments = lines.filter(l => l.svcId).map(l => { const t = techForCal(l.calId || calId); return { serviceId: l.svcId, techId: t?.id || '', station: '', status: 'waiting', cost: 0, assignedAt: now }; });
-  if (assignments.length === 0 && svcs.length) { const t = techForCal(calId); assignments = svcs.map(sid => ({ serviceId: sid, techId: t?.id || '', station: '', status: 'waiting', cost: 0, assignedAt: now })); }
-  const entry = { id: Date.now()*1000 + Math.floor(Math.random()*1000), name: title, phone, services: svcs.length > 0 ? svcs : (cfg().services.length > 0 ? [cfg().services[0].id] : []), status: 'waiting', checkinTime: new Date().toISOString(), isAppointment: true, isNew: true, skipSquare: false, groupId: null, calEventId: eventId, assignments };
-  dispatch('queue.upsert', { entry });
-  squareUpsertCustomer(entry);
+  let assignments = lines.filter(l => l.svcId).map(l => { const t = techForCal(l.calId || fallbackCalId); return { serviceId: l.svcId, techId: t?.id || '', station: '', status: 'waiting', cost: 0, assignedAt: now }; });
+  if (assignments.length === 0 && svcs.length) { const t = techForCal(fallbackCalId); assignments = svcs.map(sid => ({ serviceId: sid, techId: t?.id || '', station: '', status: 'waiting', cost: 0, assignedAt: now })); }
+  return { id: Date.now()*1000 + Math.floor(Math.random()*1000), name: title, phone, services: svcs.length > 0 ? svcs : (cfg().services.length > 0 ? [cfg().services[0].id] : []), status: 'waiting', checkinTime: new Date().toISOString(), isAppointment: true, isNew: true, skipSquare: false, groupId: queueGroupId, calEventId: ev.id, assignments };
+}
+export function calQuickCheckin(calId, eventId) {
+  const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
+  if (!ev) return;
+  const groupId = ev.extendedProperties?.private?.museGroupId || '';
+  // Gather the whole party: every event sharing the group id (across calendars),
+  // deduped to one per person; a solo/legacy event is just itself.
+  let party;   // [{ ev, calId }]
+  if (groupId) {
+    const seen = new Set(); party = [];
+    Object.entries(_calEvents).forEach(([cid, list]) => (list||[]).forEach(e => {
+      if ((e.extendedProperties?.private?.museGroupId||'') !== groupId) return;
+      const nm = e.extendedProperties?.private?.museName || (e.summary||'').split(' — ')[0] || 'Guest';
+      if (seen.has(nm)) return; seen.add(nm); party.push({ ev: e, calId: cid });
+    }));
+  } else {
+    party = [{ ev, calId }];
+  }
+  const queueGroupId = party.length > 1 ? 'grp_' + Date.now().toString(36) : null;
+  let added = 0, firstName = '';
+  party.forEach(({ ev: pe, calId: pcid }) => {
+    const entry = _buildCheckinEntry(pe, pcid, queueGroupId);
+    if (!entry) return;
+    dispatch('queue.upsert', { entry });
+    squareUpsertCustomer(entry);
+    added++; if (!firstName) firstName = entry.name;
+  });
+  if (added === 0) { showToast('Already checked in'); return; }
   window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.(); window.showDashPanel?.('queue');
-  showToast(`${title} added to queue from calendar ✓`);
+  showToast(added > 1 ? `${added} guests added to queue from calendar ✓` : `${firstName} added to queue from calendar ✓`);
 }
 
 // ── Appointment modal ─────────────────────────────
@@ -379,11 +404,36 @@ export function apptAcFill(name, phone) {
   const p = document.getElementById('appt-phone'); if (p) formatPhone(p);
   ['appt-ac-phone','appt-ac-first'].forEach(id => { const el = document.getElementById(id); if (el) { el.classList.add('hidden'); el.innerHTML = ''; } });
 }
-export function apptAddGuest() { _apptExtraGuests.push({ first:'', last:'', phone:'' }); renderApptExtraGuests(); }
-export function apptRemoveGuest(idx) { _apptExtraGuests.splice(idx,1); renderApptExtraGuests(); }
+// Each guest carries their OWN service lines so multi-customer bookings can assign
+// a specific service+tech per person (not one shared list for the whole booking).
+export function apptAddGuest() { _syncApptGuestsFromDom(); _apptExtraGuests.push({ first:'', last:'', phone:'', lines:[{ svcId:'', calId:'' }] }); renderApptExtraGuests(); }
+export function apptRemoveGuest(idx) { _syncApptGuestsFromDom(); _apptExtraGuests.splice(idx,1); renderApptExtraGuests(); }
+export function apptGuestAddLine(gi) { _syncApptGuestsFromDom(); if (!_apptExtraGuests[gi]) return; (_apptExtraGuests[gi].lines = _apptExtraGuests[gi].lines || []).push({ svcId:'', calId:'' }); renderApptExtraGuests(); }
+export function apptGuestRemoveLine(gi, li) { _syncApptGuestsFromDom(); _apptExtraGuests[gi]?.lines?.splice(li,1); renderApptExtraGuests(); }
+export function apptGuestUpdateLine(gi, li, field, val) { const l = _apptExtraGuests[gi]?.lines?.[li]; if (!l) return; if (field === 'svc') l.svcId = val; else l.calId = val; }
+// Name/phone live in the DOM; pull them into the model before any re-render so
+// typing guest 1 then adding guest 2 doesn't wipe guest 1 (service lines stay in
+// the model already, kept current by the onchange handlers above).
+function _syncApptGuestsFromDom() {
+  _apptExtraGuests.forEach((g,idx) => {
+    const f = document.getElementById(`appt-extra-first-${idx}`); if (f) g.first = f.value.trim();
+    const l = document.getElementById(`appt-extra-last-${idx}`);  if (l) g.last  = l.value.trim();
+    const p = document.getElementById(`appt-extra-phone-${idx}`); if (p) g.phone = p.value.trim();
+  });
+}
+function _guestLinesHtml(gi) {
+  const rows = (_apptExtraGuests[gi].lines || []).map((line,li) => `<div class="flex items-center gap-2">
+    <select onchange="apptGuestUpdateLine(${gi},${li},'svc',this.value)" class="flex-1 border border-surface-container-high bg-transparent rounded-lg px-2 py-1.5 text-xs font-body focus:border-primary outline-none">${_buildSvcOptions(line.svcId)}</select>
+    <select onchange="apptGuestUpdateLine(${gi},${li},'cal',this.value)" class="flex-1 border border-surface-container-high bg-transparent rounded-lg px-2 py-1.5 text-xs font-body focus:border-primary outline-none">${_buildTechOptions(line.calId)}</select>
+    <button type="button" onclick="apptGuestRemoveLine(${gi},${li})" class="w-7 h-7 rounded-lg text-outline hover:text-error flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined" style="font-size:15px">remove</span></button>
+  </div>`).join('');
+  return `<div class="mt-2"><div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Services &amp; Technicians</div>
+    <div class="space-y-1.5">${rows}</div>
+    <button type="button" onclick="apptGuestAddLine(${gi})" class="flex items-center gap-1 text-[11px] font-body font-semibold text-primary hover:text-primary-dim mt-1.5"><span class="material-symbols-outlined" style="font-size:13px">add</span> Add service</button></div>`;
+}
 function renderApptExtraGuests() {
   const container = document.getElementById('appt-extra-guests'); if (!container) return;
-  container.innerHTML = _apptExtraGuests.map((g,idx) => `<div class="border border-surface-container-high rounded-xl p-3 mb-2 bg-surface-container-low" data-appt-guest="${idx}"><div class="flex items-center justify-between mb-2"><span class="text-[11px] font-body font-semibold text-primary uppercase tracking-widest">Guest ${idx+2}</span><button type="button" onclick="apptRemoveGuest(${idx})" class="text-outline-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size:16px">close</span></button></div><div class="ac-input-wrap mb-2"><input type="tel" placeholder="Phone (optional)" autocomplete="off" id="appt-extra-phone-${idx}" oninput="apptExtraAcSearch(this,${idx},'phone')" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"><div id="appt-extra-ac-phone-${idx}" class="autocomplete-list hidden"></div></div><div class="grid grid-cols-2 gap-2"><div class="ac-input-wrap"><input type="text" placeholder="First Name *" autocomplete="off" id="appt-extra-first-${idx}" oninput="apptExtraAcSearch(this,${idx},'first'); autoCapitalize(this)" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"><div id="appt-extra-ac-first-${idx}" class="autocomplete-list hidden"></div></div><input type="text" placeholder="Last Name" id="appt-extra-last-${idx}" oninput="autoCapitalize(this)" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"></div></div>`).join('');
+  container.innerHTML = _apptExtraGuests.map((g,idx) => `<div class="border border-surface-container-high rounded-xl p-3 mb-2 bg-surface-container-low" data-appt-guest="${idx}"><div class="flex items-center justify-between mb-2"><span class="text-[11px] font-body font-semibold text-primary uppercase tracking-widest">Guest ${idx+2}</span><button type="button" onclick="apptRemoveGuest(${idx})" class="text-outline-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size:16px">close</span></button></div><div class="ac-input-wrap mb-2"><input type="tel" placeholder="Phone (optional)" autocomplete="off" value="${(g.phone||'').replace(/"/g,'&quot;')}" id="appt-extra-phone-${idx}" oninput="apptExtraAcSearch(this,${idx},'phone')" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"><div id="appt-extra-ac-phone-${idx}" class="autocomplete-list hidden"></div></div><div class="grid grid-cols-2 gap-2"><div class="ac-input-wrap"><input type="text" placeholder="First Name *" autocomplete="off" value="${(g.first||'').replace(/"/g,'&quot;')}" id="appt-extra-first-${idx}" oninput="apptExtraAcSearch(this,${idx},'first'); autoCapitalize(this)" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"><div id="appt-extra-ac-first-${idx}" class="autocomplete-list hidden"></div></div><input type="text" placeholder="Last Name" value="${(g.last||'').replace(/"/g,'&quot;')}" id="appt-extra-last-${idx}" oninput="autoCapitalize(this)" class="w-full bg-transparent border-b border-surface-container-high py-1.5 text-sm font-headline focus:border-primary transition-colors outline-none placeholder:text-outline-variant"></div>${_guestLinesHtml(idx)}</div>`).join('');
 }
 export function apptExtraAcSearch(input, idx, field) {
   if (field === 'phone') formatPhone(input);
@@ -441,7 +491,7 @@ export function removeApptLine(i) { _apptLines.splice(i,1); if (_apptLines.lengt
 export function updateApptLine(i, field, val) { if (field === 'svc') _apptLines[i].svcId = val; else _apptLines[i].calId = val; }
 
 export function showNewApptModal(calId, hour, minute, techName) {
-  _apptEditId = null; _apptLines = []; _apptExtraGuests = [];
+  _apptEditId = null; _apptLines = []; _apptExtraGuests = []; _apptEditGroupId = '';
   const eg = document.getElementById('appt-extra-guests'); if (eg) eg.innerHTML = '';
   document.getElementById('appt-modal-title').textContent = 'New Appointment';
   document.getElementById('appt-event-id').value = '';
@@ -460,7 +510,7 @@ export function showConvertToApptModal(calId, eventId) {
   const startDt = new Date(ev.start.dateTime || ev.start.date), endDt = new Date(ev.end?.dateTime || ev.end?.date || startDt.getTime()+3600000);
   const durMins = Math.round((endDt-startDt)/60000);
   const phone = _apptPhone(ev), title = ev.summary || '';
-  _apptEditId = eventId; _apptLines = [{ svcId:'', calId }];
+  _apptEditId = eventId; _apptLines = [{ svcId:'', calId }]; _apptExtraGuests = []; _apptEditGroupId = ev.extendedProperties?.private?.museGroupId || '';
   document.getElementById('appt-modal-title').textContent = 'Convert to Appointment';
   document.getElementById('appt-event-id').value = eventId; document.getElementById('appt-cal-id').value = calId;
   const parts = title.split(' ');
@@ -475,7 +525,7 @@ export function showConvertToApptModal(calId, eventId) {
 }
 export function showEditApptModal(calId, eventId) {
   const ev = (_calEvents[calId] || []).find(x => x.id === eventId); if (!ev) return;
-  _apptEditId = eventId;
+  _apptEditId = eventId; _apptExtraGuests = []; _apptEditGroupId = ev.extendedProperties?.private?.museGroupId || '';
   const startDt = new Date(ev.start.dateTime || ev.start.date), endDt = new Date(ev.end?.dateTime || ev.end?.date || startDt.getTime()+3600000);
   const durMins = Math.round((endDt-startDt)/60000);
   document.getElementById('appt-modal-title').textContent = 'Edit Appointment';
@@ -496,7 +546,19 @@ export function showEditApptModal(calId, eventId) {
   renderApptServiceLines();
   const m = document.getElementById('appt-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
-export function closeApptModal() { const m = document.getElementById('appt-modal'); m.classList.add('hidden'); m.style.display = ''; _apptEditId = null; _apptExtraGuests = []; const eg = document.getElementById('appt-extra-guests'); if (eg) eg.innerHTML = ''; }
+export function closeApptModal() { const m = document.getElementById('appt-modal'); m.classList.add('hidden'); m.style.display = ''; _apptEditId = null; _apptExtraGuests = []; _apptEditGroupId = ''; const eg = document.getElementById('appt-extra-guests'); if (eg) eg.innerHTML = ''; }
+
+// Build one person's event body. museLines/museName/musePhone (per person) + a
+// shared museGroupId link everyone in the booking so quick check-in can pull the
+// whole party in as one group.
+function _apptEventBody(person, startDt, endDt, notes, groupId) {
+  const svcTitles = person.lines.filter(l => l.svcId).map(l => cfg().services.find(s=>s.id===l.svcId)?.label).filter(Boolean);
+  const summary = svcTitles.length > 0 ? `${person.name} — ${svcTitles.join(', ')}` : person.name;
+  const museLines = person.lines.filter(l => l.svcId || l.calId).map(l => ({ svcId: l.svcId || '', calId: l.calId || '' }));
+  const priv = { museLines: JSON.stringify(museLines), musePhone: person.phone || '', museName: person.name };
+  if (groupId) priv.museGroupId = groupId;
+  return { summary, description: notes, start: { dateTime: startDt.toISOString() }, end: { dateTime: endDt.toISOString() }, extendedProperties: { private: priv } };
+}
 
 export async function saveAppt() {
   const first = document.getElementById('appt-first')?.value.trim() || '', last = document.getElementById('appt-last')?.value.trim() || '';
@@ -506,45 +568,49 @@ export async function saveAppt() {
   if (!name) { showToast('Enter a customer name'); return; }
   if (!dateVal) { showToast('Select a date'); return; }
   document.querySelectorAll('#appt-service-lines [data-line]').forEach((row,i) => { const sels = row.querySelectorAll('select'); if (_apptLines[i]) { _apptLines[i].svcId = sels[0]?.value || ''; _apptLines[i].calId = sels[1]?.value || ''; } });
-  const linesWithTech = _apptLines.filter(l => l.calId);
-  if (linesWithTech.length === 0) { showToast('Select at least one technician'); return; }
-  const primaryCalId = linesWithTech[0].calId;
+  _syncApptGuestsFromDom();
+  const primaryLinesWithTech = _apptLines.filter(l => l.calId);
+  if (primaryLinesWithTech.length === 0) { showToast('Select at least one technician'); return; }
   const startDt = new Date(`${dateVal}T${timeVal || '09:00'}`), endDt = new Date(startDt.getTime() + durMins*60000);
-  const svcTitles = _apptLines.filter(l => l.svcId).map(l => cfg().services.find(s=>s.id===l.svcId)?.label).filter(Boolean);
-  const summary = svcTitles.length > 0 ? `${name} — ${svcTitles.join(', ')}` : name;
-  // Structured data → extendedProperties; description holds ONLY the user's notes.
-  const museLines = _apptLines.filter(l => l.svcId || l.calId).map(l => ({ svcId: l.svcId || '', calId: l.calId || '' }));
-  const eventBody = {
-    summary,
-    description: notes,
-    start: { dateTime: startDt.toISOString() }, end: { dateTime: endDt.toISOString() },
-    extendedProperties: { private: { museLines: JSON.stringify(museLines), musePhone: phone || '', museName: name } },
-  };
+
+  // People in this booking: primary + each named guest, each with their OWN lines.
+  const people = [{ name, phone, lines: _apptLines.slice() }];
+  _apptExtraGuests.forEach(g => {
+    const gName = [g.first, g.last].filter(Boolean).join(' ').trim();
+    if (gName) people.push({ name: gName, phone: (g.phone||'').trim(), lines: (g.lines||[]).slice() });
+  });
+
+  // Shared group id: reuse the edited event's, else mint one when it's a party.
+  let groupId = _apptEditGroupId || '';
+  if (people.length > 1 && !groupId) groupId = 'apptgrp_' + Date.now().toString(36);
+  // Where a guest with no chosen tech lands = the primary's first tech calendar.
+  const bookingPrimaryCal = primaryLinesWithTech[0].calId;
+
   try {
     showToast('Saving…');
-    if (_apptEditId) {
-      const oldCalId = document.getElementById('appt-cal-id').value;
-      if (oldCalId && oldCalId !== primaryCalId) {
-        // Tech changed → move the event onto the new tech's calendar, drop the old copy.
-        await gapi.client.calendar.events.insert({ calendarId: primaryCalId, resource: eventBody });
-        try { await gapi.client.calendar.events.delete({ calendarId: oldCalId, eventId: _apptEditId }); } catch {}
+    for (let i = 0; i < people.length; i++) {
+      const p = people[i];
+      const body = _apptEventBody(p, startDt, endDt, notes, groupId);
+      const cals = [...new Set(p.lines.filter(l => l.calId).map(l => l.calId))];
+      if (i === 0 && _apptEditId) {
+        // Primary on edit: update/move the existing event, then insert any extra calendars.
+        const oldCalId = document.getElementById('appt-cal-id').value;
+        const newPrimary = cals[0] || oldCalId;
+        if (oldCalId && oldCalId !== newPrimary) {
+          await gapi.client.calendar.events.insert({ calendarId: newPrimary, resource: body });
+          try { await gapi.client.calendar.events.delete({ calendarId: oldCalId, eventId: _apptEditId }); } catch {}
+        } else {
+          await gapi.client.calendar.events.update({ calendarId: oldCalId, eventId: _apptEditId, resource: body });
+        }
+        for (const cid of cals) { if (cid !== newPrimary && cid !== oldCalId) await gapi.client.calendar.events.insert({ calendarId: cid, resource: body }); }
       } else {
-        await gapi.client.calendar.events.update({ calendarId: oldCalId, eventId: _apptEditId, resource: eventBody });
+        const finalCals = cals.length ? cals : (bookingPrimaryCal ? [bookingPrimaryCal] : []);
+        for (const cid of finalCals) await gapi.client.calendar.events.insert({ calendarId: cid, resource: body });
       }
-    } else {
-      const uniqueCals = [...new Set(linesWithTech.map(l => l.calId))];
-      await Promise.all(uniqueCals.map(cid => gapi.client.calendar.events.insert({ calendarId: cid, resource: eventBody })));
-      for (const g of _apptExtraGuests) {
-        const i = _apptExtraGuests.indexOf(g);
-        const gFirst = document.getElementById(`appt-extra-first-${i}`)?.value.trim() || g.first;
-        const gLast = document.getElementById(`appt-extra-last-${i}`)?.value.trim() || g.last;
-        const gPhone = document.getElementById(`appt-extra-phone-${i}`)?.value.trim() || g.phone;
-        if (!gFirst) continue;
-        await gapi.client.calendar.events.insert({ calendarId: primaryCalId, resource: { summary: [gFirst,gLast].filter(Boolean).join(' '), description: [gPhone,notes].filter(Boolean).join('\n'), start: { dateTime: startDt.toISOString() }, end: { dateTime: endDt.toISOString() } } });
-      }
+      if (p.phone) squareUpsertCustomer({ name: p.name, phone: p.phone });   // add/refresh each booked customer in Square
     }
-    if (phone) squareUpsertCustomer({ name, phone });   // add/refresh the booked customer in Square
-    closeApptModal(); await calLoadAndRender(true); showToast('Appointment saved ✓');
+    closeApptModal(); await calLoadAndRender(true);
+    showToast(people.length > 1 ? `Appointment saved for ${people.length} guests ✓` : 'Appointment saved ✓');
   } catch (err) { showToast('Save failed: ' + (err.result?.error?.message || 'Unknown error')); }
 }
 export async function deleteAppt(calIdParam, eventIdParam) {

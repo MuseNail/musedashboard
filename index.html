@@ -1968,12 +1968,6 @@ tailwind.config = {
       <!-- Hidden combined name field for backward compat -->
       <input type="hidden" id="appt-name">
 
-      <!-- Additional guests -->
-      <div id="appt-extra-guests"></div>
-      <button type="button" onclick="apptAddGuest()" class="flex items-center gap-1.5 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
-        <span class="material-symbols-outlined" style="font-size:14px">person_add</span> Add another guest
-      </button>
-
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Date *</label>
@@ -1994,16 +1988,23 @@ tailwind.config = {
           <option value="120">2 hours</option>
         </select>
       </div>
-      <!-- Service lines: each row = service + technician -->
+      <!-- Service lines: each row = service + technician (primary guest) -->
       <div>
         <div class="flex items-center justify-between mb-2">
-          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest">Services &amp; Technicians</label>
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest">Primary Guest — Services &amp; Technicians</label>
           <button type="button" onclick="addApptServiceLine()" class="flex items-center gap-1 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
             <span class="material-symbols-outlined" style="font-size:14px">add</span> Add service
           </button>
         </div>
         <div id="appt-service-lines" class="space-y-2"></div>
       </div>
+
+      <!-- Additional guests — each with their own name/phone + services -->
+      <div id="appt-extra-guests"></div>
+      <button type="button" onclick="apptAddGuest()" class="flex items-center gap-1.5 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
+        <span class="material-symbols-outlined" style="font-size:14px">person_add</span> Add another guest
+      </button>
+
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Notes</label>
         <input type="text" id="appt-notes" placeholder="Optional notes" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2.5 text-sm font-body focus:border-primary outline-none">
