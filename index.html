@@ -367,6 +367,14 @@ tailwind.config = {
             <div class="text-lg font-headline font-extrabold" style="color:#c53030" id="rpt-discount-total">-$0.00</div>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Discounts</div>
           </div>
+          <div class="rounded-xl p-4 border text-center" style="background:rgba(42,122,79,0.08);border-color:rgba(42,122,79,0.3)">
+            <div class="text-lg font-headline font-extrabold" style="color:#2a7a4f" id="rpt-gc-sold">$0.00</div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Gift Cards Sold</div>
+          </div>
+          <div class="rounded-xl p-4 border text-center" style="background:rgba(42,122,79,0.08);border-color:rgba(42,122,79,0.3)">
+            <div class="text-lg font-headline font-extrabold" style="color:#2a7a4f" id="rpt-gc-redeemed">$0.00</div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Gift Cards Redeemed</div>
+          </div>
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center col-span-2 hidden" id="rpt-refunds-row">
             <div class="text-lg font-headline font-extrabold" style="color:#c53030" id="rpt-refunds-total">-$0.00</div>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Refunds Issued</div>
@@ -388,6 +396,10 @@ tailwind.config = {
         <!-- Fees breakdown -->
         <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Fees Breakdown</h3>
         <div id="rpt-fees-breakdown" class="space-y-2 mb-5"></div>
+
+        <!-- Gift cards (separate ledger — not counted in service income) -->
+        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Gift Cards</h3>
+        <div id="rpt-giftcards-breakdown" class="space-y-2 mb-5"></div>
 
         <!-- Drill-down detail panel (hidden by default) -->
         <div id="rpt-drill-panel" class="hidden mt-5">

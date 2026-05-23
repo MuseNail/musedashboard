@@ -12,6 +12,7 @@ import { LOGO_PATH, PHOTOS_PROXY } from '../config.js';
 const cfg = () => getState().config;
 const records = () => getState().records;
 const queue   = () => getState().queue;
+const giftCards = () => getState().giftcards;
 const svc = id => cfg().services.find(s => s.id === id);
 const staffById = id => cfg().staff.find(s => s.id === id);
 const activeStaff = () => cfg().staff.filter(s => !cfg().inactive_staff.includes(s.id));
@@ -166,7 +167,27 @@ export function runReport() {
       : entries.map(([itemId,data])=>{ const item = cfg().items.find(i=>i.id===itemId); return `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(92,64,16,0.12)"><span class="text-xs font-headline font-bold" style="color:#5c4010">${item?.abbr||'?'}</span></div><div><div class="font-headline font-semibold text-on-surface text-sm">${item?.label||itemId}</div><div class="text-xs font-body text-on-surface-variant">${data.qty} unit${data.qty!==1?'s':''} sold</div></div></div><div class="font-headline font-bold text-on-surface">$${data.revenue.toFixed(2)}</div></div>`; }).join('');
   }
 
-  window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap };
+  // Gift cards — own subtotals, NOT folded into service income (a sale is a
+  // liability until redeemed; counting both the sale and the later redemption
+  // against a service would double-count). Sold/redeemed scoped to the period
+  // by datePurchased / dateUsed; outstanding balance is point-in-time (all cards).
+  const inPeriod = ds => ds && ds >= localDateStr(from) && ds <= localDateStr(to);
+  const gcSold = giftCards().filter(g => inPeriod(g.datePurchased));
+  const gcSoldValue = gcSold.reduce((s,g)=>s+(g.amount||0),0);
+  const gcRedeemed = giftCards().filter(g => inPeriod(g.dateUsed)).reduce((s,g)=>s+(g.amountUsed||0),0);
+  const gcOutstanding = giftCards().reduce((s,g)=>s+((g.amount||0)-(g.amountUsed||0)),0);
+  set('rpt-gc-sold', `$${gcSoldValue.toFixed(2)}`);
+  set('rpt-gc-redeemed', `$${gcRedeemed.toFixed(2)}`);
+  const gcBreakdown = document.getElementById('rpt-giftcards-breakdown');
+  if (gcBreakdown) {
+    const row = (label, value, sub) => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div><div class="font-headline font-semibold text-on-surface text-sm">${label}</div><div class="text-xs font-body text-on-surface-variant">${sub}</div></div><div class="font-headline font-bold text-on-surface">${value}</div></div>`;
+    gcBreakdown.innerHTML =
+      row('Gift Cards Sold', `$${gcSoldValue.toFixed(2)}`, `${gcSold.length} card${gcSold.length!==1?'s':''} sold this period`) +
+      row('Redeemed', `$${gcRedeemed.toFixed(2)}`, 'Used this period (not counted as service income)') +
+      row('Outstanding Balance', `$${gcOutstanding.toFixed(2)}`, 'Unredeemed value across all gift cards');
+  }
+
+  window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding };
 }
 
 // ── Drill-downs ───────────────────────────────────
@@ -252,6 +273,8 @@ export function exportReportExcel() {
     ...d.filtered.map(r => { const dt = new Date(r.checkinTime); const staffNames = (r.assignments||[]).map(a=>staffById(a.techId)?.name).filter(Boolean).join(', '); return [dt.toLocaleDateString(), dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.name, r.phone, r.services.map(sid=>svc(sid)?.label||sid).join(', '), r.isAppointment?'Appointment':'Walk-In', staffNames, r.totalCost?`$${r.totalCost.toFixed(2)}`:'$0.00', r.status]; }),
     [], ['STAFF BREAKDOWN'], ['Technician','Services','Turns','Bonus Turns','Total Billed','Commission %','Commission Earned','Salon Keeps'],
     ...Object.entries(d.staffMap).map(([techId,data])=>{ const tech = staffById(techId); const commPct = tech?.commission!=null?tech.commission:null; const commAmt = commPct!=null?data.income*commPct/100:0; return [tech?.name||'Unknown', data.count, data.fullTurns+data.halfTurns, data.bonusTurns, `$${data.income.toFixed(2)}`, commPct!=null?`${commPct}%`:'N/A', `$${commAmt.toFixed(2)}`, `$${(data.income-commAmt).toFixed(2)}`]; }),
+    [], ['GIFT CARDS (separate ledger — not in service income)'],
+    ['Sold this period', `$${(d.gcSoldValue||0).toFixed(2)}`], ['Redeemed this period', `$${(d.gcRedeemed||0).toFixed(2)}`], ['Outstanding balance (all cards)', `$${(d.gcOutstanding||0).toFixed(2)}`],
   ];
   const csv = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
