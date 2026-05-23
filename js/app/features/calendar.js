@@ -221,6 +221,10 @@ export function toggleCalSelector() {
   if (dd.classList.contains('hidden')) {
     _calSelectorDraft = { order: _calCalendars.map(c => c.id), hidden: new Set(_calHidden) };
     renderCalSelectorList(); dd.classList.remove('hidden');
+    // Stop clicks INSIDE the dropdown from reaching the outside-click closer below.
+    // (Toggling a row re-renders the list, detaching the clicked node, which would
+    // otherwise fool `dd.contains(e.target)` into thinking the click was outside.)
+    dd.onclick = (e) => e.stopPropagation();
     setTimeout(() => document.addEventListener('click', function closeDD(e) { if (!dd.contains(e.target)) { dd.classList.add('hidden'); _calSelectorDraft = null; document.removeEventListener('click', closeDD); } }), 10);
   } else { dd.classList.add('hidden'); _calSelectorDraft = null; }
 }
@@ -236,7 +240,7 @@ export function renderCalSelectorList() {
   if (!list || _calCalendars.length === 0) return;
   if (!_calSelectorDraft) _calSelectorDraft = { order: _calCalendars.map(c => c.id), hidden: new Set(_calHidden) };
   const draftCals = _calSelectorDraft.order.map(id => _calCalendars.find(c => c.id === id)).filter(Boolean);
-  list.innerHTML = draftCals.map((c,i) => { const isHidden = _calSelectorDraft.hidden.has(c.id); return `<div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none" draggable="true" data-cal-idx="${i}" ondragstart="calDraftDragStart(event,${i})" ondragover="calDraftDragOver(event)" ondrop="calDraftDrop(event,${i})"><span class="material-symbols-outlined" style="font-size:14px;flex-shrink:0;color:#6b7280;cursor:grab">drag_indicator</span><div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div><span class="flex-grow text-sm font-body text-on-surface" onclick="calDraftToggle('${c.id}')">${c.name}</span><div onclick="calDraftToggle('${c.id}')" style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;border:2.5px solid ${isHidden?'#9ca3af':'#1a5252'};background:${isHidden?'#fff':'#1a5252'}">${!isHidden?'<span class="material-symbols-outlined" style="font-size:13px;color:#fff;font-variation-settings:\'FILL\' 1;line-height:1">check</span>':''}</div></div>`; }).join('');
+  list.innerHTML = draftCals.map((c,i) => { const isHidden = _calSelectorDraft.hidden.has(c.id); return `<div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none" data-cal-idx="${i}" ondragover="calDraftDragOver(event)" ondrop="calDraftDrop(event,${i})"><span draggable="true" ondragstart="calDraftDragStart(event,${i})" class="material-symbols-outlined" style="font-size:14px;flex-shrink:0;color:#6b7280;cursor:grab">drag_indicator</span><div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div><span class="flex-grow text-sm font-body text-on-surface" onclick="calDraftToggle('${c.id}')">${c.name}</span><div onclick="calDraftToggle('${c.id}')" style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;border:2.5px solid ${isHidden?'#9ca3af':'#1a5252'};background:${isHidden?'#fff':'#1a5252'}">${!isHidden?'<span class="material-symbols-outlined" style="font-size:13px;color:#fff;font-variation-settings:\'FILL\' 1;line-height:1">check</span>':''}</div></div>`; }).join('');
   const visCount = draftCals.filter(c => !_calSelectorDraft.hidden.has(c.id)).length;
   const lbl = document.getElementById('cal-selector-label'); if (lbl) lbl.textContent = visCount === _calCalendars.length ? 'Calendars' : `${visCount}/${_calCalendars.length}`;
 }
