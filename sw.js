@@ -1,7 +1,7 @@
-// ── Service Worker (v2.11 — modular ES-module client) ───────────────────────
+// ── Service Worker (v2.12 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'muse-v2.11';
+const CACHE_NAME = 'muse-v2.12';
 
 const PRECACHE_URLS = [
   '/musedashboard/',
@@ -57,17 +57,11 @@ self.addEventListener('fetch', event => {
   if (!url.pathname.startsWith('/musedashboard/')) return;
   if (req.cache === 'no-store' || req.cache === 'no-cache') return;
 
-  // Network-first for the shell + version stamp + the config module (carries
-  // APP_VERSION), so deploys propagate immediately; fall back to cache offline.
-  if (
-    url.pathname.endsWith('version.json') ||
-    url.pathname.endsWith('/js/app/config.js') ||
-    url.pathname === '/musedashboard/' ||
-    url.pathname.endsWith('/index.html')
-  ) { event.respondWith(networkFirst(req)); return; }
-
-  // Cache-first for the rest (versioned by CACHE_NAME, purged on activate).
-  event.respondWith(cacheFirst(req));
+  // Network-first for EVERYTHING same-origin (shell, JS modules, CSS, assets):
+  // when online, always serve the freshly-deployed files so a version bump applies
+  // on a single reload (no stale cached modules); fall back to cache only when
+  // offline. Keeps the PWA offline-capable without ever serving stale code.
+  event.respondWith(networkFirst(req));
 });
 
 async function networkFirst(req) {
