@@ -46,14 +46,12 @@ function goTo(screenId, param) {
   if (screenId === 'screen-desk') { utils.updateDeskDate(); settings.initCalHoursSelectors(); }
 }
 function showDashPanel(panel) {
-  ['queue','reports','transactions','services','staff','turns','settings','giftcards','calendar'].forEach(p => {
+  ['queue','reports','transactions','turns','settings','giftcards','calendar'].forEach(p => {
     document.getElementById(`panel-${p}`)?.classList.remove('active');
     document.getElementById(`nav-${p}`)?.classList.remove('active');
   });
   document.getElementById(`panel-${panel}`)?.classList.add('active');
   document.getElementById(`nav-${panel}`)?.classList.add('active');
-  if (panel === 'services')     catalog.renderServicesList();
-  if (panel === 'staff')        { staff.renderStaffList(); auth.renderFdUsersList(); showStaffListView(); }
   if (panel === 'reports')      reports.setReportRange('today');
   if (panel === 'transactions') reports.renderTransactions();
   if (panel === 'settings')     settings.renderSettingsPanel();
@@ -105,8 +103,6 @@ function onStateChange(state, changed) {
     case 'panel-reports':      reports.runReport(); break;
     case 'panel-transactions': reports.renderTransactions(); break;
     case 'panel-giftcards':    giftcards.renderGiftCards(); break;
-    case 'panel-services':     catalog.renderServicesList(); break;
-    case 'panel-staff':        staff.renderStaffList(); auth.renderFdUsersList(); break;
   }
 }
 

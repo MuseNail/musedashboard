@@ -9,30 +9,59 @@ import { showToast } from '../utils.js';
 
 const cfg = () => getState().config;
 
-// ── Services ─────────────────────────────────────
-export function renderServicesList() {
-  const list = document.getElementById('services-list');
+// ── Services (merged: CRUD + check-in visibility + dashboard visibility) ──────
+// One row per service: abbr/name/base-cost + two inline visibility toggles
+// (customer check-in screen, dashboard) + edit + delete.
+export function renderServicesMerged() {
+  const list = document.getElementById('services-merged-list');
   if (!list) return;
-  list.innerHTML = cfg().services.map(s => `
-    <div class="bg-surface-container-lowest rounded-xl px-5 py-4 border border-surface-container-high flex items-center justify-between">
-      <div class="flex items-center gap-4">
-        <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+  const svcs = cfg().services;
+  if (!svcs.length) { list.innerHTML = '<p class="text-sm font-body text-on-surface-variant py-4 text-center">No services yet. Add one or sync from Square.</p>'; return; }
+  list.innerHTML = svcs.map(s => {
+    const checkin = isServiceVisibleOnCheckin(s.id);
+    const dash    = isServiceVisibleOnDash(s.id);
+    const toggle = (on, label, fn, title) => `
+      <button onclick="${fn}('${s.id}')" title="${title}" class="flex flex-col items-center gap-1 flex-shrink-0">
+        <span class="text-[9px] font-body uppercase tracking-wider ${on ? 'text-primary' : 'text-outline-variant'}">${label}</span>
+        <div class="relative w-10 h-5 rounded-full transition-colors ${on ? 'bg-primary' : 'bg-surface-container-high'}"><div class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${on ? 'left-5' : 'left-0.5'}"></div></div>
+      </button>`;
+    return `
+    <div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
           <span class="text-xs font-headline font-bold text-on-primary">${s.abbr}</span>
         </div>
-        <div>
-          <span class="font-headline font-semibold text-on-surface text-base">${s.label}</span>
+        <div class="min-w-0">
+          <div class="font-headline font-semibold text-on-surface text-base truncate">${s.label}</div>
           ${s.baseCost != null ? `<div class="text-xs font-body text-on-surface-variant mt-0.5">Base: $${Number(s.baseCost).toFixed(2)}</div>` : ''}
         </div>
       </div>
-      <div class="flex items-center gap-1">
-        <button onclick="showEditService('${s.id}')" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors">
-          <span class="material-symbols-outlined" style="font-size:18px">edit</span>
-        </button>
-        <button onclick="deleteService('${s.id}')" class="w-9 h-9 rounded-full hover:bg-error/10 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors">
-          <span class="material-symbols-outlined" style="font-size:18px">delete</span>
-        </button>
+      <div class="flex items-center gap-4 flex-shrink-0">
+        ${toggle(checkin, 'Check-in', 'toggleCheckinService', 'Show on the customer check-in screen')}
+        ${toggle(dash, 'Dashboard', 'toggleDashService', 'Show in Assign, Turns, Queue & Calendar')}
+        <div class="flex items-center gap-1">
+          <button onclick="showEditService('${s.id}')" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors">
+            <span class="material-symbols-outlined" style="font-size:18px">edit</span>
+          </button>
+          <button onclick="deleteService('${s.id}')" class="w-9 h-9 rounded-full hover:bg-error/10 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors">
+            <span class="material-symbols-outlined" style="font-size:18px">delete</span>
+          </button>
+        </div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+// ── Customer check-in service visibility (config.hidden_services) ─────────────
+export function isServiceVisibleOnCheckin(id) { return !cfg().hidden_services.includes(id); }
+export function toggleCheckinService(id) {
+  const hidden = cfg().hidden_services;
+  dispatch('config.set', { key: 'hidden_services', value: hidden.includes(id) ? hidden.filter(x => x !== id) : [...hidden, id] });
+  renderServicesMerged();
+}
+export function toggleAllCheckinServices() {
+  dispatch('config.set', { key: 'hidden_services', value: cfg().hidden_services.length === 0 ? cfg().services.map(s => s.id) : [] });
+  renderServicesMerged();
 }
 
 export function showAddService() {
@@ -85,7 +114,7 @@ export function saveService() {
   }
   dispatch('config.set', { key: 'services', value: services });
   closeServiceModal();
-  renderServicesList();
+  renderServicesMerged();
   showToast(editId ? 'Service updated' : `"${label}" added`);
   if (cfg().square_config && changedSvc && window.squarePushService) window.squarePushService(changedSvc);
 }
@@ -95,45 +124,24 @@ export function deleteService(id) {
   if (!svc) return;
   if (!confirm(`Remove "${svc.label}" from services?`)) return;
   dispatch('config.set', { key: 'services', value: cfg().services.filter(s => s.id !== id) });
-  renderServicesList();
+  renderServicesMerged();
   showToast(`"${svc.label}" removed`);
 }
 
-// ── Dashboard service visibility ──────────────────
+// ── Dashboard service visibility (config.hidden_dash_services) ────────────────
 export function isServiceVisibleOnDash(id) { return !cfg().hidden_dash_services.includes(id); }
 
 export function toggleDashService(id) {
   const hidden = cfg().hidden_dash_services;
   const next = hidden.includes(id) ? hidden.filter(x => x !== id) : [...hidden, id];
   dispatch('config.set', { key: 'hidden_dash_services', value: next });
-  renderSettingsDashServiceVisibility();
+  renderServicesMerged();
 }
 
 export function toggleAllDashServices() {
   const next = cfg().hidden_dash_services.length === 0 ? cfg().services.map(s => s.id) : [];
   dispatch('config.set', { key: 'hidden_dash_services', value: next });
-  renderSettingsDashServiceVisibility();
-}
-
-export function renderSettingsDashServiceVisibility() {
-  const container = document.getElementById('settings-dash-service-visibility');
-  if (!container) return;
-  container.innerHTML = cfg().services.map(s => {
-    const visible = isServiceVisibleOnDash(s.id);
-    return `
-      <div class="flex items-center justify-between py-2 border-b border-surface-container-high last:border-0">
-        <div class="flex items-center gap-3">
-          <div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center">
-            <span class="text-xs font-headline font-bold text-on-surface">${s.abbr}</span>
-          </div>
-          <span class="font-body font-semibold text-on-surface">${s.label}</span>
-        </div>
-        <button onclick="toggleDashService('${s.id}')"
-          class="relative w-12 h-6 rounded-full transition-colors ${visible ? 'bg-primary' : 'bg-surface-container-high'}">
-          <div class="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${visible ? 'left-6' : 'left-0.5'}"></div>
-        </button>
-      </div>`;
-  }).join('');
+  renderServicesMerged();
 }
 
 // ── Items ─────────────────────────────────────────

@@ -4,7 +4,7 @@ import { dispatch } from '../sync.js';
 import { showToast, byName } from '../utils.js';
 import { canDo, getActiveUser, ui } from '../session.js';
 import { DEFAULT_ROLE_PERMISSIONS } from '../config.js';
-import { renderSettingsDashServiceVisibility, renderSettingsItems, renderSettingsFees } from './catalog.js';
+import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
 import { setLogo } from './photos.js';
 import { getTurnConfig, saveTurnConfig, isAlwaysBonusService, saveBonusServices } from './turns.js';
 import { loadSquareCustomers } from './square-customers.js';
@@ -27,28 +27,6 @@ export function toggleDoneVisibility() {
   if (icon) icon.textContent = ui.showDoneInQueue ? 'visibility_off' : 'visibility';
   if (label) label.textContent = ui.showDoneInQueue ? 'Hide Done' : 'Show Done';
   window.renderQueue?.();
-}
-
-// ── Customer-screen service visibility (config.hidden_services) ───────────────
-export function isServiceVisibleOnCheckin(id) { return !cfg().hidden_services.includes(id); }
-export function toggleCheckinService(id) {
-  const hidden = cfg().hidden_services;
-  dispatch('config.set', { key: 'hidden_services', value: hidden.includes(id) ? hidden.filter(x => x !== id) : [...hidden, id] });
-  renderSettingsServiceVisibility();
-}
-export function toggleAllCheckinServices() {
-  dispatch('config.set', { key: 'hidden_services', value: cfg().hidden_services.length === 0 ? cfg().services.map(s => s.id) : [] });
-  renderSettingsServiceVisibility();
-}
-export function renderSettingsServiceVisibility() {
-  const container = document.getElementById('settings-service-visibility');
-  if (!container) return;
-  container.innerHTML = cfg().services.map(s => {
-    const visible = isServiceVisibleOnCheckin(s.id);
-    return `<div class="flex items-center justify-between py-2 border-b border-surface-container-high last:border-0">
-      <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center"><span class="text-xs font-headline font-bold text-on-primary">${s.abbr}</span></div><span class="font-body font-semibold text-on-surface">${s.label}</span></div>
-      <button onclick="toggleCheckinService('${s.id}')" class="relative w-12 h-6 rounded-full transition-colors ${visible?'bg-primary':'bg-surface-container-high'}"><div class="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all ${visible?'left-6':'left-0.5'}"></div></button></div>`;
-  }).join('');
 }
 
 // ── Active staff (config.inactive_staff) ──────────
@@ -204,9 +182,7 @@ export function renderServicesEmbed() {
 // by renderSettingsPanel(); nav just toggles which section wrapper is visible.
 const SETTINGS_NAV = [
   { id:'catalog', title:'Services, Items & Fees', desc:'What you sell', items:[
-    { label:'Customer Screen Services', sub:'Shown on the check-in tablet', content:'svc-section' },
-    { label:'Dashboard Services', sub:'Shown in Assign, Turns, Queue, Calendar', content:'dash-svc-section' },
-    { label:'Services Management', sub:'Add, edit or remove services', content:'settings-services-section', render:'renderServicesEmbed' },
+    { label:'Services', sub:'Add, edit, delete & visibility', content:'services-merged-section', render:'renderServicesMerged' },
     { label:'Retail Items', sub:'Add-on items', content:'items-section' },
     { label:'Fees', sub:'Flat or percentage fees', content:'fees-section' },
   ]},
@@ -291,8 +267,7 @@ export function settingsBack() {
 }
 
 export function renderSettingsPanel() {
-  renderSettingsServiceVisibility();
-  renderSettingsDashServiceVisibility();
+  renderServicesMerged();
   renderSettingsActiveStaff();
   renderSettingsItems();
   renderSettingsFees();

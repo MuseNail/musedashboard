@@ -125,7 +125,7 @@ export async function squarePullServices() {
     if (addedSvc > 0)   showToast(`${addedSvc} service${addedSvc>1?'s':''} imported from Square`);
     if (addedItems > 0) showToast(`${addedItems} item${addedItems>1?'s':''} imported from Square`);
     if (addedSvc === 0 && addedItems === 0) showToast('Catalog already up to date');
-    window.renderServicesList?.();
+    window.renderServicesMerged?.();
   } catch (e) { console.warn('Could not pull Square catalog:', e); }
 }
 
