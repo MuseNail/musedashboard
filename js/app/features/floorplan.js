@@ -1,8 +1,11 @@
-// ── Floor Plan: station grid, live assignment bubbles, drag-to-assign, layout editor ──
-// Reads the same live assignments as the Turns grid, but arranged BY STATION
-// (a.station) instead of by tech. The only new persisted data is the synced
-// config key `station_layout` ({ stationId: {col,row} }); the station list and
-// the a.station field are reused as-is. Additive — no schema change/migration.
+// ── Floor Plan v2: free-positioned station canvas ───────────────────────────
+// Each station is one physical seat → ONE customer. Manicure: 1 customer / 1 tech /
+// up to 3 services. Pedicure: 1 customer / up to 3 techs / up to 4 services.
+// The station shows that customer + their service·tech lines (sized to fit, no scroll).
+// Layout is free-form (x/y/w/h per station) + per-station fill/outline/shape, saved
+// additively in config.station_layout. Edit mode: move (incl. multi-select), resize,
+// recolor, reshape. View mode: drag a customer onto a seat; tap a customer to open
+// Assign & Price. Reuses the a.station field (set on all the customer's assignments).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr } from '../utils.js';
@@ -14,66 +17,77 @@ const q   = () => getState().queue;
 const svc = id => cfg().services.find(s => s.id === id);
 const staffById = id => cfg().staff.find(s => s.id === id);
 
-const GRID_COLS = 6;
-const ROW_PX = 92, GAP_PX = 8;   // must match #floorplan-grid grid-auto-rows + gap
 let floorEditMode = false;
+const _selected = new Set();   // station ids selected in edit mode
 
-// ── Layout (positions) ────────────────────────────
-// Default auto-grid: pedicure zone (P1–P12) rows 1–2, manicure zone (M1–M15)
-// rows 4–6, with row 3 left as a visual gap. config.station_layout overrides per station.
-function defaultPos(stationId) {
-  const list = STATIONS.filter(s => s[0] === stationId[0]);
-  const idx = Math.max(0, list.indexOf(stationId));
-  const baseRow = stationId[0] === 'P' ? 1 : 4;
-  return { col: (idx % GRID_COLS) + 1, row: baseRow + Math.floor(idx / GRID_COLS) };
+const GAP = 10;
+const DEF = { P: { w: 152, h: 116 }, M: { w: 108, h: 70 } };   // pedi larger (3 techs/4 svcs), mani compact (1 tech/3 svcs)
+const ACCENT = { P: '#1a5c7a', M: '#785a1a' };
+
+function containerW() { const g = document.getElementById('floorplan-grid'); return g && g.clientWidth ? g.clientWidth : 720; }
+
+// Deterministic default layout: pedicure zone on top, manicure zone below.
+function computedDefault(id) {
+  const type = id[0], { w, h } = DEF[type], W = containerW();
+  const list = STATIONS.filter(s => s[0] === type);
+  const idx = Math.max(0, list.indexOf(id));
+  const perRow = Math.max(1, Math.floor((W + GAP) / (w + GAP)));
+  const col = idx % perRow, row = Math.floor(idx / perRow);
+  let y = row * (h + GAP);
+  if (type === 'M') {
+    const pCount = STATIONS.filter(s => s[0] === 'P').length;
+    const pPerRow = Math.max(1, Math.floor((W + GAP) / (DEF.P.w + GAP)));
+    y += Math.ceil(pCount / pPerRow) * (DEF.P.h + GAP) + 26;
+  }
+  return { x: col * (w + GAP), y, w, h, fill: ACCENT[type], outline: ACCENT[type], shape: 'rounded' };
 }
 function layout() { return cfg().station_layout || {}; }
-function posFor(id) { const p = layout()[id]; return (p && p.col && p.row) ? p : defaultPos(id); }
+function layoutFor(id) { return { ...computedDefault(id), ...(layout()[id] || {}) }; }
 function saveLayout(next) { dispatch('config.set', { key: 'station_layout', value: next }); }
 
-// ── Live assignments by station (today, active = not done) ──────────
+// ── Live occupancy (one customer per station) ─────
+function activeAssignments(e) { return (e.assignments || []).filter(a => getAssignmentStatus(e, a) !== 'done'); }
 function collectFloor() {
   const today = todayStr();
-  const byStation = {};
+  const byStation = {};   // stationId -> entry
   const unplaced = [];
   q().forEach(e => {
     if (e.status === 'done') return;
     if (localDateStr(new Date(e.checkinTime)) !== today) return;
-    (e.assignments || []).forEach(a => {
-      if (getAssignmentStatus(e, a) === 'done') return;
-      const item = { entry: e, a };
-      if (a.station && STATIONS.includes(a.station)) (byStation[a.station] ||= []).push(item);
-      else unplaced.push(item);
-    });
+    const active = activeAssignments(e);
+    const at = active.find(a => a.station && STATIONS.includes(a.station));
+    if (at) { if (!byStation[at.station]) byStation[at.station] = e; }
+    else if (active.length) unplaced.push(e);
   });
   return { byStation, unplaced };
 }
-
-function bubbleHtml(item, draggable) {
-  const { entry: e, a } = item;
-  const tech = a.techId ? staffById(a.techId) : null;
-  const s = a.serviceId ? svc(a.serviceId) : null;
-  const inservice = getAssignmentStatus(e, a) === 'inservice';
-  const bg = inservice ? '#c8e6c5' : '#ffe0b2';
-  const fg = inservice ? '#1b5e20' : '#6d3200';
-  const attrs = draggable ? `data-entry-id="${e.id}" data-svc="${a.serviceId || ''}"` : '';
-  return `<div class="${draggable ? 'floor-bubble cursor-pointer' : ''} rounded-lg px-2 py-1 leading-tight" ${attrs} style="background:${bg};color:${fg};font-size:11px">
-    <div class="font-semibold truncate">${e.name}</div>
-    <div class="opacity-90 truncate" style="font-size:10px">${tech ? tech.name.split(' ')[0] : '—'}${s ? ' · ' + s.label : ''}${a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}</div>
-  </div>`;
+function entryInservice(e) { return activeAssignments(e).some(a => getAssignmentStatus(e, a) === 'inservice'); }
+function custLines(e, stationId) {
+  return activeAssignments(e).filter(a => a.station === stationId).map(a => {
+    const s = a.serviceId ? svc(a.serviceId) : null, t = a.techId ? staffById(a.techId) : null;
+    return `<div class="truncate" style="font-size:10px;color:#374151">${s ? s.label : 'Service'}${t ? ' · ' + t.name.split(' ')[0] : ''}${a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}</div>`;
+  }).join('');
 }
 
-function stationCardHtml(stationId, items) {
-  const p = posFor(stationId);
-  const accent = stationId[0] === 'P' ? '#1a5c7a' : '#785a1a';
-  const occupied = items.length > 0;
-  const body = occupied
-    ? items.map(it => bubbleHtml(it, !floorEditMode)).join('')
-    : `<div class="text-[10px] text-outline-variant/70 flex-1 flex items-center justify-center">empty</div>`;
-  return `<div class="floor-station rounded-xl border-2 flex flex-col overflow-hidden ${floorEditMode ? 'cursor-move' : ''}" data-station="${stationId}"
-      style="grid-column:${p.col};grid-row:${p.row};border-color:${accent}${occupied ? '' : '40'};background:${accent}0d;min-height:0">
-    <div class="px-1.5 pt-1"><span class="text-[10px] font-headline font-bold" style="color:${accent}">${stationId}</span></div>
-    <div class="flex-1 flex flex-col gap-0.5 px-1 pb-1 overflow-y-auto" style="min-height:0">${body}</div>
+function stationHtml(id, entry) {
+  const L = layoutFor(id);
+  const radius = L.shape === 'circle' ? '9999px' : L.shape === 'square' ? '4px' : '14px';
+  const sel = _selected.has(id);
+  const fillTint = (L.fill || ACCENT[id[0]]) + '17';
+  let content;
+  if (entry) {
+    const live = entryInservice(entry);
+    const dot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${live ? '#2a7a4f' : '#e8a230'};margin-right:4px;flex-shrink:0"></span>`;
+    content = `<div class="${floorEditMode ? '' : 'floor-bubble cursor-pointer'} h-full w-full flex flex-col px-1.5 py-1 overflow-hidden" ${floorEditMode ? '' : `data-entry-id="${entry.id}"`}>
+      <div class="flex items-center font-semibold" style="font-size:11px;color:#1f2937"><span class="truncate">${dot}${entry.name}</span></div>
+      <div class="flex-1 overflow-hidden leading-tight">${custLines(entry, id)}</div></div>`;
+  } else {
+    content = `<div class="h-full w-full flex items-center justify-center" style="font-size:12px;font-weight:800;color:${L.outline};opacity:0.55">${id}</div>`;
+  }
+  return `<div class="floor-station absolute ${floorEditMode ? 'cursor-move' : ''}" data-station="${id}"
+    style="left:${L.x}px;top:${L.y}px;width:${L.w}px;height:${L.h}px;box-sizing:border-box;border:2px solid ${L.outline};border-radius:${radius};background:${fillTint};overflow:hidden;${sel ? 'outline:3px solid #1a5252;outline-offset:2px;' : ''}">
+    ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${L.outline};opacity:0.6;pointer-events:none">${id}</div>` : ''}
+    ${content}
   </div>`;
 }
 
@@ -83,90 +97,102 @@ export function renderFloorPlan() {
   const { byStation, unplaced } = collectFloor();
 
   const modeLabel = document.getElementById('floorplan-mode-label');
-  if (modeLabel) modeLabel.textContent = floorEditMode ? 'Editing layout — drag stations to rearrange' : 'Live';
+  if (modeLabel) modeLabel.textContent = floorEditMode ? 'Editing layout — drag to move, tap to select, then style below' : 'Live';
   const editBtn = document.getElementById('floorplan-edit-btn');
   if (editBtn) editBtn.innerHTML = floorEditMode
     ? '<span class="material-symbols-outlined" style="font-size:16px">check</span> Done'
     : '<span class="material-symbols-outlined" style="font-size:16px">edit</span> Edit layout';
   document.getElementById('floorplan-reset-btn')?.classList.toggle('hidden', !floorEditMode);
+  renderFloorProps();
 
   const tray = document.getElementById('floorplan-tray');
   if (tray) {
     if (floorEditMode || unplaced.length === 0) tray.innerHTML = '';
     else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
-      <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not at a station — drag onto the floor (${unplaced.length})</div>
-      <div class="flex gap-1.5 flex-wrap">${unplaced.map(it => bubbleHtml(it, true)).join('')}</div></div>`;
+      <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not seated — drag onto a station (${unplaced.length})</div>
+      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#c8e6c5' : '#ffe0b2'};color:#1f2937;font-size:11px"><span class="font-semibold">${e.name}</span></div>`).join('')}</div></div>`;
   }
 
-  grid.innerHTML = STATIONS.map(id => stationCardHtml(id, byStation[id] || [])).join('');
+  grid.style.position = 'relative';
+  let maxBottom = 0;
+  STATIONS.forEach(id => { const L = layoutFor(id); maxBottom = Math.max(maxBottom, L.y + L.h); });
+  grid.style.height = (maxBottom + GAP) + 'px';
+  grid.innerHTML = STATIONS.map(id => stationHtml(id, byStation[id] || null)).join('');
 }
 
-export function toggleFloorEdit() { floorEditMode = !floorEditMode; renderFloorPlan(); }
-export function resetFloorLayout() {
-  const doReset = () => { saveLayout({}); renderFloorPlan(); showToast('Floor layout reset'); };
-  if (window.showWarnModal) window.showWarnModal('Reset layout?', 'Restore the default station arrangement?', doReset);
-  else doReset();
+// ── Edit-mode properties panel ────────────────────
+function renderFloorProps() {
+  const el = document.getElementById('floorplan-props');
+  if (!el) return;
+  if (!floorEditMode || _selected.size === 0) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.classList.remove('hidden');
+  const ids = [..._selected];
+  const ref = layoutFor(ids[0]);
+  el.innerHTML = `
+    <div class="flex items-center gap-2 mb-2 flex-wrap">
+      <span class="text-xs font-headline font-bold text-on-surface">${ids.length} selected</span>
+      <button onclick="fpClearSelection()" class="text-xs text-primary underline">clear</button>
+    </div>
+    <div class="flex items-center gap-3 flex-wrap text-xs font-body">
+      <label class="flex items-center gap-1">Fill <input type="color" value="${ref.fill}" onchange="fpSetProp('fill',this.value)" class="w-7 h-7 rounded border border-surface-container-high bg-transparent"></label>
+      <label class="flex items-center gap-1">Outline <input type="color" value="${ref.outline}" onchange="fpSetProp('outline',this.value)" class="w-7 h-7 rounded border border-surface-container-high bg-transparent"></label>
+      <span class="flex items-center gap-1">W <button onclick="fpResize('w',-12)" class="fp-step">−</button><button onclick="fpResize('w',12)" class="fp-step">+</button></span>
+      <span class="flex items-center gap-1">H <button onclick="fpResize('h',-10)" class="fp-step">−</button><button onclick="fpResize('h',10)" class="fp-step">+</button></span>
+      <span class="flex items-center gap-1">Shape
+        <button onclick="fpSetProp('shape','rounded')" class="fp-step ${ref.shape==='rounded'?'fp-on':''}">▢</button>
+        <button onclick="fpSetProp('shape','square')" class="fp-step ${ref.shape==='square'?'fp-on':''}">◻</button>
+        <button onclick="fpSetProp('shape','circle')" class="fp-step ${ref.shape==='circle'?'fp-on':''}">◯</button>
+      </span>
+    </div>`;
 }
-
-// ── Commit helpers ────────────────────────────────
-function assignBubbleToStation(entryId, svcId, stationId) {
-  const e = q().find(x => String(x.id) === String(entryId));
-  if (!e) return;
-  const a = (e.assignments || []).find(x => String(x.serviceId) === String(svcId));
-  if (!a || a.station === stationId) return;
-  a.station = stationId;
-  dispatch('queue.upsert', { entry: e });
-  renderFloorPlan();
-  showToast(`Moved to ${stationId}`);
-}
-function swapStations(aId, bId) {
-  const pa = posFor(aId), pb = posFor(bId);
-  saveLayout({ ...layout(), [aId]: { col: pb.col, row: pb.row }, [bId]: { col: pa.col, row: pa.row } });
-  renderFloorPlan();
-}
-function placeStationAt(stationId, x, y) {
-  const grid = document.getElementById('floorplan-grid');
-  if (!grid) return;
-  const rect = grid.getBoundingClientRect();
-  const col = Math.max(1, Math.min(GRID_COLS, Math.floor((x - rect.left) / (rect.width / GRID_COLS)) + 1));
-  const row = Math.max(1, Math.floor((y - rect.top) / (ROW_PX + GAP_PX)) + 1);
-  const cur = posFor(stationId);
-  if (cur.col === col && cur.row === row) return;
-  const occupant = STATIONS.find(s => s !== stationId && posFor(s).col === col && posFor(s).row === row);
+function applyToSelected(mut) {
   const next = { ...layout() };
-  if (occupant) next[occupant] = { col: cur.col, row: cur.row };
-  next[stationId] = { col, row };
+  _selected.forEach(id => { next[id] = { ...layoutFor(id), ...mut(layoutFor(id)) }; });
   saveLayout(next);
   renderFloorPlan();
 }
+export function fpSetProp(prop, val) { applyToSelected(() => ({ [prop]: val })); }
+export function fpResize(dim, delta) { applyToSelected(L => ({ [dim]: Math.max(48, (L[dim] || 0) + delta) })); }
+export function fpClearSelection() { _selected.clear(); renderFloorPlan(); }
 
-// ── Drag (pointer events; tap vs drag via movement threshold) ──────
+export function toggleFloorEdit() { floorEditMode = !floorEditMode; _selected.clear(); renderFloorPlan(); }
+export function resetFloorLayout() {
+  const doReset = () => { _selected.clear(); saveLayout({}); renderFloorPlan(); showToast('Floor layout reset'); };
+  if (window.showWarnModal) window.showWarnModal('Reset layout?', 'Restore the default station arrangement, sizes, and colors?', doReset);
+  else doReset();
+}
+
+// ── Commit: seat a customer (one per station) ─────
+function seatCustomer(entryId, stationId) {
+  const e = q().find(x => String(x.id) === String(entryId));
+  if (!e) return;
+  const occupant = collectFloor().byStation[stationId];
+  if (occupant && String(occupant.id) !== String(e.id)) { showToast(`${stationId} is taken by ${occupant.name}`); return; }
+  const active = activeAssignments(e);
+  if (!active.length) { showToast('Assign a service first.'); return; }
+  active.forEach(a => { a.station = stationId; });
+  dispatch('queue.upsert', { entry: e });
+  renderFloorPlan();
+  showToast(`Seated ${e.name.split(' ')[0]} at ${stationId}`);
+}
+
+// ── Drag (pointer events) ─────────────────────────
 (function initFloorDrag() {
   const THRESH = 6;
   let startX = 0, startY = 0, pending = null, dragging = false, clone = null;
-  let mode = null, dragEntryId = null, dragSvc = null, dragStation = null;
-
+  let mode = null, dragEntryId = null, dragStation = null, moveStart = null;
   const closest = (el, sel) => { while (el && el !== document.body) { if (el.matches && el.matches(sel)) return el; el = el.parentElement; } return null; };
-
-  function stationAt(x, y) {
-    if (clone) clone.style.display = 'none';
-    const el = document.elementFromPoint(x, y);
-    if (clone) clone.style.display = '';
-    return closest(el, '.floor-station');
-  }
-  function clearTargets() { document.querySelectorAll('.floor-station').forEach(s => { s.style.outline = ''; }); }
+  function stationAt(x, y) { if (clone) clone.style.display = 'none'; const el = document.elementFromPoint(x, y); if (clone) clone.style.display = ''; return closest(el, '.floor-station'); }
 
   function onDown(e) {
     const panel = document.getElementById('panel-floorplan');
     if (!panel || !panel.classList.contains('active') || e.button) return;
     if (floorEditMode) {
-      const st = closest(e.target, '.floor-station');
-      if (!st) return;
+      const st = closest(e.target, '.floor-station'); if (!st) return;
       mode = 'station'; dragStation = st.dataset.station; pending = st;
     } else {
-      const b = closest(e.target, '.floor-bubble');
-      if (!b) return;
-      mode = 'bubble'; dragEntryId = b.dataset.entryId; dragSvc = b.dataset.svc; pending = b;
+      const b = closest(e.target, '.floor-bubble'); if (!b) return;
+      mode = 'bubble'; dragEntryId = b.dataset.entryId; pending = b;
     }
     startX = e.clientX; startY = e.clientY;
     document.addEventListener('pointermove', onMove);
@@ -174,42 +200,48 @@ function placeStationAt(stationId, x, y) {
   }
   function startDrag() {
     dragging = true;
-    const rect = pending.getBoundingClientRect();
-    clone = pending.cloneNode(true);
-    Object.assign(clone.style, { position: 'fixed', zIndex: '9999', pointerEvents: 'none', width: rect.width + 'px', left: rect.left + 'px', top: rect.top + 'px', opacity: '0.9', transform: 'scale(1.03)', boxShadow: '0 6px 20px rgba(0,0,0,.25)' });
-    document.body.appendChild(clone);
-    pending.style.opacity = '0.4';
+    if (mode === 'station') {
+      if (!_selected.has(dragStation)) { _selected.clear(); _selected.add(dragStation); renderFloorPlan(); }
+      moveStart = {}; _selected.forEach(id => { const L = layoutFor(id); moveStart[id] = { x: L.x, y: L.y }; });
+    } else {
+      const rect = pending.getBoundingClientRect();
+      clone = pending.cloneNode(true);
+      Object.assign(clone.style, { position: 'fixed', zIndex: '9999', pointerEvents: 'none', width: rect.width + 'px', left: rect.left + 'px', top: rect.top + 'px', opacity: '0.9', transform: 'scale(1.03)', boxShadow: '0 6px 20px rgba(0,0,0,.25)' });
+      document.body.appendChild(clone);
+      pending.style.opacity = '0.4';
+    }
   }
   function onMove(e) {
-    if (!dragging) {
-      if (Math.hypot(e.clientX - startX, e.clientY - startY) > THRESH) startDrag();
-      else return;
-    }
+    if (!dragging) { if (Math.hypot(e.clientX - startX, e.clientY - startY) > THRESH) startDrag(); else return; }
     e.preventDefault();
-    if (clone) { clone.style.left = (e.clientX - clone.offsetWidth / 2) + 'px'; clone.style.top = (e.clientY - clone.offsetHeight / 2) + 'px'; }
-    clearTargets();
-    const tgt = stationAt(e.clientX, e.clientY);
-    if (tgt) tgt.style.outline = '3px solid #1a5252';
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    if (mode === 'station') {
+      _selected.forEach(id => { const el = document.querySelector(`.floor-station[data-station="${id}"]`); if (el && moveStart[id]) { el.style.left = (moveStart[id].x + dx) + 'px'; el.style.top = Math.max(0, moveStart[id].y + dy) + 'px'; } });
+    } else if (clone) {
+      clone.style.left = (e.clientX - clone.offsetWidth / 2) + 'px'; clone.style.top = (e.clientY - clone.offsetHeight / 2) + 'px';
+      document.querySelectorAll('.floor-station').forEach(s => { s.style.boxShadow = ''; });
+      const tgt = stationAt(e.clientX, e.clientY); if (tgt) tgt.style.boxShadow = 'inset 0 0 0 3px #1a5252';
+    }
   }
   function onUp(e) {
     document.removeEventListener('pointermove', onMove);
     document.removeEventListener('pointerup', onUp);
-    const wasDragging = dragging;
+    const wasDragging = dragging; dragging = false;
     if (clone) { clone.remove(); clone = null; }
-    if (pending) pending.style.opacity = '';
-    clearTargets();
-    dragging = false;
+    if (pending && mode === 'bubble') pending.style.opacity = '';
+    document.querySelectorAll('.floor-station').forEach(s => { s.style.boxShadow = ''; });
+    const dx = e.clientX - startX, dy = e.clientY - startY;
     if (!wasDragging) {
       if (mode === 'bubble' && dragEntryId) window.showGroupAssignModal?.(dragEntryId);
-    } else {
-      const tgt = stationAt(e.clientX, e.clientY);
-      if (mode === 'bubble') { if (tgt) assignBubbleToStation(dragEntryId, dragSvc, tgt.dataset.station); }
-      else if (mode === 'station') {
-        if (tgt && tgt.dataset.station !== dragStation) swapStations(dragStation, tgt.dataset.station);
-        else placeStationAt(dragStation, e.clientX, e.clientY);
-      }
+      else if (mode === 'station' && dragStation) { if (_selected.has(dragStation)) _selected.delete(dragStation); else _selected.add(dragStation); renderFloorPlan(); }
+    } else if (mode === 'bubble') {
+      const tgt = stationAt(e.clientX, e.clientY); if (tgt) seatCustomer(dragEntryId, tgt.dataset.station); else renderFloorPlan();
+    } else if (mode === 'station' && moveStart) {
+      const next = { ...layout() };
+      _selected.forEach(id => { const s = moveStart[id]; if (s) next[id] = { ...layoutFor(id), x: s.x + dx, y: Math.max(0, s.y + dy) }; });
+      saveLayout(next); renderFloorPlan();
     }
-    pending = null; mode = null; dragEntryId = dragSvc = dragStation = null;
+    pending = null; mode = null; dragEntryId = dragStation = null; moveStart = null;
   }
   document.addEventListener('pointerdown', onDown);
 })();

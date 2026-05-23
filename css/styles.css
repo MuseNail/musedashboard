@@ -151,6 +151,10 @@
     touch-action: manipulation;
   }
 
+  /* Floor-plan editor property buttons */
+  .fp-step { min-width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--outline-variant, #c2cacd); background: transparent; font-size: 14px; font-weight: 700; color: inherit; touch-action: manipulation; }
+  .fp-step.fp-on { background: #1a5252; color: #fff; border-color: #1a5252; }
+
   /* Drag sources need touch-action:none so iOS doesn't claim the gesture for
      scrolling (which fires pointercancel and aborts the pointer-event drag).
      Must come AFTER the manipulation rule above to win. Descendants included
