@@ -134,7 +134,9 @@ export function acceptSuggestion(entryId, serviceId) {
   showGroupAssignModal(String(entryId));
 }
 function acceptBtnHtml(entryId, serviceId, techName) {
-  return ` <button onclick="event.stopPropagation();acceptSuggestion('${entryId}','${serviceId}')" title="Assign ${techName}" style="pointer-events:auto;cursor:pointer;color:#1a5252;vertical-align:middle" class="hover:opacity-70"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;font-variation-settings:'FILL' 1">check_circle</span></button>`;
+  // onpointerdown stop: otherwise the card's drag engine arms pendingEntry on this tap,
+  // then hijacks the first scroll gesture inside the modal we open (freezes scrolling).
+  return ` <button onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();acceptSuggestion('${entryId}','${serviceId}')" title="Assign ${techName}" style="pointer-events:auto;cursor:pointer;color:#1a5252;vertical-align:middle" class="hover:opacity-70"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;font-variation-settings:'FILL' 1">check_circle</span></button>`;
 }
 
 // ── Render ────────────────────────────────────────
@@ -352,8 +354,11 @@ export function showTechStatusMenu(event, staffId) {
   document.getElementById('tech-status-menu-services').innerHTML = profileSvcs.length > 0 ? profileSvcs.map(l => `<div>${l}</div>`).join('') : '<div class="italic text-outline">No services configured</div>';
   const rect = event.currentTarget.getBoundingClientRect();
   menu.style.left = Math.min(rect.left, window.innerWidth - 290) + 'px';
-  menu.style.top = (rect.bottom + 8) + 'px';
   menu.classList.remove('hidden');
+  // Content-aware: flip above the tech if it would overflow the bottom of the viewport.
+  const menuH = menu.offsetHeight;
+  const openAbove = (window.innerHeight - rect.bottom) < (menuH + 16) && rect.top > (menuH + 16);
+  menu.style.top = (openAbove ? rect.top - menuH - 8 : rect.bottom + 8) + 'px';
   setTimeout(() => document.addEventListener('click', closeTechStatusMenu, { once: true }), 10);
 }
 export function closeTechStatusMenu() { document.getElementById('tech-status-menu')?.classList.add('hidden'); _techStatusMenuId = null; }

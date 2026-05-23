@@ -336,9 +336,10 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
 export function calQuickCheckin(calId, eventId) {
   const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
   if (!ev) return;
-  const already = queue().find(x => x.calEventId === eventId || (x.isAppointment && x.name === (ev.summary||'Guest') && x.status !== 'paid' && x.status !== 'done'));
-  if (already) { showToast(`${ev.summary || 'Guest'} is already checked in`); return; }
-  const cal = _calCalendars.find(c => c.id === calId), title = ev.summary || 'Guest';
+  const title = ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || 'Guest';
+  const already = queue().find(x => x.calEventId === eventId || (x.isAppointment && x.name === title && x.status !== 'paid' && x.status !== 'done'));
+  if (already) { showToast(`${title} is already checked in`); return; }
+  const cal = _calCalendars.find(c => c.id === calId);
   const rawP = _apptPhone(ev).replace(/\D/g,'');
   const phone = rawP ? rawP.replace(/^1?(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3') : '';
   const lines = _parseApptLines(ev, calId);   // [{ svcId, calId }] — per-service tech is the line's calendar
@@ -479,9 +480,11 @@ export function showEditApptModal(calId, eventId) {
   const durMins = Math.round((endDt-startDt)/60000);
   document.getElementById('appt-modal-title').textContent = 'Edit Appointment';
   document.getElementById('appt-event-id').value = eventId; document.getElementById('appt-cal-id').value = calId;
-  const parts = (ev.summary||'').split(' ');
+  // Use the stored clean name; fall back to summary up to the " — services" separator (never the services text).
+  const cleanName = ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || '';
+  const parts = cleanName.split(' ');
   document.getElementById('appt-first').value = parts[0] || ''; document.getElementById('appt-last').value = parts.slice(1).join(' ') || '';
-  document.getElementById('appt-name').value = ev.summary || '';
+  document.getElementById('appt-name').value = cleanName;
   document.getElementById('appt-notes').value = _apptNotes(ev);
   document.getElementById('appt-date').value = localDateStr(startDt);
   document.getElementById('appt-time').value = `${String(startDt.getHours()).padStart(2,'0')}:${String(startDt.getMinutes()).padStart(2,'0')}`;
@@ -515,13 +518,20 @@ export async function saveAppt() {
     summary,
     description: notes,
     start: { dateTime: startDt.toISOString() }, end: { dateTime: endDt.toISOString() },
-    extendedProperties: { private: { museLines: JSON.stringify(museLines), musePhone: phone || '' } },
+    extendedProperties: { private: { museLines: JSON.stringify(museLines), musePhone: phone || '', museName: name } },
   };
   try {
     showToast('Saving…');
-    const apptCalId = _apptEditId ? document.getElementById('appt-cal-id').value : primaryCalId;
-    if (_apptEditId) await gapi.client.calendar.events.update({ calendarId: apptCalId, eventId: _apptEditId, resource: eventBody });
-    else {
+    if (_apptEditId) {
+      const oldCalId = document.getElementById('appt-cal-id').value;
+      if (oldCalId && oldCalId !== primaryCalId) {
+        // Tech changed → move the event onto the new tech's calendar, drop the old copy.
+        await gapi.client.calendar.events.insert({ calendarId: primaryCalId, resource: eventBody });
+        try { await gapi.client.calendar.events.delete({ calendarId: oldCalId, eventId: _apptEditId }); } catch {}
+      } else {
+        await gapi.client.calendar.events.update({ calendarId: oldCalId, eventId: _apptEditId, resource: eventBody });
+      }
+    } else {
       const uniqueCals = [...new Set(linesWithTech.map(l => l.calId))];
       await Promise.all(uniqueCals.map(cid => gapi.client.calendar.events.insert({ calendarId: cid, resource: eventBody })));
       for (const g of _apptExtraGuests) {
@@ -533,6 +543,7 @@ export async function saveAppt() {
         await gapi.client.calendar.events.insert({ calendarId: primaryCalId, resource: { summary: [gFirst,gLast].filter(Boolean).join(' '), description: [gPhone,notes].filter(Boolean).join('\n'), start: { dateTime: startDt.toISOString() }, end: { dateTime: endDt.toISOString() } } });
       }
     }
+    if (phone) squareUpsertCustomer({ name, phone });   // add/refresh the booked customer in Square
     closeApptModal(); await calLoadAndRender(true); showToast('Appointment saved ✓');
   } catch (err) { showToast('Save failed: ' + (err.result?.error?.message || 'Unknown error')); }
 }
