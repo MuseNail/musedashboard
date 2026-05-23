@@ -434,7 +434,7 @@ function onTechReorderMove(e) {
   const items = [..._reorderList.querySelectorAll('.tech-order-item')];
   items.forEach(i => i.style.borderTop = '');
   const hovered = items.find(i => { if (i === _reorderDragging) return false; const r = i.getBoundingClientRect(); return e.clientY >= r.top && e.clientY <= r.bottom; });
-  if (hovered) hovered.style.borderTop = '2px solid #1a5252';
+  if (hovered) hovered.style.borderTop = '3px solid #1a5252';
 }
 function onTechReorderEnd(e) {
   document.removeEventListener('pointermove', onTechReorderMove);

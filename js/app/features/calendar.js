@@ -258,8 +258,13 @@ export function calSelectorSave() {
 export function calSelectorCancel() { _calSelectorDraft = null; const dd = document.getElementById('cal-selector-dropdown'); if (dd) { dd.classList.add('hidden'); dd.style.display = ''; } renderCalSelectorList(); }
 export function calDraftSelectAll(show) { if (!_calSelectorDraft) return; if (show) _calSelectorDraft.hidden.clear(); else _calCalendars.forEach(c => _calSelectorDraft.hidden.add(c.id)); renderCalSelectorList(); }
 export function calDraftDragStart(e,i) { _calDragIdx = i; e.dataTransfer.effectAllowed = 'move'; }
-export function calDraftDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
-export function calDraftDrop(e, targetIdx) { e.preventDefault(); if (_calDragIdx === null || _calDragIdx === targetIdx || !_calSelectorDraft) return; const moved = _calSelectorDraft.order.splice(_calDragIdx,1)[0]; _calSelectorDraft.order.splice(targetIdx,0,moved); _calDragIdx = null; renderCalSelectorList(); }
+function clearCalDropMarks() { document.querySelectorAll('#cal-selector-list [data-cal-idx]').forEach(r => { r.style.borderTop = ''; }); }
+export function calDraftDragOver(e) {
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  clearCalDropMarks();
+  if (e.currentTarget) e.currentTarget.style.borderTop = '3px solid #1a5252';
+}
+export function calDraftDrop(e, targetIdx) { e.preventDefault(); clearCalDropMarks(); if (_calDragIdx === null || _calDragIdx === targetIdx || !_calSelectorDraft) return; const moved = _calSelectorDraft.order.splice(_calDragIdx,1)[0]; _calSelectorDraft.order.splice(targetIdx,0,moved); _calDragIdx = null; renderCalSelectorList(); }
 
 // ── Event click + quick check-in ─────────────────
 export function calSlotClick(calId, hour, minute) { showNewApptModal(calId, hour, minute, _calCalendars.find(c => c.id === calId)?.name); }
