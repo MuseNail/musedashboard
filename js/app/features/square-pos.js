@@ -9,30 +9,72 @@ const cfg     = () => getState().config;
 const sqConfig = () => cfg().square_config || null;
 const queue    = () => getState().queue;
 
-// ── POS deep link ─────────────────────────────────
+// ── POS deep link (with a pre-launch confirm screen) ──────────────
 // Square Point of Sale API (iOS web): square-commerce-v1://payment/create?data=<percent-encoded JSON>.
 // Requires the public Application ID as client_id and an https callback_url — see Settings → Square.
+let _pendingPay = null;
+
+// A single entry's charge, computed from its components — authoritative, so a
+// possibly-stale entry.totalCost can't make the group total wrong.
+function entryTotal(e) {
+  const svc   = (e.assignments || []).reduce((s, a) => s + (a.cost || 0), 0);
+  const items = (e.items || []).reduce((s, i) => s + ((i.price || 0) * (i.qty || 0)), 0);
+  const fees  = (e.fees || []).reduce((s, f) => s + (f.amount || 0), 0);
+  return Math.max(0, svc + items + fees - (e.discount || 0));
+}
+function payLine(label, amt) {
+  return `<div class="flex justify-between text-sm font-body"><span class="text-on-surface-variant">${label}</span><span class="${amt < 0 ? 'text-error' : 'text-on-surface'}">${amt < 0 ? '-' : ''}$${Math.abs(amt).toFixed(2)}</span></div>`;
+}
+function payCustomerBlock(e) {
+  const lines = [];
+  (e.assignments || []).forEach(a => { const s = cfg().services.find(x => x.id === a.serviceId); lines.push(payLine(s?.label || 'Service', a.cost || 0)); });
+  (e.items || []).forEach(it => { const item = cfg().items.find(x => x.id === it.itemId); lines.push(payLine(`${item?.label || 'Item'} ×${it.qty || 1}`, (it.price || 0) * (it.qty || 0))); });
+  (e.fees || []).forEach(f => { const fee = cfg().fees.find(x => x.id === f.feeId); lines.push(payLine(fee?.label || 'Fee', f.amount || 0)); });
+  if (e.discount > 0) lines.push(payLine(`Discount${e.discountNote ? ' (' + e.discountNote + ')' : ''}`, -e.discount));
+  return `<div class="bg-surface-container rounded-xl px-4 py-3">
+    <div class="flex justify-between items-center mb-1.5"><span class="font-headline font-bold text-on-surface">${e.name}</span><span class="font-headline font-bold text-primary">$${entryTotal(e).toFixed(2)}</span></div>
+    ${lines.join('') || '<div class="text-xs text-on-surface-variant italic">No charges</div>'}
+  </div>`;
+}
+
 export function openSquarePOS(entryId) {
   const entry = queue().find(e => String(e.id) === String(entryId));
   if (!entry) return;
-  // Group check-in → charge the whole party's total. To pay separately, split the
+  // Group check-in → the whole party is on one ticket. To pay separately, split the
   // ticket in-app first (then each member is its own non-grouped entry).
   const party = entry.groupId ? queue().filter(e => e.groupId === entry.groupId) : [entry];
-  const cents = Math.round(party.reduce((s, e) => s + (e.totalCost || 0), 0) * 100);
+  const cents = Math.round(party.reduce((s, e) => s + entryTotal(e), 0) * 100);
   if (cents <= 0) { showToast('No total — assign a price first.'); return; }
+  const body = document.getElementById('square-confirm-body');
+  if (body) body.innerHTML = party.map(payCustomerBlock).join('');
+  const totalEl = document.getElementById('square-confirm-total');
+  if (totalEl) totalEl.textContent = `$${(cents / 100).toFixed(2)}`;
+  _pendingPay = { cents, names: party.map(e => e.name).filter(Boolean).join(', ').slice(0, 120) };
+  const m = document.getElementById('square-confirm-modal');
+  if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
+}
+
+export function closeSquareConfirm() {
+  _pendingPay = null;
+  const m = document.getElementById('square-confirm-modal');
+  if (m) { m.classList.add('hidden'); m.style.display = ''; }
+}
+
+export function proceedSquarePayment() {
+  if (!_pendingPay) return;
   const appId = sqConfig()?.applicationId;
   if (!appId) { showToast('Add your Square Application ID in Settings → Square first.'); return; }
-  const names = party.map(e => e.name).filter(Boolean).join(', ').slice(0, 120);
   const data = {
-    // Must EXACTLY match the Web Callback URL registered in the Square Developer
-    // Console (Point of Sale API). Pinned to the app scope so it never varies by route.
-    amount_money: { amount: cents, currency_code: 'USD' },
+    // callback_url must EXACTLY match the Web Callback URL registered in the Square
+    // Developer Console (Point of Sale API). Pinned to the app scope.
+    amount_money: { amount: _pendingPay.cents, currency_code: 'USD' },
     callback_url: location.origin + '/musedashboard/',
     client_id: appId,
     version: '1.3',
-    notes: `Muse${names ? ' · ' + names : ''}`,
+    notes: `Muse${_pendingPay.names ? ' · ' + _pendingPay.names : ''}`,
     options: { supported_tender_types: ['CREDIT_CARD', 'CASH', 'OTHER', 'SQUARE_GIFT_CARD', 'CARD_ON_FILE'] },
   };
+  closeSquareConfirm();
   window.location.href = `square-commerce-v1://payment/create?data=${encodeURIComponent(JSON.stringify(data))}`;
 }
 export function openSquarePOSFromModal() {
