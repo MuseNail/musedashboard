@@ -89,7 +89,9 @@ export function formatElapsed(checkinTime) {
 
 // ── Phone Formatting ─────────────────────────────
 export function formatPhone(input) {
-  let digits = input.value.replace(/\D/g, '').slice(0, 10);
+  let digits = input.value.replace(/\D/g, '');
+  if (digits.length === 11 && digits[0] === '1') digits = digits.slice(1); // strip US country code (+1) so E.164 numbers don't render as (1xx) xxx-xxxx
+  digits = digits.slice(0, 10);
   let formatted = '';
   if (digits.length === 0)      formatted = '';
   else if (digits.length <= 3)  formatted = `(${digits}`;
