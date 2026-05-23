@@ -23,9 +23,10 @@ import * as reports from './features/reports.js';
 import * as giftcards from './features/giftcards.js';
 import * as settings from './features/settings.js';
 import * as calendar from './features/calendar.js';
+import * as floorplan from './features/floorplan.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -46,12 +47,13 @@ function goTo(screenId, param) {
   if (screenId === 'screen-desk') { utils.updateDeskDate(); settings.initCalHoursSelectors(); }
 }
 function showDashPanel(panel) {
-  ['queue','reports','transactions','turns','settings','giftcards','calendar'].forEach(p => {
+  ['queue','reports','transactions','turns','settings','giftcards','calendar','floorplan'].forEach(p => {
     document.getElementById(`panel-${p}`)?.classList.remove('active');
     document.getElementById(`nav-${p}`)?.classList.remove('active');
   });
   document.getElementById(`panel-${panel}`)?.classList.add('active');
   document.getElementById(`nav-${panel}`)?.classList.add('active');
+  if (panel === 'floorplan')    floorplan.renderFloorPlan();
   if (panel === 'reports')      reports.setReportRange('today');
   if (panel === 'transactions') reports.renderTransactions();
   if (panel === 'settings')     settings.renderSettingsPanel();
@@ -98,6 +100,7 @@ function onStateChange(state, changed) {
   const active = document.querySelector('.dash-panel.active'); if (!active) return;
   switch (active.id) {
     case 'panel-turns':        turns.renderTurns(); break;
+    case 'panel-floorplan':    floorplan.renderFloorPlan(); break;
     case 'panel-queue':        queue.renderQueue(); queue.updateStats(); break;
     case 'panel-reports':      reports.runReport(); break;
     case 'panel-transactions': reports.renderTransactions(); break;

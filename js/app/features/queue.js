@@ -17,7 +17,7 @@ const q     = () => getState().queue;
 const svc   = id => cfg().services.find(s => s.id === id);
 const staffById = id => cfg().staff.find(s => s.id === id);
 const activeStaff = () => cfg().staff.filter(s => !cfg().inactive_staff.includes(s.id));
-const STATIONS = [...Array.from({length:12}, (_,i)=>`P${i+1}`), ...Array.from({length:15}, (_,i)=>`M${i+1}`)];
+export const STATIONS = [...Array.from({length:12}, (_,i)=>`P${i+1}`), ...Array.from({length:15}, (_,i)=>`M${i+1}`)];
 
 const upsert = entry => dispatch('queue.upsert', { entry });
 

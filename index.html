@@ -205,6 +205,9 @@ tailwind.config = {
       <button class="dash-tab active" id="nav-turns" onclick="showDashPanel('turns')">
         <span class="material-symbols-outlined" style="font-size:18px">swap_vert</span> Turns
       </button>
+      <button class="dash-tab" id="nav-floorplan" onclick="showDashPanel('floorplan')">
+        <span class="material-symbols-outlined" style="font-size:18px">grid_view</span> Floor Plan
+      </button>
       <button class="dash-tab" id="nav-queue" onclick="showDashPanel('queue')">
         <span class="material-symbols-outlined" style="font-size:18px">queue</span> Queue
       </button>
@@ -250,6 +253,20 @@ tailwind.config = {
 
   <!-- Main content (full width, no sidebar) -->
   <div class="flex-grow overflow-y-auto no-scroll p-4">
+
+      <!-- ── FLOOR PLAN PANEL ── -->
+      <div class="dash-panel" id="panel-floorplan">
+        <div class="flex items-center gap-2 mb-3 flex-wrap">
+          <h2 class="text-lg font-headline font-bold text-on-surface">Floor Plan</h2>
+          <span id="floorplan-mode-label" class="text-xs font-body text-on-surface-variant px-2 py-0.5 rounded-full bg-surface-container">Live</span>
+          <div class="ml-auto flex gap-2">
+            <button id="floorplan-reset-btn" onclick="resetFloorLayout()" class="hidden border border-outline-variant text-on-surface-variant hover:bg-surface-container px-3 py-1.5 rounded-lg text-xs font-body transition-all">Reset layout</button>
+            <button id="floorplan-edit-btn" onclick="toggleFloorEdit()" class="flex items-center gap-1 border border-primary text-primary hover:bg-primary hover:text-on-primary px-3 py-1.5 rounded-lg text-xs font-headline font-bold transition-all"><span class="material-symbols-outlined" style="font-size:16px">edit</span> Edit layout</button>
+          </div>
+        </div>
+        <div id="floorplan-tray" class="mb-3"></div>
+        <div id="floorplan-grid" style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-auto-rows:92px;gap:8px;position:relative"></div>
+      </div>
 
       <!-- ── QUEUE PANEL ── -->
       <div class="dash-panel active" id="panel-queue">
