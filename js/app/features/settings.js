@@ -112,7 +112,8 @@ export function initCalHoursSelectors() {
 export function saveSquareFromSettings() {
   const locationId = document.getElementById('settings-location-id')?.value.trim();
   if (!locationId) { showToast('Please enter a Location ID.'); return; }
-  dispatch('config.set', { key: 'square_config', value: { locationId } });
+  const applicationId = document.getElementById('settings-app-id')?.value.trim() || '';
+  dispatch('config.set', { key: 'square_config', value: { ...cfg().square_config, locationId, applicationId } });
   const status = document.getElementById('settings-square-status'); if (status) status.textContent = '✓ Connected — Location: ' + locationId;
   loadSquareCustomers();
   showToast('Square connected ✓');
@@ -269,9 +270,10 @@ export function renderSettingsPanel() {
   initCalHoursSelectors();
   const lbl = document.getElementById('last-backup-label'); if (lbl) lbl.textContent = localStorage.getItem('muse_last_backup') || 'Never';
   setLogo();
-  const sqStatus = document.getElementById('settings-square-status'), sqInput = document.getElementById('settings-location-id');
+  const sqStatus = document.getElementById('settings-square-status'), sqInput = document.getElementById('settings-location-id'), sqAppInput = document.getElementById('settings-app-id');
   if (sqStatus) sqStatus.textContent = cfg().square_config ? `✓ Connected — Location: ${cfg().square_config.locationId}` : 'Not connected';
   if (sqInput && cfg().square_config?.locationId) sqInput.value = cfg().square_config.locationId;
+  if (sqAppInput && cfg().square_config?.applicationId) sqAppInput.value = cfg().square_config.applicationId;
   const c = getTurnConfig();
   const fi = document.getElementById('thresh-full'), hi = document.getElementById('thresh-half');
   if (fi) fi.value = c.fullMin;

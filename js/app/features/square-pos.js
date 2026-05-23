@@ -10,70 +10,29 @@ const sqConfig = () => cfg().square_config || null;
 const queue    = () => getState().queue;
 
 // ── POS deep link ─────────────────────────────────
+// Square Point of Sale API (iOS web): square-commerce-v1://payment/create?data=<percent-encoded JSON>.
+// Requires the public Application ID as client_id and an https callback_url — see Settings → Square.
 export function openSquarePOS(entryId) {
   const entry = queue().find(e => String(e.id) === String(entryId));
   if (!entry) return;
   const cents = Math.round((entry.totalCost || 0) * 100);
   if (cents <= 0) { showToast('No total — assign a price first.'); return; }
-  let url = `squareup://pos/take-payment?amount_money=${cents}&currency_code=USD`;
-  if (entry.phone) {
-    const match = customerDirectory.find(c => c.phone && c.phone.replace(/\D/g,'').endsWith(entry.phone.replace(/\D/g,'')));
-    if (match?.squareId) url += `&customer_id=${encodeURIComponent(match.squareId)}`;
-  }
-  window.location.href = url;
+  const appId = sqConfig()?.applicationId;
+  if (!appId) { showToast('Add your Square Application ID in Settings → Square first.'); return; }
+  const data = {
+    amount_money: { amount: cents, currency_code: 'USD' },
+    callback_url: location.origin + location.pathname,
+    client_id: appId,
+    version: '1.3',
+    notes: `Muse${entry.name ? ' · ' + entry.name : ''}`,
+    options: { supported_tender_types: ['CREDIT_CARD', 'CASH', 'OTHER', 'SQUARE_GIFT_CARD', 'CARD_ON_FILE'] },
+  };
+  window.location.href = `square-commerce-v1://payment/create?data=${encodeURIComponent(JSON.stringify(data))}`;
 }
 export function openSquarePOSFromModal() {
   window.saveCurrentGroupTabInputs?.();
   const entryId = window.activeGroupEntryId?.();
   if (entryId) openSquarePOS(entryId);
-}
-
-// ── Order push (open ticket) ──────────────────────
-export async function pushOrderToSquare(entry) {
-  if (!sqConfig()) { showToast('Square not configured.'); return; }
-  if (!sqConfig().locationId) { showToast('Location ID missing.'); return; }
-
-  const lineItems = (entry.assignments || []).filter(a => a.cost > 0).map(a => {
-    const svc = cfg().services.find(s => s.id === a.serviceId);
-    return { name: svc?.label || 'Service', quantity: '1', base_price_money: { amount: Math.round(Number(a.cost) * 100), currency: 'USD' }, note: a.station || '' };
-  });
-  const assignedSvcIds = new Set((entry.assignments||[]).map(a => a.serviceId));
-  entry.services.forEach(sid => {
-    if (!assignedSvcIds.has(sid)) {
-      const svc = cfg().services.find(s => s.id === sid);
-      lineItems.push({ name: svc?.label || 'Service', quantity: '1', base_price_money: { amount: 0, currency: 'USD' } });
-    }
-  });
-  if (lineItems.length === 0) { showToast('No services to push to Square.'); return; }
-
-  showToast('Creating Square ticket…');
-  try {
-    let customerId = null;
-    if (entry.phone) {
-      const rawPhone = entry.phone.replace(/\D/g, '');
-      const cached = customerDirectory.find(c => { const cp = (c.phone||'').replace(/\D/g,'').replace(/^1(\d{10})$/,'$1'); return cp && (cp === rawPhone || cp === rawPhone.replace(/^1/,'')); });
-      if (cached?.squareId) customerId = cached.squareId;
-      else {
-        try {
-          const phoneE164 = `+1${rawPhone.replace(/^1(\d{10})$/, '$1')}`;
-          const sr = await fetch(`${SQUARE_PROXY}/v2/customers/search`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: { filter: { phone_number: { exact: phoneE164 } } } }) });
-          if (sr.ok) customerId = (await sr.json())?.customers?.[0]?.id || null;
-        } catch (e) {}
-      }
-    }
-    const orderBody = { idempotency_key: `muse-${String(entry.id)}-${Date.now()}`, order: { location_id: sqConfig().locationId, state: 'OPEN', reference_id: `muse-${String(entry.id).slice(-8)}`, line_items: lineItems, ...(customerId ? { customer_id: customerId } : {}) } };
-    const orderRes = await fetch(`${SQUARE_PROXY}/v2/orders`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(orderBody) });
-    const od = await orderRes.json();
-    if (orderRes.ok && od?.order?.id) {
-      const total = od.order.total_money?.amount;
-      const display = total != null ? ` · $${(total/100).toFixed(2)}` : '';
-      dispatch('queue.upsert', { entry: { ...entry, squareOrderId: od.order.id } });
-      showToast(`✓ Ticket open in Square POS${display}`);
-      window.renderQueue?.();
-    } else {
-      showToast(`Square error: ${od?.errors?.[0]?.detail || od?.errors?.[0]?.code || 'unknown'}`);
-    }
-  } catch (e) { showToast('Could not reach Square. Check proxy.'); }
 }
 
 // ── Appointments → queue ──────────────────────────

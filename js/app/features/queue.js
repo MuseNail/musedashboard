@@ -11,7 +11,6 @@ import { ui } from '../session.js';
 import { getAssignmentStatus, deriveEntryStatus, setAssignmentStatus } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { squareUpsertCustomer, showEditCustomer, customerDirectory } from './square-customers.js';
-import { pushOrderToSquare } from './square-pos.js';
 
 const cfg   = () => getState().config;
 const q     = () => getState().queue;
@@ -649,16 +648,6 @@ export function saveGroupAssignments() {
   closeGroupAssignModal();
   renderQueue(); updateStats(); window.renderTurns?.();
   showToast('Assignments saved');
-}
-
-export async function saveGroupAndPushSquare() {
-  saveCurrentGroupTabInputs();
-  const entries = collectGroupAssignments();
-  if (!entries.some(e => (e.assignments||[]).some(a => a.cost > 0))) { showToast('Add at least one price before pushing to Square.'); return; }
-  showToast('Creating Square ticket…');
-  for (const e of entries) { upsert(e); await pushOrderToSquare(e); }
-  closeGroupAssignModal();
-  renderQueue(); window.renderTurns?.();
 }
 
 // ── Edit Services modal ───────────────────────────
