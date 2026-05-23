@@ -6,6 +6,7 @@ import { dispatch } from '../sync.js';
 import { showToast, localDateStr, todayStr } from '../utils.js';
 import { canDo, getActiveUser } from '../session.js';
 import { classifyTurn } from './turns.js';
+import { isPaidStatus } from './status.js';
 import { squareUpsertCustomer } from './square-customers.js';
 import { LOGO_PATH, PHOTOS_PROXY } from '../config.js';
 
@@ -38,7 +39,7 @@ export function saveRecord(entry) {
 export function buildCombinedRecords() {
   const deletedIds = new Set(getState().deletions.map(String));
   records().filter(r => r.status === 'deleted').forEach(r => deletedIds.add(String(r.id)));
-  const liveSnaps = queue().filter(e => e.status === 'done' && !deletedIds.has(String(e.id))).map(e => ({
+  const liveSnaps = queue().filter(e => isPaidStatus(e.status) && !deletedIds.has(String(e.id))).map(e => ({
     id: String(e.id), name: e.name, phone: e.phone || '', services: e.services, assignments: e.assignments || [],
     items: e.items || [], fees: e.fees || [], discount: e.discount || 0, discountNote: e.discountNote || '',
     totalCost: e.totalCost || 0, checkinTime: e.checkinTime, completedAt: e.completedAt || null,
@@ -75,7 +76,7 @@ export function runReport() {
   const filtered = buildCombinedRecords().filter(r => {
     if (r.status === 'deleted') return false;
     const d = new Date(r.checkinTime);
-    return d >= from && d <= to && (r.status === 'done' || r.status === 'refund');
+    return d >= from && d <= to && (isPaidStatus(r.status) || r.status === 'refund');
   });
 
   const svcTotal = filtered.reduce((s,r)=>s+(r.assignments||[]).reduce((a,x)=>a+(x.cost||0),0),0);
@@ -83,7 +84,7 @@ export function runReport() {
   const feesTotal = filtered.reduce((s,r)=>s+(r.fees||[]).reduce((a,x)=>a+(x.amount||0),0),0);
   const discountTotal = filtered.reduce((s,r)=>s+(r.discount||0),0);
   const totalIncome = filtered.reduce((s,r)=>s+(r.totalCost||0),0);
-  const guestCount = filtered.filter(r => r.status === 'done').length;
+  const guestCount = filtered.filter(r => isPaidStatus(r.status)).length;
   const avgTicket = guestCount > 0 ? totalIncome / guestCount : 0;
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -235,14 +236,14 @@ export function renderTransactions() {
   }
   let combined = buildCombinedRecords();
   if (dateFilter) combined = combined.filter(r => localDateStr(new Date(r.checkinTime)) === dateFilter);
-  combined = combined.filter(r => r.status === 'done' || r.status === 'refund').sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime));
+  combined = combined.filter(r => isPaidStatus(r.status) || r.status === 'refund').sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime));
   if (combined.length === 0) { list.innerHTML = ''; empty?.classList.remove('hidden'); return; }
   empty?.classList.add('hidden');
   list.innerHTML = combined.map(r => {
     const dt = new Date(r.checkinTime);
     const timeStr = dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), dateStr = dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
     const isRefund = r.status === 'refund';
-    const badgeClass = isRefund ? 'badge-refund' : ({ waiting:'badge-waiting', inservice:'badge-inservice', done:'badge-done' }[r.status] || 'badge-done');
+    const badgeClass = isRefund ? 'badge-refund' : ({ waiting:'badge-waiting', inservice:'badge-inservice', complete:'badge-complete', paid:'badge-done', done:'badge-done' }[r.status] || 'badge-done');
     const serviceLabels = (r.services||[]).map(sid => svc(sid)?.label||sid).join(', ') || '—';
     const assignRows = !isRefund && (r.assignments||[]).filter(a=>a.techId||a.cost).map(a=>`<div class="text-[11px] font-body text-primary">${svc(a.serviceId)?.label||''} → ${staffById(a.techId)?.name||'—'}${a.station?' @ '+a.station:''} ${a.cost?'· $'+a.cost.toFixed(2):''}</div>`).join('');
     const refundNote = isRefund && r.discountNote ? `<div class="text-[11px] font-body text-error mt-1">Reason: ${r.discountNote}</div>` : '';
@@ -496,11 +497,11 @@ export function saveHistoricalTransaction() {
   if (dateVal >= todayStr()) { showToast('Date must be before today'); return; }
   const checkinTime = new Date(`${dateVal}T${timeVal}:00`);
   const total = _computeHistTotal();
-  const assignments = _histSelectedSvcs.map(sid => ({ serviceId: sid, techId: _histAssignments[sid]?.techId||'', station: _histAssignments[sid]?.station||'', cost: parseFloat(_histAssignments[sid]?.cost)||0, status: 'done', assignedAt: checkinTime.getTime() }));
-  if (assignments.length === 0 && total > 0) assignments.push({ serviceId:'', techId:'', station:'', cost: total, status:'done', assignedAt: checkinTime.getTime() });
+  const assignments = _histSelectedSvcs.map(sid => ({ serviceId: sid, techId: _histAssignments[sid]?.techId||'', station: _histAssignments[sid]?.station||'', cost: parseFloat(_histAssignments[sid]?.cost)||0, status: 'paid', assignedAt: checkinTime.getTime() }));
+  if (assignments.length === 0 && total > 0) assignments.push({ serviceId:'', techId:'', station:'', cost: total, status:'paid', assignedAt: checkinTime.getTime() });
   const items = _histItems.filter(i => i.itemId && i.qty > 0).map(i => ({ itemId: i.itemId, qty: i.qty, price: i.price }));
   const fees = _histFees.filter(f => f.feeId && f.amount > 0).map(f => ({ feeId: f.feeId, amount: f.amount }));
-  const base = { name, phone, services: _histSelectedSvcs, assignments, items, fees, discount, discountNote, totalCost: total, checkinTime: checkinTime.toISOString(), status: 'done', isAppointment: _histType === 'Appointment', loggedBy: getActiveUser()?.name || 'Admin' };
+  const base = { name, phone, services: _histSelectedSvcs, assignments, items, fees, discount, discountNote, totalCost: total, checkinTime: checkinTime.toISOString(), status: 'paid', isAppointment: _histType === 'Appointment', loggedBy: getActiveUser()?.name || 'Admin' };
   if (_histMode === 'edit') {
     const existing = records().find(r => String(r.id) === String(_histEditId));
     dispatch('record.save', { record: { ...existing, ...base, id: String(_histEditId), completedAt: existing?.completedAt || checkinTime.toISOString() } });

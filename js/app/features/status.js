@@ -4,18 +4,22 @@
 
 import { dispatch } from '../sync.js';
 
-// Each service assignment carries its own status; unset = 'waiting'.
+// Flow: waiting → inservice → complete → paid.
+//   complete = service finished, payment pending (still active; tech earned the turn).
+//   paid     = finalized sale (record created, counts in Reports, leaves the floor).
+// 'done' is the LEGACY finalized status — treated everywhere as equivalent to 'paid'.
 export function getAssignmentStatus(entry, assignment) {
   return assignment.status || 'waiting';
 }
+// Finalized = money collected / archived. Accepts legacy 'done'.
+export const isPaidStatus = s => s === 'paid' || s === 'done';
 
-// Derive the entry-level status from its assignments:
-// any inservice → inservice; all done → done; else waiting.
 export function deriveEntryStatus(entry) {
   if (!entry.assignments || entry.assignments.length === 0) return entry.status || 'waiting';
-  const statuses = entry.assignments.map(a => getAssignmentStatus(entry, a));
-  if (statuses.some(s => s === 'inservice')) return 'inservice';
-  if (statuses.every(s => s === 'done'))     return 'done';
+  const ss = entry.assignments.map(a => getAssignmentStatus(entry, a));
+  if (ss.some(s => s === 'inservice')) return 'inservice';
+  if (ss.every(isPaidStatus)) return 'paid';
+  if (ss.every(s => s === 'complete' || isPaidStatus(s))) return 'complete';
   return 'waiting';
 }
 
@@ -25,6 +29,6 @@ export function setAssignmentStatus(entry, serviceId, newStatus) {
   if (a) a.status = newStatus;
   entry.status = deriveEntryStatus(entry);
   dispatch('queue.upsert', { entry });
-  if (entry.status === 'done') window.saveRecord?.(entry);
-  window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.();
+  if (entry.status === 'paid') window.saveRecord?.(entry);   // finalize the sale only at Paid
+  window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.(); window.renderFloorPlan?.();
 }

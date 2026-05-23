@@ -16,7 +16,7 @@ export function toggleDoneVisibility() {
   ui.showDoneInQueue = !ui.showDoneInQueue;
   const icon = document.getElementById('done-toggle-icon'), label = document.getElementById('done-toggle-label');
   if (icon) icon.textContent = ui.showDoneInQueue ? 'visibility_off' : 'visibility';
-  if (label) label.textContent = ui.showDoneInQueue ? 'Hide Done' : 'Show Done';
+  if (label) label.textContent = ui.showDoneInQueue ? 'Hide Paid' : 'Show Paid';
   window.renderQueue?.();
 }
 

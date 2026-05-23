@@ -39,6 +39,7 @@
   /* Status badges */
   .badge-waiting { background: #f5c870; color: #3a2800; }
   .badge-inservice { background: #8fd4d3; color: #0a2e2e; }
+  .badge-complete { background: #cfe3ef; color: #0a3a52; }
   .badge-done { background: #b4bec2; color: #000000; }
   .badge-appointment { background: #1a5252; color: #ffffff; }
   .badge-refund { background: rgba(139,28,26,0.12); color: #8b1c1a; }

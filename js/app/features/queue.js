@@ -8,7 +8,7 @@ import { dispatch } from '../sync.js';
 import { showToast, formatElapsed, byName, todayStr } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
-import { getAssignmentStatus, deriveEntryStatus, setAssignmentStatus } from './status.js';
+import { getAssignmentStatus, deriveEntryStatus, setAssignmentStatus, isPaidStatus } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { squareUpsertCustomer, showEditCustomer, customerDirectory } from './square-customers.js';
 
@@ -47,8 +47,8 @@ function renderQueueHistoryView(list, empty) {
   const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' });
   const banner = `<div class="bg-secondary-container/30 rounded-xl px-4 py-2 mb-3 text-sm font-body text-on-surface-variant flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">history</span> Viewing ${dateLabel} — read only</div>`;
   if (snapshot.length === 0) { list.innerHTML = banner + '<div class="text-center py-12 text-on-surface-variant text-sm font-body">No queue records saved for this day.</div>'; return; }
-  const badge = { waiting:'badge-waiting', inservice:'badge-inservice', done:'badge-done' };
-  const groups = [ { key:'waiting', label:'Waiting' }, { key:'inservice', label:'In Service' }, { key:'done', label:'Done' } ];
+  const badge = { waiting:'badge-waiting', inservice:'badge-inservice', complete:'badge-complete', paid:'badge-done', done:'badge-done' };
+  const groups = [ { key:'waiting', label:'Waiting' }, { key:'inservice', label:'In Service' }, { key:'complete', label:'Complete' }, { key:'paid', label:'Paid' } ];
   const row = e => {
     const techs = [...new Set((e.assignments||[]).filter(a=>a.techId).map(a=>staffById(a.techId)?.name).filter(Boolean))].join(', ');
     const svcs = (e.services||[]).map(sid => svc(sid)?.label || sid).join(', ') || '—';
@@ -60,7 +60,7 @@ function renderQueueHistoryView(list, empty) {
       <div class="font-headline font-bold text-on-surface flex-shrink-0 ml-3">$${(e.totalCost||0).toFixed(2)}</div></div>`;
   };
   list.innerHTML = banner + groups.map(g => {
-    const entries = snapshot.filter(e => e.status === g.key);
+    const entries = snapshot.filter(e => g.key === 'paid' ? isPaidStatus(e.status) : e.status === g.key);
     if (!entries.length) return '';
     return `<div class="mb-4"><div class="flex items-center gap-2 mb-2"><span class="text-[11px] font-headline font-bold uppercase tracking-widest text-on-surface-variant">${g.label}</span><span class="text-[11px] font-body text-on-surface-variant opacity-60">(${entries.length})</span><div class="flex-grow h-px bg-surface-container-high ml-1"></div></div><div class="space-y-2">${entries.map(row).join('')}</div></div>`;
   }).join('');
@@ -72,9 +72,9 @@ export function renderQueue() {
   const empty = document.getElementById('queue-empty');
   if (!list) return;
   if (queueViewingHistory) { renderQueueHistoryView(list, empty); return; }
-  let filtered = ui.currentFilter === 'all' ? [...q()] : q().filter(e => e.status === ui.currentFilter);
-  if (ui.currentFilter === 'all' && !ui.showDoneInQueue) filtered = filtered.filter(e => e.status !== 'done');
-  const order = { waiting: 0, inservice: 1, done: 2 };
+  let filtered = ui.currentFilter === 'all' ? [...q()] : q().filter(e => ui.currentFilter === 'paid' ? isPaidStatus(e.status) : e.status === ui.currentFilter);
+  if (ui.currentFilter === 'all' && !ui.showDoneInQueue) filtered = filtered.filter(e => !isPaidStatus(e.status));
+  const order = { waiting: 0, inservice: 1, complete: 2, paid: 3, done: 3 };
   filtered.sort((a,b) => order[a.status] - order[b.status] || new Date(a.checkinTime) - new Date(b.checkinTime));
 
   if (filtered.length === 0) { list.innerHTML = ''; empty?.classList.remove('hidden'); return; }
@@ -84,10 +84,11 @@ export function renderQueue() {
     const groups = [
       { key: 'waiting',   label: 'Waiting',    color: 'text-secondary' },
       { key: 'inservice', label: 'In Service', color: 'text-primary' },
-      { key: 'done',      label: 'Done Today',  color: 'text-outline' },
+      { key: 'complete',  label: 'Complete',   color: 'text-primary' },
+      { key: 'paid',      label: 'Paid Today', color: 'text-outline' },
     ];
     list.innerHTML = groups.map(g => {
-      const entries = filtered.filter(e => e.status === g.key);
+      const entries = filtered.filter(e => g.key === 'paid' ? isPaidStatus(e.status) : e.status === g.key);
       if (entries.length === 0) return '';
       return `<div class="mb-4">
         <div class="flex items-center gap-2 mb-2">
@@ -107,13 +108,13 @@ function buildQueueRow(e) {
   const t = new Date(e.checkinTime);
   const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const serviceLabels = e.services.map(sid => svc(sid)?.label || sid).join(', ') || '—';
-  const badgeClass = { waiting: 'badge-waiting', inservice: 'badge-inservice', done: 'badge-done' }[e.status];
-  const badgeLabel = { waiting: 'Waiting', inservice: 'In Service', done: 'Done' }[e.status];
+  const badgeClass = { waiting: 'badge-waiting', inservice: 'badge-inservice', complete: 'badge-complete', paid: 'badge-done', done: 'badge-done' }[e.status] || 'badge-waiting';
+  const badgeLabel = { waiting: 'Waiting', inservice: 'In Service', complete: 'Complete', paid: 'Paid', done: 'Paid' }[e.status] || e.status;
   const apptBadge = e.isAppointment ? `<span class="badge-appointment text-[10px] px-1.5 py-0.5 rounded-full font-body font-semibold">Appt</span>` : '';
   const assignSummary = (e.assignments || []).filter(a => a.techId || a.cost).map(a => {
     const tech = staffById(a.techId), s = svc(a.serviceId);
     const st = getAssignmentStatus(e, a);
-    const dot = st === 'done' ? '✓ ' : st === 'inservice' ? '● ' : '○ ';
+    const dot = isPaidStatus(st) ? '✓ ' : st === 'complete' ? '◍ ' : st === 'inservice' ? '● ' : '○ ';
     const parts = [dot + (s ? s.label : '')];
     if (tech) parts.push('→ ' + tech.name);
     if (a.station) parts.push('@ ' + a.station);
@@ -121,10 +122,10 @@ function buildQueueRow(e) {
     return parts.join(' ');
   }).join(' · ');
   const totalDisplay = e.totalCost ? `<span class="font-semibold text-primary ml-1">$${e.totalCost.toFixed(2)}</span>` : '';
-  const cardBg = e.status === 'done'
+  const cardBg = isPaidStatus(e.status)
     ? 'bg-surface-container-high border-surface-container-highest opacity-70'
     : `bg-surface-container-lowest ${e.isAppointment ? 'border-primary/40' : 'border-surface-container-high'}`;
-  const groupBorder = e.groupId && e.status !== 'done' ? `border-left:4px solid ${e.groupColor};` : '';
+  const groupBorder = e.groupId && !isPaidStatus(e.status) ? `border-left:4px solid ${e.groupColor};` : '';
   const groupDot = e.groupId ? `<span class="inline-block w-2 h-2 rounded-full flex-shrink-0 mr-0.5" style="background:${e.groupColor}"></span>` : '';
   const groupTag = e.groupLabel ? `<span class="text-[10px] font-body italic" style="color:${e.groupColor}">${e.groupLabel}</span>` : '';
   const btnCls = `flex items-center justify-center min-w-[44px] self-stretch rounded-xl transition-all active:scale-95 border-0 cursor-pointer px-3`;
@@ -152,9 +153,12 @@ function buildQueueRow(e) {
         ${e.status === 'waiting' ? `<button onclick="tryAdvanceStatus('${id}','inservice')" title="In Service" class="${btnCls}" style="background:#8fd4d3;color:#0a2e2e;"><span class="material-symbols-outlined" style="font-size:19px">play_circle</span></button>` : ''}
         ${e.status === 'inservice' ? `
           <button onclick="updateStatus('${id}','waiting')" title="Back to Waiting" class="${btnCls}" style="background:#f5c870;color:#3a2800;"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
-          <button onclick="tryAdvanceStatus('${id}','done')" title="Done" class="${btnCls}" style="background:#c2cacd;color:#333;"><span class="material-symbols-outlined" style="font-size:19px">check_circle</span></button>` : ''}
-        ${e.status === 'done' && hasSquare && e.totalCost > 0 ? `<button onclick="openSquarePOS('${id}')" title="Pay in Square POS" class="${btnCls}" style="background:#1b5e3b;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">point_of_sale</span></button>` : ''}
-        ${e.status === 'done' ? `<button onclick="confirmReopen('${id}')" title="Reopen" class="${btnCls} bg-surface-container hover:bg-secondary-container text-outline-variant"><span class="material-symbols-outlined" style="font-size:19px">undo</span></button>` : ''}
+          <button onclick="tryAdvanceStatus('${id}','complete')" title="Complete" class="${btnCls}" style="background:#1a5c7a;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">task_alt</span></button>` : ''}
+        ${e.status === 'complete' ? `
+          <button onclick="updateStatus('${id}','inservice')" title="Back to In Service" class="${btnCls}" style="background:#c8e6c5;color:#1b5e20;"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
+          ${hasSquare && e.totalCost > 0 ? `<button onclick="openSquarePOS('${id}')" title="Pay in Square POS" class="${btnCls}" style="background:#1b5e3b;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">point_of_sale</span></button>` : ''}
+          <button onclick="tryAdvanceStatus('${id}','paid')" title="Mark Paid" class="${btnCls}" style="background:#2a7a4f;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">paid</span></button>` : ''}
+        ${isPaidStatus(e.status) ? `<button onclick="confirmReopen('${id}')" title="Reopen" class="${btnCls} bg-surface-container hover:bg-secondary-container text-outline-variant"><span class="material-symbols-outlined" style="font-size:19px">undo</span></button>` : ''}
         <button onclick="removeFromQueue('${id}')" title="Remove" class="${btnCls} bg-surface-container hover:bg-error/20 text-outline hover:text-error"><span class="material-symbols-outlined" style="font-size:17px">close</span></button>
       </div>
     </div>`;
@@ -164,14 +168,15 @@ export function updateStatus(id, status) {
   const entry = q().find(e => String(e.id) === String(id));
   if (!entry) return;
   if (entry.assignments && entry.assignments.length > 0) {
-    if (status === 'inservice') entry.assignments.forEach(a => { if (a.techId && getAssignmentStatus(entry, a) === 'waiting') a.status = 'inservice'; });
+    if (status === 'inservice') entry.assignments.forEach(a => { if (a.techId && (getAssignmentStatus(entry, a) === 'waiting' || getAssignmentStatus(entry, a) === 'complete')) a.status = 'inservice'; });
     else if (status === 'waiting') entry.assignments.forEach(a => { if (getAssignmentStatus(entry, a) === 'inservice') a.status = 'waiting'; });
-    else if (status === 'done') entry.assignments.forEach(a => { if (a.techId) a.status = 'done'; });
+    else if (status === 'complete') entry.assignments.forEach(a => { if (a.techId) a.status = 'complete'; });
+    else if (status === 'paid') entry.assignments.forEach(a => { if (a.techId) a.status = 'paid'; });
     entry.status = deriveEntryStatus(entry);
   } else entry.status = status;
-  if (entry.status === 'done') window.saveRecord?.(entry);
+  if (entry.status === 'paid') window.saveRecord?.(entry);
   upsert(entry);
-  renderQueue(); updateStats(); window.renderTurns?.();
+  renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
 }
 
 export function removeFromQueue(id) { window.initiateDeleteTransaction?.(id); }
@@ -185,10 +190,11 @@ export function filterQueue(filter) {
 }
 
 export function updateStats() {
-  const w = document.getElementById('stat-waiting'), s = document.getElementById('stat-inservice'), d = document.getElementById('stat-done');
+  const w = document.getElementById('stat-waiting'), s = document.getElementById('stat-inservice'), cmp = document.getElementById('stat-complete'), d = document.getElementById('stat-done');
   if (w) w.textContent = q().filter(e => e.status === 'waiting').length;
   if (s) s.textContent = q().filter(e => e.status === 'inservice').length;
-  if (d) d.textContent = q().filter(e => e.status === 'done').length;
+  if (cmp) cmp.textContent = q().filter(e => e.status === 'complete').length;
+  if (d) d.textContent = q().filter(e => isPaidStatus(e.status)).length;
 }
 
 export function validateAssignments(entry) {
@@ -199,8 +205,8 @@ export function validateAssignments(entry) {
 export function tryAdvanceStatus(id, targetStatus) {
   const entry = q().find(e => String(e.id) === String(id));
   if (!entry) return;
-  if (targetStatus === 'done' && !validateAssignments(entry)) {
-    showToast('Please assign a technician and cost before marking as Done.');
+  if ((targetStatus === 'complete' || targetStatus === 'paid') && !validateAssignments(entry)) {
+    showToast('Assign a technician and cost first.');
     showGroupAssignModal(id);
     return;
   }
@@ -437,9 +443,9 @@ export function cycleServiceStatus(entryId, serviceId, newStatus) {
   if (!entry) return;
   const a = (entry.assignments || []).find(x => x.serviceId === serviceId);
   if (newStatus === 'inservice' && (!a || !a.techId)) { showToast('Assign a technician before marking In Service.'); return; }
-  if (newStatus === 'done') {
-    if (!a || !a.techId) { showToast('Assign a technician before marking Done.'); return; }
-    if (!a.cost || a.cost <= 0) { showToast('Enter a price before marking Done.'); return; }
+  if (newStatus === 'complete' || newStatus === 'paid') {
+    if (!a || !a.techId) { showToast('Assign a technician first.'); return; }
+    if (!a.cost || a.cost <= 0) { showToast('Enter a price first.'); return; }
   }
   setAssignmentStatus(entry, serviceId, newStatus);
   renderGroupAssignContent();
@@ -523,9 +529,9 @@ export function renderGroupAssignContent() {
     const a = (entry.assignments || []).find(x => x.serviceId === sid) || {};
     const st = getAssignmentStatus(entry, a);
     const sug = !a.techId ? (window.suggestTechForService?.(sid) || null) : null;
-    const statusBtnStyle = { waiting:'background:#ffe0b2;color:#6d3200', inservice:'background:#c8e6c5;color:#1b5e20', done:'background:#dde2e5;color:#555' }[st] || 'background:#ffe0b2;color:#6d3200';
-    const statusLabel = { waiting:'Waiting', inservice:'In Service', done:'Done' }[st] || 'Waiting';
-    const nextStatus = { waiting:'inservice', inservice:'done', done:'waiting' }[st];
+    const statusBtnStyle = { waiting:'background:#ffe0b2;color:#6d3200', inservice:'background:#c8e6c5;color:#1b5e20', complete:'background:#cfe3ef;color:#0a3a52', paid:'background:#dde2e5;color:#555', done:'background:#dde2e5;color:#555' }[st] || 'background:#ffe0b2;color:#6d3200';
+    const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[st] || 'Waiting';
+    const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', paid:'waiting', done:'waiting' }[st];
     return `
       <div class="bg-surface-container-low rounded-xl p-4 border border-surface-container-high mb-3" data-service-id="${sid}">
         <div class="flex items-center justify-between mb-3">
@@ -712,7 +718,7 @@ export function closeSplitMergeModal() {
 export function showMergeSelectModal(entryId) {
   const entry = q().find(e => String(e.id) === String(entryId));
   if (!entry) return;
-  const candidates = q().filter(e => String(e.id) !== String(entryId) && e.status !== 'done');
+  const candidates = q().filter(e => String(e.id) !== String(entryId) && !isPaidStatus(e.status));
   document.getElementById('split-merge-title').textContent = 'Merge with Guest';
   document.getElementById('split-merge-content').innerHTML = `
     <p class="text-sm font-body text-on-surface-variant mb-4">Select a guest to merge with <strong>${entry.name}</strong>. They become a party with a shared color.</p>
@@ -757,10 +763,10 @@ export function confirmReopen(entryId) {
   if (!entry) return;
   showWarnModal('Reopen this ticket?', `This will move ${entry.name} back to "In Service."`, () => {
     entry.status = 'inservice';
-    if (entry.assignments) entry.assignments.forEach(a => { if (getAssignmentStatus(entry, a) === 'done') a.status = 'inservice'; });
+    if (entry.assignments) entry.assignments.forEach(a => { if (isPaidStatus(getAssignmentStatus(entry, a)) || getAssignmentStatus(entry, a) === 'complete') a.status = 'inservice'; });
     entry.completedAt = null;
     upsert(entry);
-    renderQueue(); updateStats(); window.renderTurns?.();
+    renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
     showToast(`${entry.name}'s ticket reopened`);
   });
 }

@@ -9,7 +9,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr } from '../utils.js';
-import { getAssignmentStatus } from './status.js';
+import { getAssignmentStatus, isPaidStatus } from './status.js';
 import { STATIONS } from './queue.js';
 
 const cfg = () => getState().config;
@@ -46,13 +46,13 @@ function layoutFor(id) { return { ...computedDefault(id), ...(layout()[id] || {}
 function saveLayout(next) { dispatch('config.set', { key: 'station_layout', value: next }); }
 
 // ── Live occupancy (one customer per station) ─────
-function activeAssignments(e) { return (e.assignments || []).filter(a => getAssignmentStatus(e, a) !== 'done'); }
+function activeAssignments(e) { return (e.assignments || []).filter(a => !isPaidStatus(getAssignmentStatus(e, a))); }
 function collectFloor() {
   const today = todayStr();
   const byStation = {};   // stationId -> entry
   const unplaced = [];
   q().forEach(e => {
-    if (e.status === 'done') return;
+    if (isPaidStatus(e.status)) return;   // paid customers leave the floor; complete stays (awaiting payment)
     if (localDateStr(new Date(e.checkinTime)) !== today) return;
     const active = activeAssignments(e);
     const at = active.find(a => a.station && STATIONS.includes(a.station));
@@ -77,10 +77,16 @@ function stationHtml(id, entry) {
   const sel = _selected.has(id);
   const fs = L.font || 1;
   const live = !!entry && (entryInservice(entry) || entry.status === 'inservice');
+  const complete = !!entry && !live && entry.status === 'complete';
   // Empty (or any station while editing the layout) shows the editor's custom color.
-  // In the live view, an occupied seat MATCHES the customer's status: GREEN in service, ORANGE waiting.
+  // In the live view, an occupied seat MATCHES the customer's status:
+  // GREEN in service, BLUE complete (ready to pay), ORANGE waiting.
   let bg = (L.fill || ACCENT[id[0]]) + '17', border = L.outline || ACCENT[id[0]];
-  if (entry && !floorEditMode) { if (live) { bg = '#bfe6bd'; border = '#2a7a4f'; } else { bg = '#ffe0c2'; border = '#e8730a'; } }
+  if (entry && !floorEditMode) {
+    if (live) { bg = '#bfe6bd'; border = '#2a7a4f'; }
+    else if (complete) { bg = '#cfe3ef'; border = '#1a5c7a'; }
+    else { bg = '#ffe0c2'; border = '#e8730a'; }
+  }
   let content;
   if (entry) {
     content = `<div class="${floorEditMode ? '' : 'floor-bubble cursor-pointer'} h-full w-full flex flex-col justify-center px-1.5 py-1 overflow-hidden" ${floorEditMode ? '' : `data-entry-id="${entry.id}"`}>

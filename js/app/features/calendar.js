@@ -172,7 +172,8 @@ export function calRenderGrid() {
       const qs = qm?.status || null;
       let bg, border, tc = '#1a1a1a', sl = '';
       if (!isAppt) { bg='#eceff1'; border='#78909c'; tc='#37474f'; }
-      else if (qs==='done') { bg='#f3f4f6'; border='#9ca3af'; tc='#6b7280'; sl='✓ Done'; }
+      else if (qs==='paid' || qs==='done') { bg='#f3f4f6'; border='#9ca3af'; tc='#6b7280'; sl='✓ Paid'; }
+      else if (qs==='complete') { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; sl='✓ Complete'; }
       else if (qs==='inservice') { bg='#dcfce7'; border='#16a34a'; tc='#14532d'; sl='● In Service'; }
       else if (qs==='waiting') { bg='#dbeafe'; border='#2563eb'; tc='#1e3a8a'; sl='● Checked In'; }
       else if (isPast && isAppt) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; sl='⚠ Not Checked In'; }
@@ -292,7 +293,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-[85] flex items-center justify-center bg-on-surface/40 px-4';
   let statusBadge = '';
-  if (queueMatch?.status === 'done') statusBadge = '<span style="color:#6b7280;font-size:11px;font-weight:700">✓ Completed</span>';
+  if (['complete','paid','done'].includes(queueMatch?.status)) statusBadge = '<span style="color:#6b7280;font-size:11px;font-weight:700">✓ Completed</span>';
   else if (queueMatch?.status === 'inservice') statusBadge = '<span style="color:#16a34a;font-size:11px;font-weight:700">● In Service</span>';
   else if (queueMatch?.status === 'waiting') statusBadge = '<span style="color:#2563eb;font-size:11px;font-weight:700">● Checked In</span>';
   else if (startDt < new Date() && isAppt) statusBadge = '<span style="color:#ea580c;font-size:11px;font-weight:700">⚠ Not Checked In</span>';
@@ -314,7 +315,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
 export function calQuickCheckin(calId, eventId) {
   const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
   if (!ev) return;
-  const already = queue().find(x => x.calEventId === eventId || (x.isAppointment && x.name === (ev.summary||'Guest') && x.status !== 'done'));
+  const already = queue().find(x => x.calEventId === eventId || (x.isAppointment && x.name === (ev.summary||'Guest') && x.status !== 'paid' && x.status !== 'done'));
   if (already) { showToast(`${ev.summary || 'Guest'} is already checked in`); return; }
   const cal = _calCalendars.find(c => c.id === calId), title = ev.summary || 'Guest';
   const rawP = _apptPhone(ev).replace(/\D/g,'');

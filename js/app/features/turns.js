@@ -3,7 +3,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, byName, localDateStr } from '../utils.js';
 import { canDo } from '../session.js';
-import { getAssignmentStatus } from './status.js';
+import { getAssignmentStatus, isPaidStatus } from './status.js';
 import { renderQueue, updateStats, showGroupAssignModal, switchGroupTab } from './queue.js';
 
 const cfg = () => getState().config;
@@ -103,7 +103,7 @@ export function suggestTechForService(serviceId) {
 }
 function buildSuggestions() {
   const suggestions = {};
-  q().filter(e => e.status !== 'done').forEach(e => {
+  q().filter(e => !isPaidStatus(e.status)).forEach(e => {
     suggestions[e.id] = {};
     e.services.forEach(sid => {
       const a = (e.assignments || []).find(x => x.serviceId === sid);
@@ -162,9 +162,9 @@ export function renderTurnsTechGrid() {
     if (!st) return '';
     const turns = getTechTurns(staffId);
     const allAssign = getTechAllAssignments(staffId);
-    // Billed today = sum of this tech's assignment costs on completed (done)
-    // transactions — matches the Reports "Billed" figure for today.
-    const billed = allAssign.reduce((sum, it) => sum + (it.entry.status === 'done' ? (it.assignment.cost || 0) : 0), 0);
+    // Billed today = this tech's assignment costs for work performed (Complete OR
+    // Paid) — the tech earns the turn when the work is done, regardless of payment.
+    const billed = allAssign.reduce((sum, it) => { const ast = getAssignmentStatus(it.entry, it.assignment); return sum + ((ast === 'complete' || isPaidStatus(ast)) ? (it.assignment.cost || 0) : 0); }, 0);
     if (allAssign.some(a => getAssignmentStatus(a.entry, a.assignment) === 'inservice')) activeCount++;
     const sc = getTechStatusColor(staffId);
     const photo = st.photo
@@ -194,7 +194,7 @@ export function renderTurnsTechGrid() {
         const turnLabel = tt === 'bonus' ? 'Bonus' : (cost === 0 ? '?' : '' + turnLabelNum);
         const ss = getAssignmentStatus(e, a);
         let bg, fg;
-        if (ss === 'done') { bg='#dde2e5'; fg='#555'; } else if (ss === 'inservice') { bg='#c8e6c5'; fg='#1b5e20'; } else { bg='#ffe0b2'; fg='#6d3200'; }
+        if (isPaidStatus(ss)) { bg='#dde2e5'; fg='#555'; } else if (ss === 'complete') { bg='#cfe3ef'; fg='#0a3a52'; } else if (ss === 'inservice') { bg='#c8e6c5'; fg='#1b5e20'; } else { bg='#ffe0b2'; fg='#6d3200'; }
         const outline = e.groupId ? `;outline:2px solid ${e.groupColor||'#e8a230'};outline-offset:-1px` : '';
         const s = svc(a.serviceId);
         const svcLabel = s ? s.label : (e.services.map(sid => svc(sid)?.label || '?').join(', '));
@@ -227,7 +227,7 @@ export function renderTurnsQueue() {
   const waitingList = document.getElementById('turns-waiting-list');
   const activeList  = document.getElementById('turns-active-list');
   if (!waitingList || !activeList) return;
-  const waiting = q().filter(e => { if (e.status === 'done') return false; if (!e.assignments || e.assignments.length === 0) return e.status === 'waiting'; return e.assignments.some(a => getAssignmentStatus(e, a) === 'waiting'); });
+  const waiting = q().filter(e => { if (isPaidStatus(e.status)) return false; if (!e.assignments || e.assignments.length === 0) return e.status === 'waiting'; return e.assignments.some(a => getAssignmentStatus(e, a) === 'waiting'); });
   const inservice = q().filter(e => { if (!e.assignments || e.assignments.length === 0) return e.status === 'inservice'; return e.assignments.some(a => getAssignmentStatus(e, a) === 'inservice'); });
   const wLabel = document.getElementById('turns-waiting-label'); if (wLabel) wLabel.textContent = waiting.length + ' in queue';
   const aLabel = document.getElementById('turns-active-label'); if (aLabel) aLabel.textContent = inservice.length + ' in service';
@@ -246,7 +246,7 @@ export function renderTurnsQueue() {
     if (assignments.length > 0) {
       serviceContent = assignments.map(a => {
         const tech = staffById(a.techId), s = svc(a.serviceId), ss = getAssignmentStatus(e, a);
-        const dot = ss==='done'?'✓ ':ss==='inservice'?'● ':'○ ';
+        const dot = isPaidStatus(ss)?'✓ ':ss==='complete'?'◍ ':ss==='inservice'?'● ':'○ ';
         const parts = [dot + (s ? s.label : '')];
         let accept = '';
         if (tech) parts.push('→ ' + tech.name); else if (es[a.serviceId]) { parts.push('→ ' + es[a.serviceId].techName + '?'); accept = acceptBtnHtml(e.id, a.serviceId, es[a.serviceId].techName); }
@@ -290,7 +290,7 @@ export function openTurnsAssign(techId, slotIndex) {
   document.getElementById('turns-assign-label').textContent = `Assign to ${tech?.name || ''}`;
   const options = [];
   q().forEach(e => {
-    if (e.status === 'done') return;
+    if (isPaidStatus(e.status)) return;
     e.services.forEach(sid => {
       const a = (e.assignments || []).find(x => x.serviceId === sid);
       const ss = a ? getAssignmentStatus(e, a) : 'waiting';
@@ -486,7 +486,7 @@ export function clearTurnsHistory() {
 // live grid. The device-local muse_turns_history snapshot is used only as a
 // fallback for the tech ordering. Filled bubbles open the historical edit modal.
 function histAssignmentsByTech(dateStr) {
-  const recs = (window.buildCombinedRecords?.() || []).filter(r => r.status === 'done' && localDateStr(new Date(r.checkinTime)) === dateStr);
+  const recs = (window.buildCombinedRecords?.() || []).filter(r => isPaidStatus(r.status) && localDateStr(new Date(r.checkinTime)) === dateStr);
   const byTech = {};
   recs.forEach(r => (r.assignments || []).forEach(a => {
     const tid = a.techId || '__unassigned__';
