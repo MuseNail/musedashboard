@@ -153,15 +153,20 @@ export function calRenderGrid() {
       const hasPhone = /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(desc);
       const knownSvcs = cfg().services.some(s => title.toLowerCase().includes(s.label.toLowerCase()) || desc.toLowerCase().includes(s.label.toLowerCase()));
       const isAppt = hasPhone || knownSvcs, isPast = startDt < now;
-      const fn = title.split(/[\s—–-]/)[0].toLowerCase();
-      const qm = queue().find(x => x.name && x.name.toLowerCase().startsWith(fn) && fn.length > 1), qs = qm?.status || null;
+      // Match this event to a queue entry ONLY by the check-in link (calEventId)
+      // or exact phone — never by loose name prefix, which made unrelated
+      // appointments all show "Checked In".
+      const evPhone = (desc.match(/\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/)?.[0] || '').replace(/\D/g,'');
+      const qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id))
+        || (evPhone ? queue().find(x => (x.phone||'').replace(/\D/g,'') === evPhone) : null);
+      const qs = qm?.status || null;
       let bg, border, tc = '#1a1a1a', sl = '';
       if (!isAppt) { bg='#eceff1'; border='#78909c'; tc='#37474f'; }
       else if (qs==='done') { bg='#f3f4f6'; border='#9ca3af'; tc='#6b7280'; sl='✓ Done'; }
       else if (qs==='inservice') { bg='#dcfce7'; border='#16a34a'; tc='#14532d'; sl='● In Service'; }
       else if (qs==='waiting') { bg='#dbeafe'; border='#2563eb'; tc='#1e3a8a'; sl='● Checked In'; }
       else if (isPast && isAppt) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; sl='⚠ Not Checked In'; }
-      else { bg='#eff6ff'; border='#3b82f6'; tc='#1e3a8a'; }
+      else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt → tinted by this tech's color
       const chips = cfg().services.filter(s => title.toLowerCase().includes(s.label.toLowerCase()) || desc.toLowerCase().includes(s.label.toLowerCase())).map(s => { const g = SVC_GROUPS.find(x => x.ids.some(id => s.id.toLowerCase().includes(id))); return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${g?.color||'#455a64'};margin-right:2px;flex-shrink:0"></span>`; }).join('');
       const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,' ').replace(/\r/g,'');
       body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(ev.id)}','${_e(title||'Event')}','${_e(desc)}',${isAppt})" style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)"><div style="display:flex;align-items:center;gap:2px;overflow:hidden">${chips}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${title||'Event'}</span></div>${ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75">${timeStr}</div>`:''}${sl&&ht>44?`<div style="font-size:9px;font-weight:700;color:${border}">${sl}</div>`:''}</div>`;
