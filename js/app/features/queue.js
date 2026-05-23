@@ -250,7 +250,9 @@ export function showManualAdd() {
   manualGuestCount = 0;
   document.getElementById('manual-guests-container').innerHTML = '';
   addManualGuest();
+  const appt = document.getElementById('manual-is-appointment'); if (appt) appt.checked = false;
   const m = document.getElementById('manual-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
+  setTimeout(() => document.getElementById('manual-phone-1')?.focus(), 100);
 }
 export function addManualGuest() { manualGuestCount++; renderManualGuestCard(manualGuestCount); }
 export function removeManualGuest(idx) { document.getElementById(`manual-guest-${idx}`)?.remove(); }
@@ -350,10 +352,6 @@ export function showGroupAssignModal(entryId) {
   activeGroupTab = clicked >= 0 ? clicked : 0;
   renderGroupAssignTabs();
   renderGroupAssignContent();
-  const advLabel = document.getElementById('group-advance-label');
-  if (advLabel) advLabel.textContent = entry.status === 'inservice' ? 'Mark Done' : 'In Service';
-  const advBtn = document.getElementById('group-advance-btn');
-  if (advBtn) advBtn.style.display = entry.status === 'done' ? 'none' : '';
   const m = document.getElementById('group-assign-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
 
@@ -385,11 +383,6 @@ export function switchGroupTab(i) {
   activeGroupTab = i;
   renderGroupAssignTabs();
   renderGroupAssignContent();
-  const entry = q().find(e => String(e.id) === groupAssignEntries[i]);
-  const advLabel = document.getElementById('group-advance-label');
-  if (advLabel && entry) advLabel.textContent = entry.status === 'inservice' ? 'Mark Done' : 'In Service';
-  const advBtn = document.getElementById('group-advance-btn');
-  if (advBtn && entry) advBtn.style.display = entry.status === 'done' ? 'none' : '';
 }
 
 export function cycleServiceStatus(entryId, serviceId, newStatus) {
@@ -481,7 +474,7 @@ export function renderGroupAssignContent() {
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Station</label>
             <select class="assign-station w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"><option value="">— None —</option>${stationOptions(a.station)}</select></div>
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
-            <input type="text" inputmode="decimal" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.cost != null && a.cost !== 0 ? a.cost : (s.baseCost != null && s.baseCost > 0 ? Number(s.baseCost).toFixed(2) : '')}"
+            <input type="text" inputmode="decimal" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.cost != null && a.cost !== 0 ? a.cost : ''}"
               class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
               onfocus="openNumpad(this,'Cost — ' + '${s.label}')" onclick="openNumpad(this,'Cost — ' + '${s.label}')" oninput="updateGroupTotal()"></div>
         </div>
@@ -501,9 +494,9 @@ export function renderGroupAssignContent() {
           <div class="font-headline font-semibold text-on-surface text-sm">${item.label}<span class="ml-2 text-[10px] font-body text-outline-variant uppercase tracking-widest">Retail Item</span></div>
           <div class="flex items-center gap-2">
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">Qty</label>
-            <input type="text" inputmode="numeric" value="${existing.qty || ''}" placeholder="1" class="item-qty w-12 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body text-center focus:outline-none focus:border-primary" oninput="updateGroupTotal()">
+            <input type="text" inputmode="numeric" value="${existing.qty || ''}" placeholder="0" class="item-qty w-12 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body text-center focus:outline-none focus:border-primary" oninput="updateGroupTotal()">
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">$</label>
-            <input type="text" inputmode="decimal" value="${existing.price != null && existing.price !== 0 ? existing.price : (item.price || '')}" placeholder="${item.price || '0.00'}" class="item-price w-16 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" onfocus="openNumpad(this,'${item.label}')" onclick="openNumpad(this,'${item.label}')" oninput="updateGroupTotal()">
+            <input type="text" inputmode="decimal" value="${existing.price != null && existing.price !== 0 ? existing.price : ''}" placeholder="${item.price || '0.00'}" class="item-price w-16 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" onfocus="openNumpad(this,'${item.label}')" onclick="openNumpad(this,'${item.label}')" oninput="updateGroupTotal()">
           </div></div></div>`;
   }).join('');
 
@@ -523,6 +516,7 @@ export function renderGroupAssignContent() {
   content.innerHTML = `
     <div class="flex items-center gap-2 mb-3"><span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${color}"></span>
       <span class="font-headline font-bold text-on-surface">${entry.name}</span>
+      ${entry.phone ? `<span class="text-xs font-body text-on-surface-variant">· ${entry.phone}</span>` : ''}
       ${entry.groupLabel ? `<span class="text-[10px] font-body italic" style="color:${color}">${entry.groupLabel}</span>` : ''}</div>
     <div class="mb-1"><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Services</label>
       <div class="grid grid-cols-4 gap-2 mb-4">${svcPicker}</div></div>
@@ -590,27 +584,6 @@ export function saveGroupAssignments() {
   closeGroupAssignModal();
   renderQueue(); updateStats(); window.renderTurns?.();
   showToast('Assignments saved');
-}
-
-export function saveGroupAndAdvance() {
-  const currentEntry = q().find(e => String(e.id) === String(groupAssignEntries[activeGroupTab]));
-  if (!currentEntry) return;
-  saveCurrentGroupTabInputs();
-  const curStatus = currentEntry.status || 'waiting';
-  const targetStatus = curStatus === 'inservice' ? 'done' : 'inservice';
-  if (targetStatus === 'inservice' && !(currentEntry.assignments||[]).some(a => a.techId)) { showToast('Assign a technician before marking In Service.'); return; }
-  if (targetStatus === 'done' && validateGroupAssignments([currentEntry]).length > 0) { showToast(currentEntry.name.split(' ')[0] + ' — assign a tech and price for all services before marking Done.'); return; }
-  if (!currentEntry.assignments || currentEntry.assignments.length === 0) currentEntry.status = targetStatus;
-  else {
-    const sourceStatus = targetStatus === 'inservice' ? 'waiting' : 'inservice';
-    currentEntry.assignments.forEach(a => { if (a.techId && getAssignmentStatus(currentEntry, a) === sourceStatus) a.status = targetStatus; });
-    currentEntry.status = deriveEntryStatus(currentEntry);
-  }
-  if (currentEntry.status === 'done') window.saveRecord?.(currentEntry);
-  upsert(currentEntry);
-  closeGroupAssignModal();
-  renderQueue(); updateStats(); window.renderTurns?.();
-  showToast(currentEntry.name.split(' ')[0] + ' → ' + (targetStatus === 'done' ? 'Done' : 'In Service'));
 }
 
 export async function saveGroupAndPushSquare() {

@@ -173,7 +173,7 @@ function wireKeyboard() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       const gm = document.getElementById('group-assign-modal');
-      if (gm && !gm.classList.contains('hidden')) { e.preventDefault(); queue.saveGroupAndAdvance(); return; }
+      if (gm && !gm.classList.contains('hidden')) { e.preventDefault(); queue.saveGroupAssignments(); return; }
       const mm = document.getElementById('manual-modal');
       if (mm && !mm.classList.contains('hidden')) { const tag = document.activeElement?.tagName; if (tag !== 'SELECT' && tag !== 'TEXTAREA') { e.preventDefault(); queue.submitManualAdd(); return; } }
     }
