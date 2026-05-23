@@ -196,6 +196,97 @@ export function renderServicesEmbed() {
 }
 
 // ── Orchestrator ──────────────────────────────────
+// ── Settings drill-down navigation ────────────────────────────────────────────
+// Groups existing setting sections into 6 categories. Content is already rendered
+// by renderSettingsPanel(); nav just toggles which section wrapper is visible.
+const SETTINGS_NAV = [
+  { id:'catalog', title:'Services, Items & Fees', desc:'What you sell', items:[
+    { label:'Customer Screen Services', sub:'Shown on the check-in tablet', content:'svc-section' },
+    { label:'Dashboard Services', sub:'Shown in Assign, Turns, Queue, Calendar', content:'dash-svc-section' },
+    { label:'Services Management', sub:'Add, edit or remove services', content:'settings-services-section', render:'renderServicesEmbed' },
+    { label:'Retail Items', sub:'Add-on items', content:'items-section' },
+    { label:'Fees', sub:'Flat or percentage fees', content:'fees-section' },
+  ]},
+  { id:'staff', title:'Staff & Access', desc:'People & permissions', items:[
+    { label:'Technicians', sub:'Manage staff, photos, commission', content:'settings-staff-section', render:'renderStaffEmbed' },
+    { label:'Active Staff', sub:'Who appears in menus', content:'active-staff-section' },
+    { label:'Role Permissions', sub:'What each role can do', content:'settings-perms-section', adminOnly:true },
+  ]},
+  { id:'workflow', title:'Workflow', desc:'How the floor runs', items:[
+    { label:'Turn Thresholds', sub:'Full / half / bonus cutoffs', content:'turns-thresh-section' },
+    { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section' },
+  ]},
+  { id:'integrations', title:'Integrations', desc:'Square & Google', items:[
+    { label:'Square', sub:'Location & connection', content:'square-section' },
+    { label:'Customer Directory', sub:'Browse synced customers', action:'showCustomerDir' },
+  ]},
+  { id:'business', title:'Business', desc:'Branding', items:[
+    { label:'Business Logo', sub:'Header & report logo', content:'logo-section' },
+  ]},
+  { id:'data', title:'Data & System', desc:'Backup & logs', items:[
+    { label:'Backup & Restore', sub:'Export / import data', content:'backup-section' },
+    { label:'Audit Log', sub:'Deletions & admin actions', content:'settings-audit-section', render:'loadAuditLog' },
+  ]},
+];
+let _settingsView = 'root', _settingsCat = null;
+
+function _hideAllSettingsSections() {
+  const panel = document.getElementById('panel-settings');
+  if (!panel) return;
+  [...panel.children].forEach(ch => {
+    if (ch.classList.contains('settings-nav-header') || ch.id === 'settings-root' || ch.id === 'settings-category') return;
+    ch.classList.add('hidden');
+  });
+}
+function _setSettingsHeader(title, desc, showBack) {
+  const t = document.getElementById('settings-nav-title'); if (t) t.textContent = title;
+  const d = document.getElementById('settings-nav-desc'); if (d) d.textContent = desc || '';
+  const b = document.getElementById('settings-back-btn'); if (b) b.classList.toggle('hidden', !showBack);
+}
+export function settingsNavRoot() {
+  _settingsView = 'root'; _settingsCat = null;
+  _hideAllSettingsSections();
+  document.getElementById('settings-category')?.classList.add('hidden');
+  document.getElementById('settings-root')?.classList.remove('hidden');
+  _setSettingsHeader('Settings', 'Configure app behavior and customer options', false);
+}
+export function settingsOpenCategory(catId) {
+  const g = SETTINGS_NAV.find(x => x.id === catId); if (!g) return;
+  _settingsView = 'cat'; _settingsCat = catId;
+  _hideAllSettingsSections();
+  document.getElementById('settings-root')?.classList.add('hidden');
+  const isAdmin = getActiveUser()?.role === 'admin';
+  const list = document.getElementById('settings-category');
+  list.innerHTML = g.items.filter(it => !it.adminOnly || isAdmin).map(it => `
+    <button onclick="${it.action ? it.action + '()' : `settingsOpenLeaf('${it.content}')`}" class="w-full flex items-center justify-between px-5 py-4 bg-surface-container-lowest rounded-xl border border-surface-container-high mb-2 hover:bg-surface-container transition-colors text-left">
+      <div><div class="font-headline font-bold text-on-surface">${it.label}</div><div class="text-xs font-body text-on-surface-variant mt-0.5">${it.sub || ''}</div></div>
+      <span class="material-symbols-outlined text-on-surface-variant">${it.action ? 'open_in_new' : 'chevron_right'}</span>
+    </button>`).join('');
+  list.classList.remove('hidden');
+  _setSettingsHeader(g.title, g.desc, true);
+}
+export function settingsOpenLeaf(contentId) {
+  let item = null;
+  SETTINGS_NAV.forEach(g => g.items.forEach(it => { if (it.content === contentId) item = it; }));
+  _settingsView = 'leaf';
+  _hideAllSettingsSections();
+  document.getElementById('settings-root')?.classList.add('hidden');
+  document.getElementById('settings-category')?.classList.add('hidden');
+  if (item?.render) window[item.render]?.();
+  const content = document.getElementById(contentId);
+  if (content) {
+    const wrapper = content.parentElement;
+    if (wrapper) wrapper.classList.remove('hidden');
+    content.classList.remove('hidden');
+    const hdr = wrapper?.querySelector(':scope > button'); if (hdr) hdr.classList.add('hidden');
+  }
+  _setSettingsHeader(item?.label || 'Settings', '', true);
+}
+export function settingsBack() {
+  if (_settingsView === 'leaf' && _settingsCat) settingsOpenCategory(_settingsCat);
+  else settingsNavRoot();
+}
+
 export function renderSettingsPanel() {
   renderSettingsServiceVisibility();
   renderSettingsDashServiceVisibility();
@@ -214,4 +305,5 @@ export function renderSettingsPanel() {
   if (fi) fi.value = c.fullMin;
   if (hi) hi.value = c.halfMin;
   renderBonusServicesList();
+  settingsNavRoot();
 }
