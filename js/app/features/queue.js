@@ -334,6 +334,7 @@ export function saveEditCheckin() {
   if (entry.assignments) entry.assignments = entry.assignments.filter(a => svcs.includes(a.serviceId));
   entry.status = deriveEntryStatus(entry);
   upsert(entry);
+  if (!entry.skipSquare) squareUpsertCustomer(entry);   // propagate a name/phone fix to Square + cache
   closeEditCheckin();
   renderQueue(); window.renderTurns?.();
   showToast('Check-in updated ✓');

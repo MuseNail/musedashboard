@@ -310,7 +310,20 @@ export async function squareUpsertCustomer(entry) {
 
     if (existingId) {
       const res = await fetch(`${SQUARE_PROXY}/v2/customers/${existingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (res.ok) { const c = (await res.json()).customer; if (c && !squareCustomers.find(x => x.id === c.id)) squareCustomers.push({ id: c.id, given_name: c.given_name||'', family_name: c.family_name||'', phone: c.phone_number||'', display: entry.name }); }
+      if (res.ok) {
+        const c = (await res.json()).customer;
+        if (c) {
+          // Refresh the local caches so a name/phone fix shows immediately in-app
+          // (not only after the next full sync).
+          const sc = squareCustomers.find(x => x.id === c.id);
+          if (sc) { sc.given_name = c.given_name||''; sc.family_name = c.family_name||''; sc.phone = c.phone_number||''; sc.display = entry.name; }
+          else squareCustomers.push({ id: c.id, given_name: c.given_name||'', family_name: c.family_name||'', phone: c.phone_number||'', display: entry.name });
+          const dir = customerDirectory.find(x => x.squareId === c.id);
+          if (dir) { dir.firstName = c.given_name||''; dir.lastName = c.family_name||''; dir.phone = c.phone_number||''; }
+          else customerDirectory.push({ squareId: c.id, firstName: c.given_name||'', lastName: c.family_name||'', phone: c.phone_number||'', email: '', note: c.note||'' });
+          localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
+        }
+      }
     } else {
       const iKey = rawPhone ? `muse-customer-${rawPhone}` : `muse-customer-${firstName.toLowerCase()}-${lastName.toLowerCase()}`;
       const res = await fetch(`${SQUARE_PROXY}/v2/customers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotency_key: iKey, ...payload }) });
