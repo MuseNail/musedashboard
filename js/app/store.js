@@ -14,7 +14,8 @@ function emptyConfig() {
     staff: [], services: [], items: [], fees: [], fd_users: [],
     schedule: {}, turn_config: {}, bonus_services: [],
     hidden_services: [], hidden_dash_services: [], inactive_staff: [],
-    logo: null, turns_order: [], role_permissions: {}, photos: {},
+    logo: null, turns_order: [], turns_break: [], turns_off: [],
+    role_permissions: {}, photos: {}, square_config: null,
   };
 }
 
