@@ -20,8 +20,10 @@ export function openSquarePOS(entryId) {
   const appId = sqConfig()?.applicationId;
   if (!appId) { showToast('Add your Square Application ID in Settings → Square first.'); return; }
   const data = {
+    // Must EXACTLY match the Web Callback URL registered in the Square Developer
+    // Console (Point of Sale API). Pinned to the app scope so it never varies by route.
     amount_money: { amount: cents, currency_code: 'USD' },
-    callback_url: location.origin + location.pathname,
+    callback_url: location.origin + '/musedashboard/',
     client_id: appId,
     version: '1.3',
     notes: `Muse${entry.name ? ' · ' + entry.name : ''}`,
