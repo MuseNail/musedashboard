@@ -151,6 +151,22 @@
     touch-action: manipulation;
   }
 
+  /* Drag sources need touch-action:none so iOS doesn't claim the gesture for
+     scrolling (which fires pointercancel and aborts the pointer-event drag).
+     Must come AFTER the manipulation rule above to win. Descendants included
+     because the touch lands on the inner button/text, not the wrapper. Also
+     suppress text-selection + the long-press callout that interfere with drag. */
+  .turns-filled-slot, .turns-filled-slot *,
+  #turns-waiting-list [data-entry-id], #turns-waiting-list [data-entry-id] *,
+  #turns-active-list [data-entry-id], #turns-active-list [data-entry-id] *,
+  .floor-bubble, .floor-bubble *, .floor-station, .floor-station *,
+  .tech-drag-handle {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
   /* Queue action buttons — large touch targets */
   .q-action-btn { display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:50%; border:none; cursor:pointer; transition:background 0.15s; flex-shrink:0; }
   .q-action-btn:active { transform:scale(0.92); }
