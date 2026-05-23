@@ -252,7 +252,7 @@ export function renderCalSelectorList() {
   if (!list || _calCalendars.length === 0) return;
   if (!_calSelectorDraft) _calSelectorDraft = { order: _calCalendars.map(c => c.id), hidden: new Set(_calHidden) };
   const draftCals = _calSelectorDraft.order.map(id => _calCalendars.find(c => c.id === id)).filter(Boolean);
-  list.innerHTML = draftCals.map((c,i) => { const isHidden = _calSelectorDraft.hidden.has(c.id); return `<div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none" data-cal-idx="${i}" ondragover="calDraftDragOver(event)" ondrop="calDraftDrop(event,${i})"><span draggable="true" ondragstart="calDraftDragStart(event,${i})" class="material-symbols-outlined" style="font-size:14px;flex-shrink:0;color:#6b7280;cursor:grab">drag_indicator</span><div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div><span class="flex-grow text-sm font-body text-on-surface" onclick="calDraftToggle('${c.id}')">${c.name}</span><div onclick="calDraftToggle('${c.id}')" style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;border:2.5px solid ${isHidden?'#9ca3af':'#1a5252'};background:${isHidden?'#fff':'#1a5252'}">${!isHidden?'<span class="material-symbols-outlined" style="font-size:13px;color:#fff;font-variation-settings:\'FILL\' 1;line-height:1">check</span>':''}</div></div>`; }).join('');
+  list.innerHTML = draftCals.map((c,i) => { const isHidden = _calSelectorDraft.hidden.has(c.id); return `<div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none" data-cal-idx="${i}"><span onpointerdown="calReorderStart(event,${i})" class="material-symbols-outlined" style="font-size:14px;flex-shrink:0;color:#6b7280;cursor:grab;touch-action:none">drag_indicator</span><div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div><span class="flex-grow text-sm font-body text-on-surface" onclick="calDraftToggle('${c.id}')">${c.name}</span><div onclick="calDraftToggle('${c.id}')" style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;border:2.5px solid ${isHidden?'#9ca3af':'#1a5252'};background:${isHidden?'#fff':'#1a5252'}">${!isHidden?'<span class="material-symbols-outlined" style="font-size:13px;color:#fff;font-variation-settings:\'FILL\' 1;line-height:1">check</span>':''}</div></div>`; }).join('');
   const visCount = draftCals.filter(c => !_calSelectorDraft.hidden.has(c.id)).length;
   const lbl = document.getElementById('cal-selector-label'); if (lbl) lbl.textContent = visCount === _calCalendars.length ? 'Calendars' : `${visCount}/${_calCalendars.length}`;
 }
@@ -269,14 +269,35 @@ export function calSelectorSave() {
 }
 export function calSelectorCancel() { _calSelectorDraft = null; const dd = document.getElementById('cal-selector-dropdown'); if (dd) { dd.classList.add('hidden'); dd.style.display = ''; } renderCalSelectorList(); }
 export function calDraftSelectAll(show) { if (!_calSelectorDraft) return; if (show) _calSelectorDraft.hidden.clear(); else _calCalendars.forEach(c => _calSelectorDraft.hidden.add(c.id)); renderCalSelectorList(); }
-export function calDraftDragStart(e,i) { _calDragIdx = i; e.dataTransfer.effectAllowed = 'move'; }
+// Pointer-based reorder (HTML5 drag-and-drop doesn't work on iOS touch).
 function clearCalDropMarks() { document.querySelectorAll('#cal-selector-list [data-cal-idx]').forEach(r => { r.style.borderTop = ''; }); }
-export function calDraftDragOver(e) {
-  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
-  clearCalDropMarks();
-  if (e.currentTarget) e.currentTarget.style.borderTop = '3px solid #1a5252';
+let _calReorderList = null;
+function calRowAt(y) { const rows = _calReorderList ? [..._calReorderList.querySelectorAll('[data-cal-idx]')] : []; return rows.find(r => { const rc = r.getBoundingClientRect(); return y >= rc.top && y <= rc.bottom; }) || null; }
+export function calReorderStart(e, i) {
+  e.preventDefault(); e.stopPropagation();
+  _calDragIdx = i; _calReorderList = document.getElementById('cal-selector-list');
+  document.addEventListener('pointermove', calReorderMove);
+  document.addEventListener('pointerup', calReorderEnd, { once: true });
 }
-export function calDraftDrop(e, targetIdx) { e.preventDefault(); clearCalDropMarks(); if (_calDragIdx === null || _calDragIdx === targetIdx || !_calSelectorDraft) return; const moved = _calSelectorDraft.order.splice(_calDragIdx,1)[0]; _calSelectorDraft.order.splice(targetIdx,0,moved); _calDragIdx = null; renderCalSelectorList(); }
+function calReorderMove(e) {
+  e.preventDefault(); clearCalDropMarks();
+  const row = calRowAt(e.clientY);
+  if (row && Number(row.dataset.calIdx) !== _calDragIdx) row.style.borderTop = '3px solid #1a5252';
+}
+function calReorderEnd(e) {
+  document.removeEventListener('pointermove', calReorderMove);
+  clearCalDropMarks();
+  const row = calRowAt(e.clientY);
+  if (row && _calSelectorDraft && _calDragIdx !== null) {
+    const target = Number(row.dataset.calIdx);
+    if (!isNaN(target) && target !== _calDragIdx) {
+      const moved = _calSelectorDraft.order.splice(_calDragIdx, 1)[0];
+      _calSelectorDraft.order.splice(target, 0, moved);
+      renderCalSelectorList();
+    }
+  }
+  _calDragIdx = null; _calReorderList = null;
+}
 
 // ── Event click + quick check-in ─────────────────
 export function calSlotClick(calId, hour, minute) { showNewApptModal(calId, hour, minute, _calCalendars.find(c => c.id === calId)?.name); }

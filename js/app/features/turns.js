@@ -229,8 +229,9 @@ export function renderTurnsQueue() {
   if (!waitingList || !activeList) return;
   const waiting = q().filter(e => { if (isPaidStatus(e.status)) return false; if (!e.assignments || e.assignments.length === 0) return e.status === 'waiting'; return e.assignments.some(a => getAssignmentStatus(e, a) === 'waiting'); });
   const inservice = q().filter(e => { if (!e.assignments || e.assignments.length === 0) return e.status === 'inservice'; return e.assignments.some(a => getAssignmentStatus(e, a) === 'inservice'); });
+  const complete = q().filter(e => e.status === 'complete');   // service done, payment pending
   const wLabel = document.getElementById('turns-waiting-label'); if (wLabel) wLabel.textContent = waiting.length + ' in queue';
-  const aLabel = document.getElementById('turns-active-label'); if (aLabel) aLabel.textContent = inservice.length + ' in service';
+  const aLabel = document.getElementById('turns-active-label'); if (aLabel) aLabel.textContent = (complete.length ? complete.length + ' complete · ' : '') + inservice.length + ' in service';
   const suggestions = buildSuggestions();
 
   function buildCard(e) {
@@ -256,14 +257,15 @@ export function renderTurnsQueue() {
     } else {
       serviceContent = e.services.map(sid => { const s = svc(sid), sug = es[sid]; return `<div class="text-[10px] text-on-surface-variant leading-tight">○ ${s?s.label:sid}${sug?` <span class="font-semibold" style="color:#1a5252">→ ${sug.techName}?</span>${acceptBtnHtml(e.id, sid, sug.techName)}`:''}</div>`; }).join('');
     }
-    const borderColor = e.status==='inservice' ? '#2a7a4f' : '#d4860a';
-    const bgTint = e.status==='inservice' ? 'rgba(200,230,197,0.25)' : 'rgba(255,224,178,0.25)';
+    const borderColor = e.status==='inservice' ? '#2a7a4f' : e.status==='complete' ? '#1a5c7a' : '#d4860a';
+    const bgTint = e.status==='inservice' ? 'rgba(200,230,197,0.25)' : e.status==='complete' ? 'rgba(207,227,239,0.45)' : 'rgba(255,224,178,0.25)';
     return `<div class="px-3 py-2 cursor-grab hover:brightness-95 transition-all select-none border-b border-surface-container-high border-l-4" style="border-left-color:${borderColor};background:${bgTint}" data-entry-id="${e.id}" onclick="showGroupAssignModal('${e.id}')">
       <div class="flex items-start gap-2 pointer-events-none">${avatar}
         <div class="min-w-0 flex-grow"><div class="flex items-center gap-1 flex-wrap leading-tight">${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span>${groupLbl}<span class="text-[10px] font-body text-on-surface-variant ml-1">${timeStr}</span></div>${serviceContent}</div></div></div>`;
   }
   waitingList.innerHTML = waiting.length === 0 ? '<div class="px-4 py-3 text-xs text-on-surface-variant text-center">No one waiting</div>' : waiting.map(buildCard).join('');
-  activeList.innerHTML = inservice.length === 0 ? '<div class="px-4 py-3 text-xs text-on-surface-variant text-center">No one in service</div>' : inservice.map(buildCard).join('');
+  const activeCards = [...complete, ...inservice];   // completed (awaiting payment) at the top, then in-service
+  activeList.innerHTML = activeCards.length === 0 ? '<div class="px-4 py-3 text-xs text-on-surface-variant text-center">No one active</div>' : activeCards.map(buildCard).join('');
 }
 
 function reorderTurnSlots(techId, moveEntryId, beforeEntryId) {
