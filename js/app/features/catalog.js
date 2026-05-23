@@ -21,9 +21,9 @@ export function renderServicesMerged() {
     const checkin = isServiceVisibleOnCheckin(s.id);
     const dash    = isServiceVisibleOnDash(s.id);
     const toggle = (on, label, fn, title) => `
-      <button onclick="${fn}('${s.id}')" title="${title}" class="flex flex-col items-center gap-1 flex-shrink-0">
+      <button onclick="${fn}('${s.id}')" title="${title}" class="flex flex-col items-center gap-1 flex-shrink-0 px-1 py-1">
         <span class="text-[9px] font-body uppercase tracking-wider ${on ? 'text-primary' : 'text-outline-variant'}">${label}</span>
-        <div class="relative w-10 h-5 rounded-full transition-colors ${on ? 'bg-primary' : 'bg-surface-container-high'}"><div class="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${on ? 'left-5' : 'left-0.5'}"></div></div>
+        <div class="relative w-14 h-7 rounded-full transition-colors ${on ? 'bg-primary' : 'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${on ? 'left-7' : 'left-0.5'}"></div></div>
       </button>`;
     return `
     <div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between gap-3">

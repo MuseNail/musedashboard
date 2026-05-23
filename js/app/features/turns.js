@@ -513,6 +513,7 @@ function renderTurnsHistoryView() {
     if (dragClone) { dragClone.remove(); dragClone = null; }
     document.querySelectorAll('#turns-waiting-list [data-entry-id], #turns-active-list [data-entry-id], .turns-filled-slot').forEach(c => { c.style.opacity = ''; c.style.transform = ''; });
     document.querySelectorAll('.turns-empty-slot').forEach(s => s.classList.remove('turns-drop-highlight'));
+    document.querySelectorAll('.turns-reorder-target').forEach(s => s.classList.remove('turns-reorder-target'));
     const capturedId = dragEntryId, capturedTech = dragTechId;
     dragEntryId = null; dragTechId = null; pendingEntry = null;
     if (!capturedId) return;
@@ -550,6 +551,12 @@ function renderTurnsHistoryView() {
       const w = parseFloat(dragClone.style.width);
       dragClone.style.left = (e.clientX - w/2) + 'px'; dragClone.style.top = (e.clientY - 30) + 'px';
       document.querySelectorAll('.turns-empty-slot').forEach(slot => { const r = slot.getBoundingClientRect(); slot.classList.toggle('turns-drop-highlight', e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom); });
+      // Reorder target: highlight the same-tech filled slot the dragged customer would land before.
+      document.querySelectorAll('.turns-filled-slot').forEach(slot => {
+        const r = slot.getBoundingClientRect();
+        const over = e.clientX>=r.left && e.clientX<=r.right && e.clientY>=r.top && e.clientY<=r.bottom;
+        slot.classList.toggle('turns-reorder-target', over && slot.dataset.techId === dragTechId && slot.dataset.entryId !== dragEntryId);
+      });
       return;
     }
     if (pendingEntry && !isDragging) { const dx = e.clientX - startX, dy = e.clientY - startY; if (Math.sqrt(dx*dx+dy*dy) > DRAG_THRESH) startDrag(pendingEntry); }
@@ -559,6 +566,7 @@ function renderTurnsHistoryView() {
     isDragging = false; if (dragClone) { dragClone.remove(); dragClone = null; }
     document.querySelectorAll('.turns-filled-slot, #turns-waiting-list [data-entry-id], #turns-active-list [data-entry-id]').forEach(c => { c.style.opacity=''; c.style.transform=''; });
     document.querySelectorAll('.turns-empty-slot').forEach(s => s.classList.remove('turns-drop-highlight'));
+    document.querySelectorAll('.turns-reorder-target').forEach(s => s.classList.remove('turns-reorder-target'));
     pendingEntry = null; dragEntryId = null; dragTechId = null;
   });
 })();

@@ -117,11 +117,15 @@
     transform: rotate(2deg) scale(1.02);
     transition: none !important;
   }
-  .turns-drop-highlight { 
-    border-color: #1a5252 !important; 
+  .turns-drop-highlight {
+    border-color: #1a5252 !important;
     background: rgba(26,82,82,0.1) !important;
     transform: scale(1.02);
     transition: transform 0.1s, background 0.1s;
+  }
+  /* Reorder drop target: a clear "insert before here" bar on a filled slot */
+  .turns-reorder-target > button {
+    box-shadow: inset 5px 0 0 0 #1a5252, 0 0 0 2px rgba(26,82,82,0.45) !important;
   }
   /* Touch-friendly tap targets */
   @media (pointer: coarse) {
