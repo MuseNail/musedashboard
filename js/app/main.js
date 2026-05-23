@@ -91,10 +91,17 @@ function updateSyncIndicator(state) {
   if (state.connected) { dot.style.background = state.pendingCount > 0 ? '#f5c870' : '#2a7a4f'; if (text) text.textContent = state.pendingCount > 0 ? `Sync ${state.pendingCount}` : 'Synced'; }
   else { dot.style.background = '#fa746f'; if (text) text.textContent = state.pendingCount > 0 ? `Offline ${state.pendingCount}` : 'Offline'; }
 }
+let _custAutoLoaded = false;
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
   if (changed === 'connection') return;
-  if (changed === 'hydrate' || (changed && changed.startsWith('config'))) { photos.setLogo(); auth.updateLoggedInDisplay(); }
+  if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
+    photos.setLogo(); auth.updateLoggedInDisplay();
+    // T2.17: once Square is configured, auto-load the customer directory so
+    // check-in autofill works on every device without a manual Settings→Square
+    // sync. Once per session; non-blocking; no-ops offline (cache pre-populates).
+    if (!_custAutoLoaded && state.config.square_config?.locationId) { _custAutoLoaded = true; sqCust.loadSquareCustomers(); }
+  }
   const desk = document.getElementById('screen-desk');
   if (!desk || !desk.classList.contains('active')) return;
   const active = document.querySelector('.dash-panel.active'); if (!active) return;
