@@ -310,10 +310,16 @@ export function calQuickCheckin(calId, eventId) {
   const cal = _calCalendars.find(c => c.id === calId), title = ev.summary || 'Guest';
   const rawP = _apptPhone(ev).replace(/\D/g,'');
   const phone = rawP ? rawP.replace(/^1?(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3') : '';
-  let svcs = _parseApptLines(ev, calId).map(l => l.svcId).filter(Boolean);
+  const lines = _parseApptLines(ev, calId);   // [{ svcId, calId }] — per-service tech is the line's calendar
+  let svcs = lines.map(l => l.svcId).filter(Boolean);
   if (svcs.length === 0) svcs = cfg().services.filter(s => title.toLowerCase().includes(s.label.toLowerCase())).map(s => s.id);
-  const tech = cfg().staff.find(s => s.name.toLowerCase() === (cal?.name||'').toLowerCase());
-  const entry = { id: Date.now()*1000 + Math.floor(Math.random()*1000), name: title, phone, services: svcs.length > 0 ? svcs : (cfg().services.length > 0 ? [cfg().services[0].id] : []), status: 'waiting', checkinTime: new Date().toISOString(), isAppointment: true, isNew: true, skipSquare: false, groupId: null, calEventId: eventId, assignments: tech ? [{ serviceId: svcs[0]||'', techId: tech.id, status: 'waiting', cost: 0, assignedAt: Date.now() }] : [] };
+  // Map a service line's calendar → the staff member (calendars are named per tech).
+  const techForCal = cid => { const nm = (_calCalendars.find(c => c.id === cid)?.name || '').trim().toLowerCase(); return nm ? cfg().staff.find(s => (s.name||'').trim().toLowerCase() === nm) : null; };
+  const now = Date.now();
+  // Preserve EVERY booked service + its assigned tech (was: only svcs[0] with the event-calendar tech).
+  let assignments = lines.filter(l => l.svcId).map(l => { const t = techForCal(l.calId || calId); return { serviceId: l.svcId, techId: t?.id || '', station: '', status: 'waiting', cost: 0, assignedAt: now }; });
+  if (assignments.length === 0 && svcs.length) { const t = techForCal(calId); assignments = svcs.map(sid => ({ serviceId: sid, techId: t?.id || '', station: '', status: 'waiting', cost: 0, assignedAt: now })); }
+  const entry = { id: Date.now()*1000 + Math.floor(Math.random()*1000), name: title, phone, services: svcs.length > 0 ? svcs : (cfg().services.length > 0 ? [cfg().services[0].id] : []), status: 'waiting', checkinTime: new Date().toISOString(), isAppointment: true, isNew: true, skipSquare: false, groupId: null, calEventId: eventId, assignments };
   dispatch('queue.upsert', { entry });
   squareUpsertCustomer(entry);
   window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.(); window.showDashPanel?.('queue');
