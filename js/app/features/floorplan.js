@@ -56,8 +56,10 @@ function collectFloor() {
     if (localDateStr(new Date(e.checkinTime)) !== today) return;
     const active = activeAssignments(e);
     const at = active.find(a => a.station && STATIONS.includes(a.station));
-    if (at) { if (!byStation[at.station]) byStation[at.station] = e; }
-    else if (active.length) unplaced.push(e);
+    // A customer's seat = a service's station, else the entry-level station set by dragging on the plan.
+    const station = at ? at.station : (e.station && STATIONS.includes(e.station) ? e.station : null);
+    if (station) { if (!byStation[station]) byStation[station] = e; }
+    else unplaced.push(e);   // ANY active customer not yet seated — including ones with no service/tech assigned
   });
   return { byStation, unplaced };
 }
@@ -74,11 +76,11 @@ function stationHtml(id, entry) {
   const radius = L.shape === 'circle' ? '9999px' : L.shape === 'square' ? '4px' : '14px';
   const sel = _selected.has(id);
   const fs = L.font || 1;
-  const live = !!entry && entryInservice(entry);
+  const live = !!entry && (entryInservice(entry) || entry.status === 'inservice');
   // Empty (or any station while editing the layout) shows the editor's custom color.
-  // In the live view, an occupied seat shows its status: GREEN in service, amber waiting.
+  // In the live view, an occupied seat MATCHES the customer's status: GREEN in service, ORANGE waiting.
   let bg = (L.fill || ACCENT[id[0]]) + '17', border = L.outline || ACCENT[id[0]];
-  if (entry && !floorEditMode) { if (live) { bg = '#bfe6bd'; border = '#2a7a4f'; } else { bg = '#ffe2b8'; border = '#e8a230'; } }
+  if (entry && !floorEditMode) { if (live) { bg = '#bfe6bd'; border = '#2a7a4f'; } else { bg = '#ffe0c2'; border = '#e8730a'; } }
   let content;
   if (entry) {
     content = `<div class="${floorEditMode ? '' : 'floor-bubble cursor-pointer'} h-full w-full flex flex-col justify-center px-1.5 py-1 overflow-hidden" ${floorEditMode ? '' : `data-entry-id="${entry.id}"`}>
@@ -173,9 +175,8 @@ function seatCustomer(entryId, stationId) {
   if (!e) return;
   const occupant = collectFloor().byStation[stationId];
   if (occupant && String(occupant.id) !== String(e.id)) { showToast(`${stationId} is taken by ${occupant.name}`); return; }
-  const active = activeAssignments(e);
-  if (!active.length) { showToast('Assign a service first.'); return; }
-  active.forEach(a => { a.station = stationId; });
+  e.station = stationId;                                    // seat the customer — works with OR without an assigned tech
+  activeAssignments(e).forEach(a => { a.station = stationId; });   // keep per-service station in sync (no-op if none yet)
   dispatch('queue.upsert', { entry: e });
   renderFloorPlan();
   showToast(`Seated ${e.name.split(' ')[0]} at ${stationId}`);
