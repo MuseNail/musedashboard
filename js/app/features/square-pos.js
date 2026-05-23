@@ -15,10 +15,14 @@ const queue    = () => getState().queue;
 export function openSquarePOS(entryId) {
   const entry = queue().find(e => String(e.id) === String(entryId));
   if (!entry) return;
-  const cents = Math.round((entry.totalCost || 0) * 100);
+  // Group check-in → charge the whole party's total. To pay separately, split the
+  // ticket in-app first (then each member is its own non-grouped entry).
+  const party = entry.groupId ? queue().filter(e => e.groupId === entry.groupId) : [entry];
+  const cents = Math.round(party.reduce((s, e) => s + (e.totalCost || 0), 0) * 100);
   if (cents <= 0) { showToast('No total — assign a price first.'); return; }
   const appId = sqConfig()?.applicationId;
   if (!appId) { showToast('Add your Square Application ID in Settings → Square first.'); return; }
+  const names = party.map(e => e.name).filter(Boolean).join(', ').slice(0, 120);
   const data = {
     // Must EXACTLY match the Web Callback URL registered in the Square Developer
     // Console (Point of Sale API). Pinned to the app scope so it never varies by route.
@@ -26,7 +30,7 @@ export function openSquarePOS(entryId) {
     callback_url: location.origin + '/musedashboard/',
     client_id: appId,
     version: '1.3',
-    notes: `Muse${entry.name ? ' · ' + entry.name : ''}`,
+    notes: `Muse${names ? ' · ' + names : ''}`,
     options: { supported_tender_types: ['CREDIT_CARD', 'CASH', 'OTHER', 'SQUARE_GIFT_CARD', 'CARD_ON_FILE'] },
   };
   window.location.href = `square-commerce-v1://payment/create?data=${encodeURIComponent(JSON.stringify(data))}`;

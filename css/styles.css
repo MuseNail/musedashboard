@@ -141,6 +141,16 @@
     .numpad-key { min-height: 56px !important; }
   }
 
+  /* Tap responsiveness — applies to ALL pointer types (incl. an iPad with a
+     trackpad/Magic Keyboard, where `pointer: coarse` does NOT match, so the
+     coarse-only rule above wouldn't apply). Crucially also covers clickable
+     [onclick] <div>s (sync pill, cards, rows, toggles), which were previously
+     uncovered and kept iOS's double-tap-zoom delay — the "have to tap twice" feel. */
+  a, button, label, select, input, textarea,
+  [onclick], [role="button"], .dash-tab, .q-action-btn, .tab-btn {
+    touch-action: manipulation;
+  }
+
   /* Queue action buttons — large touch targets */
   .q-action-btn { display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:50%; border:none; cursor:pointer; transition:background 0.15s; flex-shrink:0; }
   .q-action-btn:active { transform:scale(0.92); }
