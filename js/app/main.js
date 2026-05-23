@@ -184,8 +184,37 @@ function wireKeyboard() {
   });
 }
 
+// ── Square POS return handler ─────────────────────
+// Square's mobile-web payment flow returns by opening callback_url in a NEW Safari
+// tab — Apple's sandbox won't let an external app reuse an existing tab, so the tab
+// itself is unavoidable (confirmed by Square). When we detect that return, show a
+// tiny self-closing screen instead of booting a second live dashboard, and try to
+// auto-close (best-effort; iOS usually blocks closing a non-script-opened tab).
+function handleSquarePosReturn() {
+  const fields = (s) => { const o = {}; try { new URLSearchParams(s).forEach((v, k) => { o[k] = v; }); } catch (e) {} return o; };
+  const p = { ...fields(location.hash.replace(/^#/, '')), ...fields(location.search.replace(/^\?/, '')) };
+  if (p.data) { try { Object.assign(p, JSON.parse(p.data)); } catch (e) {} }
+  if (!['status', 'transaction_id', 'client_transaction_id', 'error_code'].some(k => k in p)) return false;
+
+  const errored = p.status === 'error' || !!p.error_code;
+  document.title = 'Muse — Payment';
+  document.body.innerHTML = `
+    <div style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#e8ecee;font-family:-apple-system,system-ui,sans-serif;">
+      <div style="text-align:center;padding:32px;max-width:340px;">
+        <div style="font-size:56px;line-height:1;margin-bottom:16px;">${errored ? '⚠️' : '✓'}</div>
+        <div style="font-size:22px;font-weight:800;color:#1a5252;margin-bottom:8px;">${errored ? 'Payment not completed' : 'Payment complete'}</div>
+        <div style="font-size:15px;color:#555;margin-bottom:24px;">You can close this tab and return to the Muse dashboard.</div>
+        <button onclick="window.close()" style="background:#1a5252;color:#fff;border:none;padding:14px 28px;border-radius:14px;font-size:16px;font-weight:700;">Close tab</button>
+      </div>
+    </div>`;
+  try { window.close(); } catch (e) {}
+  setTimeout(() => { try { window.close(); } catch (e) {} }, 300);
+  return true;
+}
+
 // ── Boot ──────────────────────────────────────────
 function boot() {
+  if (handleSquarePosReturn()) return; // don't boot a 2nd live app in the Square return tab
   sync.start();                       // connect to the DO, hydrate from cache + snapshot
   store.subscribe(onStateChange);
 
