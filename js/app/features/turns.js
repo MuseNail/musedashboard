@@ -1,7 +1,8 @@
 // ── Turns: rotation grid, drag-drop, tech status, turn classification ───────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr, byName } from '../utils.js';
+import { showToast, todayStr, byName, localDateStr } from '../utils.js';
+import { canDo } from '../session.js';
 import { getAssignmentStatus } from './status.js';
 import { renderQueue, updateStats, showGroupAssignModal, switchGroupTab } from './queue.js';
 
@@ -480,18 +481,98 @@ export function clearTurnsHistory() {
   const lbl = document.getElementById('turns-date-label'); if (lbl) lbl.textContent = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
   renderTurns();
 }
+// Past-day grid: built from the synced transaction records for the date (the same
+// source Reports uses, so the two always agree), grouped per technician like the
+// live grid. The device-local muse_turns_history snapshot is used only as a
+// fallback for the tech ordering. Filled bubbles open the historical edit modal.
+function histAssignmentsByTech(dateStr) {
+  const recs = (window.buildCombinedRecords?.() || []).filter(r => r.status === 'done' && localDateStr(new Date(r.checkinTime)) === dateStr);
+  const byTech = {};
+  recs.forEach(r => (r.assignments || []).forEach(a => {
+    const tid = a.techId || '__unassigned__';
+    (byTech[tid] ||= []).push({ entry: r, assignment: a });
+  }));
+  Object.values(byTech).forEach(list => list.sort((x, y) =>
+    (x.assignment.assignedAt || new Date(x.entry.checkinTime).getTime()) -
+    (y.assignment.assignedAt || new Date(y.entry.checkinTime).getTime())));
+  return byTech;
+}
 function renderTurnsHistoryView() {
   const grid = document.getElementById('turns-tech-grid');
-  const hist = turnsHistory[turnsViewingHistory];
-  if (!hist) { grid.innerHTML = '<div class="text-sm font-body text-on-surface-variant py-8 text-center">No turns data for this date.</div>'; return; }
-  const order = hist.order || [], snap = hist.snapshot || [];
-  grid.innerHTML = `<div class="bg-secondary-container/30 rounded-xl px-4 py-2 mb-3 text-sm font-body text-on-surface-variant flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">history</span> Viewing history — read only</div>
-    ${order.map(staffId => {
-      const st = staffById(staffId); if (!st) return '';
-      const staffEntries = snap.filter(e => (e.assignments||[]).some(a => a.techId === staffId));
-      return `<div class="flex items-center border-b border-surface-container-high py-3 gap-3 opacity-80"><div class="w-40 flex-shrink-0 font-headline font-semibold text-on-surface text-sm">${st.name}</div>
-        <div class="flex gap-2 flex-wrap">${staffEntries.map(e => { const a = (e.assignments||[]).find(x => x.techId === staffId); return `<div class="px-3 py-2 bg-surface-container rounded-lg text-xs font-body"><div class="font-semibold">${e.name.split(' ')[0]}</div><div class="text-on-surface-variant">${svc(a?.serviceId)?.label||''} ${a?.cost?'$'+a.cost:''}</div></div>`; }).join('')}</div></div>`;
-    }).join('')}`;
+  if (!grid) return;
+  const dateStr = turnsViewingHistory;
+  const byTech = histAssignmentsByTech(dateStr);
+  const snap = turnsHistory[dateStr];
+
+  let order = (snap?.order || []).filter(id => id && staffById(id));
+  if (order.length === 0) order = getActiveTurnsOrder();
+  Object.keys(byTech).forEach(tid => { if (tid !== '__unassigned__' && !order.includes(tid)) order.push(tid); });
+
+  const canAdd = canDo('historicalEntry');
+  const addBtn = canAdd
+    ? `<button onclick="showHistoricalEntryModal(null,'${dateStr}')" class="ml-auto flex items-center gap-1 bg-primary text-on-primary px-3 py-1.5 rounded-lg text-xs font-headline font-bold active:scale-95 transition-all"><span class="material-symbols-outlined" style="font-size:16px">add</span> Add turn to this day</button>`
+    : '';
+  const banner = `<div class="bg-secondary-container/30 rounded-xl px-4 py-2 mb-3 text-sm font-body text-on-surface-variant flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">history</span> Past day — built from saved transactions${canAdd ? '. Tap a turn to edit.' : ''}${addBtn}</div>`;
+
+  const hasData = Object.values(byTech).some(l => l.length);
+  if (!hasData) {
+    grid.innerHTML = banner + `<div class="text-sm font-body text-on-surface-variant py-8 text-center opacity-70">No completed turns recorded for this day.${canAdd ? '<br>Use “Add turn to this day” to recreate them.' : ''}</div>`;
+    return;
+  }
+
+  const rowFor = (tid) => {
+    const items = byTech[tid] || [];
+    if (!items.length) return '';
+    const isUnassigned = tid === '__unassigned__';
+    const st = isUnassigned ? null : staffById(tid);
+    if (!isUnassigned && !st) return '';
+    const name = isUnassigned ? 'Unassigned' : st.name;
+    const accent = isUnassigned ? '#9aa0a3' : '#1a5252';
+
+    let full = 0, half = 0, bonus = 0, billed = 0;
+    items.forEach(({ assignment: a }) => {
+      const t = classifyTurn(a.cost || 0, a.serviceId || '');
+      if (t === 'full') full++; else if (t === 'half') half += 0.5; else if (t === 'bonus') bonus++;
+      billed += a.cost || 0;
+    });
+    const total = full + half;
+    const isHalf = !Number.isInteger(total) && total > 0;
+    const photo = (!isUnassigned && st.photo)
+      ? `<img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border-2 flex-shrink-0" style="border-color:${accent}">`
+      : `<div class="w-10 h-10 rounded-full flex items-center justify-center border-2 flex-shrink-0 text-sm font-headline font-bold" style="background:${accent}20;border-color:${accent};color:${accent}">${isUnassigned ? '?' : name.charAt(0).toUpperCase()}</div>`;
+    const turnDisplay = total > 0
+      ? `<span class="text-sm font-headline font-bold ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:' + accent}">${total}t</span>`
+      : `<span class="text-sm font-headline text-outline-variant">0t</span>`;
+    const techCol = `<div class="flex items-center gap-2 w-[155px] flex-shrink-0 pr-2">${photo}
+      <div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate leading-tight">${name}</div>
+      <div class="flex items-center gap-1.5 mt-0.5">${turnDisplay}${bonus > 0 ? `<span class="text-[10px] text-secondary">+${bonus}b</span>` : ''}</div>
+      <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
+
+    let turnCounter = 0;
+    const slotHtml = items.map(({ entry: e, assignment: a }) => {
+      const cost = a.cost || 0;
+      const tt = classifyTurn(cost, a.serviceId || '');
+      if (tt === 'full') turnCounter += 1; else if (tt === 'half') turnCounter += 0.5;
+      const turnLabelNum = Number.isInteger(turnCounter) ? turnCounter : turnCounter.toFixed(1);
+      const turnLabel = tt === 'bonus' ? 'Bonus' : (cost === 0 ? '?' : '' + turnLabelNum);
+      const s = svc(a.serviceId);
+      const svcLabel = s ? s.label : (e.services || []).map(sid => svc(sid)?.label || '?').join(', ');
+      const costStr = cost ? '$' + Number(cost).toFixed(0) : '';
+      const timeStr = new Date(e.checkinTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const tap = canAdd ? `onclick="showHistoricalEntryModal('${e.id}')"` : '';
+      return `<div class="flex-shrink-0 w-[150px] px-1">
+        <button ${tap} class="w-full rounded-xl px-2 py-1.5 text-left ${canAdd ? 'active:scale-95 cursor-pointer' : 'cursor-default'} transition-all text-xs font-body" style="background:#dde2e5;color:#555;min-height:66px">
+          <div class="flex items-center justify-between gap-0.5 mb-0.5"><span class="font-semibold text-[11px] truncate">${e.name}</span>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="opacity:0.75">${turnLabel}</span>` : ''}</div>
+          <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
+          <div class="text-[9px] opacity-60">${timeStr}</div>
+        </button></div>`;
+    }).join('');
+
+    return `<div class="flex items-center border-b border-surface-container-high py-2 gap-2">${techCol}
+      <div class="flex gap-1.5 overflow-x-auto pb-0.5" style="min-width:0;flex:1;scrollbar-width:thin">${slotHtml}</div></div>`;
+  };
+
+  grid.innerHTML = banner + order.map(rowFor).filter(Boolean).join('') + rowFor('__unassigned__');
 }
 
 // ── Drag & drop (event delegation) ────────────────

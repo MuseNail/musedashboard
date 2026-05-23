@@ -395,7 +395,7 @@ export function confirmDeleteTransaction() {
 
 // ── Historical transaction entry (admin) ──────────
 let _histMode = 'add', _histEditId = null, _histType = 'Walk-In', _histSelectedSvcs = [], _histAssignments = {}, _histItems = [], _histFees = [];
-export function showHistoricalEntryModal(editId) {
+export function showHistoricalEntryModal(editId, prefillDate) {
   if (!canDo('historicalEntry')) { showToast('Permission denied'); return; }
   _histMode = editId ? 'edit' : 'add'; _histEditId = editId || null;
   _histSelectedSvcs = []; _histAssignments = {}; _histItems = []; _histFees = [];
@@ -422,7 +422,7 @@ export function showHistoricalEntryModal(editId) {
     _histType = rec.isAppointment ? 'Appointment' : 'Walk-In';
   } else {
     if (title) title.textContent = 'Add Historical Transaction';
-    document.getElementById('hist-date').value = yesterdayStr;
+    document.getElementById('hist-date').value = (prefillDate && prefillDate < todayStr()) ? prefillDate : yesterdayStr;
     document.getElementById('hist-time').value = '12:00';
     document.getElementById('hist-name').value = '';
     document.getElementById('hist-phone').value = '';
@@ -513,4 +513,5 @@ export function saveHistoricalTransaction() {
   closeHistoricalModal();
   renderTransactions();
   if (document.getElementById('panel-reports')?.classList.contains('active')) runReport();
+  window.renderTurns?.();   // keep the past-day Turns grid in sync when added/edited from there
 }
