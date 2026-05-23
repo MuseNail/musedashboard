@@ -103,7 +103,13 @@ export function runReport() {
     const m = staffMap[a.techId]; m.income += a.cost||0; m.count++;
     const t = classifyTurn(a.cost||0, a.serviceId||''); if (t==='full') m.fullTurns++; else if (t==='half') m.halfTurns += 0.5; else m.bonusTurns++;
   }));
-  const staffEntries = Object.entries(staffMap).sort((a,b)=>b[1].income-a[1].income);
+  const turnsOrder = cfg().turns_order || [];
+  const staffEntries = Object.entries(staffMap).sort((a,b)=>{
+    const ra = turnsOrder.indexOf(a[0]) === -1 ? Infinity : turnsOrder.indexOf(a[0]);
+    const rb = turnsOrder.indexOf(b[0]) === -1 ? Infinity : turnsOrder.indexOf(b[0]);
+    if (ra !== rb) return ra - rb;            // rotation order; non-rotation techs last
+    return b[1].income - a[1].income;          // both off-rotation → by income
+  });
   const totalComm = staffEntries.reduce((sum,[id,d])=>{ const t = staffById(id); return t?.commission != null ? sum + d.income*t.commission/100 : sum; }, 0);
   set('rpt-shop-keeps', `$${(totalIncome-totalComm).toFixed(2)}`); set('rpt-total-commission', `$${totalComm.toFixed(2)}`);
 

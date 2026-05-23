@@ -158,6 +158,9 @@ export function renderTurnsTechGrid() {
     if (!st) return '';
     const turns = getTechTurns(staffId);
     const allAssign = getTechAllAssignments(staffId);
+    // Billed today = sum of this tech's assignment costs on completed (done)
+    // transactions — matches the Reports "Billed" figure for today.
+    const billed = allAssign.reduce((sum, it) => sum + (it.entry.status === 'done' ? (it.assignment.cost || 0) : 0), 0);
     if (allAssign.some(a => getAssignmentStatus(a.entry, a.assignment) === 'inservice')) activeCount++;
     const sc = getTechStatusColor(staffId);
     const photo = st.photo
@@ -170,7 +173,8 @@ export function renderTurnsTechGrid() {
     const techCol = `<div class="flex items-center gap-2 w-[155px] flex-shrink-0 pr-2">
       <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
       <div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate leading-tight">${st.name}</div>
-      <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none" style="background:${sc.bg};color:${sc.text}">${sc.label}</span>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div></div></div>`;
+      <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none" style="background:${sc.bg};color:${sc.text}">${sc.label}</span>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
+      <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
 
     const MIN_SLOTS = 5;
     const totalSlots = Math.max(MIN_SLOTS, allAssign.length + 1);
