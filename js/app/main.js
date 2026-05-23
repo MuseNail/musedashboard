@@ -78,10 +78,9 @@ function showStaffListView() {
 }
 Object.assign(window, { goTo, showDashPanel, toggleStaffScheduleView, showStaffListView });
 
-// Header pills / obsolete-button stubs (the DO syncs in real time, so manual
-// "sync to sheets" actions are no-ops now).
-window.forceSyncNow      = () => utils.showToast(store.getState().connected ? 'Live — in sync' : 'Reconnecting…');
-window.exportAllToSheets = () => utils.showToast('Auto-synced to the cloud ✓');
+// Live-sync status pill: clicking it just reports DO connection state (the DO
+// syncs in real time — there's no manual sync to trigger).
+window.forceSyncNow = () => utils.showToast(store.getState().connected ? 'Live — in sync' : 'Reconnecting…');
 
 // ── Store subscription → re-render the active panel on (remote) changes ───────
 function updateSyncIndicator(state) {

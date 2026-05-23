@@ -122,10 +122,6 @@ export function renderGiftCards() {
   }).join('');
 }
 
-// Gift cards now sync automatically through the DO — the legacy "Sync to Sheets"
-// button just confirms that.
-export function exportGiftCardsSheets() { showToast('Gift cards sync automatically ✓'); }
-
 // ── Backup / restore / clear ──────────────────────
 export function exportAllData() {
   const s = getState();
