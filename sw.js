@@ -1,101 +1,82 @@
-// ── Service Worker ────────────────────────────────
-// Cache name must match APP_VERSION. Bump this whenever APP_VERSION changes
-// in js/config.js so old caches are purged on the next activation.
-const CACHE_NAME = 'muse-v2.00';
+// ── Service Worker (v2.01 — modular ES-module client) ───────────────────────
+// CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
+// three together on deploy so old caches purge on activation.
+const CACHE_NAME = 'muse-v2.01';
 
-// Static assets to precache on install.
-// All paths are absolute from the GitHub Pages origin.
 const PRECACHE_URLS = [
   '/musedashboard/',
   '/musedashboard/index.html',
   '/musedashboard/css/styles.css',
-  '/musedashboard/js/utils.js',
-  '/musedashboard/js/config.js',
-  '/musedashboard/js/sync.js',
-  '/musedashboard/js/photos.js',
-  '/musedashboard/js/auth.js',
-  '/musedashboard/js/catalog.js',
-  '/musedashboard/js/square-customers.js',
-  '/musedashboard/js/square-catalog.js',
-  '/musedashboard/js/square-pos.js',
-  '/musedashboard/js/staff.js',
-  '/musedashboard/js/checkin.js',
-  '/musedashboard/js/queue.js',
-  '/musedashboard/js/turns.js',
-  '/musedashboard/js/reports.js',
-  '/musedashboard/js/giftcards.js',
-  '/musedashboard/js/calendar.js',
-  '/musedashboard/js/settings.js',
-  '/musedashboard/js/app.js',
+  '/musedashboard/manifest.json',
+  // App core
+  '/musedashboard/js/app/main.js',
+  '/musedashboard/js/app/store.js',
+  '/musedashboard/js/app/sync.js',
+  '/musedashboard/js/app/config.js',
+  '/musedashboard/js/app/session.js',
+  '/musedashboard/js/app/utils.js',
+  // Feature modules
+  '/musedashboard/js/app/features/auth.js',
+  '/musedashboard/js/app/features/photos.js',
+  '/musedashboard/js/app/features/catalog.js',
+  '/musedashboard/js/app/features/square-customers.js',
+  '/musedashboard/js/app/features/square-catalog.js',
+  '/musedashboard/js/app/features/square-pos.js',
+  '/musedashboard/js/app/features/staff.js',
+  '/musedashboard/js/app/features/checkin.js',
+  '/musedashboard/js/app/features/status.js',
+  '/musedashboard/js/app/features/queue.js',
+  '/musedashboard/js/app/features/turns.js',
+  '/musedashboard/js/app/features/reports.js',
+  '/musedashboard/js/app/features/giftcards.js',
+  '/musedashboard/js/app/features/settings.js',
+  '/musedashboard/js/app/features/calendar.js',
 ];
 
-// ── Install ───────────────────────────────────────
-// Precache all static assets. skipWaiting() activates the new SW immediately
-// instead of waiting for all existing tabs to close.
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(PRECACHE_URLS))
+      // Use individual puts so one missing file doesn't fail the whole install.
+      .then(cache => Promise.all(PRECACHE_URLS.map(u => cache.add(u).catch(() => {}))))
       .then(() => self.skipWaiting())
   );
 });
 
-// ── Activate ──────────────────────────────────────
-// Delete every cache that doesn't match CACHE_NAME. This purges old version
-// caches automatically whenever the SW updates (i.e. on every version bump).
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
-      ))
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
 
-// ── Fetch ─────────────────────────────────────────
 self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
-
-  // Only handle same-origin requests under our repo path.
-  // Everything else (Cloudflare Workers proxies, Square, Google Fonts, Tailwind CDN)
-  // goes straight to the network — don't cache external API calls.
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== self.location.origin) return;            // proxies/CDN → network
   if (!url.pathname.startsWith('/musedashboard/')) return;
-
-  // Never intercept requests that explicitly bypass the cache (e.g. checkAppVersion()
-  // fetches version.json with cache:'no-store'). Let those go to the network directly.
   if (req.cache === 'no-store' || req.cache === 'no-cache') return;
 
-  // Network-first for HTML, version.json, and config.js so version bumps propagate
-  // immediately. config.js carries APP_VERSION — serving it stale causes a reload
-  // loop when checkAppVersion() detects a mismatch on every soft reload.
-  // Falls back to cache only when offline.
+  // Network-first for the shell + version stamp + the config module (carries
+  // APP_VERSION), so deploys propagate immediately; fall back to cache offline.
   if (
     url.pathname.endsWith('version.json') ||
-    url.pathname.endsWith('/js/config.js') ||
+    url.pathname.endsWith('/js/app/config.js') ||
     url.pathname === '/musedashboard/' ||
     url.pathname.endsWith('/index.html')
-  ) {
-    event.respondWith(networkFirst(req));
-    return;
-  }
+  ) { event.respondWith(networkFirst(req)); return; }
 
-  // Cache-first for JS, CSS, and icons — these are versioned by CACHE_NAME.
+  // Cache-first for the rest (versioned by CACHE_NAME, purged on activate).
   event.respondWith(cacheFirst(req));
 });
 
 async function networkFirst(req) {
   try {
     const res = await fetch(req);
-    // Refresh the cache entry while we're here
     const cache = await caches.open(CACHE_NAME);
     cache.put(req, res.clone());
     return res;
-  } catch {
-    return caches.match(req);
-  }
+  } catch { return caches.match(req); }
 }
 
 async function cacheFirst(req) {
@@ -106,7 +87,5 @@ async function cacheFirst(req) {
     const cache = await caches.open(CACHE_NAME);
     cache.put(req, res.clone());
     return res;
-  } catch {
-    return new Response('Offline', { status: 503 });
-  }
+  } catch { return new Response('Offline', { status: 503 }); }
 }
