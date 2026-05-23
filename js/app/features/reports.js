@@ -199,10 +199,18 @@ function showDrillPanel(title, html) {
 export function closeDrillDown() { document.getElementById('rpt-drill-panel').classList.add('hidden'); }
 
 // ── Transactions list ─────────────────────────────
+export function txnToday() { const el = document.getElementById('txn-date-filter'); if (el) el.value = todayStr(); renderTransactions(); }
 export function renderTransactions() {
   const list = document.getElementById('txn-list'), empty = document.getElementById('txn-empty');
   if (!list) return;
   const dateFilter = document.getElementById('txn-date-filter')?.value;
+  const banner = document.getElementById('txn-history-banner');
+  if (banner) {
+    const isPast = dateFilter && dateFilter !== todayStr();
+    banner.classList.toggle('hidden', !isPast);
+    const bt = document.getElementById('txn-history-banner-text');
+    if (isPast && bt) bt.textContent = `Viewing ${new Date(dateFilter+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})} — not today`;
+  }
   let combined = buildCombinedRecords();
   if (dateFilter) combined = combined.filter(r => localDateStr(new Date(r.checkinTime)) === dateFilter);
   combined = combined.filter(r => r.status === 'done' || r.status === 'refund').sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime));
