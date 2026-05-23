@@ -485,14 +485,14 @@ export async function saveAppt() {
         await gapi.client.calendar.events.insert({ calendarId: primaryCalId, resource: { summary: [gFirst,gLast].filter(Boolean).join(' '), description: [gPhone,notes].filter(Boolean).join('\n'), start: { dateTime: startDt.toISOString() }, end: { dateTime: endDt.toISOString() } } });
       }
     }
-    closeApptModal(); await calLoadAndRender(); showToast('Appointment saved ✓');
+    closeApptModal(); await calLoadAndRender(true); showToast('Appointment saved ✓');
   } catch (err) { showToast('Save failed: ' + (err.result?.error?.message || 'Unknown error')); }
 }
 export async function deleteAppt(calIdParam, eventIdParam) {
   const calId = calIdParam || document.getElementById('appt-cal-id')?.value, eventId = eventIdParam || document.getElementById('appt-event-id')?.value;
   if (!calId || !eventId) return;
   if (!calIdParam && !confirm('Cancel this appointment?')) return;
-  try { await gapi.client.calendar.events.delete({ calendarId: calId, eventId }); if (!calIdParam) closeApptModal(); await calLoadAndRender(); showToast('Appointment cancelled'); }
+  try { await gapi.client.calendar.events.delete({ calendarId: calId, eventId }); if (!calIdParam) closeApptModal(); await calLoadAndRender(true); showToast('Appointment cancelled'); }
   catch (err) { showToast('Delete failed: ' + (err.result?.error?.message || 'Unknown error')); }
 }
 
