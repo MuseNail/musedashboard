@@ -1,15 +1,21 @@
 // ── Cloudflare Worker — musedashboard ─────────────────────────────────────────
 //
 // Routes
-//   GET/POST /sheets        — CORS proxy → Google Apps Script doPost
 //   GET/POST/PUT /square/*  — CORS proxy → Square API
 //   PUT      /photos/{key}  — Upload binary to R2, returns { url }
 //   GET      /photos/{key}  — Serve object from R2 (used as <img src>)
 //   DELETE   /photos/{key}  — Delete object from R2
+//   POST     /backup/run    — Manually trigger the daily Sheets backup (token-gated; for testing)
+//   /ws, /state/*           — Durable Object sync (source of truth)
+//
+// Google Sheets is now a WRITE-ONLY daily backup target only (the app never reads
+// from it). The nightly cron exports yesterday's turns/queue/transactions to a
+// fresh Apps Script via SHEETS_URL. The old /sheets config proxy + KV cache are gone.
 //
 // Required secrets (set via: wrangler secret put <NAME>)
-//   SHEETS_URL      Google Apps Script doPost endpoint (web app URL)
+//   SHEETS_URL      Google Apps Script web-app /exec URL (daily backup intake)
 //   SQUARE_TOKEN    Square access token
+//   RESTORE_TOKEN   (optional) gates /state/restore and /backup/run
 //
 // Optional environment variables (wrangler.toml [vars])
 //   SQUARE_BASE_URL Defaults to https://connect.squareup.com
@@ -36,25 +42,120 @@ function json(data, status = 200) {
   });
 }
 
-// Called by the Cron Trigger at 4:05 AM Pacific every night.
-// Forwards an archiveDay request to Apps Script, which computes the day's
-// stats, sends the Gmail summary, and clears the live queue.
-async function _runMidnightArchive(env) {
+// ── Daily one-way backup → Google Sheets ────────────────────────────────────
+// Runs from the Cron Trigger (10:30 UTC = 2:30 AM PST / 3:30 AM PDT — always
+// BEFORE the client's 4 AM day-reset, so the queue is still intact). Reads the
+// just-finished business day (yesterday, Pacific) from the DO and POSTs a
+// detailed, one-way backup to the fresh write-only Apps Script. The app never
+// reads this sheet. Records are the financial truth; turns are derived from
+// them; the queue is the pre-reset snapshot. Failure is logged, not fatal.
+const PACIFIC = 'America/Los_Angeles';
+const pacificDate = (ms) => new Date(ms).toLocaleDateString('en-CA', { timeZone: PACIFIC });
+
+async function _runDailyBackup(env, dateOverride) {
   const sheetsUrl = (env.SHEETS_URL || '').trim();
-  if (!sheetsUrl) return;
-  // clientDate in Pacific Time so Apps Script uses the right day
-  const clientDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+  if (!sheetsUrl) { console.warn('[Backup] SHEETS_URL not set — skipped'); return { skipped: true }; }
+  // Shift back 6h so the small-hours run lands on the previous Pacific evening,
+  // then take that calendar date — the just-finished business day.
+  const targetDate = dateOverride || pacificDate(Date.now() - 6 * 3600 * 1000);
   try {
+    const stub    = env.SALON_DO.get(env.SALON_DO.idFromName('muse'));
+    const snapRes = await stub.fetch('https://do/state/snapshot');
+    const snap    = await snapRes.json();
+    const payload = buildDailyBackup(snap.state || {}, targetDate);
     const res = await fetch(sheetsUrl, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ action: 'archiveDay', clientDate }),
+      body:    JSON.stringify({ action: 'dailyBackup', ...payload }),
     });
-    const data = await res.json();
-    console.log('[Cron] archiveDay:', JSON.stringify(data));
-  } catch(e) {
-    console.error('[Cron] archiveDay failed:', e.message);
+    console.log('[Backup]', targetDate, 'HTTP', res.status,
+      `tx=${payload.transactions.rows.length} turns=${payload.turns.rows.length} queue=${payload.queue.rows.length}`);
+    return { ok: res.ok, date: targetDate, status: res.status };
+  } catch (e) {
+    console.error('[Backup] failed:', e && e.message || e);
+    return { ok: false, error: String(e) };
   }
+}
+
+// Build the one-day backup payload from a DO snapshot. Mirrors the client's
+// buildCombinedRecords (merge live `done` queue entries with stored records,
+// dedupe by id, drop deleted) so the backup matches what Reports/Transactions
+// show — no double-counting.
+function buildDailyBackup(state, dateStr) {
+  const config    = state.config    || {};
+  const queue     = state.queue     || [];
+  const records   = state.records   || [];
+  const deletions = state.deletions || [];
+
+  const svcById = {}; (config.services || []).forEach(s => { svcById[s.id] = s.label || s.abbr || s.id; });
+  const staffById = {}; (config.staff || []).forEach(s => { staffById[s.id] = s.name; });
+
+  const deletedIds = new Set(deletions.map(d => String(d.id)));
+  records.filter(r => r.status === 'deleted').forEach(r => deletedIds.add(String(r.id)));
+
+  const liveDone = queue.filter(e => e.status === 'done' && !deletedIds.has(String(e.id)));
+  const liveIds  = new Set(liveDone.map(e => String(e.id)));
+  const combined = [
+    ...liveDone,
+    ...records.filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted' && !deletedIds.has(String(r.id))),
+  ];
+
+  const onDay = iso => { try { return iso && pacificDate(new Date(iso).getTime()) === dateStr; } catch { return false; } };
+  const svcList   = ids => (ids || []).map(id => svcById[id] || id).join(', ');
+  const techList  = a   => [...new Set((a || []).filter(x => x.techId).map(x => staffById[x.techId] || x.techId))].join(', ');
+  const fmtTime   = iso => { try { return new Date(iso).toLocaleString('en-US', { timeZone: PACIFIC }); } catch { return iso || ''; } };
+  const itemsTot  = r   => (r.items || []).reduce((s, x) => s + (x.price || 0) * (x.qty || 0), 0);
+  const feesTot   = r   => (r.fees  || []).reduce((s, x) => s + (x.amount || 0), 0);
+
+  // Transactions (done + refund), matching Reports.
+  const txnRows = combined
+    .filter(r => onDay(r.checkinTime) && (r.status === 'done' || r.status === 'refund'))
+    .sort((a, b) => new Date(a.checkinTime) - new Date(b.checkinTime))
+    .map(r => [
+      fmtTime(r.checkinTime), r.name || '', r.phone || '', svcList(r.services),
+      techList(r.assignments), +itemsTot(r).toFixed(2), +feesTot(r).toFixed(2),
+      +(r.discount || 0).toFixed(2), +(r.totalCost || 0).toFixed(2),
+      r.status, r.isAppointment ? 'Appointment' : 'Walk-In', r.loggedBy || '',
+    ]);
+
+  // Per-tech turns tally (done only), ordered by the rotation.
+  const tally = {};
+  combined.filter(r => onDay(r.checkinTime) && r.status === 'done').forEach(r => {
+    (r.assignments || []).forEach(a => {
+      if (!a.techId) return;
+      (tally[a.techId] = tally[a.techId] || { count: 0, billed: 0 });
+      tally[a.techId].count++; tally[a.techId].billed += a.cost || 0;
+    });
+  });
+  const order = config.turns_order || [];
+  const turnRows = Object.keys(tally)
+    .sort((a, b) => {
+      const ra = order.indexOf(a) === -1 ? Infinity : order.indexOf(a);
+      const rb = order.indexOf(b) === -1 ? Infinity : order.indexOf(b);
+      return ra - rb;
+    })
+    .map(id => [staffById[id] || id, tally[id].count, +tally[id].billed.toFixed(2)]);
+
+  // Queue snapshot for the day (all statuses).
+  const queueRows = queue
+    .filter(e => onDay(e.checkinTime))
+    .sort((a, b) => new Date(a.checkinTime) - new Date(b.checkinTime))
+    .map(e => [
+      fmtTime(e.checkinTime), e.name || '', e.phone || '', svcList(e.services),
+      techList(e.assignments), e.status || '', +(e.totalCost || 0).toFixed(2),
+      e.isAppointment ? 'Appointment' : 'Walk-In',
+    ]);
+
+  const revenue   = txnRows.filter(r => r[9] === 'done').reduce((s, r) => s + (r[8] || 0), 0);
+  const customers = txnRows.filter(r => r[9] === 'done').length;
+
+  return {
+    date: dateStr,
+    summary: { customers, revenue: +revenue.toFixed(2) },
+    transactions: { columns: ['Time', 'Name', 'Phone', 'Services', 'Technician(s)', 'Items $', 'Fees $', 'Discount $', 'Total $', 'Status', 'Type', 'Logged By'], rows: txnRows },
+    turns:        { columns: ['Technician', 'Customers', 'Billed $'], rows: turnRows },
+    queue:        { columns: ['Time', 'Name', 'Phone', 'Services', 'Technician(s)', 'Status', 'Total $', 'Type'], rows: queueRows },
+  };
 }
 
 export default {
@@ -128,66 +229,14 @@ export default {
       });
     }
 
-    // ── Sheets Proxy ──────────────────────────────────────────────────────────
-    if (path === '/sheets' || path === '/sheets/') {
-      const sheetsUrl = (env.SHEETS_URL || '').trim();
-      if (!sheetsUrl) return json({ error: 'SHEETS_URL not configured' }, 500);
-
-      // Read body once — streams can only be consumed once
-      const bodyText   = method === 'POST' ? await request.text() : null;
-      let   parsedBody = null;
-      if (bodyText) { try { parsedBody = JSON.parse(bodyText); } catch {} }
-
-      const isLoadConfig = method === 'GET' && url.searchParams.get('action') === 'loadConfig';
-      const isSaveConfig = parsedBody?.action === 'saveConfig';
-
-      // KV fast path — serve loadConfig from cache, skipping Apps Script entirely
-      if (isLoadConfig && env.CONFIG_KV) {
-        try {
-          const cached = await env.CONFIG_KV.get('config');
-          if (cached) {
-            return new Response(cached, {
-              status:  200,
-              headers: corsHeaders({ 'Content-Type': 'application/json' }),
-            });
-          }
-        } catch {} // cache miss or KV error — fall through to Apps Script
-      }
-
-      const targetUrl = method === 'GET' && url.search
-        ? `${sheetsUrl}${url.search}`
-        : sheetsUrl;
-
-      const init = { method, headers: { 'Content-Type': 'application/json' } };
-      if (bodyText) init.body = bodyText;
-
-      try {
-        const upstream = await fetch(targetUrl, init);
-        const text     = await upstream.text();
-
-        // KV write-through: keep cache warm after every loadConfig or saveConfig
-        if (env.CONFIG_KV && upstream.ok) {
-          if (isLoadConfig) {
-            // Cache the authoritative Apps Script response (includes recordsUpdatedAt)
-            env.CONFIG_KV.put('config', text, { expirationTtl: 86400 });
-          } else if (isSaveConfig && parsedBody.config) {
-            // Proactively update KV so the next cold start skips Apps Script
-            env.CONFIG_KV.put('config', JSON.stringify({
-              success:          true,
-              config:           parsedBody.config,
-              device:           parsedBody.device || '',
-              recordsUpdatedAt: null,
-            }), { expirationTtl: 86400 });
-          }
-        }
-
-        return new Response(text, {
-          status:  upstream.status,
-          headers: corsHeaders({ 'Content-Type': 'application/json' }),
-        });
-      } catch(e) {
-        return json({ error: 'Sheets proxy error', detail: e.message }, 502);
-      }
+    // ── Manual backup trigger (testing) ─────────────────────────────────────────
+    // POST /backup/run[?date=YYYY-MM-DD] — runs the daily Sheets backup on demand.
+    // Token-gated by RESTORE_TOKEN when set (open in dev when unset).
+    if (path === '/backup/run' && method === 'POST') {
+      let body = {}; try { body = await request.json(); } catch {}
+      if (env.RESTORE_TOKEN && body.token !== env.RESTORE_TOKEN) return json({ error: 'unauthorized' }, 403);
+      const result = await _runDailyBackup(env, url.searchParams.get('date') || body.date);
+      return json(result);
     }
 
     // ── Square Proxy ──────────────────────────────────────────────────────────
@@ -227,7 +276,7 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(_runMidnightArchive(env));
+    ctx.waitUntil(_runDailyBackup(env));
   },
 };
 

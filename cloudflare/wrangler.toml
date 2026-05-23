@@ -3,22 +3,18 @@ main               = "worker.js"
 compatibility_date = "2024-11-20"
 
 # ── Cron Trigger ───────────────────────────────────────────────────────────────
-# Fires at 11:05 AM UTC = 4:05 AM PDT (summer) / 3:05 AM PST (winter)
-# Calls Apps Script to archive the day and send the daily summary email.
+# Fires at 10:30 UTC = 2:30 AM PST (winter) / 3:30 AM PDT (summer) — always BEFORE
+# the client's 4 AM day-reset, so the queue is still intact. Exports yesterday's
+# turns/queue/transactions one-way to Google Sheets (write-only backup) + emails
+# the daily summary. The app never reads from the sheet.
 [triggers]
-crons = ["5 11 * * *"]
+crons = ["30 10 * * *"]
 
 # ── R2 bucket binding ─────────────────────────────────────────────────────────
 # Create the bucket first:  wrangler r2 bucket create musedashboard-photos
 [[r2_buckets]]
 binding     = "PHOTOS_BUCKET"
 bucket_name = "musedashboard-photos"
-
-# ── Workers KV binding ────────────────────────────────────────────────────────
-# Fast config read cache. Create namespace: wrangler kv namespace create CONFIG_CACHE
-[[kv_namespaces]]
-binding = "CONFIG_KV"
-id      = "e293d33d03ab48fd9e3cbef625193546"
 
 # ── Durable Object binding ─────────────────────────────────────────────────────
 # Enables real-time WebSocket sync. Migrations run automatically on deploy.
@@ -36,8 +32,9 @@ new_sqlite_classes = ["MuseSalonDO"]
 #   wrangler secret put SHEETS_URL
 #   wrangler secret put SQUARE_TOKEN
 #
-# SHEETS_URL    — Google Apps Script doPost endpoint (the /exec URL)
+# SHEETS_URL    — FRESH Google Apps Script web-app /exec URL (write-only daily backup intake)
 # SQUARE_TOKEN  — Square access token (sandbox or production)
+# RESTORE_TOKEN — (optional) gates POST /state/restore and POST /backup/run
 
 # ── Optional environment variables ────────────────────────────────────────────
 # [vars]
