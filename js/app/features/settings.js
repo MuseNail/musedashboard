@@ -1,7 +1,7 @@
 // ── Settings panel ──────────────────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast } from '../utils.js';
+import { showToast, byName } from '../utils.js';
 import { canDo, getActiveUser, ui } from '../session.js';
 import { DEFAULT_ROLE_PERMISSIONS } from '../config.js';
 import { renderSettingsDashServiceVisibility, renderSettingsItems, renderSettingsFees } from './catalog.js';
@@ -65,7 +65,7 @@ export function toggleAllActiveStaff() {
 export function renderSettingsActiveStaff() {
   const container = document.getElementById('settings-active-staff');
   if (!container) return;
-  container.innerHTML = cfg().staff.map(st => {
+  container.innerHTML = [...cfg().staff].sort(byName).map(st => {
     const active = isStaffActive(st.id);
     return `<div class="flex items-center justify-between py-2 border-b border-surface-container-high last:border-0">
       <div class="flex items-center gap-3"><div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center"><span class="text-sm font-headline font-bold text-on-surface">${st.name.charAt(0)}</span></div><span class="font-body font-semibold text-on-surface ${active?'':'line-through text-outline-variant'}">${st.name}</span></div>

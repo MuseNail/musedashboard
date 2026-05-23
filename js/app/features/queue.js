@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, formatElapsed } from '../utils.js';
+import { showToast, formatElapsed, byName } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
 import { getAssignmentStatus, deriveEntryStatus, setAssignmentStatus } from './status.js';
@@ -449,7 +449,7 @@ export function renderGroupAssignContent() {
   if (!entry) return;
   const color = entry.groupColor || '#1a5252';
   const content = document.getElementById('group-assign-content');
-  const checkedIn = activeStaff().filter(s => cfg().turns_order.includes(s.id));
+  const checkedIn = activeStaff().filter(s => cfg().turns_order.includes(s.id)).sort(byName);
   const techOptions = sel => checkedIn.length > 0
     ? checkedIn.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}</option>`).join('')
     : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;

@@ -1,7 +1,7 @@
 // ── Google Calendar + Tasks ─────────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, formatPhone } from '../utils.js';
+import { showToast, localDateStr, formatPhone, byName } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer } from './square-customers.js';
 import { squarePushBooking } from './square-pos.js';
 
@@ -347,7 +347,7 @@ export function apptExtraAcFill(idx, name, phone) {
   if (f) f.value = parts[0] || ''; if (l) l.value = parts.slice(1).join(' ') || ''; if (p) { p.value = phone; formatPhone(p); }
   [`appt-extra-ac-phone-${idx}`,`appt-extra-ac-first-${idx}`].forEach(id => { const el = document.getElementById(id); if (el) { el.classList.add('hidden'); el.innerHTML = ''; } });
 }
-function _buildTechOptions(sel) { return '<option value="">— Tech —</option>' + _calCalendars.map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${c.name}</option>`).join(''); }
+function _buildTechOptions(sel) { return '<option value="">— Tech —</option>' + [..._calCalendars].sort(byName).map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${c.name}</option>`).join(''); }
 function _buildSvcOptions(sel) { return '<option value="">— Service —</option>' + cfg().services.filter(s => !cfg().hidden_dash_services.includes(s.id)).map(s => `<option value="${s.id}" ${s.id === sel ? 'selected' : ''}>${s.label}</option>`).join(''); }
 export function renderApptServiceLines() {
   const container = document.getElementById('appt-service-lines'); if (!container) return;

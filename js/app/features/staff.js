@@ -1,7 +1,7 @@
 // ── Staff CRUD + weekly schedule ────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr } from '../utils.js';
+import { showToast, localDateStr, byName } from '../utils.js';
 import { SCHEDULE_COLORS } from '../config.js';
 
 const cfg = () => getState().config;
@@ -11,7 +11,7 @@ const setStaff = (staff) => dispatch('config.set', { key: 'staff', value: staff 
 export function renderStaffList() {
   const list = document.getElementById('staff-list');
   if (!list) return;
-  list.innerHTML = cfg().staff.map(st => {
+  list.innerHTML = [...cfg().staff].sort(byName).map(st => {
     const photoHtml = st.photo
       ? `<button onclick="showEditStaff('${st.id}')" class="flex-shrink-0 focus:outline-none"><img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border border-surface-container-high hover:opacity-80 transition-opacity"></button>`
       : `<button onclick="showEditStaff('${st.id}')" class="flex-shrink-0 focus:outline-none"><div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-primary hover:text-on-primary transition-colors"><span class="text-sm font-headline font-bold text-on-surface">${st.name.charAt(0).toUpperCase()}</span></div></button>`;
@@ -150,7 +150,7 @@ export function renderSchedule() {
       <div class="text-sm font-headline font-bold ${isToday(d) ? 'text-primary' : 'text-on-surface'}">${d.getDate()}</div>
     </div>`).join('');
 
-  const staffRows = cfg().staff.map(st => {
+  const staffRows = [...cfg().staff].sort(byName).map(st => {
     const photoHtml = st.photo
       ? `<img src="${st.photo}" class="w-9 h-9 rounded-full object-cover border border-surface-container-high flex-shrink-0">`
       : `<div class="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center flex-shrink-0"><span class="text-xs font-headline font-bold text-on-surface">${st.name.charAt(0).toUpperCase()}</span></div>`;

@@ -56,6 +56,11 @@ export function dedupByLabel(arr) {
   });
 }
 
+// ── Sort helper ───────────────────────────────────
+// Alphabetical by .name (case-insensitive). For display/selection lists only —
+// not for custom-ordered data (turns rotation, calendar column order).
+export function byName(a, b) { return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }); }
+
 // ── Elapsed Time Timer ────────────────────────────
 let _elapsedTimer = null;
 export function startElapsedTimer() {

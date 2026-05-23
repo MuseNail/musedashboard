@@ -1,7 +1,7 @@
 // ── Turns: rotation grid, drag-drop, tech status, turn classification ───────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr } from '../utils.js';
+import { showToast, todayStr, byName } from '../utils.js';
 import { getAssignmentStatus } from './status.js';
 import { renderQueue, updateStats, showGroupAssignModal, switchGroupTab } from './queue.js';
 
@@ -358,7 +358,7 @@ export function showTurnsTechSelector() {
     list.innerHTML = `<div class="text-sm font-body text-on-surface-variant py-6 text-center">No staff found. Add staff in <strong>Settings → Staff Management</strong> first.</div>`;
     const m = document.getElementById('turns-tech-modal'); m.classList.remove('hidden'); m.style.display = 'flex'; return;
   }
-  const remaining = activeOnly.filter(s => !currentOrder.includes(s.id));
+  const remaining = activeOnly.filter(s => !currentOrder.includes(s.id)).sort(byName);
   const allForDisplay = [...currentOrder.map(id => activeOnly.find(s => s.id === id)).filter(Boolean), ...remaining];
   list.innerHTML = allForDisplay.map(st => {
     const inOrder = currentOrder.includes(st.id), orderIdx = currentOrder.indexOf(st.id);
@@ -370,7 +370,7 @@ export function showTurnsTechSelector() {
   }).join('');
   const m = document.getElementById('turns-tech-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
-export function checkAllTechs() { setOrder(activeStaff().map(s => s.id)); showTurnsTechSelector(); }
+export function checkAllTechs() { setOrder([...activeStaff()].sort(byName).map(s => s.id)); showTurnsTechSelector(); }
 export function uncheckAllTechs() { setOrder([]); showTurnsTechSelector(); }
 export function toggleTurnsTechOrder(staffId) {
   const order = getActiveTurnsOrder();
