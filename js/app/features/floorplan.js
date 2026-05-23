@@ -119,10 +119,24 @@ export function renderFloorPlan() {
   }
 
   grid.style.position = 'relative';
-  let maxBottom = 0;
-  STATIONS.forEach(id => { const L = layoutFor(id); maxBottom = Math.max(maxBottom, L.y + L.h); });
-  grid.style.height = (maxBottom + GAP) + 'px';
-  grid.innerHTML = STATIONS.map(id => stationHtml(id, byStation[id] || null)).join('');
+  let maxRight = 0, maxBottom = 0;
+  STATIONS.forEach(id => { const L = layoutFor(id); maxRight = Math.max(maxRight, L.x + L.w); maxBottom = Math.max(maxBottom, L.y + L.h); });
+  const cw = maxRight + GAP, ch = maxBottom + GAP;
+  const stationsHtml = STATIONS.map(id => stationHtml(id, byStation[id] || null)).join('');
+  if (floorEditMode) {
+    // Full size while arranging (drag stays precise); the editor may scroll.
+    grid.style.overflow = 'auto';
+    grid.style.height = ch + 'px';
+    grid.innerHTML = `<div id="floorplan-canvas" style="position:relative;width:${cw}px;height:${ch}px">${stationsHtml}</div>`;
+  } else {
+    // Live view: scale the whole canvas to fit the screen — no horizontal scroll.
+    const availW = grid.clientWidth || 720;
+    const availH = Math.max(280, window.innerHeight - grid.getBoundingClientRect().top - 16);
+    const s = Math.min(1, availW / cw, availH / ch);
+    grid.style.overflow = 'hidden';
+    grid.style.height = (ch * s) + 'px';
+    grid.innerHTML = `<div id="floorplan-canvas" style="position:relative;width:${cw}px;height:${ch}px;transform-origin:top left;transform:scale(${s})">${stationsHtml}</div>`;
+  }
 }
 
 // ── Edit-mode properties panel ────────────────────
@@ -201,7 +215,7 @@ function snapMove(primaryId, base, rawDx, rawDy, selectedSet) {
   return { dx: rawDx + (bdx === Infinity ? 0 : bdx), dy: rawDy + (bdy === Infinity ? 0 : bdy), guideX: bdx === Infinity ? null : guideX, guideY: bdy === Infinity ? null : guideY };
 }
 function fpGuide(axis, pos) {
-  const grid = document.getElementById('floorplan-grid'); if (!grid) return;
+  const grid = document.getElementById('floorplan-canvas') || document.getElementById('floorplan-grid'); if (!grid) return;
   const gid = axis === 'v' ? 'fp-guide-v' : 'fp-guide-h';
   let g = document.getElementById(gid);
   if (pos === null) { if (g) g.style.display = 'none'; return; }
