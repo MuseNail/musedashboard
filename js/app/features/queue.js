@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, formatElapsed, byName } from '../utils.js';
+import { showToast, formatElapsed, byName, todayStr } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
 import { getAssignmentStatus, deriveEntryStatus, setAssignmentStatus } from './status.js';
@@ -22,11 +22,57 @@ const STATIONS = [...Array.from({length:12}, (_,i)=>`P${i+1}`), ...Array.from({l
 
 const upsert = entry => dispatch('queue.upsert', { entry });
 
+// ── Queue history (read-only past-day view) ───────
+// Source: the daily turns-history snapshot (turns.js archives q() into
+// muse_turns_history each night), so a past day's queue is recoverable without
+// any extra storage. View is read-only — actions only make sense on today's live queue.
+let queueViewingHistory = null;
+
+export function loadQueueHistory(dateStr) {
+  if (!dateStr || dateStr === todayStr()) { clearQueueHistory(); return; }
+  const hist = JSON.parse(localStorage.getItem('muse_turns_history') || '{}')[dateStr];
+  queueViewingHistory = { date: dateStr, snapshot: (hist && hist.snapshot) || [] };
+  document.getElementById('clear-history-btn')?.classList.remove('hidden');
+  renderQueue();
+}
+export function clearQueueHistory() {
+  queueViewingHistory = null;
+  const di = document.getElementById('queue-history-date'); if (di) di.value = todayStr();
+  document.getElementById('clear-history-btn')?.classList.add('hidden');
+  renderQueue();
+}
+
+function renderQueueHistoryView(list, empty) {
+  const { date, snapshot } = queueViewingHistory;
+  empty?.classList.add('hidden');
+  const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' });
+  const banner = `<div class="bg-secondary-container/30 rounded-xl px-4 py-2 mb-3 text-sm font-body text-on-surface-variant flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">history</span> Viewing ${dateLabel} — read only</div>`;
+  if (snapshot.length === 0) { list.innerHTML = banner + '<div class="text-center py-12 text-on-surface-variant text-sm font-body">No queue records saved for this day.</div>'; return; }
+  const badge = { waiting:'badge-waiting', inservice:'badge-inservice', done:'badge-done' };
+  const groups = [ { key:'waiting', label:'Waiting' }, { key:'inservice', label:'In Service' }, { key:'done', label:'Done' } ];
+  const row = e => {
+    const techs = [...new Set((e.assignments||[]).filter(a=>a.techId).map(a=>staffById(a.techId)?.name).filter(Boolean))].join(', ');
+    const svcs = (e.services||[]).map(sid => svc(sid)?.label || sid).join(', ') || '—';
+    const time = new Date(e.checkinTime).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+    return `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between opacity-90">
+      <div class="min-w-0"><div class="flex items-center gap-2 flex-wrap"><span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span><span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badge[e.status]||'badge-done'}">${e.status}</span></div>
+        <div class="text-xs font-body text-on-surface-variant">${svcs}${techs ? ' · ' + techs : ''}</div>
+        <div class="text-[11px] font-body text-outline">${time}</div></div>
+      <div class="font-headline font-bold text-on-surface flex-shrink-0 ml-3">$${(e.totalCost||0).toFixed(2)}</div></div>`;
+  };
+  list.innerHTML = banner + groups.map(g => {
+    const entries = snapshot.filter(e => e.status === g.key);
+    if (!entries.length) return '';
+    return `<div class="mb-4"><div class="flex items-center gap-2 mb-2"><span class="text-[11px] font-headline font-bold uppercase tracking-widest text-on-surface-variant">${g.label}</span><span class="text-[11px] font-body text-on-surface-variant opacity-60">(${entries.length})</span><div class="flex-grow h-px bg-surface-container-high ml-1"></div></div><div class="space-y-2">${entries.map(row).join('')}</div></div>`;
+  }).join('');
+}
+
 // ── Render ────────────────────────────────────────
 export function renderQueue() {
   const list = document.getElementById('queue-list');
   const empty = document.getElementById('queue-empty');
   if (!list) return;
+  if (queueViewingHistory) { renderQueueHistoryView(list, empty); return; }
   let filtered = ui.currentFilter === 'all' ? [...q()] : q().filter(e => e.status === ui.currentFilter);
   if (ui.currentFilter === 'all' && !ui.showDoneInQueue) filtered = filtered.filter(e => e.status !== 'done');
   const order = { waiting: 0, inservice: 1, done: 2 };

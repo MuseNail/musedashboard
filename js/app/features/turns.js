@@ -265,8 +265,6 @@ export function renderTurnsQueue() {
   activeList.innerHTML = inservice.length === 0 ? '<div class="px-4 py-3 text-xs text-on-surface-variant text-center">No one in service</div>' : inservice.map(buildCard).join('');
 }
 
-export function setupTurnsDragDrop() { /* handled by the document-level delegation below */ }
-
 function reorderTurnSlots(techId, moveEntryId, beforeEntryId) {
   const allAssign = getTechAllAssignments(techId);
   const moveItem = allAssign.find(a => String(a.entry.id) === String(moveEntryId));

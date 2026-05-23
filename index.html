@@ -1266,30 +1266,6 @@ tailwind.config = {
 </div>
 
 
-<div id="assign-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-md shadow-2xl fade-up mx-4 max-h-[90vh] overflow-y-auto no-scroll">
-    <div class="flex items-center justify-between mb-1">
-      <h2 class="text-xl font-headline font-bold text-on-surface">Assign & Price</h2>
-      <button onclick="closeAssignModal()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
-    </div>
-    <p id="assign-guest-name" class="text-sm font-body text-on-surface-variant mb-3"></p>
-
-    <!-- Inline service selector -->
-    <div class="mb-4">
-      <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Services — tap to add or remove</label>
-      <div class="grid grid-cols-4 gap-2" id="assign-service-picker"></div>
-    </div>
-    <div id="assign-services-list" class="space-y-4 mb-4"></div>
-    <div class="border-t border-surface-container-high pt-4 flex items-center justify-between mb-4">
-      <span class="font-body font-semibold text-on-surface">Total</span>
-      <span id="assign-total" class="text-xl font-headline font-bold text-primary">$0.00</span>
-    </div>
-    <div class="flex flex-col gap-2">
-      <button onclick="saveAssignments()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">Save</button>
-    </div>
-  </div>
-</div>
-
 <!-- ═══════════════════════════════════════════════
      GROUP ASSIGN MODAL (multi-guest tabs)
 ═══════════════════════════════════════════════ -->
