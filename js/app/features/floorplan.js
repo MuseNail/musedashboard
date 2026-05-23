@@ -74,20 +74,22 @@ function stationHtml(id, entry) {
   const radius = L.shape === 'circle' ? '9999px' : L.shape === 'square' ? '4px' : '14px';
   const sel = _selected.has(id);
   const fs = L.font || 1;
-  const fillTint = (L.fill || ACCENT[id[0]]) + '17';
+  const live = !!entry && entryInservice(entry);
+  // Empty (or any station while editing the layout) shows the editor's custom color.
+  // In the live view, an occupied seat shows its status: GREEN in service, amber waiting.
+  let bg = (L.fill || ACCENT[id[0]]) + '17', border = L.outline || ACCENT[id[0]];
+  if (entry && !floorEditMode) { if (live) { bg = '#bfe6bd'; border = '#2a7a4f'; } else { bg = '#ffe2b8'; border = '#e8a230'; } }
   let content;
   if (entry) {
-    const live = entryInservice(entry);
-    const dot = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${live ? '#2a7a4f' : '#e8a230'};margin-right:4px;flex-shrink:0"></span>`;
     content = `<div class="${floorEditMode ? '' : 'floor-bubble cursor-pointer'} h-full w-full flex flex-col justify-center px-1.5 py-1 overflow-hidden" ${floorEditMode ? '' : `data-entry-id="${entry.id}"`}>
-      <div class="flex items-center font-semibold" style="font-size:${Math.round(11 * fs)}px;color:#1f2937"><span class="truncate">${dot}${entry.name}</span></div>
+      <div class="font-semibold truncate" style="font-size:${Math.round(11 * fs)}px;color:#1f2937">${entry.name}</div>
       <div class="overflow-hidden leading-tight">${custLines(entry, id, fs)}</div></div>`;
   } else {
-    content = `<div class="h-full w-full flex items-center justify-center" style="font-size:${Math.round(12 * fs)}px;font-weight:800;color:${L.outline};opacity:0.55">${id}</div>`;
+    content = `<div class="h-full w-full flex items-center justify-center" style="font-size:${Math.round(12 * fs)}px;font-weight:800;color:${border};opacity:0.55">${id}</div>`;
   }
   return `<div class="floor-station absolute ${floorEditMode ? 'cursor-move' : ''}" data-station="${id}"
-    style="left:${L.x}px;top:${L.y}px;width:${L.w}px;height:${L.h}px;box-sizing:border-box;border:2px solid ${L.outline};border-radius:${radius};background:${fillTint};overflow:hidden;${sel ? 'outline:3px solid #1a5252;outline-offset:2px;' : ''}">
-    ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${L.outline};opacity:0.6;pointer-events:none">${id}</div>` : ''}
+    style="left:${L.x}px;top:${L.y}px;width:${L.w}px;height:${L.h}px;box-sizing:border-box;border:2px solid ${border};border-radius:${radius};background:${bg};overflow:hidden;${sel ? 'outline:3px solid #1a5252;outline-offset:2px;' : ''}">
+    ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${border};opacity:0.65;pointer-events:none">${id}</div>` : ''}
     ${content}
   </div>`;
 }
