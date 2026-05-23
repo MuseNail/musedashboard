@@ -579,6 +579,7 @@ function renderTurnsHistoryView() {
 (function initTurnsDrag() {
   let dragEntryId = null, dragTechId = null, dragClone = null, isDragging = false;
   const DRAG_THRESH = 6; let startX = 0, startY = 0, pendingEntry = null;
+  let justDragged = false;   // suppress the click that trails a real drag (so a reorder doesn't also open Assign&Price)
   function getTarget(e, selector) { let el = e.target; while (el && el !== document.body) { if (el.matches && el.matches(selector)) return el; el = el.parentElement; } return null; }
   function startDrag(card) {
     isDragging = true; dragEntryId = card.dataset.entryId; dragTechId = card.dataset.techId || null;
@@ -591,6 +592,7 @@ function renderTurnsHistoryView() {
   function endDrag(e) {
     if (!isDragging) { pendingEntry = null; return; }
     isDragging = false;
+    justDragged = true; setTimeout(() => { justDragged = false; }, 400);
     if (dragClone) { dragClone.remove(); dragClone = null; }
     document.querySelectorAll('#turns-waiting-list [data-entry-id], #turns-active-list [data-entry-id], .turns-filled-slot').forEach(c => { c.style.opacity = ''; c.style.transform = ''; });
     document.querySelectorAll('.turns-empty-slot').forEach(s => s.classList.remove('turns-drop-highlight'));
@@ -624,9 +626,13 @@ function renderTurnsHistoryView() {
   document.addEventListener('pointerdown', function(e) {
     if (e.button !== 0) return;
     const card = getTarget(e, '.turns-filled-slot, #turns-waiting-list [data-entry-id], #turns-active-list [data-entry-id]');
-    if (!card || e.target.closest('button')) return;
-    startX = e.clientX; startY = e.clientY; pendingEntry = card; e.preventDefault();
-  }, { passive: false });
+    if (!card) return;
+    // Filled slots ARE <button>s — we still allow a drag to start on them (the old
+    // `closest('button')` guard blocked all grid reordering). We don't preventDefault,
+    // so a tap still fires the button's click (opens Assign&Price); a move past the
+    // threshold becomes a drag and endDrag suppresses the trailing click.
+    startX = e.clientX; startY = e.clientY; pendingEntry = card;
+  });
   document.addEventListener('pointermove', function(e) {
     if (isDragging && dragClone) {
       const w = parseFloat(dragClone.style.width);
@@ -650,4 +656,10 @@ function renderTurnsHistoryView() {
     document.querySelectorAll('.turns-reorder-target').forEach(s => s.classList.remove('turns-reorder-target'));
     pendingEntry = null; dragEntryId = null; dragTechId = null;
   });
+  // After a real drag, swallow the trailing click so a filled slot's onclick
+  // (open Assign&Price) doesn't fire on top of the reorder. Capture phase → runs
+  // before the inline onclick and stops it reaching the target.
+  document.addEventListener('click', function(e) {
+    if (justDragged) { justDragged = false; e.stopPropagation(); e.preventDefault(); }
+  }, true);
 })();
