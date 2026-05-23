@@ -113,7 +113,7 @@ export default {
     // GET  /state/snapshot  → full state snapshot { state, seq, schemaVersion }
     // POST /state/mutate    → apply a mutation { op, payload, mutationId } → { applied, seq }
     // HTTP fallback for the new client; the DO also serves these over /ws.
-    if (path === '/state/snapshot' || path === '/state/mutate') {
+    if (path.startsWith('/state/')) {
       const id    = env.SALON_DO.idFromName('muse');
       const stub  = env.SALON_DO.get(id);
       const doRes = await stub.fetch(request);
@@ -288,6 +288,20 @@ export class MuseSalonDO {
       });
     }
 
+    if (url.pathname === '/state/backups') {
+      return new Response(JSON.stringify(await this.listBackups()), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.pathname === '/state/backup-now' && request.method === 'POST') {
+      return new Response(JSON.stringify(await this.backupNow()), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.pathname === '/state/restore' && request.method === 'POST') {
+      let body = {}; try { body = await request.json(); } catch {}
+      if (!body.confirm) return new Response(JSON.stringify({ error: 'restore requires { confirm: true }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      if (this.env.RESTORE_TOKEN && body.token !== this.env.RESTORE_TOKEN) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      const res = await this.restoreFromBackup(body.key);
+      return new Response(JSON.stringify(res), { status: res.error ? 400 : 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
     return new Response('Expected WebSocket upgrade or /state/*', { status: 426 });
   }
 
@@ -445,5 +459,50 @@ export class MuseSalonDO {
       }
     } catch (e) { /* swallow — backup is best-effort */ }
     await this.state.storage.setAlarm(Date.now() + this.BACKUP_INTERVAL_MS);
+  }
+
+  // List the timestamped snapshots in R2 (newest first).
+  async listBackups() {
+    if (!this.env.PHOTOS_BUCKET) return { backups: [], count: 0 };
+    const listed = await this.env.PHOTOS_BUCKET.list({ prefix: 'backups/' });
+    const backups = (listed.objects || [])
+      .map(o => ({ key: o.key, uploaded: o.uploaded, size: o.size }))
+      .sort((a, b) => new Date(b.uploaded) - new Date(a.uploaded));
+    return { backups, count: backups.length };
+  }
+
+  // Force a snapshot to R2 right now (used for testing + before a restore).
+  async backupNow() {
+    const snap = await this.buildSnapshot();
+    const key  = 'backups/state-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+    if (this.env.PHOTOS_BUCKET) await this.env.PHOTOS_BUCKET.put(key, JSON.stringify(snap), { httpMetadata: { contentType: 'application/json' } });
+    return { backedUp: true, key, seq: snap.seq };
+  }
+
+  // Disaster recovery: replace ALL state with a backup snapshot from R2.
+  // Takes a safety snapshot of current state first, then broadcasts the
+  // restored state to every connected client.
+  async restoreFromBackup(key) {
+    if (!this.env.PHOTOS_BUCKET) return { error: 'no backup storage configured' };
+    let useKey = key;
+    if (!useKey) { const l = await this.listBackups(); useKey = l.backups[0]?.key; }
+    if (!useKey) return { error: 'no backup found' };
+    const obj = await this.env.PHOTOS_BUCKET.get(useKey);
+    if (!obj) return { error: 'backup not found: ' + useKey };
+    let snap; try { snap = JSON.parse(await obj.text()); } catch { return { error: 'backup is not valid JSON' }; }
+    const st = snap.state || {};
+    await this.backupNow();                           // safety snapshot before wiping
+    await this.state.storage.deleteAll();
+    for (const [k, v] of Object.entries(st.config || {})) await this.state.storage.put('config:' + k, v);
+    for (const e of (st.queue || []))     await this.state.storage.put('queue:' + String(e.id), e);
+    for (const r of (st.records || []))   await this.state.storage.put('record:' + String(r.id), r);
+    for (const g of (st.giftcards || [])) await this.state.storage.put('giftcard:' + String(g.id), g);
+    for (const d of (st.deletions || [])) await this.state.storage.put('deletion:' + String(d.id), d);
+    await this.state.storage.put('meta:seq', (snap.seq || 0) + 1);
+    await this.ensureBackupScheduled();
+    const fresh = await this.buildSnapshot();
+    const payload = JSON.stringify({ type: 'snapshot', state: fresh.state, seq: fresh.seq, schemaVersion: fresh.schemaVersion });
+    for (const socket of this.sockets) { if (socket.readyState === 1) { try { socket.send(payload); } catch {} } }
+    return { restored: true, key: useKey, counts: { config: Object.keys(st.config||{}).length, queue: (st.queue||[]).length, records: (st.records||[]).length, giftcards: (st.giftcards||[]).length } };
   }
 }
