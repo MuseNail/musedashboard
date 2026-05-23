@@ -15,7 +15,7 @@
 // Required secrets (set via: wrangler secret put <NAME>)
 //   SHEETS_URL           Google Apps Script web-app /exec URL (daily backup intake)
 //   SQUARE_TOKEN         Square access token
-//   RESTORE_TOKEN        (optional) gates /state/restore and /backup/run
+//   RESTORE_TOKEN        (optional) gates /state/restore, /state/reset, and /backup/run
 //   ORIGIN_GATE_ENABLED  (optional) "true" turns on the Origin allow-list gate (default off)
 //   ALLOWED_ORIGINS      (optional) extra comma-separated origins to allow (prod origin is built in)
 //
@@ -380,6 +380,16 @@ export class MuseSalonDO {
       return new Response(JSON.stringify(res), { status: res.error ? 400 : 200, headers: { 'Content-Type': 'application/json' } });
     }
 
+    // Factory reset: wipe ALL state to an empty system. Token-gated + requires
+    // { confirm:true }. Takes a safety snapshot to R2 first (recoverable via /state/restore).
+    if (url.pathname === '/state/reset' && request.method === 'POST') {
+      let body = {}; try { body = await request.json(); } catch {}
+      if (!body.confirm) return new Response(JSON.stringify({ error: 'reset requires { confirm: true }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      if (this.env.RESTORE_TOKEN && body.token !== this.env.RESTORE_TOKEN) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      const res = await this.factoryReset();
+      return new Response(JSON.stringify(res), { status: res.error ? 400 : 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
     return new Response('Expected WebSocket upgrade or /state/*', { status: 426 });
   }
 
@@ -582,5 +592,19 @@ export class MuseSalonDO {
     const payload = JSON.stringify({ type: 'snapshot', state: fresh.state, seq: fresh.seq, schemaVersion: fresh.schemaVersion });
     for (const socket of this.sockets) { if (socket.readyState === 1) { try { socket.send(payload); } catch {} } }
     return { restored: true, key: useKey, counts: { config: Object.keys(st.config||{}).length, queue: (st.queue||[]).length, records: (st.records||[]).length, giftcards: (st.giftcards||[]).length } };
+  }
+
+  // Factory reset: wipe ALL state to an empty system, after a safety snapshot to
+  // R2 (recoverable via /state/restore). Broadcasts the empty snapshot so any
+  // connected client clears immediately.
+  async factoryReset() {
+    const safety = await this.backupNow();            // recovery point before wiping
+    await this.state.storage.deleteAll();
+    await this.state.storage.put('meta:seq', 1);
+    await this.ensureBackupScheduled();
+    const fresh = await this.buildSnapshot();
+    const payload = JSON.stringify({ type: 'snapshot', state: fresh.state, seq: fresh.seq, schemaVersion: fresh.schemaVersion });
+    for (const socket of this.sockets) { if (socket.readyState === 1) { try { socket.send(payload); } catch {} } }
+    return { reset: true, seq: fresh.seq, safetyBackup: safety.key };
   }
 }
