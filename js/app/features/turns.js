@@ -112,6 +112,27 @@ function buildSuggestions() {
   return suggestions;
 }
 
+// Accept a suggested tech for ONE service: assign it (status stays waiting) and
+// open the assign/price modal so the front desk can price it, then advance to
+// In Service or just save while still waiting.
+export function acceptSuggestion(entryId, serviceId) {
+  const entry = q().find(e => String(e.id) === String(entryId));
+  if (!entry) return;
+  const sug = suggestTechForService(serviceId);
+  if (!sug) { showToast('No available technician to suggest right now.'); return; }
+  if (!entry.assignments) entry.assignments = [];
+  let a = entry.assignments.find(x => x.serviceId === serviceId);
+  if (!a) { a = { serviceId, status: 'waiting' }; entry.assignments.push(a); }
+  a.techId = sug.techId;
+  a.status = 'waiting';
+  if (!a.assignedAt) a.assignedAt = Date.now();
+  dispatch('queue.upsert', { entry });
+  showGroupAssignModal(String(entryId));
+}
+function acceptBtnHtml(entryId, serviceId, techName) {
+  return ` <button onclick="event.stopPropagation();acceptSuggestion('${entryId}','${serviceId}')" title="Assign ${techName}" style="pointer-events:auto;cursor:pointer;color:#1a5252;vertical-align:middle" class="hover:opacity-70"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;font-variation-settings:'FILL' 1">check_circle</span></button>`;
+}
+
 // ── Render ────────────────────────────────────────
 export function renderTurns() { renderTurnsTechGrid(); renderTurnsQueue(); }
 
@@ -219,12 +240,13 @@ export function renderTurnsQueue() {
         const tech = staffById(a.techId), s = svc(a.serviceId), ss = getAssignmentStatus(e, a);
         const dot = ss==='done'?'✓ ':ss==='inservice'?'● ':'○ ';
         const parts = [dot + (s ? s.label : '')];
-        if (tech) parts.push('→ ' + tech.name); else if (es[a.serviceId]) parts.push('→ ' + es[a.serviceId].techName + '?');
+        let accept = '';
+        if (tech) parts.push('→ ' + tech.name); else if (es[a.serviceId]) { parts.push('→ ' + es[a.serviceId].techName + '?'); accept = acceptBtnHtml(e.id, a.serviceId, es[a.serviceId].techName); }
         if (a.cost) parts.push('$' + a.cost);
-        return `<div class="text-[10px] text-on-surface-variant leading-tight">${parts.join(' ')}</div>`;
+        return `<div class="text-[10px] text-on-surface-variant leading-tight">${parts.join(' ')}${accept}</div>`;
       }).join('');
     } else {
-      serviceContent = e.services.map(sid => { const s = svc(sid), sug = es[sid]; return `<div class="text-[10px] text-on-surface-variant leading-tight">○ ${s?s.label:sid}${sug?` <span class="font-semibold" style="color:#1a5252">→ ${sug.techName}?</span>`:''}</div>`; }).join('');
+      serviceContent = e.services.map(sid => { const s = svc(sid), sug = es[sid]; return `<div class="text-[10px] text-on-surface-variant leading-tight">○ ${s?s.label:sid}${sug?` <span class="font-semibold" style="color:#1a5252">→ ${sug.techName}?</span>${acceptBtnHtml(e.id, sid, sug.techName)}`:''}</div>`; }).join('');
     }
     const borderColor = e.status==='inservice' ? '#2a7a4f' : '#d4860a';
     const bgTint = e.status==='inservice' ? 'rgba(200,230,197,0.25)' : 'rgba(255,224,178,0.25)';
