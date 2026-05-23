@@ -156,20 +156,29 @@ function renderFloorProps() {
   el.classList.remove('hidden');
   const ids = [..._selected];
   const ref = layoutFor(ids[0]);
+  // Show the reference (first-selected) dimensions as exact numbers so two seats
+  // can be compared at a glance; flag "mixed" when the selection isn't uniform.
+  const dims = ids.map(id => layoutFor(id));
+  const sameW = dims.every(d => Math.round(d.w) === Math.round(ref.w));
+  const sameH = dims.every(d => Math.round(d.h) === Math.round(ref.h));
+  const sameShape = dims.every(d => d.shape === ref.shape);
+  const numCls = 'w-12 text-center border border-surface-container-high rounded bg-transparent py-0.5 text-xs font-body';
   el.innerHTML = `
     <div class="flex items-center gap-2 mb-2 flex-wrap">
       <span class="text-xs font-headline font-bold text-on-surface">${ids.length} selected</span>
       <button onclick="fpClearSelection()" class="text-xs text-primary underline">clear</button>
+      ${ids.length >= 2 ? `<button onclick="fpMatchSize()" class="fp-step" style="width:auto;padding:0 10px" title="Make every selected station the same width, height & shape as the first one">Match size</button>` : ''}
     </div>
     <div class="flex items-center gap-3 flex-wrap text-xs font-body">
       <label class="flex items-center gap-1">Fill <input type="color" value="${ref.fill}" onchange="fpSetProp('fill',this.value)" class="w-7 h-7 rounded border border-surface-container-high bg-transparent"></label>
       <label class="flex items-center gap-1">Outline <input type="color" value="${ref.outline}" onchange="fpSetProp('outline',this.value)" class="w-7 h-7 rounded border border-surface-container-high bg-transparent"></label>
-      <span class="flex items-center gap-1">W <button onclick="fpResize('w',-12)" class="fp-step">−</button><button onclick="fpResize('w',12)" class="fp-step">+</button></span>
-      <span class="flex items-center gap-1">H <button onclick="fpResize('h',-10)" class="fp-step">−</button><button onclick="fpResize('h',10)" class="fp-step">+</button></span>
+      <span class="flex items-center gap-1">W <button onclick="fpResize('w',-12)" class="fp-step">−</button><input type="number" value="${Math.round(ref.w)}" onchange="fpSetSize('w',this.value)" class="${numCls}"><button onclick="fpResize('w',12)" class="fp-step">+</button>${sameW?'':'<span class="text-[10px] text-outline">mixed</span>'}</span>
+      <span class="flex items-center gap-1">H <button onclick="fpResize('h',-10)" class="fp-step">−</button><input type="number" value="${Math.round(ref.h)}" onchange="fpSetSize('h',this.value)" class="${numCls}"><button onclick="fpResize('h',10)" class="fp-step">+</button>${sameH?'':'<span class="text-[10px] text-outline">mixed</span>'}</span>
       <span class="flex items-center gap-1">Shape
-        <button onclick="fpSetProp('shape','rounded')" class="fp-step ${ref.shape==='rounded'?'fp-on':''}">▢</button>
-        <button onclick="fpSetProp('shape','square')" class="fp-step ${ref.shape==='square'?'fp-on':''}">◻</button>
-        <button onclick="fpSetProp('shape','circle')" class="fp-step ${ref.shape==='circle'?'fp-on':''}">◯</button>
+        <button onclick="fpSetProp('shape','rounded')" class="fp-step ${sameShape&&ref.shape==='rounded'?'fp-on':''}">▢</button>
+        <button onclick="fpSetProp('shape','square')" class="fp-step ${sameShape&&ref.shape==='square'?'fp-on':''}">◻</button>
+        <button onclick="fpSetProp('shape','circle')" class="fp-step ${sameShape&&ref.shape==='circle'?'fp-on':''}">◯</button>
+        ${sameShape?'':'<span class="text-[10px] text-outline">mixed</span>'}
       </span>
       <span class="flex items-center gap-1">Text <button onclick="fpTextSize(-0.1)" class="fp-step" style="font-size:11px">A−</button><button onclick="fpTextSize(0.1)" class="fp-step" style="font-size:15px">A+</button></span>
     </div>`;
@@ -182,6 +191,13 @@ function applyToSelected(mut) {
 }
 export function fpSetProp(prop, val) { applyToSelected(() => ({ [prop]: val })); }
 export function fpResize(dim, delta) { applyToSelected(L => ({ [dim]: Math.max(48, (L[dim] || 0) + delta) })); }
+export function fpSetSize(dim, val) { const n = parseInt(val, 10); if (!Number.isFinite(n)) return; applyToSelected(() => ({ [dim]: Math.max(48, n) })); }
+// One click: make every selected station match the first-selected one's size & shape.
+export function fpMatchSize() {
+  const ids = [..._selected]; if (ids.length < 2) return;
+  const ref = layoutFor(ids[0]);
+  applyToSelected(() => ({ w: ref.w, h: ref.h, shape: ref.shape }));
+}
 export function fpTextSize(delta) { applyToSelected(L => ({ font: Math.min(1.8, Math.max(0.7, Math.round(((L.font || 1) + delta) * 100) / 100)) })); }
 export function fpClearSelection() { _selected.clear(); renderFloorPlan(); }
 
