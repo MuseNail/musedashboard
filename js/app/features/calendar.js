@@ -13,7 +13,7 @@ const GTASK_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/tasks/v1/r
 const cfg = () => getState().config;
 const queue = () => getState().queue;
 
-let _calGapiLoaded = false, _calGisLoaded = false, _calTokenClient = null;
+let _calGapiLoaded = false, _calGisLoaded = false, _calTokenClient = null, _calRefreshTimer = null;
 let _calDate = new Date(), _calCalendars = [], _calEvents = {};
 let _apptEditId = null, _apptLines = [], _apptExtraGuests = [];
 let _calSyncTimer = null, _calSelectorDraft = null, _calDragIdx = null;
@@ -26,6 +26,13 @@ const CAL_SYNC_INTERVAL = 60000;
 export function getCalEvents(calId) { return _calEvents[calId] || []; }
 
 // ── Script loading + auth ─────────────────────────
+// Proactively refresh the Google token ~5 min before it expires (silent, no
+// prompt) so the calendar stays connected — no 401, no manual reconnect.
+function scheduleCalTokenRefresh(expires) {
+  clearTimeout(_calRefreshTimer);
+  const delay = Math.max(10000, expires - Date.now() - 5 * 60 * 1000);
+  _calRefreshTimer = setTimeout(() => { if (_calTokenClient) _calTokenClient.requestAccessToken({ prompt: '' }); }, delay);
+}
 export function loadGCalScripts() {
   if (document.getElementById('gapi-script')) return;
   const s1 = document.createElement('script'); s1.id = 'gapi-script'; s1.src = 'https://apis.google.com/js/api.js';
@@ -39,6 +46,7 @@ export function loadGCalScripts() {
       localStorage.setItem('gcal_token', JSON.stringify({ token: resp.access_token, expires }));
       dispatch('config.set', { key: 'gcal_token', value: { token: resp.access_token, expires } });
       gapi.client.setToken({ access_token: resp.access_token });
+      scheduleCalTokenRefresh(expires);
       document.getElementById('cal-signin-btn')?.classList.add('hidden');
       calSetStatus(''); startCalSync(); calLoadAndRender(); loadTaskLists();
     } });
@@ -49,6 +57,7 @@ export function loadGCalScripts() {
 
 function _useToken(saved) {
   gapi.client.setToken({ access_token: saved.token });
+  scheduleCalTokenRefresh(saved.expires);
   document.getElementById('cal-signin-btn')?.classList.add('hidden');
   calSetStatus(''); startCalSync(); calLoadAndRender(); loadTaskLists();
 }
