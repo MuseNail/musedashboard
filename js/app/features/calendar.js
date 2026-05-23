@@ -150,13 +150,14 @@ export function calRenderGrid() {
       if (topMin < 0 || topMin >= (END_HOUR-START_HOUR)*60) return;
       const top = (topMin/SLOT_MINS)*SLOT_H, ht = (durMin/SLOT_MINS)*SLOT_H;
       const timeStr = startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}), title = ev.summary||'', desc = ev.description||'';
-      const hasPhone = /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(desc);
-      const knownSvcs = cfg().services.some(s => title.toLowerCase().includes(s.label.toLowerCase()) || desc.toLowerCase().includes(s.label.toLowerCase()));
-      const isAppt = hasPhone || knownSvcs, isPast = startDt < now;
+      const ext = ev.extendedProperties?.private || {}, notes = _apptNotes(ev);
+      const hasPhone = !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(desc);
+      const knownSvcs = cfg().services.some(s => title.toLowerCase().includes(s.label.toLowerCase()));
+      const isAppt = hasPhone || knownSvcs || ext.museLines !== undefined, isPast = startDt < now;
       // Match this event to a queue entry ONLY by the check-in link (calEventId)
       // or exact phone — never by loose name prefix, which made unrelated
       // appointments all show "Checked In".
-      const evPhone = (desc.match(/\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/)?.[0] || '').replace(/\D/g,'');
+      const evPhone = _apptPhone(ev).replace(/\D/g,'');
       const qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id))
         || (evPhone ? queue().find(x => (x.phone||'').replace(/\D/g,'') === evPhone) : null);
       const qs = qm?.status || null;
@@ -169,7 +170,7 @@ export function calRenderGrid() {
       else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt → tinted by this tech's color
       const chips = cfg().services.filter(s => title.toLowerCase().includes(s.label.toLowerCase()) || desc.toLowerCase().includes(s.label.toLowerCase())).map(s => { const g = SVC_GROUPS.find(x => x.ids.some(id => s.id.toLowerCase().includes(id))); return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${g?.color||'#455a64'};margin-right:2px;flex-shrink:0"></span>`; }).join('');
       const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,' ').replace(/\r/g,'');
-      body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(ev.id)}','${_e(title||'Event')}','${_e(desc)}',${isAppt})" style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)"><div style="display:flex;align-items:center;gap:2px;overflow:hidden">${chips}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${title||'Event'}</span></div>${ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75">${timeStr}</div>`:''}${sl&&ht>44?`<div style="font-size:9px;font-weight:700;color:${border}">${sl}</div>`:''}</div>`;
+      body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(ev.id)}','${_e(title||'Event')}','${_e(desc)}',${isAppt})" style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)"><div style="display:flex;align-items:center;gap:2px;overflow:hidden">${chips}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${title||'Event'}</span></div>${ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75">${timeStr}</div>`:''}${sl&&ht>44?`<div style="font-size:9px;font-weight:700;color:${border}">${sl}</div>`:''}${notes&&ht>58?`<div style="font-size:9px;color:${tc};opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${notes.split('\n')[0].replace(/</g,'&lt;')}</div>`:''}</div>`;
     });
     body += '</div></div>';
   });
@@ -264,8 +265,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   if (!ev) return;
   const cal = _calCalendars.find(c => c.id === calId);
   const startDt = new Date(ev.start.dateTime || ev.start.date);
-  const phoneMatch = desc.match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
-  const phone = phoneMatch ? phoneMatch[1] : '', rawPhone = phone.replace(/\D/g, '');
+  const phone = _apptPhone(ev), rawPhone = phone.replace(/\D/g, ''), notes = _apptNotes(ev);
   let queueMatch = queue().find(x => x.calEventId && x.calEventId === eventId);
   if (!queueMatch && rawPhone) queueMatch = queue().find(x => { const p = (x.phone||'').replace(/\D/g,''); return p && p === rawPhone; });
   if (!queueMatch) { const fullName = title.trim().toLowerCase(); if (fullName.length > 2) queueMatch = queue().find(x => x.name && x.name.trim().toLowerCase() === fullName && !(rawPhone && (x.phone||'').replace(/\D/g,''))); }
@@ -278,7 +278,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   else if (startDt < new Date() && isAppt) statusBadge = '<span style="color:#ea580c;font-size:11px;font-weight:700">⚠ Not Checked In</span>';
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${title}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
-    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${cal?.name||''}</span> · ${startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</p>${phone?`<p>📞 ${phone}</p>`:''}${desc?`<p class="text-xs opacity-75">${desc.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${statusBadge?`<div class="mt-1">${statusBadge}</div>`:''}</div>
+    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${cal?.name||''}</span> · ${startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</p>${phone?`<p>📞 ${phone}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${statusBadge?`<div class="mt-1">${statusBadge}</div>`:''}</div>
     <div class="space-y-2">
       ${isAppt ? `<button onclick="calQuickCheckin('${calId}','${eventId}'); this.closest('.fixed').remove()" class="${queueMatch?'hidden':''} w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Quick Check-In</button>
       ${queueMatch?`<button onclick="this.closest('.fixed').remove(); showGroupAssignModal('${queueMatch.id}')" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">assignment_ind</span> Assign & Price</button>`:''}
@@ -297,9 +297,10 @@ export function calQuickCheckin(calId, eventId) {
   const already = queue().find(x => x.calEventId === eventId || (x.isAppointment && x.name === (ev.summary||'Guest') && x.status !== 'done'));
   if (already) { showToast(`${ev.summary || 'Guest'} is already checked in`); return; }
   const cal = _calCalendars.find(c => c.id === calId), title = ev.summary || 'Guest';
-  const phoneMatch = (ev.description || '').match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
-  const phone = phoneMatch ? phoneMatch[1].replace(/\D/g,'').replace(/(\d{3})(\d{3})(\d{4})/,'($1) $2-$3') : '';
-  const svcs = cfg().services.filter(s => title.toLowerCase().includes(s.label.toLowerCase()) || (ev.description||'').toLowerCase().includes(s.label.toLowerCase())).map(s => s.id);
+  const rawP = _apptPhone(ev).replace(/\D/g,'');
+  const phone = rawP ? rawP.replace(/^1?(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3') : '';
+  let svcs = _parseApptLines(ev, calId).map(l => l.svcId).filter(Boolean);
+  if (svcs.length === 0) svcs = cfg().services.filter(s => title.toLowerCase().includes(s.label.toLowerCase())).map(s => s.id);
   const tech = cfg().staff.find(s => s.name.toLowerCase() === (cal?.name||'').toLowerCase());
   const entry = { id: Date.now()*1000 + Math.floor(Math.random()*1000), name: title, phone, services: svcs.length > 0 ? svcs : (cfg().services.length > 0 ? [cfg().services[0].id] : []), status: 'waiting', checkinTime: new Date().toISOString(), isAppointment: true, isNew: true, skipSquare: false, groupId: null, calEventId: eventId, assignments: tech ? [{ serviceId: svcs[0]||'', techId: tech.id, status: 'waiting', cost: 0, assignedAt: Date.now() }] : [] };
   dispatch('queue.upsert', { entry });
@@ -354,6 +355,34 @@ export function apptExtraAcFill(idx, name, phone) {
 }
 function _buildTechOptions(sel) { return '<option value="">— Tech —</option>' + [..._calCalendars].sort(byName).map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${c.name}</option>`).join(''); }
 function _buildSvcOptions(sel) { return '<option value="">— Service —</option>' + cfg().services.filter(s => !cfg().hidden_dash_services.includes(s.id)).map(s => `<option value="${s.id}" ${s.id === sel ? 'selected' : ''}>${s.label}</option>`).join(''); }
+
+// ── Appointment metadata (structured in extendedProperties; description = notes) ─
+// New events store service lines + phone in extendedProperties.private so the
+// description is purely the user's notes. Old events fall back to parsing the
+// legacy "Service (Tech)\nphone\nnotes" description.
+function _apptPhone(ev) {
+  const ext = ev?.extendedProperties?.private || {};
+  if (ext.musePhone) return ext.musePhone;
+  const m = (ev?.description || '').match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
+  return m ? m[1] : '';
+}
+function _apptNotes(ev) {
+  const ext = ev?.extendedProperties?.private || {};
+  if (ext.museLines !== undefined) return ev?.description || '';   // new format: description IS the notes
+  return (ev?.description || '').replace(/\([^)]*\)\s*/g, '').replace(/\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/g, '').trim();
+}
+function _parseApptLines(ev, calId) {
+  const ext = ev?.extendedProperties?.private || {};
+  if (ext.museLines !== undefined) { try { return JSON.parse(ext.museLines) || []; } catch { return []; } }
+  const lines = [], desc = ev?.description || '', re = /(.+?)\s*\(([^)]+)\)/g; let m;
+  while ((m = re.exec(desc)) !== null) {
+    const svcLabel = m[1].trim(), techName = m[2].trim();
+    const s = cfg().services.find(x => x.label.toLowerCase() === svcLabel.toLowerCase());
+    const cal = _calCalendars.find(x => x.name.toLowerCase() === techName.toLowerCase()) || _calCalendars.find(x => x.id === calId);
+    if (s || cal) lines.push({ svcId: s?.id || '', calId: cal?.id || calId });
+  }
+  return lines;
+}
 export function renderApptServiceLines() {
   const container = document.getElementById('appt-service-lines'); if (!container) return;
   container.innerHTML = _apptLines.map((line,i) => `<div class="flex items-center gap-2" data-line="${i}"><select onchange="updateApptLine(${i},'svc',this.value)" class="flex-1 border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">${_buildSvcOptions(line.svcId)}</select><select onchange="updateApptLine(${i},'cal',this.value)" class="flex-1 border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">${_buildTechOptions(line.calId)}</select><button type="button" onclick="removeApptLine(${i})" class="w-8 h-8 rounded-xl text-outline hover:text-error hover:bg-error/10 flex items-center justify-center transition-colors flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">remove</span></button></div>`).join('');
@@ -381,7 +410,7 @@ export function showConvertToApptModal(calId, eventId) {
   const ev = (_calEvents[calId] || []).find(x => x.id === eventId); if (!ev) return;
   const startDt = new Date(ev.start.dateTime || ev.start.date), endDt = new Date(ev.end?.dateTime || ev.end?.date || startDt.getTime()+3600000);
   const durMins = Math.round((endDt-startDt)/60000);
-  const phone = (ev.description||'').match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/)?.[1] || '', title = ev.summary || '';
+  const phone = _apptPhone(ev), title = ev.summary || '';
   _apptEditId = eventId; _apptLines = [{ svcId:'', calId }];
   document.getElementById('appt-modal-title').textContent = 'Convert to Appointment';
   document.getElementById('appt-event-id').value = eventId; document.getElementById('appt-cal-id').value = calId;
@@ -405,17 +434,13 @@ export function showEditApptModal(calId, eventId) {
   const parts = (ev.summary||'').split(' ');
   document.getElementById('appt-first').value = parts[0] || ''; document.getElementById('appt-last').value = parts.slice(1).join(' ') || '';
   document.getElementById('appt-name').value = ev.summary || '';
-  document.getElementById('appt-notes').value = (ev.description||'').replace(/\([^)]*\)\s*/g,'').replace(/\d{3}[\s.-]\d{3}[\s.-]\d{4}/g,'').trim();
+  document.getElementById('appt-notes').value = _apptNotes(ev);
   document.getElementById('appt-date').value = localDateStr(startDt);
   document.getElementById('appt-time').value = `${String(startDt.getHours()).padStart(2,'0')}:${String(startDt.getMinutes()).padStart(2,'0')}`;
   document.getElementById('appt-delete-btn').classList.remove('hidden');
   const durSel = document.getElementById('appt-duration'); durSel.value = [...durSel.options].reduce((a,b)=>Math.abs(parseInt(b.value)-durMins)<Math.abs(parseInt(a.value)-durMins)?b:a).value;
-  const phoneMatch = (ev.description||'').match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
-  document.getElementById('appt-phone').value = phoneMatch ? phoneMatch[1] : '';
-  _apptLines = [];
-  const desc = ev.description || '', linePattern = /(.+?)\s*\(([^)]+)\)/g;
-  let match;
-  while ((match = linePattern.exec(desc)) !== null) { const svcLabel = match[1].trim(), techName = match[2].trim(); const s = cfg().services.find(x => x.label.toLowerCase() === svcLabel.toLowerCase()); const cal = _calCalendars.find(x => x.name.toLowerCase() === techName.toLowerCase()) || _calCalendars.find(x => x.id === calId); if (s || cal) _apptLines.push({ svcId: s?.id || '', calId: cal?.id || calId }); }
+  document.getElementById('appt-phone').value = _apptPhone(ev);
+  _apptLines = _parseApptLines(ev, calId);
   if (_apptLines.length === 0) _apptLines.push({ svcId:'', calId });
   renderApptServiceLines();
   const m = document.getElementById('appt-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
@@ -434,11 +459,16 @@ export async function saveAppt() {
   if (linesWithTech.length === 0) { showToast('Select at least one technician'); return; }
   const primaryCalId = linesWithTech[0].calId;
   const startDt = new Date(`${dateVal}T${timeVal || '09:00'}`), endDt = new Date(startDt.getTime() + durMins*60000);
-  const lineParts = _apptLines.filter(l => l.svcId || l.calId).map(l => { const svcLabel = cfg().services.find(s=>s.id===l.svcId)?.label || '', techName = _calCalendars.find(c=>c.id===l.calId)?.name || ''; if (svcLabel && techName) return `${svcLabel} (${techName})`; if (svcLabel) return svcLabel; if (techName) return `(${techName})`; return ''; }).filter(Boolean);
-  const descParts = [...lineParts]; if (phone) descParts.push(phone); if (notes) descParts.push(notes);
   const svcTitles = _apptLines.filter(l => l.svcId).map(l => cfg().services.find(s=>s.id===l.svcId)?.label).filter(Boolean);
   const summary = svcTitles.length > 0 ? `${name} — ${svcTitles.join(', ')}` : name;
-  const eventBody = { summary, description: descParts.join('\n'), start: { dateTime: startDt.toISOString() }, end: { dateTime: endDt.toISOString() } };
+  // Structured data → extendedProperties; description holds ONLY the user's notes.
+  const museLines = _apptLines.filter(l => l.svcId || l.calId).map(l => ({ svcId: l.svcId || '', calId: l.calId || '' }));
+  const eventBody = {
+    summary,
+    description: notes,
+    start: { dateTime: startDt.toISOString() }, end: { dateTime: endDt.toISOString() },
+    extendedProperties: { private: { museLines: JSON.stringify(museLines), musePhone: phone || '' } },
+  };
   try {
     showToast('Saving…');
     const apptCalId = _apptEditId ? document.getElementById('appt-cal-id').value : primaryCalId;
