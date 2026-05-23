@@ -206,10 +206,7 @@ document.addEventListener('click', (e) => {
     document.querySelectorAll('.autocomplete-list').forEach(d => { d.innerHTML = ''; d.classList.add('hidden'); });
   }
 });
-// Intercept focus on tel inputs to show the on-screen phone numpad (touch only).
-document.addEventListener('focusin', e => {
-  const el = e.target;
-  if (el.tagName === 'INPUT' && el.type === 'tel' && !el.dataset.noNumpad) {
-    setTimeout(() => openPhoneNumpad(el, el.placeholder || 'Phone Number'), 0);
-  }
-});
+// Phone fields use the device's native numeric keypad (NOT the custom numpad):
+// the native keypad docks at the bottom and leaves the input + its customer
+// autocomplete visible and tappable, so returning customers can be auto-filled.
+// (The custom numpad is still used for cost entry, where there's no autocomplete.)
