@@ -106,6 +106,37 @@ function updatePinDots() {
   });
 }
 
+// ── Admin-code gate (for destructive actions) ─────
+// A code is "admin" if it's the default Manager PIN or an fd_user with role 'admin'.
+let _adminCodeOnSuccess = null;
+function isAdminCode(code) {
+  if (!code) return false;
+  if (code === STAFF_PIN) return true;
+  return cfg().fd_users.some(u => u.pin === code && u.role === 'admin');
+}
+export function requireAdminCode(onSuccess, msg) {
+  _adminCodeOnSuccess = onSuccess;
+  const m = document.getElementById('admin-code-modal');
+  if (!m) { onSuccess?.(); return; }   // modal missing → don't hard-block
+  const input = document.getElementById('admin-code-input'); if (input) input.value = '';
+  document.getElementById('admin-code-err')?.classList.add('hidden');
+  if (msg) { const el = document.getElementById('admin-code-msg'); if (el) el.textContent = msg; }
+  m.classList.remove('hidden'); m.style.display = 'flex';
+  setTimeout(() => document.getElementById('admin-code-input')?.focus(), 100);
+}
+export function closeAdminCode() {
+  const m = document.getElementById('admin-code-modal');
+  if (m) { m.classList.add('hidden'); m.style.display = ''; }
+  _adminCodeOnSuccess = null;
+}
+export function submitAdminCode() {
+  const code = (document.getElementById('admin-code-input')?.value || '').trim();
+  if (!isAdminCode(code)) { document.getElementById('admin-code-err')?.classList.remove('hidden'); return; }
+  const cb = _adminCodeOnSuccess; _adminCodeOnSuccess = null;
+  closeAdminCode();
+  cb?.();
+}
+
 // ── Front desk users CRUD (synced config.fd_users) ────────────────────────────
 function setFdUsers(users) { dispatch('config.set', { key: 'fd_users', value: users }); }
 

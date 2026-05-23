@@ -191,7 +191,9 @@ async function calSilentSync() {
     const newEvents = {};
     await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); newEvents[cal.id] = r.result.items || []; } catch (e) { newEvents[cal.id] = _calEvents[cal.id] || []; } }));
     _calEvents = newEvents;
-    if (document.getElementById('panel-calendar')?.classList.contains('active')) calRenderGrid();
+    // Preserve the user's scroll position on a silent refresh — calRenderGrid()
+    // re-scrolls to ~1hr-before-now, which yanked the view away mid-use.
+    if (document.getElementById('panel-calendar')?.classList.contains('active')) calRenderGridPreserveScroll();
     setCalSyncIndicator('ok');
   } catch (e) { setCalSyncIndicator('error'); }
 }

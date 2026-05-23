@@ -156,10 +156,13 @@ export function importAllData(input) {
 }
 
 export function confirmClearAllRecords() {
-  window.showWarnModal?.('Clear All Records?', 'This permanently removes every transaction record. Export a backup first if you need this data.', () => {
-    getState().records.forEach(r => { if (r.status !== 'deleted') dispatch('record.delete', { id: r.id, reason: 'bulk clear', by: 'admin' }); });
-    localStorage.removeItem('muse_deletion_log');
-    window.renderTransactions?.(); window.runReport?.();
-    showToast('All records cleared ✓');
-  });
+  // Require an admin code first (destructive + irreversible), then the usual confirm.
+  window.requireAdminCode?.(() => {
+    window.showWarnModal?.('Clear All Records?', 'This permanently removes every transaction record. Export a backup first if you need this data.', () => {
+      getState().records.forEach(r => { if (r.status !== 'deleted') dispatch('record.delete', { id: r.id, reason: 'bulk clear', by: 'admin' }); });
+      localStorage.removeItem('muse_deletion_log');
+      window.renderTransactions?.(); window.runReport?.();
+      showToast('All records cleared ✓');
+    });
+  }, 'Clearing all records requires an admin PIN.');
 }

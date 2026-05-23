@@ -32,7 +32,25 @@ window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
 
 // ── Navigation ────────────────────────────────────
+// In-app back handling: the OS/browser back gesture used to reload the PWA
+// (losing state). Instead we track screen history and return to the previous
+// screen; back never unloads the page (we always keep a history entry to pop).
+let _screenStack = [];
+let _navBack = false;
+function setupBackHandler() {
+  history.pushState({ muse: true }, '');
+  window.addEventListener('popstate', () => {
+    const prev = _screenStack.pop();
+    if (prev) { _navBack = true; goTo(prev); _navBack = false; }
+    history.pushState({ muse: true }, '');
+  });
+}
 function goTo(screenId, param) {
+  const prevScreen = document.querySelector('.screen.active')?.id;
+  if (prevScreen && prevScreen !== screenId && !_navBack) {
+    _screenStack.push(prevScreen);
+    if (_screenStack.length > 30) _screenStack.shift();
+  }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(screenId)?.classList.add('active');
   window.scrollTo(0, 0);
@@ -225,6 +243,7 @@ function handleSquarePosReturn() {
 // ── Boot ──────────────────────────────────────────
 function boot() {
   if (handleSquarePosReturn()) return; // don't boot a 2nd live app in the Square return tab
+  setupBackHandler();                 // OS back returns to the previous screen, never reloads the PWA
   sync.start();                       // connect to the DO, hydrate from cache + snapshot
   store.subscribe(onStateChange);
 

@@ -1336,6 +1336,24 @@ tailwind.config = {
 </div>
 
 <!-- ═══════════════════════════════════════════════
+     ADMIN CODE MODAL (gate for destructive actions)
+═══════════════════════════════════════════════ -->
+<div id="admin-code-modal" class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4" style="display:none;z-index:90">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-xs p-5 shadow-2xl">
+    <h2 class="text-lg font-headline font-bold text-on-surface mb-1">Admin code required</h2>
+    <p id="admin-code-msg" class="text-xs font-body text-on-surface-variant mb-3">Enter an admin PIN to continue.</p>
+    <input id="admin-code-input" type="password" inputmode="numeric" autocomplete="off" placeholder="Admin PIN"
+      class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-3 text-base font-headline text-on-surface text-center tracking-widest focus:border-primary transition-colors outline-none mb-2"
+      onkeydown="if(event.key==='Enter'){submitAdminCode()}">
+    <div id="admin-code-err" class="text-xs text-error mb-2 hidden">Incorrect admin code.</div>
+    <div class="flex gap-2">
+      <button onclick="closeAdminCode()" class="flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-2.5 rounded-xl font-headline font-semibold transition-all">Cancel</button>
+      <button onclick="submitAdminCode()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-2.5 rounded-xl font-headline font-bold transition-all">Verify</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
      SQUARE PAYMENT CONFIRM MODAL
 ═══════════════════════════════════════════════ -->
 <div id="square-confirm-modal" class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4" style="display:none;z-index:80">
