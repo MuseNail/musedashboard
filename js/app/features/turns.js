@@ -78,7 +78,7 @@ function getTechStatusColor(staffId) {
 }
 
 // ── Suggestion engine ─────────────────────────────
-function suggestTechForService(serviceId) {
+export function suggestTechForService(serviceId) {
   const order = getActiveTurnsOrder();
   if (order.length === 0) return null;
   const eligible = order.filter(id => {

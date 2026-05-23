@@ -6,6 +6,7 @@ import { dispatch } from '../sync.js';
 import { showToast, localDateStr, todayStr } from '../utils.js';
 import { canDo, getActiveUser } from '../session.js';
 import { classifyTurn } from './turns.js';
+import { squareUpsertCustomer } from './square-customers.js';
 import { LOGO_PATH, PHOTOS_PROXY } from '../config.js';
 
 const cfg = () => getState().config;
@@ -485,6 +486,7 @@ export function saveHistoricalTransaction() {
     dispatch('record.save', { record: { ...base, id: String(Date.now()*1000 + Math.floor(Math.random()*1000)), completedAt: checkinTime.toISOString() } });
     showToast('Historical transaction saved ✓');
   }
+  if (phone) squareUpsertCustomer({ name, phone, services: _histSelectedSvcs });   // sync customer to directory + Square
   closeHistoricalModal();
   renderTransactions();
   if (document.getElementById('panel-reports')?.classList.contains('active')) runReport();

@@ -400,6 +400,13 @@ export function cycleServiceStatus(entryId, serviceId, newStatus) {
   renderGroupAssignContent();
 }
 
+// Accept an in-modal tech suggestion: set that service row's tech dropdown.
+export function acceptAssignSuggestion(serviceId, techId) {
+  const row = document.querySelector(`#group-assign-content [data-service-id="${serviceId}"]`);
+  const sel = row?.querySelector('.assign-tech');
+  if (sel) { sel.value = techId; updateGroupTotal(); }
+}
+
 // Mutates the in-store entry as an editing buffer (committed by the save handlers).
 export function saveCurrentGroupTabInputs() {
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
@@ -460,13 +467,14 @@ export function renderGroupAssignContent() {
     const s = svc(sid) || { id: sid, label: sid };
     const a = (entry.assignments || []).find(x => x.serviceId === sid) || {};
     const st = getAssignmentStatus(entry, a);
+    const sug = !a.techId ? (window.suggestTechForService?.(sid) || null) : null;
     const statusBtnStyle = { waiting:'background:#ffe0b2;color:#6d3200', inservice:'background:#c8e6c5;color:#1b5e20', done:'background:#dde2e5;color:#555' }[st] || 'background:#ffe0b2;color:#6d3200';
     const statusLabel = { waiting:'Waiting', inservice:'In Service', done:'Done' }[st] || 'Waiting';
     const nextStatus = { waiting:'inservice', inservice:'done', done:'waiting' }[st];
     return `
       <div class="bg-surface-container-low rounded-xl p-4 border border-surface-container-high mb-3" data-service-id="${sid}">
         <div class="flex items-center justify-between mb-3">
-          <div class="font-headline font-semibold text-on-surface">${s.label}</div>
+          <div class="font-headline font-semibold text-on-surface flex items-center gap-2 flex-wrap">${s.label}${sug ? `<button onclick="acceptAssignSuggestion('${sid}','${sug.techId}')" title="Assign ${sug.techName}" class="text-[10px] px-2 py-0.5 rounded-full font-body font-semibold hover:opacity-80" style="background:#1a525218;color:#1a5252">→ ${sug.techName} ✓</button>` : ''}</div>
           <button onclick="cycleServiceStatus('${entry.id}','${sid}','${nextStatus}')" class="text-[11px] px-3 py-1 rounded-full font-body font-semibold transition-all hover:opacity-80" style="${statusBtnStyle}">${statusLabel} ›</button>
         </div>
         <div class="grid grid-cols-3 gap-3">
