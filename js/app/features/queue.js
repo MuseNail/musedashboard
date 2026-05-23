@@ -458,9 +458,19 @@ export function renderGroupAssignContent() {
   const color = entry.groupColor || '#1a5252';
   const content = document.getElementById('group-assign-content');
   const checkedIn = activeStaff().filter(s => cfg().turns_order.includes(s.id)).sort(byName);
-  const techOptions = sel => checkedIn.length > 0
-    ? checkedIn.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}</option>`).join('')
-    : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
+  const techOptions = sel => {
+    // Include the currently-assigned tech even if inactive / not in today's
+    // rotation, so an existing assignment shows correctly instead of falsely as
+    // "Unassigned" (lets the user see it and reassign to an active tech).
+    let opts = checkedIn;
+    if (sel && !checkedIn.some(s => s.id === sel)) {
+      const assigned = staffById(sel);
+      if (assigned) opts = [...checkedIn, assigned];
+    }
+    return opts.length > 0
+      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}</option>`).join('')
+      : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
+  };
   const stationOptions = sel => STATIONS.map(st => `<option value="${st}" ${sel === st ? 'selected' : ''}>${st}</option>`).join('');
 
   const serviceRows = entry.services.map(sid => {

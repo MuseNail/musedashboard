@@ -39,7 +39,10 @@ export function classifyTurn(cost, serviceId) {
   return 'bonus';
 }
 
-export function getActiveTurnsOrder() { return cfg().turns_order.filter(id => id && typeof id === 'string'); }
+// The rotation, excluding any ids that are blank or belong to deactivated staff
+// (a tech deactivated after being added to the rotation must not linger on the
+// grid / in suggestions). turns_order self-heals on the next roster edit.
+export function getActiveTurnsOrder() { return cfg().turns_order.filter(id => id && typeof id === 'string' && isStaffActive(id)); }
 
 export function getActiveTechEntries(staffId) {
   return q().filter(e => e.status === 'inservice' && (e.assignments||[]).some(a => a.techId === staffId && getAssignmentStatus(e, a) === 'inservice'));

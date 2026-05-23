@@ -18,6 +18,9 @@ export function renderGuestsContainer() {
   guestCount = 0;
   addGuestCard();
   renderAddGuestButton();
+  // Land the cursor in the primary guest's phone field so check-in can start
+  // typing immediately (on touch this also opens the on-screen number pad).
+  setTimeout(() => document.getElementById('phone-1')?.focus(), 150);
 }
 
 export function renderAddGuestButton() {
