@@ -226,11 +226,6 @@ tailwind.config = {
     </nav>
     <!-- Right side: sync pills + actions — locked right -->
     <div class="flex items-center gap-1.5 flex-shrink-0">
-      <div class="flex items-center gap-2 px-3 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:110px"
-        onclick="syncSquare && syncSquare()" title="Click to sync Square data">
-        <span class="sync-dot ok" id="sync-dot"></span>
-        <span id="sync-label">Square synced</span>
-      </div>
       <div class="flex items-center gap-2 px-3 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:72px"
         onclick="forceSyncNow()" title="Tap to sync queue">
         <span class="sync-dot" id="sheets-sync-dot" style="background:#adb3b5"></span>
@@ -622,16 +617,9 @@ tailwind.config = {
         <!-- Drill-down: category sub-item list (rendered by settingsOpenCategory) -->
         <div id="settings-category" class="hidden"></div>
 
-        <!-- Business Logo -->
+        <!-- Leaf: Business Logo -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <button onclick="toggleSettingsSection('logo-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
-            <div class="text-left">
-              <div class="font-headline font-bold text-on-surface">Business Logo</div>
-              <div class="text-xs font-body text-on-surface-variant mt-0.5">Upload your logo for the dashboard header and PDF reports</div>
-            </div>
-            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="logo-section-icon">expand_more</span>
-          </button>
-          <div id="logo-section" class="hidden px-5 pb-5 border-t border-surface-container-high pt-4">
+          <div id="logo-section" class="hidden px-5 py-4">
             <div class="flex items-start gap-6">
               <!-- Preview -->
               <div class="flex-shrink-0">
@@ -658,16 +646,9 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Turn Thresholds -->
+        <!-- Leaf: Turn Thresholds -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <button onclick="toggleSettingsSection('turns-thresh-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
-            <div class="text-left">
-              <div class="font-headline font-bold text-on-surface">Turn Thresholds</div>
-              <div class="text-xs font-body text-on-surface-variant mt-0.5">Set price cutoffs for full, half, and bonus turns</div>
-            </div>
-            <span class="material-symbols-outlined text-on-surface-variant" id="turns-thresh-section-icon">expand_more</span>
-          </button>
-          <div id="turns-thresh-section" class="hidden px-5 pb-5 border-t border-surface-container-high pt-4">
+          <div id="turns-thresh-section" class="hidden px-5 py-4">
             <div class="grid grid-cols-2 gap-4 mb-4">
               <div>
                 <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Full Turn minimum ($)</label>
@@ -694,16 +675,10 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Square Connection -->
+        <!-- Leaf: Square -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <button onclick="toggleSettingsSection('square-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
-            <div class="text-left">
-              <div class="font-headline font-bold text-on-surface">Square Connection</div>
-              <div class="text-xs font-body text-on-surface-variant mt-0.5" id="settings-square-status">Checking…</div>
-            </div>
-            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="square-section-icon">expand_more</span>
-          </button>
-          <div id="square-section" class="hidden px-5 pb-5 border-t border-surface-container-high pt-4 space-y-3">
+          <div id="square-section" class="hidden px-5 py-4 space-y-3">
+            <div class="text-xs font-body text-on-surface-variant" id="settings-square-status">Checking…</div>
             <div>
               <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Square Location ID</label>
               <input id="settings-location-id" type="text"
@@ -713,17 +688,28 @@ tailwind.config = {
             <button onclick="saveSquareFromSettings()" class="w-full bg-primary text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary-dim">
               Save & Connect
             </button>
+            <button onclick="syncSquareFromSettings()" class="w-full flex items-center justify-center gap-2 border border-primary text-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary hover:text-on-primary">
+              <span class="material-symbols-outlined" style="font-size:18px">sync</span> Sync Customers & Catalog
+            </button>
           </div>
         </div>
+
+        <!-- Leaf: Google Calendar -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <button onclick="toggleSettingsSection('backup-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
-            <div class="text-left">
-              <div class="font-headline font-bold text-on-surface">Data Backup & Restore</div>
-              <div class="text-xs font-body text-on-surface-variant mt-0.5">Export all data to a file or restore from a previous backup</div>
-            </div>
-            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="backup-section-icon">expand_more</span>
-          </button>
-          <div id="backup-section" class="hidden px-5 pb-5 border-t border-surface-container-high pt-4">
+          <div id="gcal-section" class="hidden px-5 py-4 space-y-3">
+            <p class="text-sm font-body text-on-surface-variant">Connect Google Calendar to view and create appointments in the Calendar tab.</p>
+            <div class="text-xs font-body" id="gcal-settings-status">Checking…</div>
+            <button id="gcal-connect-btn" onclick="calSignIn()" class="w-full flex items-center justify-center gap-2 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary-dim">
+              <span class="material-symbols-outlined" style="font-size:18px">login</span> Connect Google Calendar
+            </button>
+            <button id="gcal-disconnect-btn" onclick="calSignOut();renderGcalSettings()" class="hidden w-full flex items-center justify-center gap-2 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-surface-container">
+              <span class="material-symbols-outlined" style="font-size:18px">logout</span> Disconnect
+            </button>
+          </div>
+        </div>
+        <!-- Leaf: Data Backup & Restore -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="backup-section" class="hidden px-5 py-4">
             <div class="grid grid-cols-2 gap-3 mb-4">
               <button onclick="exportAllData()" class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-all">
                 <span class="material-symbols-outlined" style="font-size:18px">download</span> Export Backup
@@ -790,34 +776,20 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Collapsible: Items -->
+        <!-- Leaf: Retail Items -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <button onclick="toggleSettingsSection('items-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
-            <div class="text-left">
-              <div class="font-headline font-bold text-on-surface">Retail Items</div>
-              <div class="text-xs font-body text-on-surface-variant mt-0.5">Add-on items (cuticle oil, gift card, etc.) — appear at the bottom of Assign &amp; Price</div>
-            </div>
-            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="items-section-icon">expand_more</span>
-          </button>
-          <div id="items-section" class="hidden px-5 pb-4 border-t border-surface-container-high">
-            <div id="settings-items-list" class="space-y-2 mt-3"></div>
+          <div id="items-section" class="hidden px-5 py-4">
+            <div id="settings-items-list" class="space-y-2"></div>
             <button onclick="addItemRow()" class="mt-3 flex items-center gap-1.5 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
               <span class="material-symbols-outlined" style="font-size:14px">add</span> Add Item
             </button>
           </div>
         </div>
 
-        <!-- Collapsible: Fees -->
+        <!-- Leaf: Fees -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <button onclick="toggleSettingsSection('fees-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
-            <div class="text-left">
-              <div class="font-headline font-bold text-on-surface">Fees</div>
-              <div class="text-xs font-body text-on-surface-variant mt-0.5">Flat or percentage fees — appear at the bottom of Assign &amp; Price</div>
-            </div>
-            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="fees-section-icon">expand_more</span>
-          </button>
-          <div id="fees-section" class="hidden px-5 pb-4 border-t border-surface-container-high">
-            <div id="settings-fees-list" class="space-y-2 mt-3"></div>
+          <div id="fees-section" class="hidden px-5 py-4">
+            <div id="settings-fees-list" class="space-y-2"></div>
             <button onclick="addFeeRow()" class="mt-3 flex items-center gap-1.5 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
               <span class="material-symbols-outlined" style="font-size:14px">add</span> Add Fee
             </button>
@@ -891,15 +863,9 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Calendar Hours -->
+        <!-- Leaf: Calendar Hours -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <button onclick="toggleSettingsSection('settings-calhours-section')" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
-            <div class="font-headline font-bold text-on-surface flex items-center gap-2">
-              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">schedule</span> Calendar Hours
-            </div>
-            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="settings-calhours-section-icon">expand_more</span>
-          </button>
-          <div id="settings-calhours-section" class="hidden border-t border-surface-container-high px-5 py-4">
+          <div id="settings-calhours-section" class="hidden px-5 py-4">
             <p class="text-sm font-body text-on-surface-variant mb-4">Set the earliest and latest time visible on the Calendar tab.</p>
             <div class="grid grid-cols-2 gap-4">
               <div>
@@ -922,29 +888,17 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Role Permissions (admin only) -->
+        <!-- Leaf: Role Permissions (admin only) -->
         <div id="settings-role-permissions" class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden hidden">
-          <button onclick="toggleSettingsSection('settings-perms-section');renderRolePermissions()" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
-            <div class="font-headline font-bold text-on-surface flex items-center gap-2">
-              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">manage_accounts</span> Role Permissions
-            </div>
-            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="settings-perms-section-icon">expand_more</span>
-          </button>
-          <div id="settings-perms-section" class="hidden border-t border-surface-container-high px-5 py-4">
+          <div id="settings-perms-section" class="hidden px-5 py-4">
             <p class="text-sm font-body text-on-surface-variant mb-4">Configure what each role can do. Admin always has full access and is not shown here.</p>
             <div id="role-permissions-list"></div>
           </div>
         </div>
 
-        <!-- Audit Log -->
+        <!-- Leaf: Audit Log -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <button onclick="toggleSettingsSection('settings-audit-section');if(!document.getElementById('audit-log-content').children.length)loadAuditLog()" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
-            <div class="font-headline font-bold text-on-surface flex items-center gap-2">
-              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">history</span> Audit Log
-            </div>
-            <span class="material-symbols-outlined text-on-surface-variant transition-transform" id="settings-audit-section-icon">expand_more</span>
-          </button>
-          <div id="settings-audit-section" class="hidden border-t border-surface-container-high px-5 py-4">
+          <div id="settings-audit-section" class="hidden px-5 py-4">
             <p class="text-sm font-body text-on-surface-variant mb-3">History of deleted transactions and admin actions.</p>
             <button onclick="loadAuditLog()" class="mb-3 flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body font-semibold text-sm transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">refresh</span> Load Audit Log
@@ -953,14 +907,11 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Customer Directory -->
+        <!-- Leaf: App Info -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <button onclick="showCustomerDir()" class="w-full flex items-center justify-between px-5 py-4 hover:bg-surface-container transition-colors">
-            <div class="font-headline font-bold text-on-surface flex items-center gap-2">
-              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">contacts</span> Customer Directory
-            </div>
-            <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">open_in_new</span>
-          </button>
+          <div id="appinfo-section" class="hidden px-5 py-4">
+            <div id="appinfo-content" class="rounded-xl border border-surface-container-high overflow-hidden"></div>
+          </div>
         </div>
 
       </div>

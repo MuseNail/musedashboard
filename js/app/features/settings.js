@@ -3,22 +3,13 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast } from '../utils.js';
 import { canDo, getActiveUser, ui } from '../session.js';
-import { DEFAULT_ROLE_PERMISSIONS } from '../config.js';
+import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION } from '../config.js';
 import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
 import { setLogo } from './photos.js';
 import { getTurnConfig, saveTurnConfig, isAlwaysBonusService, saveBonusServices } from './turns.js';
 import { loadSquareCustomers } from './square-customers.js';
 
 const cfg = () => getState().config;
-
-export function toggleSettingsSection(sectionId) {
-  const section = document.getElementById(sectionId);
-  const icon = document.getElementById(sectionId + '-icon');
-  if (!section) return;
-  const isHidden = section.classList.contains('hidden');
-  section.classList.toggle('hidden', !isHidden);
-  if (icon) icon.style.transform = isHidden ? 'rotate(180deg)' : '';
-}
 
 // ── Done-card visibility (transient UI state) ─────
 export function toggleDoneVisibility() {
@@ -127,6 +118,45 @@ export function saveSquareFromSettings() {
   showToast('Square connected ✓');
 }
 
+export function syncSquareFromSettings() {
+  if (!cfg().square_config) { showToast('Connect a Location ID first.'); return; }
+  window.syncSquare?.();
+}
+
+// ── Google Calendar (Integrations leaf) ───────────
+function gcalConnected() {
+  try { const l = JSON.parse(localStorage.getItem('gcal_token') || 'null'); if (l && Date.now() < l.expires - 60000) return true; } catch (e) {}
+  const s = cfg().gcal_token;
+  return !!(s && Date.now() < s.expires - 60000);
+}
+export function renderGcalSettings() {
+  window.loadGCalScripts?.();
+  const on = gcalConnected();
+  const status = document.getElementById('gcal-settings-status');
+  if (status) { status.textContent = on ? '✓ Connected' : 'Not connected'; status.style.color = on ? '#2a7a4f' : ''; }
+  document.getElementById('gcal-connect-btn')?.classList.toggle('hidden', on);
+  document.getElementById('gcal-disconnect-btn')?.classList.toggle('hidden', !on);
+}
+
+// ── App Info (Data & System leaf) ─────────────────
+export function renderAppInfo() {
+  const el = document.getElementById('appinfo-content');
+  if (!el) return;
+  const st = getState();
+  const rows = [
+    ['App version', APP_VERSION],
+    ['Device ID', localStorage.getItem('muse_device_id') || '—'],
+    ['Live sync', st.connected ? `Connected${st.pendingCount ? ` · ${st.pendingCount} pending` : ''}` : 'Offline'],
+    ['Square', cfg().square_config ? `Connected · ${cfg().square_config.locationId}` : 'Not connected'],
+    ['Google Calendar', gcalConnected() ? 'Connected' : 'Not connected'],
+  ];
+  el.innerHTML = rows.map(([k, v]) => `
+    <div class="flex items-center justify-between px-4 py-3 border-b border-surface-container-high last:border-0">
+      <span class="text-sm font-body text-on-surface-variant">${k}</span>
+      <span class="text-sm font-body font-semibold text-on-surface text-right break-all ml-4">${v}</span>
+    </div>`).join('');
+}
+
 // ── First-time setup wizard ───────────────────────
 export function showSetupWizard() { const w = document.getElementById('setup-wizard'); if (!w) return; w.classList.remove('hidden'); w.style.display = 'flex'; setTimeout(() => document.getElementById('setup-location-id')?.focus(), 300); }
 export function hideSetupWizard() { const w = document.getElementById('setup-wizard'); if (!w) return; w.classList.add('hidden'); w.style.display = ''; }
@@ -152,22 +182,24 @@ const SETTINGS_NAV = [
   { id:'staff', title:'Staff & Access', desc:'People & permissions', items:[
     { label:'Technicians', sub:'Staff, photos, schedule & active toggle', content:'staff-merged-section', render:'renderStaffMerged' },
     { label:'Front Desk Users', sub:'Dashboard PIN login accounts', content:'fdusers-merged-section', render:'renderFdUsersList' },
-    { label:'Role Permissions', sub:'What each role can do', content:'settings-perms-section', adminOnly:true },
+    { label:'Role Permissions', sub:'What each role can do', content:'settings-perms-section', render:'renderRolePermissions', adminOnly:true },
   ]},
   { id:'workflow', title:'Workflow', desc:'How the floor runs', items:[
     { label:'Turn Thresholds', sub:'Full / half / bonus cutoffs', content:'turns-thresh-section' },
     { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section' },
   ]},
   { id:'integrations', title:'Integrations', desc:'Square & Google', items:[
-    { label:'Square', sub:'Location & connection', content:'square-section' },
+    { label:'Square', sub:'Location, connection & sync', content:'square-section' },
+    { label:'Google Calendar', sub:'Connect for appointments', content:'gcal-section', render:'renderGcalSettings' },
     { label:'Customer Directory', sub:'Browse synced customers', action:'showCustomerDir' },
   ]},
   { id:'business', title:'Business', desc:'Branding', items:[
     { label:'Business Logo', sub:'Header & report logo', content:'logo-section' },
   ]},
-  { id:'data', title:'Data & System', desc:'Backup & logs', items:[
+  { id:'data', title:'Data & System', desc:'Backup, logs & info', items:[
     { label:'Backup & Restore', sub:'Export / import data', content:'backup-section' },
     { label:'Audit Log', sub:'Deletions & admin actions', content:'settings-audit-section', render:'loadAuditLog' },
+    { label:'App Info', sub:'Version & connection status', content:'appinfo-section', render:'renderAppInfo' },
   ]},
 ];
 let _settingsView = 'root', _settingsCat = null;
