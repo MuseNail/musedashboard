@@ -107,8 +107,11 @@ export function toggleRolePermission(role, perm) {
 export function updatePermissionGatedUI() {
   if (document.getElementById('panel-transactions')?.classList.contains('active')) window.renderTransactions?.();
   if (document.getElementById('panel-reports')?.classList.contains('active')) window.runReport?.();
+  // Visibility of the role-permissions section is owned by the settings drill-down
+  // (it's an admin-only leaf). Keep the wrapper hidden here so it never leaks into
+  // another open leaf; the drill-down un-hides it when that leaf is opened.
   const permSection = document.getElementById('settings-role-permissions');
-  if (permSection) permSection.classList.toggle('hidden', getActiveUser()?.role !== 'admin');
+  if (permSection) permSection.classList.add('hidden');
 }
 
 // ── Audit log (device-local deletion log) ─────────
