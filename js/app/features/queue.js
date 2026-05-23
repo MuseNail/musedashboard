@@ -17,7 +17,78 @@ const q     = () => getState().queue;
 const svc   = id => cfg().services.find(s => s.id === id);
 const staffById = id => cfg().staff.find(s => s.id === id);
 const activeStaff = () => cfg().staff.filter(s => !cfg().inactive_staff.includes(s.id));
-export const STATIONS = [...Array.from({length:12}, (_,i)=>`P${i+1}`), ...Array.from({length:15}, (_,i)=>`M${i+1}`)];
+// ── Stations (editable in Settings; synced as config.stations) ────────────────
+// Each station = { id, type:'P'|'M', label }. id is the STABLE key (used as the
+// a.station value + station_layout key), so renaming only changes the label and
+// never breaks seated customers, floor layout, or historical records. When
+// config.stations is empty we fall back to the original P1–P12 / M1–M15 set, so
+// existing installs behave identically until the operator edits the list.
+export const DEFAULT_STATIONS = [
+  ...Array.from({length:12}, (_,i)=>({ id:`P${i+1}`, type:'P', label:`P${i+1}` })),
+  ...Array.from({length:15}, (_,i)=>({ id:`M${i+1}`, type:'M', label:`M${i+1}` })),
+];
+export function stationDefs() { const s = cfg().stations; return Array.isArray(s) && s.length ? s : DEFAULT_STATIONS; }
+export function getStations()  { return stationDefs().map(s => s.id); }
+export function stationType(id) { const d = stationDefs().find(s => s.id === id); return d ? d.type : (id && id[0] === 'M' ? 'M' : 'P'); }
+export function stationLabel(id){ const d = stationDefs().find(s => s.id === id); return d ? (d.label || d.id) : id; }
+function commitStations(next) { dispatch('config.set', { key: 'stations', value: next }); }
+
+export function addStation(type) {
+  const t = type === 'M' ? 'M' : 'P';
+  const defs = stationDefs().map(s => ({ ...s }));
+  const ids = new Set(defs.map(s => s.id));
+  let n = 1; while (ids.has(`${t}${n}`)) n++;
+  const id = `${t}${n}`;
+  defs.push({ id, type: t, label: id });
+  commitStations(defs);
+  return id;
+}
+export function renameStation(id, label) {
+  commitStations(stationDefs().map(s => s.id === id ? { ...s, label: (label || '').trim() || s.id } : { ...s }));
+}
+export function setStationType(id, type) {
+  const t = type === 'M' ? 'M' : 'P';
+  commitStations(stationDefs().map(s => s.id === id ? { ...s, type: t } : { ...s }));
+}
+export function deleteStation(id) {
+  const seated = q().some(e => !isPaidStatus(e.status) && (e.station === id || (e.assignments || []).some(a => a.station === id)));
+  if (seated) { showToast(`Can't delete ${stationLabel(id)} — a customer is seated there`); return false; }
+  commitStations(stationDefs().filter(s => s.id !== id).map(s => ({ ...s })));
+  return true;
+}
+export function confirmDeleteStation(id) {
+  const doDel = () => { if (deleteStation(id)) renderStationsSettings(); };
+  if (window.showWarnModal) window.showWarnModal('Delete station?', `Remove ${stationLabel(id)} from the floor plan and the station picker?`, doDel);
+  else if (confirm(`Delete ${stationLabel(id)}?`)) doDel();
+}
+export function renderStationsSettings() {
+  const el = document.getElementById('settings-stations-section'); if (!el) return;
+  const defs = stationDefs();
+  const group = (type, title) => {
+    const list = defs.filter(s => s.type === type);
+    const rows = list.map(s => `
+      <div class="flex items-center gap-2 bg-surface-container-lowest rounded-xl px-3 py-2 border border-surface-container-high">
+        <input value="${(s.label || s.id).replace(/"/g,'&quot;')}" onchange="renameStation('${s.id}',this.value);renderStationsSettings()"
+          class="flex-1 bg-transparent border-b border-surface-container-high py-1 text-sm font-headline focus:border-primary outline-none">
+        <select onchange="setStationType('${s.id}',this.value);renderStationsSettings()" class="text-xs font-body border border-surface-container-high rounded-lg px-1.5 py-1 bg-transparent">
+          <option value="P" ${s.type==='P'?'selected':''}>Pedi</option>
+          <option value="M" ${s.type==='M'?'selected':''}>Mani</option>
+        </select>
+        <button onclick="confirmDeleteStation('${s.id}')" class="w-8 h-8 rounded-lg text-outline hover:text-error hover:bg-error/10 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
+      </div>`).join('');
+    return `<div class="mb-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-headline font-semibold text-on-surface">${title} <span class="text-xs font-body text-on-surface-variant">(${list.length})</span></div>
+        <button onclick="addStation('${type}');renderStationsSettings()" class="text-xs font-headline font-bold text-primary flex items-center gap-1 hover:opacity-70"><span class="material-symbols-outlined" style="font-size:16px">add</span>Add</button>
+      </div>
+      <div class="space-y-1.5">${rows || '<div class="text-xs font-body text-on-surface-variant italic px-1">None yet</div>'}</div>
+    </div>`;
+  };
+  el.innerHTML = `
+    <p class="text-xs font-body text-on-surface-variant mb-4">Stations appear on the Floor Plan and in the Assign &amp; Price station picker. Renaming keeps history intact; a station can't be deleted while a customer is seated there.</p>
+    ${group('P','Pedicure')}
+    ${group('M','Manicure')}`;
+}
 
 const upsert = entry => dispatch('queue.upsert', { entry });
 
@@ -522,7 +593,7 @@ export function renderGroupAssignContent() {
       ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}</option>`).join('')
       : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
   };
-  const stationOptions = sel => STATIONS.map(st => `<option value="${st}" ${sel === st ? 'selected' : ''}>${st}</option>`).join('');
+  const stationOptions = sel => stationDefs().map(s => `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${s.label || s.id}</option>`).join('');
 
   const serviceRows = entry.services.map(sid => {
     const s = svc(sid) || { id: sid, label: sid };

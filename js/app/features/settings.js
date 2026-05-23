@@ -230,6 +230,7 @@ const SETTINGS_NAV = [
   ]},
   { id:'workflow', title:'Workflow', desc:'How the floor runs', items:[
     { label:'Turn Thresholds', sub:'Full / half / bonus cutoffs', content:'turns-thresh-section' },
+    { label:'Stations', sub:'Add, rename & delete pedicure / manicure seats', content:'settings-stations-section', render:'renderStationsSettings' },
     { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section' },
   ]},
   { id:'integrations', title:'Integrations', desc:'Square & Google', items:[

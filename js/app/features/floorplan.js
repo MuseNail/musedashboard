@@ -10,7 +10,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr } from '../utils.js';
 import { getAssignmentStatus, isPaidStatus } from './status.js';
-import { STATIONS } from './queue.js';
+import { getStations, stationDefs, stationType, stationLabel } from './queue.js';
 
 const cfg = () => getState().config;
 const q   = () => getState().queue;
@@ -28,14 +28,14 @@ function containerW() { const g = document.getElementById('floorplan-grid'); ret
 
 // Deterministic default layout: pedicure zone on top, manicure zone below.
 function computedDefault(id) {
-  const type = id[0], { w, h } = DEF[type], W = containerW();
-  const list = STATIONS.filter(s => s[0] === type);
+  const type = stationType(id), { w, h } = DEF[type], W = containerW();
+  const list = stationDefs().filter(s => s.type === type).map(s => s.id);
   const idx = Math.max(0, list.indexOf(id));
   const perRow = Math.max(1, Math.floor((W + GAP) / (w + GAP)));
   const col = idx % perRow, row = Math.floor(idx / perRow);
   let y = row * (h + GAP);
   if (type === 'M') {
-    const pCount = STATIONS.filter(s => s[0] === 'P').length;
+    const pCount = stationDefs().filter(s => s.type === 'P').length;
     const pPerRow = Math.max(1, Math.floor((W + GAP) / (DEF.P.w + GAP)));
     y += Math.ceil(pCount / pPerRow) * (DEF.P.h + GAP) + 26;
   }
@@ -55,9 +55,10 @@ function collectFloor() {
     if (isPaidStatus(e.status)) return;   // paid customers leave the floor; complete stays (awaiting payment)
     if (localDateStr(new Date(e.checkinTime)) !== today) return;
     const active = activeAssignments(e);
-    const at = active.find(a => a.station && STATIONS.includes(a.station));
+    const stationIds = getStations();
+    const at = active.find(a => a.station && stationIds.includes(a.station));
     // A customer's seat = a service's station, else the entry-level station set by dragging on the plan.
-    const station = at ? at.station : (e.station && STATIONS.includes(e.station) ? e.station : null);
+    const station = at ? at.station : (e.station && stationIds.includes(e.station) ? e.station : null);
     if (station) { if (!byStation[station]) byStation[station] = e; }
     else unplaced.push(e);   // ANY active customer not yet seated — including ones with no service/tech assigned
   });
@@ -81,7 +82,8 @@ function stationHtml(id, entry) {
   // Empty (or any station while editing the layout) shows the editor's custom color.
   // In the live view, an occupied seat MATCHES the customer's status:
   // GREEN in service, BLUE complete (ready to pay), ORANGE waiting.
-  let bg = (L.fill || ACCENT[id[0]]) + '17', border = L.outline || ACCENT[id[0]];
+  const accent = ACCENT[stationType(id)];
+  let bg = (L.fill || accent) + '17', border = L.outline || accent;
   if (entry && !floorEditMode) {
     if (live) { bg = '#bfe6bd'; border = '#2a7a4f'; }
     else if (complete) { bg = '#cfe3ef'; border = '#1a5c7a'; }
@@ -93,11 +95,11 @@ function stationHtml(id, entry) {
       <div class="font-semibold truncate" style="font-size:${Math.round(11 * fs)}px;color:#1f2937">${entry.name}</div>
       <div class="overflow-hidden leading-tight">${custLines(entry, id, fs)}</div></div>`;
   } else {
-    content = `<div class="h-full w-full flex items-center justify-center" style="font-size:${Math.round(12 * fs)}px;font-weight:800;color:${border};opacity:0.55">${id}</div>`;
+    content = `<div class="h-full w-full flex items-center justify-center" style="font-size:${Math.round(12 * fs)}px;font-weight:800;color:${border};opacity:0.55">${stationLabel(id)}</div>`;
   }
   return `<div class="floor-station absolute ${floorEditMode ? 'cursor-move' : ''}" data-station="${id}"
     style="left:${L.x}px;top:${L.y}px;width:${L.w}px;height:${L.h}px;box-sizing:border-box;border:2px solid ${border};border-radius:${radius};background:${bg};overflow:hidden;${sel ? 'outline:3px solid #1a5252;outline-offset:2px;' : ''}">
-    ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${border};opacity:0.65;pointer-events:none">${id}</div>` : ''}
+    ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${border};opacity:0.65;pointer-events:none">${stationLabel(id)}</div>` : ''}
     ${content}
   </div>`;
 }
@@ -126,9 +128,10 @@ export function renderFloorPlan() {
 
   grid.style.position = 'relative';
   let maxRight = 0, maxBottom = 0;
-  STATIONS.forEach(id => { const L = layoutFor(id); maxRight = Math.max(maxRight, L.x + L.w); maxBottom = Math.max(maxBottom, L.y + L.h); });
+  const stationIds = getStations();
+  stationIds.forEach(id => { const L = layoutFor(id); maxRight = Math.max(maxRight, L.x + L.w); maxBottom = Math.max(maxBottom, L.y + L.h); });
   const cw = maxRight + GAP, ch = maxBottom + GAP;
-  const stationsHtml = STATIONS.map(id => stationHtml(id, byStation[id] || null)).join('');
+  const stationsHtml = stationIds.map(id => stationHtml(id, byStation[id] || null)).join('');
   if (floorEditMode) {
     // Full size while arranging (drag stays precise); the editor may scroll.
     grid.style.overflow = 'auto';
@@ -210,7 +213,7 @@ function snapMove(primaryId, base, rawDx, rawDy, selectedSet) {
   const myH = [py, py + L.h / 2, py + L.h];   // top, centerY, bottom
   const TH = 7;
   let bdx = Infinity, bdy = Infinity, guideX = null, guideY = null;
-  STATIONS.forEach(id => {
+  getStations().forEach(id => {
     if (selectedSet.has(id)) return;
     const o = layoutFor(id);
     const oV = [o.x, o.x + o.w / 2, o.x + o.w];
