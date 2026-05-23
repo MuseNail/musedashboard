@@ -13,9 +13,11 @@
 // fresh Apps Script via SHEETS_URL. The old /sheets config proxy + KV cache are gone.
 //
 // Required secrets (set via: wrangler secret put <NAME>)
-//   SHEETS_URL      Google Apps Script web-app /exec URL (daily backup intake)
-//   SQUARE_TOKEN    Square access token
-//   RESTORE_TOKEN   (optional) gates /state/restore and /backup/run
+//   SHEETS_URL           Google Apps Script web-app /exec URL (daily backup intake)
+//   SQUARE_TOKEN         Square access token
+//   RESTORE_TOKEN        (optional) gates /state/restore and /backup/run
+//   ORIGIN_GATE_ENABLED  (optional) "true" turns on the Origin allow-list gate (default off)
+//   ALLOWED_ORIGINS      (optional) extra comma-separated origins to allow (prod origin is built in)
 //
 // Optional environment variables (wrangler.toml [vars])
 //   SQUARE_BASE_URL Defaults to https://connect.squareup.com
@@ -40,6 +42,26 @@ function json(data, status = 200) {
     status,
     headers: corsHeaders({ 'Content-Type': 'application/json' }),
   });
+}
+
+// ── Origin gate (OFF by default; flip on live via the ORIGIN_GATE_ENABLED secret) ──
+// When enabled, browser requests from a non-allowed Origin get 403. Requests with
+// NO Origin header (server-to-server, <img> loads, curl, the cron) always pass —
+// origin-gating only deters other websites, not non-browser clients (real fix =
+// token auth, T2.12). Safe rollout: deploy with the gate OFF (this is a no-op),
+// then `wrangler secret put ORIGIN_GATE_ENABLED` = "true" and immediately verify
+// the app still syncs. Set it back to "false" (or delete it) to disable instantly
+// — live, no redeploy — if anything can't connect.
+function originAllowed(request, env) {
+  if (String(env.ORIGIN_GATE_ENABLED || '').toLowerCase() !== 'true') return true; // gate off
+  const origin = request.headers.get('Origin');
+  if (!origin) return true; // non-browser / same-origin / image / cron
+  const allow = new Set(
+    ['https://musenail.github.io',
+     ...String(env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)]
+      .map(s => s.toLowerCase())
+  );
+  return allow.has(origin.toLowerCase());
 }
 
 // ── Daily one-way backup → Google Sheets ────────────────────────────────────
@@ -171,6 +193,10 @@ export default {
     if (method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders() });
     }
+
+    // Origin gate (no-op unless ORIGIN_GATE_ENABLED = "true"). Covers /ws, /state,
+    // /square, /photos, /backup — all share the same allow-list.
+    if (!originAllowed(request, env)) return json({ error: 'forbidden origin' }, 403);
 
     // ── R2 Photo Routes ───────────────────────────────────────────────────────
     if (path.startsWith('/photos/')) {

@@ -32,9 +32,13 @@ new_sqlite_classes = ["MuseSalonDO"]
 #   wrangler secret put SHEETS_URL
 #   wrangler secret put SQUARE_TOKEN
 #
-# SHEETS_URL    — FRESH Google Apps Script web-app /exec URL (write-only daily backup intake)
-# SQUARE_TOKEN  — Square access token (sandbox or production)
-# RESTORE_TOKEN — (optional) gates POST /state/restore and POST /backup/run
+# SHEETS_URL          — FRESH Google Apps Script web-app /exec URL (write-only daily backup intake)
+# SQUARE_TOKEN        — Square access token (sandbox or production)
+# RESTORE_TOKEN       — (optional) gates POST /state/restore and POST /backup/run
+# ORIGIN_GATE_ENABLED — (optional) "true" enables the Origin allow-list gate; unset/"false" = off (default).
+#                       Flip live with `wrangler secret put ORIGIN_GATE_ENABLED` — no redeploy. Built-in
+#                       allowed origin: https://musenail.github.io. Add more via ALLOWED_ORIGINS.
+# ALLOWED_ORIGINS     — (optional) extra comma-separated origins to allow (e.g. a future custom domain)
 
 # ── Optional environment variables ────────────────────────────────────────────
 # [vars]
