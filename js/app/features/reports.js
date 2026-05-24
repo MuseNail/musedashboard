@@ -3,7 +3,7 @@
 //   record.save (complete/historical/refund), record.delete (soft delete).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, todayStr } from '../utils.js';
+import { showToast, localDateStr, todayStr, partyLetterMap } from '../utils.js';
 import { canDo, getActiveUser } from '../session.js';
 import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
@@ -28,6 +28,7 @@ export function saveRecord(entry) {
     id: String(entry.id), name: entry.name, phone: entry.phone || '',
     services: entry.services, assignments: entry.assignments || [], items: entry.items || [], fees: entry.fees || [],
     discount: entry.discount || 0, discountNote: entry.discountNote || '', txnNote: entry.txnNote || '', totalCost: entry.totalCost || 0,
+    groupId: entry.groupId || '', groupColor: entry.groupColor || '', groupLabel: entry.groupLabel || '',
     checkinTime: typeof entry.checkinTime === 'string' ? entry.checkinTime : new Date(entry.checkinTime).toISOString(),
     completedAt: entry.completedAt, status: entry.status, isAppointment: entry.isAppointment || false,
     loggedBy: getActiveUser()?.name || '',
@@ -239,7 +240,8 @@ export function renderTransactions() {
   combined = combined.filter(r => isPaidStatus(r.status) || r.status === 'refund').sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime));
   if (combined.length === 0) { list.innerHTML = ''; empty?.classList.remove('hidden'); return; }
   empty?.classList.add('hidden');
-  list.innerHTML = combined.map(r => {
+  const letters = partyLetterMap(combined);
+  const txnCard = (r) => {
     const dt = new Date(r.checkinTime);
     const timeStr = dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), dateStr = dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
     const isRefund = r.status === 'refund';
@@ -259,6 +261,28 @@ export function renderTransactions() {
           ${!isRefund&&canDo('refund')?`<button onclick="initiateRefund('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-secondary transition-colors px-2 py-1 rounded-lg hover:bg-secondary/10"><span class="material-symbols-outlined" style="font-size:14px">undo</span> Refund</button>`:''}
           ${canDo('deleteTransaction')?`<button onclick="initiateDeleteTransaction('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-error transition-colors px-2 py-1 rounded-lg hover:bg-error/10"><span class="material-symbols-outlined" style="font-size:14px">delete</span> Delete</button>`:''}
         </div></div></div>`;
+  };
+  // Bracket a party (paid records sharing a groupId) under a header with a combined total,
+  // so it's clear at a glance who was checked in / paid together. Solos render as-is.
+  const blocks = []; const partyIdx = {};
+  combined.forEach(r => {
+    if (r.groupId && r.status !== 'refund') {
+      if (partyIdx[r.groupId] == null) { partyIdx[r.groupId] = blocks.length; blocks.push({ type:'party', groupId:r.groupId, color:r.groupColor||'#1a5252', members:[] }); }
+      blocks[partyIdx[r.groupId]].members.push(r);
+    } else blocks.push({ type:'solo', record:r });
+  });
+  list.innerHTML = blocks.map(b => {
+    if (b.type === 'solo') return txnCard(b.record);
+    if (b.members.length === 1) return txnCard(b.members[0]);
+    const total = b.members.reduce((s,m)=>s+(m.totalCost||0),0), c = b.color, letter = letters.get(b.groupId) || '•';
+    const primary = (b.members.find(m=>/\(primary\)/i.test(m.groupLabel||'')) || b.members[0]).name;
+    return `<div style="border:1.5px solid ${c}66;background:${c}0d;border-radius:14px;padding:8px">
+      <div class="flex items-center justify-between px-2 py-1.5">
+        <div class="flex items-center gap-2"><span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;background:${c};color:#fff;font-size:11px;font-weight:800">${letter}</span><span class="font-headline font-bold text-sm" style="color:${c}">${primary} · party of ${b.members.length}</span></div>
+        <span class="font-headline font-extrabold" style="color:${c}">$${total.toFixed(2)}</span>
+      </div>
+      <div class="space-y-2">${b.members.map(txnCard).join('')}</div>
+    </div>`;
   }).join('');
 }
 export function updateHistoricalButtonVisibility() { document.getElementById('add-historical-btn')?.classList.toggle('hidden', !canDo('historicalEntry')); }

@@ -61,6 +61,14 @@ export function dedupByLabel(arr) {
 // not for custom-ordered data (turns rotation, calendar column order).
 export function byName(a, b) { return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }); }
 
+// Map each distinct party groupId (first-seen order) → a letter A,B,C… so members of
+// the same check-in can be tagged at-a-glance (live queue/turns + history).
+export function partyLetterMap(items) {
+  const m = new Map(); let i = 0;
+  (items || []).forEach(e => { const g = e && e.groupId; if (g && !m.has(g)) { m.set(g, String.fromCharCode(65 + (i % 26))); i++; } });
+  return m;
+}
+
 // ── Elapsed Time Timer ────────────────────────────
 let _elapsedTimer = null;
 export function startElapsedTimer() {

@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, formatElapsed, byName, todayStr, openNumpad } from '../utils.js';
+import { showToast, formatElapsed, byName, todayStr, openNumpad, partyLetterMap } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, setAssignmentStatus, isPaidStatus } from './status.js';
@@ -138,10 +138,12 @@ function renderQueueHistoryView(list, empty) {
 }
 
 // ── Render ────────────────────────────────────────
+let _partyLetters = new Map();   // groupId → A/B/C tag for the current queue render
 export function renderQueue() {
   const list = document.getElementById('queue-list');
   const empty = document.getElementById('queue-empty');
   if (!list) return;
+  _partyLetters = partyLetterMap(q());   // assign party letters across the whole queue (stable across status sections)
   if (queueViewingHistory) { renderQueueHistoryView(list, empty); return; }
   let filtered = ui.currentFilter === 'all' ? [...q()] : q().filter(e => ui.currentFilter === 'paid' ? isPaidStatus(e.status) : e.status === ui.currentFilter);
   if (ui.currentFilter === 'all' && !ui.showDoneInQueue) filtered = filtered.filter(e => !isPaidStatus(e.status));
@@ -196,8 +198,8 @@ function buildQueueRow(e) {
   const cardBg = isPaidStatus(e.status)
     ? 'bg-surface-container-high border-surface-container-highest opacity-70'
     : `bg-surface-container-lowest ${e.isAppointment ? 'border-primary/40' : 'border-surface-container-high'}`;
-  const groupBorder = e.groupId && !isPaidStatus(e.status) ? `border-left:4px solid ${e.groupColor};` : '';
-  const groupDot = e.groupId ? `<span class="inline-block w-2 h-2 rounded-full flex-shrink-0 mr-0.5" style="background:${e.groupColor}"></span>` : '';
+  const groupBorder = e.groupId ? `border-left:5px solid ${e.groupColor};` : '';
+  const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:5px;background:${e.groupColor};color:#fff;font-size:10px;font-weight:800;flex-shrink:0;margin-right:1px">${_partyLetters.get(e.groupId) || '•'}</span>` : '';
   const groupTag = e.groupLabel ? `<span class="text-[10px] font-body italic" style="color:${e.groupColor}">${e.groupLabel}</span>` : '';
   const btnCls = `flex items-center justify-center min-w-[44px] self-stretch rounded-xl transition-all active:scale-95 border-0 cursor-pointer px-3`;
   const id = e.id;

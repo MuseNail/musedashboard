@@ -1,7 +1,7 @@
 // ── Turns: rotation grid, drag-drop, tech status, turn classification ───────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr, byName, localDateStr, formatElapsed } from '../utils.js';
+import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap } from '../utils.js';
 import { canDo } from '../session.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince } from './status.js';
 import { renderQueue, updateStats, showGroupAssignModal, switchGroupTab } from './queue.js';
@@ -235,10 +235,11 @@ export function renderTurnsQueue() {
   const wLabel = document.getElementById('turns-waiting-label'); if (wLabel) wLabel.textContent = waiting.length + ' in queue';
   const aLabel = document.getElementById('turns-active-label'); if (aLabel) aLabel.textContent = (complete.length ? complete.length + ' complete · ' : '') + inservice.length + ' in service';
   const suggestions = buildSuggestions();
+  const partyLetters = partyLetterMap(q());   // same party → same letter as the queue
 
   function buildCard(e) {
     const timeStr = new Date(e.checkinTime).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
-    const groupDot = e.groupId ? `<span class="inline-block w-2 h-2 rounded-full flex-shrink-0" style="background:${e.groupColor||''}"></span>` : '';
+    const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:5px;background:${e.groupColor||'#888'};color:#fff;font-size:9px;font-weight:800;flex-shrink:0">${partyLetters.get(e.groupId) || '•'}</span>` : '';
     const groupLbl = e.groupLabel ? `<span class="text-[10px] font-body italic ml-0.5" style="color:${e.groupColor||'#888'}">${e.groupLabel}</span>` : '';
     const avatar = e.groupId
       ? `<div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-headline font-bold" style="background:${e.groupColor}20;color:${e.groupColor};border:2px solid ${e.groupColor}">${e.name.charAt(0).toUpperCase()}</div>`
