@@ -646,7 +646,7 @@ export function renderGroupAssignContent() {
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Station</label>
             <select class="assign-station w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"><option value="">— None —</option>${stationOptions(a.station || entry.station)}</select></div>
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
-            <input type="text" inputmode="decimal" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.cost != null && a.cost !== 0 ? a.cost : ''}"
+            <input type="text" inputmode="none" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.cost != null && a.cost !== 0 ? a.cost : ''}"
               class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
               onfocus="openNumpad(this,'Cost — ' + '${s.label}')" onclick="openNumpad(this,'Cost — ' + '${s.label}')" oninput="updateGroupTotal()"></div>
         </div>
@@ -668,7 +668,7 @@ export function renderGroupAssignContent() {
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">Qty</label>
             <input type="text" inputmode="numeric" value="${existing.qty || ''}" placeholder="0" class="item-qty w-12 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body text-center focus:outline-none focus:border-primary" oninput="updateGroupTotal()">
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">$</label>
-            <input type="text" inputmode="decimal" value="${existing.price != null && existing.price !== 0 ? existing.price : ''}" placeholder="${item.price || '0.00'}" class="item-price w-16 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" onfocus="openNumpad(this,'${item.label}')" onclick="openNumpad(this,'${item.label}')" oninput="updateGroupTotal()">
+            <input type="text" inputmode="none" value="${existing.price != null && existing.price !== 0 ? existing.price : ''}" placeholder="${item.price || '0.00'}" class="item-price w-16 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" onfocus="openNumpad(this,'${item.label}')" onclick="openNumpad(this,'${item.label}')" oninput="updateGroupTotal()">
           </div></div></div>`;
   }).join('');
 
@@ -680,7 +680,7 @@ export function renderGroupAssignContent() {
           <div><div class="font-headline font-semibold text-on-surface text-sm">${fee.label}<span class="ml-2 text-[10px] font-body text-outline-variant uppercase tracking-widest">${fee.type === 'percent' ? 'Percent Fee' : 'Flat Fee'}</span></div>
             ${fee.type === 'percent' ? `<div class="text-xs text-on-surface-variant mt-0.5">${feeLabel} of service subtotal</div>` : ''}</div>
           <div class="flex items-center gap-2"><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">$</label>
-            <input type="text" inputmode="decimal" value="${existing.amount != null && existing.amount !== 0 ? existing.amount : ''}" placeholder="${fee.type==='flat'?fee.value.toFixed(2):'auto'}" class="fee-amount w-20 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" ${fee.type==='percent' ? 'readonly' : ''} onfocus="if(!this.readOnly) openNumpad(this,'${fee.label}')" onclick="if(!this.readOnly) openNumpad(this,'${fee.label}')" oninput="updateGroupTotal()">
+            <input type="text" inputmode="none" value="${existing.amount != null && existing.amount !== 0 ? existing.amount : ''}" placeholder="${fee.type==='flat'?fee.value.toFixed(2):'auto'}" class="fee-amount w-20 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" ${fee.type==='percent' ? 'readonly' : ''} onfocus="if(!this.readOnly) openNumpad(this,'${fee.label}')" onclick="if(!this.readOnly) openNumpad(this,'${fee.label}')" oninput="updateGroupTotal()">
           </div></div></div>`;
   }).join('');
 
@@ -703,7 +703,7 @@ export function renderGroupAssignContent() {
       <div class="bg-surface-container-low rounded-xl p-3 border border-surface-container-high">
         <div class="flex items-center gap-2 mb-2">
           <select class="discount-type-select bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-xs font-body focus:outline-none focus:border-primary" onchange="updateGroupTotal()"><option value="flat">$ Off</option><option value="percent">% Off</option></select>
-          <input type="text" inputmode="decimal" class="discount-input flex-1 bg-surface-container border border-surface-container-high rounded-lg px-3 py-1.5 text-sm font-body text-right focus:outline-none focus:border-primary cursor-pointer" value="${entry.discount && entry.discount > 0 ? entry.discount : ''}" placeholder="0" onfocus="openDiscountNumpad(this)" onclick="openDiscountNumpad(this)" oninput="updateGroupTotal()">
+          <input type="text" inputmode="none" class="discount-input flex-1 bg-surface-container border border-surface-container-high rounded-lg px-3 py-1.5 text-sm font-body text-right focus:outline-none focus:border-primary cursor-pointer" value="${entry.discount && entry.discount > 0 ? entry.discount : ''}" placeholder="0" onfocus="openDiscountNumpad(this)" onclick="openDiscountNumpad(this)" oninput="updateGroupTotal()">
         </div>
         <input type="text" maxlength="60" class="discount-note-input w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-1.5 text-xs font-body focus:outline-none focus:border-primary" value="${entry.discountNote || ''}" placeholder="Reason (optional)">
       </div></div>

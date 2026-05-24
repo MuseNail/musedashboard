@@ -161,13 +161,16 @@ export function renderFloorPlan() {
     grid.style.height = ch + 'px';
     grid.innerHTML = `<div id="floorplan-canvas" style="position:relative;width:${cw}px;height:${ch}px">${stationsHtml}</div>`;
   } else {
-    // Live view: scale the whole canvas to fit the screen — no horizontal scroll.
+    // Live view: scale the whole canvas to fit the screen — no horizontal scroll —
+    // and center it horizontally (transform-origin is top-left, so shift by the
+    // leftover width). Keeps the iPad look; just stops it hugging the left on desktop.
     const availW = grid.clientWidth || 720;
     const availH = Math.max(280, window.innerHeight - grid.getBoundingClientRect().top - 16);
     const s = Math.min(1, availW / cw, availH / ch);
+    const offsetX = Math.max(0, (availW - cw * s) / 2);
     grid.style.overflow = 'hidden';
     grid.style.height = (ch * s) + 'px';
-    grid.innerHTML = `<div id="floorplan-canvas" style="position:relative;width:${cw}px;height:${ch}px;transform-origin:top left;transform:scale(${s})">${stationsHtml}</div>`;
+    grid.innerHTML = `<div id="floorplan-canvas" style="position:relative;width:${cw}px;height:${ch}px;transform-origin:top left;transform:translateX(${offsetX}px) scale(${s})">${stationsHtml}</div>`;
   }
 }
 
