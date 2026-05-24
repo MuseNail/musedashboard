@@ -433,7 +433,7 @@ export function calSelectorSave() {
 export function calSelectorCancel() { _calSelectorDraft = null; const dd = document.getElementById('cal-selector-dropdown'); if (dd) { dd.classList.add('hidden'); dd.style.display = ''; } renderCalSelectorList(); }
 export function calDraftSelectAll(show) { if (!_calSelectorDraft) return; if (show) _calSelectorDraft.hidden.clear(); else _calCalendars.forEach(c => _calSelectorDraft.hidden.add(c.id)); renderCalSelectorList(); }
 // Pointer-based reorder (HTML5 drag-and-drop doesn't work on iOS touch).
-function clearCalDropMarks() { document.querySelectorAll('#cal-selector-list [data-cal-idx]').forEach(r => { r.style.borderTop = ''; }); }
+function clearCalDropMarks() { document.querySelectorAll('#cal-selector-list [data-cal-idx]').forEach(r => r.classList.remove('drop-above')); }
 let _calReorderList = null;
 function calRowAt(y) { const rows = _calReorderList ? [..._calReorderList.querySelectorAll('[data-cal-idx]')] : []; return rows.find(r => { const rc = r.getBoundingClientRect(); return y >= rc.top && y <= rc.bottom; }) || null; }
 export function calReorderStart(e, i) {
@@ -445,7 +445,7 @@ export function calReorderStart(e, i) {
 function calReorderMove(e) {
   e.preventDefault(); clearCalDropMarks();
   const row = calRowAt(e.clientY);
-  if (row && Number(row.dataset.calIdx) !== _calDragIdx) row.style.borderTop = '3px solid #1a5252';
+  if (row && Number(row.dataset.calIdx) !== _calDragIdx) row.classList.add('drop-above');
 }
 function calReorderEnd(e) {
   document.removeEventListener('pointermove', calReorderMove);

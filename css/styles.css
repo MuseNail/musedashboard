@@ -253,3 +253,57 @@
   /* Queue row hover */
   .queue-row:hover { background: #f1f4f5; }
   .queue-row { transition: background 0.15s; }
+
+  /* ══════════════════════════════════════════════════════════════════
+     COSMETIC REFRESH (v2.57) — polish only, no layout/behavior change.
+     Tactile press, slick pill switches, one unified drag drop-marker,
+     softer depth, and a compact-density pass so long lists scroll less.
+     ══════════════════════════════════════════════════════════════════ */
+
+  /* Tactile press feedback on interactive controls */
+  button, [onclick], [role="button"], .dash-tab {
+    transition: transform .08s ease, box-shadow .15s ease, background-color .15s ease, color .15s ease;
+  }
+  button:active, [onclick]:active, [role="button"]:active { transform: scale(0.975); }
+
+  /* Slick pill switch — shared by services / active-staff / role-permission
+     toggles (identical markup: a track div + an absolutely-positioned knob div).
+     On-state keeps its bg-primary class → we layer a gradient + inset shadow;
+     the knob gets a lift + a springy slide. */
+  .mswitch { box-shadow: inset 0 1px 3px rgba(0,0,0,.18); }
+  .mswitch.bg-primary { background-image: linear-gradient(180deg, #237370, var(--primary)); }
+  .mswitch > div { box-shadow: 0 2px 5px rgba(0,0,0,.28); transition: left .22s cubic-bezier(.4,1.3,.5,1) !important; }
+
+  /* Unified drag drop-marker — a glowing teal insert-line, used everywhere a
+     reorder happens (turns slots, tech order, calendar selector, floor plan). */
+  .drop-line { position: relative; height: 0; }
+  .drop-line::before {
+    content:''; position:absolute; left:2px; right:2px; top:-1.5px; height:3px;
+    border-radius:999px; background: var(--primary); box-shadow: 0 0 0 3px rgba(26,82,82,.18);
+  }
+  .drop-line::after {
+    content:''; position:absolute; left:-2px; top:-4px; width:9px; height:9px;
+    border-radius:999px; background: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  /* Lift the item being dragged (turns ghost is already styled; match the others) */
+  .tech-order-item.dragging, .floor-bubble.dragging {
+    box-shadow: 0 12px 30px rgba(0,0,0,.28) !important; transform: rotate(-1.5deg) scale(1.02);
+  }
+  /* Brighter, rounder turns reorder/drop targets */
+  .turns-reorder-target > button { box-shadow: inset 4px 0 0 0 var(--primary), 0 0 0 2px rgba(26,82,82,0.5) !important; }
+  .turns-drop-highlight { border-color: var(--primary) !important; background: rgba(26,82,82,0.12) !important; }
+
+  /* Reorder drop indicator for list rows (calendar selector + tech/staff order) —
+     a clear teal bar on the row the item will land before. */
+  .drop-above { box-shadow: inset 0 3px 0 0 var(--primary) !important; border-radius: 8px; }
+
+  /* Declutter: hide the chunky horizontal scrollbars on the turns slot rows */
+  .turns-slot-row::-webkit-scrollbar { display: none; }
+  .turns-slot-row { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Compact density — trim padding on shared list-row classes so more rows fit */
+  .autocomplete-item { padding: 7px 14px; }
+  .queue-row { padding-top: 8px !important; padding-bottom: 8px !important; }
+
+  /* Softer elevation on cards & modal panels (replaces hard hairline look) */
+  .fixed.inset-0 > div[class*="max-w-"] { box-shadow: 0 24px 60px -12px rgba(0,0,0,.4), 0 8px 24px -8px rgba(0,0,0,.25) !important; }

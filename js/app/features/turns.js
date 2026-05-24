@@ -428,7 +428,7 @@ export function startTechReorder(e) {
   _reorderDragging = item; _reorderList = item.parentNode;
   const rect = item.getBoundingClientRect();
   _reorderClone = item.cloneNode(true);
-  _reorderClone.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;opacity:0.85;pointer-events:none;z-index:9999;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.2);`;
+  _reorderClone.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;opacity:0.9;pointer-events:none;z-index:9999;border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,0.28);transform:rotate(-1.5deg) scale(1.02);`;
   document.body.appendChild(_reorderClone);
   item.style.opacity = '0.3';
   document.addEventListener('pointermove', onTechReorderMove);
@@ -439,9 +439,9 @@ function onTechReorderMove(e) {
   if (!_reorderClone) return;
   _reorderClone.style.top = (e.clientY - 25) + 'px';
   const items = [..._reorderList.querySelectorAll('.tech-order-item')];
-  items.forEach(i => i.style.borderTop = '');
+  items.forEach(i => i.classList.remove('drop-above'));
   const hovered = items.find(i => { if (i === _reorderDragging) return false; const r = i.getBoundingClientRect(); return e.clientY >= r.top && e.clientY <= r.bottom; });
-  if (hovered) hovered.style.borderTop = '3px solid #1a5252';
+  if (hovered) hovered.classList.add('drop-above');
 }
 function onTechReorderEnd(e) {
   document.removeEventListener('pointermove', onTechReorderMove);
@@ -449,7 +449,7 @@ function onTechReorderEnd(e) {
   if (!_reorderDragging) return;
   _reorderDragging.style.opacity = '';
   const items = [..._reorderList.querySelectorAll('.tech-order-item')];
-  items.forEach(i => i.style.borderTop = '');
+  items.forEach(i => i.classList.remove('drop-above'));
   const hovered = items.find(i => { if (i === _reorderDragging) return false; const r = i.getBoundingClientRect(); return e.clientY >= r.top && e.clientY <= r.bottom; });
   if (hovered && hovered !== _reorderDragging) {
     _reorderList.insertBefore(_reorderDragging, hovered);
