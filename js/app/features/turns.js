@@ -152,6 +152,7 @@ export function renderTurnsTechGrid() {
   const bc = document.getElementById('turns-break-count'); if (bc) bc.textContent = cfg().turns_break.length;
 
   const order = getActiveTurnsOrder();
+  const partyLetters = partyLetterMap(q());   // same party letter as the queue/side cards
   let activeCount = 0;
   if (order.length === 0) {
     grid.innerHTML = '<div class="text-sm font-body text-on-surface-variant py-8 text-center opacity-60"><span class="material-symbols-outlined text-4xl block mb-2">swap_vert</span>No technicians added today.<br>Click <strong>Technicians</strong> to set up the turn order.</div>';
@@ -202,7 +203,7 @@ export function renderTurnsTechGrid() {
         const svcLabel = s ? s.label : (e.services.map(sid => svc(sid)?.label || '?').join(', '));
         const costStr = a.cost ? '$' + Number(a.cost).toFixed(0) : '';
         const timeStr = new Date(e.checkinTime).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
-        const groupDot = e.groupId ? `<span class="inline-block w-1.5 h-1.5 rounded-full mr-0.5 flex-shrink-0" style="background:${e.groupColor||'#888'}"></span>` : '';
+        const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0;margin-right:2px">${partyLetters.get(e.groupId)||'•'}</span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
           <button onclick="showGroupAssignModal('${e.id}')" class="w-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px${outline}">
             <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="opacity:0.75">${turnLabel}</span>` : ''}</div>

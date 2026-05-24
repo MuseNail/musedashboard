@@ -8,7 +8,7 @@
 // Assign & Price. Reuses the a.station field (set on all the customer's assignments).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr, localDateStr, formatElapsed } from '../utils.js';
+import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap } from '../utils.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince } from './status.js';
 import { getStations, stationDefs, stationType, stationLabel } from './queue.js';
 import { getActiveTurnsOrder, getTechStatusColor } from './turns.js';
@@ -20,6 +20,7 @@ const staffById = id => cfg().staff.find(s => s.id === id);
 
 let floorEditMode = false;
 const _selected = new Set();   // station ids selected in edit mode
+let _fpLetters = new Map();    // groupId → A/B/C party tag (matches queue/turns)
 
 const GAP = 10;
 const DEF = { P: { w: 152, h: 116 }, M: { w: 108, h: 70 } };   // pedi larger (3 techs/4 svcs), mani compact (1 tech/3 svcs)
@@ -94,6 +95,7 @@ function stationHtml(id, entry) {
   if (entry) {
     content = `<div class="${floorEditMode ? '' : 'floor-bubble cursor-pointer'} h-full w-full flex flex-col justify-center px-1.5 py-1 overflow-hidden" ${floorEditMode ? '' : `data-entry-id="${entry.id}"`}>
       <div class="flex items-start justify-between gap-1">
+        ${entry.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:${Math.round(15*fs)}px;height:${Math.round(15*fs)}px;border-radius:4px;background:${entry.groupColor||'#888'};color:#fff;font-size:${Math.round(9*fs)}px;font-weight:800;flex-shrink:0;margin-top:1px">${_fpLetters.get(entry.groupId)||'•'}</span>` : ''}
         <div class="font-semibold" style="font-size:${Math.round(11 * fs)}px;color:#1f2937;flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.15">${entry.name}</div>
         <span class="flex-shrink-0" style="font-size:${Math.round(9 * fs)}px;color:#52606d" data-checkin-ts="${entryStatusSince(entry)}">${formatElapsed(entryStatusSince(entry))}</span>
       </div>
@@ -130,6 +132,7 @@ export function renderFloorPlan() {
   const grid = document.getElementById('floorplan-grid');
   if (!grid) return;
   const { byStation, unplaced } = collectFloor();
+  _fpLetters = partyLetterMap(q());
   renderFloorStaffRow();
 
   const modeLabel = document.getElementById('floorplan-mode-label');
@@ -146,7 +149,7 @@ export function renderFloorPlan() {
     if (floorEditMode || unplaced.length === 0) tray.innerHTML = '';
     else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not seated — drag onto a station (${unplaced.length})</div>
-      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#c8e6c5' : '#ffe0b2'};color:#1f2937;font-size:11px"><span class="font-semibold">${e.name}</span></div>`).join('')}</div></div>`;
+      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#c8e6c5' : '#ffe0b2'};color:#1f2937;font-size:11px">${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${e.name}</span></div>`).join('')}</div></div>`;
   }
 
   grid.style.position = 'relative';
