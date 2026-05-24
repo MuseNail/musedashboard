@@ -258,7 +258,18 @@ window.staffPinSubmit = () => {
   registerPush();   // re-tag this device's push subscription to the signed-in tech (no-op if alerts off)
 };
 window.staffPinKey = (ev) => { if (ev.key === 'Enter') window.staffPinSubmit(); };
+// Auto-login as soon as a correct PIN is fully entered (no Enter needed) — but wait if
+// the typed PIN is a prefix of a longer staff PIN (ambiguous), to avoid logging in early.
+window.staffPinInput = () => {
+  const pin = (document.getElementById('staff-pin-entry')?.value || '').trim();
+  if (!pin) return;
+  if (!staffByPin(cfg().staff, cfg().inactive_staff, pin)) return;
+  const inactive = new Set(cfg().inactive_staff || []);
+  const ambiguous = (cfg().staff || []).some(s => s.pin && !inactive.has(s.id) && String(s.pin) !== pin && String(s.pin).startsWith(pin));
+  if (!ambiguous) window.staffPinSubmit();
+};
 window.staffSwitch = () => { localStorage.removeItem(MY_KEY); myId = null; render(); };
+window.staffLogout = window.staffSwitch;
 
 // ── Push notifications (assignment alerts) ────────
 const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && typeof Notification !== 'undefined';

@@ -156,9 +156,11 @@ export function renderFloorPlan() {
   const cw = maxRight + GAP, ch = maxBottom + GAP;
   const stationsHtml = stationIds.map(id => stationHtml(id, byStation[id] || null)).join('');
   if (floorEditMode) {
-    // Full size while arranging (drag stays precise); the editor may scroll.
+    // Full size while arranging (drag stays precise). Cap the grid to the viewport so
+    // it scrolls INTERNALLY — otherwise a station placed far down/right can't be reached.
     grid.style.overflow = 'auto';
-    grid.style.height = ch + 'px';
+    const availH = Math.max(280, window.innerHeight - grid.getBoundingClientRect().top - 16);
+    grid.style.height = Math.min(ch, availH) + 'px';
     grid.innerHTML = `<div id="floorplan-canvas" style="position:relative;width:${cw}px;height:${ch}px">${stationsHtml}</div>`;
   } else {
     // Live view: scale the whole canvas to fit the screen — no horizontal scroll —
