@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, formatElapsed, byName, todayStr } from '../utils.js';
+import { showToast, formatElapsed, byName, todayStr, openNumpad } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, setAssignmentStatus, isPaidStatus } from './status.js';
@@ -667,7 +667,7 @@ export function renderGroupAssignContent() {
       <div class="bg-surface-container-low rounded-xl p-3 border border-surface-container-high">
         <div class="flex items-center gap-2 mb-2">
           <select class="discount-type-select bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-xs font-body focus:outline-none focus:border-primary" onchange="updateGroupTotal()"><option value="flat">$ Off</option><option value="percent">% Off</option></select>
-          <input type="text" inputmode="decimal" class="discount-input flex-1 bg-surface-container border border-surface-container-high rounded-lg px-3 py-1.5 text-sm font-body text-right focus:outline-none focus:border-primary cursor-pointer" value="${entry.discount && entry.discount > 0 ? entry.discount : ''}" placeholder="0" onfocus="openNumpad(this,'Discount')" onclick="openNumpad(this,'Discount')" oninput="updateGroupTotal()">
+          <input type="text" inputmode="decimal" class="discount-input flex-1 bg-surface-container border border-surface-container-high rounded-lg px-3 py-1.5 text-sm font-body text-right focus:outline-none focus:border-primary cursor-pointer" value="${entry.discount && entry.discount > 0 ? entry.discount : ''}" placeholder="0" onfocus="openDiscountNumpad(this)" onclick="openDiscountNumpad(this)" oninput="updateGroupTotal()">
         </div>
         <input type="text" maxlength="60" class="discount-note-input w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-1.5 text-xs font-body focus:outline-none focus:border-primary" value="${entry.discountNote || ''}" placeholder="Reason (optional)">
       </div></div>
@@ -686,6 +686,13 @@ export function toggleGroupService(sid) {
     if (entry.assignments) entry.assignments = entry.assignments.filter(a => a.serviceId !== sid);
   } else entry.services.push(sid);
   renderGroupAssignContent();
+}
+
+// Open the touch numpad in the right mode for the discount field: a "% Off"
+// discount is a plain percent (20 → 20%), not a dollar/cents amount.
+export function openDiscountNumpad(inputEl) {
+  const type = document.querySelector('#group-assign-content .discount-type-select')?.value || 'flat';
+  openNumpad(inputEl, type === 'percent' ? '% Off' : 'Discount ($)', type === 'percent' ? 'percent' : 'cost');
 }
 
 export function updateGroupTotal() {

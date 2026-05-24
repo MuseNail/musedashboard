@@ -155,7 +155,7 @@ function _attachAcKeyNav(input, dropdown, onSelect) {
     const items = dropdown.querySelectorAll('.autocomplete-item');
     if (e.key === 'ArrowDown') { e.preventDefault(); highlight(Math.min(activeIdx + 1, items.length - 1)); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(Math.max(activeIdx - 1, 0)); }
-    else if (e.key === 'Enter' && activeIdx >= 0) { e.preventDefault(); onSelect(activeIdx); input.removeEventListener('keydown', handler); }
+    else if (e.key === 'Enter' && activeIdx >= 0) { e.preventDefault(); e.stopPropagation(); onSelect(activeIdx); input.removeEventListener('keydown', handler); }
     else if (e.key === 'Escape') { dropdown.classList.add('hidden'); input.removeEventListener('keydown', handler); }
   }
   input._acKeyHandler && input.removeEventListener('keydown', input._acKeyHandler);

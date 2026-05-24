@@ -103,14 +103,20 @@ export function formatPhone(input) {
 // ── Numeric Keypad ────────────────────────────────
 let _numpadTarget = null, _numpadRaw = '', _numpadCallback = null, _numpadMode = 'cost';
 
-export function openNumpad(inputEl, label) {
+export function openNumpad(inputEl, label, mode) {
   if (window.matchMedia('(pointer: fine)').matches) return;
-  _numpadMode = 'cost'; _numpadTarget = inputEl; _numpadCallback = null;
+  _numpadMode = mode === 'percent' ? 'percent' : 'cost'; _numpadTarget = inputEl; _numpadCallback = null;
   const existing = (inputEl.value || '').replace(/[^0-9.]/g, '');
-  _numpadRaw = existing && !isNaN(parseFloat(existing)) ? Math.round(parseFloat(existing) * 100).toString() : '';
-  document.getElementById('numpad-label').textContent = label || 'Cost';
+  if (_numpadMode === 'percent') {
+    // A percent is a plain whole/decimal value (20 → 20%), NOT a cents accumulator.
+    _numpadRaw = existing && !isNaN(parseFloat(existing)) ? String(parseFloat(existing)) : '';
+    document.getElementById('numpad-plus-key').textContent = '';
+  } else {
+    _numpadRaw = existing && !isNaN(parseFloat(existing)) ? Math.round(parseFloat(existing) * 100).toString() : '';
+    document.getElementById('numpad-plus-key').textContent = '+';
+  }
+  document.getElementById('numpad-label').textContent = label || (_numpadMode === 'percent' ? 'Percent' : 'Cost');
   document.getElementById('numpad-dot-key').textContent  = '.';
-  document.getElementById('numpad-plus-key').textContent = '+';
   _numpadUpdateDisplay();
   const m = document.getElementById('numpad-modal');
   m.classList.remove('hidden'); m.style.display = 'flex';
@@ -140,6 +146,8 @@ function _numpadUpdateDisplay() {
     else if (d.length <= 6) f = '(' + d.slice(0,3) + ') ' + d.slice(3);
     else f = '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6,10);
     el.textContent = f || '—';
+  } else if (_numpadMode === 'percent') {
+    el.textContent = (_numpadRaw || '0') + '%';
   } else {
     const cents = parseInt(_numpadRaw || '0', 10);
     el.textContent = '$' + (cents / 100).toFixed(2);
@@ -155,6 +163,16 @@ export function numpadKey(key) {
       else if (_numpadRaw.length + 1 <= 10) _numpadRaw += '0';
     } else { _numpadRaw += key; }
     _numpadUpdateDisplay();
+    return;
+  }
+  if (_numpadMode === 'percent') {
+    if (key === '+') return;
+    let raw = _numpadRaw;
+    if (key === '.') { if (raw.includes('.')) return; raw = (raw === '' ? '0' : raw) + '.'; }
+    else if (key === '00') { if (raw === '' || raw === '0') return; raw += '00'; }
+    else { raw = raw === '0' ? key : raw + key; }
+    if (raw.replace('.', '').length > 4) return;
+    _numpadRaw = raw; _numpadUpdateDisplay();
     return;
   }
   if (key === '.' || key === '+') return;
@@ -174,6 +192,9 @@ export function numpadConfirm() {
       if (d.length === 10) f = '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
       else if (d.length > 0) f = d;
       _numpadTarget.value = f;
+    } else if (_numpadMode === 'percent') {
+      const v = parseFloat(_numpadRaw);
+      _numpadTarget.value = !isNaN(v) && v > 0 ? String(v) : '';
     } else {
       const cents = parseInt(_numpadRaw || '0', 10);
       _numpadTarget.value = cents > 0 ? (cents / 100).toString() : '';

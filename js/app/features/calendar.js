@@ -151,36 +151,64 @@ export function calRenderGrid() {
     body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;${isFirst?'border-left:2px solid rgba(0,0,0,0.12);':''}${isLast?'':'border-right:2px solid rgba(0,0,0,0.12);'}min-height:${SLOTS*SLOT_H}px"><div style="position:relative;height:${SLOTS*SLOT_H}px">`;
     for (let s = 0; s < SLOTS; s++) { const isHour = s % (60/SLOT_MINS) === 0; const h = START_HOUR + Math.floor(s*SLOT_MINS/60), m = (s*SLOT_MINS)%60; body += `<div style="position:absolute;left:0;right:0;top:${s*SLOT_H}px;height:${SLOT_H}px;border-top:${isHour?'1.5px solid rgba(0,0,0,0.12)':'1px solid rgba(0,0,0,0.05)'};cursor:pointer" onclick="calSlotClick('${cal.id}',${h},${m})"></div>`; }
     if (isToday) { const lineTop = ((nowMin - START_HOUR*60)/SLOT_MINS)*SLOT_H; if (lineTop >= 0 && lineTop <= SLOTS*SLOT_H) body += `<div style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;border-top:2px dashed #e53935;z-index:5;pointer-events:none">${colIdx===0?`<div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>`:''}</div>`; }
-    events.forEach(ev => {
-      if (!ev.start) return;
-      const startDt = new Date(ev.start.dateTime||ev.start.date), endDt = new Date(ev.end?.dateTime||ev.end?.date||startDt.getTime()+3600000);
+    // Group this column's events into bookings so a party checked in together (or
+    // one guest with several services) renders as ONE bubble. Overlapping same-time
+    // bubbles stacking on top of each other was the "piled-up / unreadable" bug.
+    // Key = shared museGroupId, else the event's own id for a solo appointment.
+    const bookings = new Map();
+    events.forEach(ev => { if (!ev.start) return; const k = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!bookings.has(k)) bookings.set(k, []); bookings.get(k).push(ev); });
+    const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,' ').replace(/\r/g,'');
+    const escHtml = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    bookings.forEach(evs => {
+      const first = evs[0];
+      const startDt = new Date(first.start.dateTime||first.start.date), endDt = new Date(first.end?.dateTime||first.end?.date||startDt.getTime()+3600000);
       const sMin = startDt.getHours()*60+startDt.getMinutes(), eMin = endDt.getHours()*60+endDt.getMinutes();
       const topMin = sMin - START_HOUR*60, durMin = Math.max(eMin-sMin,15);
       if (topMin < 0 || topMin >= (END_HOUR-START_HOUR)*60) return;
       const top = (topMin/SLOT_MINS)*SLOT_H, ht = (durMin/SLOT_MINS)*SLOT_H;
-      const timeStr = startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}), title = ev.summary||'', desc = ev.description||'';
-      const ext = ev.extendedProperties?.private || {}, notes = _apptNotes(ev), confirmed = ext.museConfirmed === '1';
-      const hasPhone = !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(desc);
-      const knownSvcs = cfg().services.some(s => title.toLowerCase().includes(s.label.toLowerCase()));
-      const isAppt = hasPhone || knownSvcs || ext.museLines !== undefined, isPast = startDt < now;
-      // Match this event to a queue entry ONLY by the check-in link (calEventId)
-      // or exact phone — never by loose name prefix, which made unrelated
-      // appointments all show "Checked In".
-      const evPhone = _apptPhone(ev).replace(/\D/g,'');
-      const qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id))
-        || (evPhone ? queue().find(x => (x.phone||'').replace(/\D/g,'') === evPhone) : null);
+      const timeStr = startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
+      const primaryEv = evs.find(e => (e.extendedProperties?.private||{}).musePrimary === '1') || first;
+      const ppriv = primaryEv.extendedProperties?.private || {};
+      const primaryName = ppriv.musePrimaryName || ppriv.museName || (primaryEv.summary||'').split(' — ')[0] || 'Guest';
+      const primaryPhone = ppriv.musePrimaryPhone || _apptPhone(primaryEv);
+      const notes = _apptNotes(first), confirmed = evs.some(e => (e.extendedProperties?.private||{}).museConfirmed === '1'), isPast = startDt < now;
+      // Appointment-ness + a queue match from ANY event in the booking. Match a queue
+      // entry only by the check-in link or exact phone — never by loose name prefix.
+      let isAppt = false, qm = null;
+      for (const ev of evs) {
+        const ext = ev.extendedProperties?.private || {}, d = ev.description || '', t = ev.summary || '';
+        if (!!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(d) || cfg().services.some(s => t.toLowerCase().includes(s.label.toLowerCase())) || ext.museLines !== undefined) isAppt = true;
+        if (!qm) { const evPhone = _apptPhone(ev).replace(/\D/g,''); qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || (evPhone ? queue().find(x => (x.phone||'').replace(/\D/g,'') === evPhone) : null); }
+      }
       const qs = qm?.status || null;
-      let bg, border, tc = '#1a1a1a', sl = '';
+      // One row per service in THIS column: "FirstName — Service".
+      const svcRows = [];
+      evs.forEach(ev => {
+        const ext = ev.extendedProperties?.private || {};
+        const person = ext.museName || (ev.summary||'').split(' — ')[0] || '';
+        const fn = (person.split(' ')[0] || person).trim();
+        const lines = _parseApptLines(ev, cal.id).filter(l => !l.calId || l.calId === cal.id);
+        if (lines.length === 0 && ext.museLines === undefined) { cfg().services.filter(s => (ev.summary||'').toLowerCase().includes(s.label.toLowerCase())).forEach(s => svcRows.push({ fn, label: s.label, svcId: s.id })); return; }
+        lines.forEach(l => { const s = cfg().services.find(x => x.id === l.svcId); svcRows.push({ fn, label: s?.label || l.svcId || '', svcId: l.svcId || '' }); });
+      });
+      const dotColors = [...new Set(svcRows.map(r => (SVC_GROUPS.find(x => x.ids.some(id => (r.svcId||'').toLowerCase().includes(id)))||{}).color || '#455a64'))].slice(0,6);
+      const chips = dotColors.map(c => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:2px;flex-shrink:0"></span>`).join('');
+      let bg, border, tc = '#1a1a1a';   // status is conveyed by the bubble's color
       if (!isAppt) { bg='#eceff1'; border='#78909c'; tc='#37474f'; }
-      else if (qs==='paid' || qs==='done') { bg='#f3f4f6'; border='#9ca3af'; tc='#6b7280'; sl='✓ Paid'; }
-      else if (qs==='complete') { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; sl='✓ Complete'; }
-      else if (qs==='inservice') { bg='#dcfce7'; border='#16a34a'; tc='#14532d'; sl='● In Service'; }
-      else if (qs==='waiting') { bg='#dbeafe'; border='#2563eb'; tc='#1e3a8a'; sl='● Checked In'; }
-      else if (isPast && isAppt) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; sl='⚠ Not Checked In'; }
+      else if (qs==='paid' || qs==='done') { bg='#f3f4f6'; border='#9ca3af'; tc='#6b7280'; }
+      else if (qs==='complete') { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; }
+      else if (qs==='inservice') { bg='#dcfce7'; border='#16a34a'; tc='#14532d'; }
+      else if (qs==='waiting') { bg='#dbeafe'; border='#2563eb'; tc='#1e3a8a'; }
+      else if (isPast && isAppt) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; }
       else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt → tinted by this tech's color
-      const chips = cfg().services.filter(s => title.toLowerCase().includes(s.label.toLowerCase()) || desc.toLowerCase().includes(s.label.toLowerCase())).map(s => { const g = SVC_GROUPS.find(x => x.ids.some(id => s.id.toLowerCase().includes(id))); return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${g?.color||'#455a64'};margin-right:2px;flex-shrink:0"></span>`; }).join('');
-      const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,' ').replace(/\r/g,'');
-      body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(ev.id)}','${_e(title||'Event')}','${_e(desc)}',${isAppt})" style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)"><div style="display:flex;align-items:center;gap:2px;overflow:hidden">${chips}${confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0">✓</span>':''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${title||'Event'}</span></div>${ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75">${timeStr}</div>`:''}${sl&&ht>44?`<div style="font-size:9px;font-weight:700;color:${border}">${sl}</div>`:''}${notes&&ht>44?`<div style="font-size:9px;color:${tc};opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📝 ${notes.split('\n')[0].replace(/</g,'&lt;')}</div>`:''}</div>`;
+      const phoneLine = [timeStr, primaryPhone].filter(Boolean).join('  ·  ');
+      const svcHtml = svcRows.map(r => `<div style="font-size:10px;color:${tc};opacity:0.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35">${escHtml(r.fn)}${r.fn&&r.label?' — ':''}${escHtml(r.label)}</div>`).join('');
+      body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(primaryEv.id)}','${_e(primaryName)}','${_e(notes)}',${isAppt})" style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
+        + `<div style="display:flex;align-items:center;gap:2px;overflow:hidden;line-height:1.25">${chips}${confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0">✓</span>':''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}</span></div>`
+        + (ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(phoneLine)}</div>`:'')
+        + (ht>44?svcHtml:'')
+        + (notes&&ht>44?`<div style="font-size:9px;color:${tc};opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📝 ${escHtml(notes.split('\n')[0])}</div>`:'')
+        + `</div>`;
     });
     body += '</div></div>';
   });
@@ -568,12 +596,15 @@ export function closeApptModal() { const m = document.getElementById('appt-modal
 // Build one person's event body. museLines/museName/musePhone (per person) + a
 // shared museGroupId link everyone in the booking so quick check-in can pull the
 // whole party in as one group.
-function _apptEventBody(person, startDt, endDt, notes, groupId) {
+function _apptEventBody(person, startDt, endDt, notes, groupId, primary) {
   const svcTitles = person.lines.filter(l => l.svcId).map(l => cfg().services.find(s=>s.id===l.svcId)?.label).filter(Boolean);
   const summary = svcTitles.length > 0 ? `${person.name} — ${svcTitles.join(', ')}` : person.name;
   const museLines = person.lines.filter(l => l.svcId || l.calId).map(l => ({ svcId: l.svcId || '', calId: l.calId || '' }));
   const priv = { museLines: JSON.stringify(museLines), musePhone: person.phone || '', museName: person.name };
   if (groupId) priv.museGroupId = groupId;
+  // Every event in a booking carries the primary's name/phone so the calendar can
+  // render the whole party as one bubble labelled by the primary guest.
+  if (primary) { priv.musePrimaryName = primary.name; priv.musePrimaryPhone = primary.phone || ''; if (primary.isPrimary) priv.musePrimary = '1'; }
   return { summary, description: notes, start: { dateTime: startDt.toISOString() }, end: { dateTime: endDt.toISOString() }, extendedProperties: { private: priv } };
 }
 
@@ -607,7 +638,7 @@ export async function saveAppt() {
     showToast('Saving…');
     for (let i = 0; i < people.length; i++) {
       const p = people[i];
-      const body = _apptEventBody(p, startDt, endDt, notes, groupId);
+      const body = _apptEventBody(p, startDt, endDt, notes, groupId, { name: people[0].name, phone: people[0].phone, isPrimary: i === 0 });
       const cals = [...new Set(p.lines.filter(l => l.calId).map(l => l.calId))];
       if (i === 0 && _apptEditId) {
         // Primary on edit: update/move the existing event, then insert any extra calendars.
