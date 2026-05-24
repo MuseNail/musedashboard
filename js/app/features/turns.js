@@ -74,7 +74,7 @@ export function getTechTurns(techId) {
   return { full, half, bonus, total: full + half };
 }
 
-function getTechStatusColor(staffId) {
+export function getTechStatusColor(staffId) {
   if (cfg().turns_off.includes(staffId))   return { bg: '#f3f4f6', text: '#9ca3af', label: 'Off' };
   if (cfg().turns_break.includes(staffId)) return { bg: '#f5c870', text: '#3a2800', label: 'On Break' };
   if (getActiveTechEntries(staffId).length > 0) return { bg: '#fa746f', text: '#fff', label: 'In Service' };
