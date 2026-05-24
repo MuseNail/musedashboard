@@ -11,6 +11,7 @@ import * as store from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr } from './utils.js';
 import { applyEntryStatus, isPaidStatus } from './features/status.js';
+import { VAPID_PUBLIC_KEY, PUSH_PROXY } from './config.js';
 
 const cfg     = () => store.getState().config;
 const queue   = () => store.getState().queue;
@@ -109,7 +110,13 @@ function renderMain(meStaff) {
   const tab = (id, label) => `<button onclick="staffTab('${id}')"
     class="flex-1 py-3 rounded-xl font-headline font-bold text-base transition-all ${_view === id ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}">${label}</button>`;
 
+  const notifBanner = (pushSupported() && Notification.permission !== 'granted') ? `
+    <button onclick="enableStaffPush()" class="w-full mb-3 rounded-xl border-2 border-primary text-primary py-3 font-headline font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors">
+      <span class="material-symbols-outlined" style="font-size:18px">notifications_active</span> Turn on assignment alerts
+    </button>` : '';
+
   document.getElementById('staff-list').innerHTML = `
+    ${notifBanner}
     <div class="rounded-2xl bg-primary text-on-primary px-5 py-4 mb-3 flex items-end justify-between shadow-sm">
       <div><div class="text-xs font-body uppercase tracking-widest opacity-80">Today</div>
         <div class="font-headline font-extrabold leading-none" style="font-size:40px">$${st.total.toFixed(0)}</div></div>
@@ -248,16 +255,56 @@ window.staffPinSubmit = () => {
   myId = match.id; localStorage.setItem(MY_KEY, myId);
   if (input) input.value = '';
   render();
+  registerPush();   // re-tag this device's push subscription to the signed-in tech (no-op if alerts off)
 };
 window.staffPinKey = (ev) => { if (ev.key === 'Enter') window.staffPinSubmit(); };
 window.staffSwitch = () => { localStorage.removeItem(MY_KEY); myId = null; render(); };
+
+// ── Push notifications (assignment alerts) ────────
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && typeof Notification !== 'undefined';
+const isStandalone  = () => (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+const isIOS         = () => /iphone|ipad|ipod/i.test(navigator.userAgent || '');
+function urlB64ToBytes(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const s = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(s), arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+window.enableStaffPush = async () => {
+  if (!pushSupported()) { showToast("Notifications aren't supported on this device"); return; }
+  if (isIOS() && !isStandalone()) { showToast('On iPhone/iPad: Add Muse Staff to your Home Screen first, then turn on alerts.'); return; }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { showToast('Notifications not enabled'); return; }
+    await registerPush();
+    showToast('Assignment alerts on ✓');
+    render();
+  } catch { showToast('Could not enable notifications'); }
+};
+// Subscribe this device (if needed) and register the subscription under the current tech.
+// No-ops unless permission is already granted + a tech is signed in.
+async function registerPush() {
+  if (!pushSupported() || Notification.permission !== 'granted' || !myId) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToBytes(VAPID_PUBLIC_KEY) });
+    const prevTech = localStorage.getItem('muse_push_techid');
+    if (prevTech && prevTech !== myId) {   // device switched techs → drop the old link
+      try { await fetch(PUSH_PROXY + '/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: prevTech, endpoint: sub.endpoint }) }); } catch {}
+    }
+    await fetch(PUSH_PROXY + '/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: myId, subscription: sub.toJSON() }) });
+    localStorage.setItem('muse_push_techid', myId);
+  } catch {}
+}
 
 // ── Boot ──────────────────────────────────────────
 function boot() {
   sync.start();
   store.subscribe(() => render());
   render();   // instant render from cached state; subscribe re-renders on hydrate
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').then(() => registerPush()).catch(() => {});
 }
 // Only boot inside the real page (the login shell exists); skipped when imported
 // by the Node test runner (the global shim's getElementById returns null).

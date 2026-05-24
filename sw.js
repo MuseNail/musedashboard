@@ -1,7 +1,7 @@
-// ── Service Worker (v2.50 — modular ES-module client) ───────────────────────
+// ── Service Worker (v2.51 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'muse-v2.50';
+const CACHE_NAME = 'muse-v2.51';
 
 const PRECACHE_URLS = [
   '/musedashboard/',
@@ -88,3 +88,26 @@ async function cacheFirst(req) {
     return res;
   } catch { return new Response('Offline', { status: 503 }); }
 }
+
+// ── Web Push (Muse Staff) ────────────────────────────────────────────────────
+// Payload-less pushes: show a generic notification; the tech taps to open the app.
+self.addEventListener('push', event => {
+  let body = 'New customer assigned — tap to open';
+  try { if (event.data) { const d = event.data.json(); if (d && d.body) body = d.body; } } catch {}
+  event.waitUntil(self.registration.showNotification('Muse Staff', {
+    body,
+    icon: '/musedashboard/icons/icon-192.png',
+    badge: '/musedashboard/icons/icon-192.png',
+    tag: 'muse-assign',
+    renotify: true,
+  }));
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const c of list) { if (c.url.includes('/musedashboard/staff') && 'focus' in c) return c.focus(); }
+      return clients.openWindow('/musedashboard/staff.html');
+    })
+  );
+});

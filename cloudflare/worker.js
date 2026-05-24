@@ -44,6 +44,30 @@ function json(data, status = 200) {
   });
 }
 
+// ── Web Push (VAPID) helpers ────────────────────────────────────────────────────
+// Payload-less push: only a VAPID JWT (ES256) is needed — no aes128gcm body
+// encryption. (Pure helpers exported for unit tests.)
+export function b64urlFromBytes(bytes) {
+  const b = new Uint8Array(bytes); let s = '';
+  for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+export function b64urlFromStr(str) { return b64urlFromBytes(new TextEncoder().encode(str)); }
+export function vapidJwtUnsigned(aud, sub, expSec) {
+  return b64urlFromStr(JSON.stringify({ typ: 'JWT', alg: 'ES256' })) + '.' +
+         b64urlFromStr(JSON.stringify({ aud, exp: expSec, sub }));
+}
+async function vapidJwt(privJwkStr, aud, sub) {
+  const key = await crypto.subtle.importKey('jwk', JSON.parse(privJwkStr), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const unsigned = vapidJwtUnsigned(aud, sub, Math.floor(Date.now() / 1000) + 12 * 3600);
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key, new TextEncoder().encode(unsigned));
+  return unsigned + '.' + b64urlFromBytes(sig);   // WebCrypto ECDSA = raw r‖s, exactly what ES256 wants
+}
+async function pushKeyHash(endpoint) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(endpoint));
+  return [...new Uint8Array(buf)].slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // ── Origin gate (OFF by default; flip on live via the ORIGIN_GATE_ENABLED secret) ──
 // When enabled, browser requests from a non-allowed Origin get 403. Requests with
 // NO Origin header (server-to-server, <img> loads, curl, the cron) always pass —
@@ -268,6 +292,16 @@ export default {
       });
     }
 
+    // ── Web Push (Muse Staff notifications) ──────────────────────────────────────
+    // POST /push/subscribe | /push/unsubscribe — register a tech's push subscription.
+    // Forwarded to the DO (same pattern as /state), re-wrapped with CORS.
+    if (path.startsWith('/push/')) {
+      const stub  = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
+      const doRes = await stub.fetch(request);
+      const body  = await doRes.text();
+      return new Response(body, { status: doRes.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+    }
+
     // ── Manual backup trigger (testing) ─────────────────────────────────────────
     // POST /backup/run[?date=YYYY-MM-DD] — runs the daily Sheets backup on demand.
     // Token-gated by RESTORE_TOKEN when set (open in dev when unset).
@@ -406,7 +440,51 @@ export class MuseSalonDO {
       return new Response(JSON.stringify(res), { status: res.error ? 400 : 200, headers: { 'Content-Type': 'application/json' } });
     }
 
+    // ── Web Push subscriptions (per tech) ───────────────────────────────────────
+    if (url.pathname === '/push/subscribe' && request.method === 'POST') {
+      let body = {}; try { body = await request.json(); } catch {}
+      const { techId, subscription } = body;
+      if (!techId || !subscription || !subscription.endpoint) return new Response(JSON.stringify({ error: 'techId + subscription required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      const hash = await pushKeyHash(subscription.endpoint);
+      await this.state.storage.put('push:' + techId + ':' + hash, subscription);
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.pathname === '/push/unsubscribe' && request.method === 'POST') {
+      let body = {}; try { body = await request.json(); } catch {}
+      if (body.techId && body.endpoint) await this.state.storage.delete('push:' + body.techId + ':' + (await pushKeyHash(body.endpoint)));
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
     return new Response('Expected WebSocket upgrade or /state/*', { status: 426 });
+  }
+
+  // Send a payload-less push to every device subscribed for this tech; prune dead subs.
+  async sendPushToTech(techId) {
+    if (!this.env.VAPID_PRIVATE_KEY) return;
+    const subs = await this.state.storage.list({ prefix: 'push:' + techId + ':' });
+    if (subs.size === 0) return;
+    const subject = this.env.VAPID_SUBJECT || 'mailto:admin@musenailandspa.com';
+    const pub = this.env.VAPID_PUBLIC_KEY || '';
+    await Promise.all([...subs.entries()].map(async ([key, sub]) => {
+      try {
+        if (!sub || !sub.endpoint) { await this.state.storage.delete(key); return; }
+        const jwt = await vapidJwt(this.env.VAPID_PRIVATE_KEY, new URL(sub.endpoint).origin, subject);
+        const res = await fetch(sub.endpoint, { method: 'POST', headers: { Authorization: `vapid t=${jwt}, k=${pub}`, TTL: '2592000' } });
+        if (res.status === 404 || res.status === 410) await this.state.storage.delete(key);   // subscription gone
+        else if (!res.ok) console.warn('[push]', res.status, 'tech', techId);
+      } catch (e) { console.error('[push] send failed:', (e && e.message) || String(e)); }
+    }));
+  }
+
+  // On a queue.upsert, notify any tech whose techId is NEWLY assigned (present now,
+  // absent before) — so a price/status edit doesn't re-ping. Best-effort, non-blocking.
+  _notifyNewAssignments(prev, entry) {
+    try {
+      if (entry.status === 'paid' || entry.status === 'done') return;
+      const techSet = e => new Set(((e && e.assignments) || []).map(a => a.techId).filter(Boolean));
+      const before = techSet(prev), after = techSet(entry);
+      for (const t of after) if (!before.has(t)) this.sendPushToTech(t).catch(() => {});
+    } catch {}
   }
 
   handleSession(ws) {
@@ -475,9 +553,13 @@ export class MuseSalonDO {
         case 'turns.order':
           await this.state.storage.put('config:turns_order', payload.order);
           break;
-        case 'queue.upsert':
-          await this.state.storage.put('queue:' + payload.entry.id, payload.entry);
+        case 'queue.upsert': {
+          const qKey = 'queue:' + payload.entry.id;
+          const prevEntry = await this.state.storage.get(qKey);
+          await this.state.storage.put(qKey, payload.entry);
+          this._notifyNewAssignments(prevEntry, payload.entry);   // push to newly-assigned techs (best-effort)
           break;
+        }
         case 'queue.remove':
           await this.state.storage.delete('queue:' + payload.id);
           break;

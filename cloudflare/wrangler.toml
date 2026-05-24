@@ -43,13 +43,20 @@ new_sqlite_classes = ["MuseSalonDO"]
 # SHEETS_URL          — FRESH Google Apps Script web-app /exec URL (write-only daily backup intake)
 # SQUARE_TOKEN        — Square access token (sandbox or production)
 # RESTORE_TOKEN       — (optional) gates POST /state/restore and POST /backup/run
+# VAPID_PRIVATE_KEY   — Web Push signing key (JWK JSON string). Set once:
+#                         wrangler secret put VAPID_PRIVATE_KEY
+#                       (matching public key is VAPID_PUBLIC_KEY below + js/app/config.js)
 # ORIGIN_GATE_ENABLED — (optional) "true" enables the Origin allow-list gate; unset/"false" = off (default).
 #                       Flip live with `wrangler secret put ORIGIN_GATE_ENABLED` — no redeploy. Built-in
 #                       allowed origin: https://musenail.github.io. Add more via ALLOWED_ORIGINS.
 # ALLOWED_ORIGINS     — (optional) extra comma-separated origins to allow (e.g. a future custom domain)
 
-# ── Optional environment variables ────────────────────────────────────────────
-# [vars]
+# ── Environment variables ──────────────────────────────────────────────────────
+[vars]
+# Web Push: non-secret VAPID public key (matches js/app/config.js VAPID_PUBLIC_KEY)
+# + the contact subject sent in the VAPID JWT. The PRIVATE key is a secret (above).
+VAPID_PUBLIC_KEY = "BCoL00zoZ6BMiurBxzhh05439KLXdDCgmd6z6bQzOl4r30VYBq7Xzvf5Xl5DqsuqUchNE7xnfcaCrvgUvfJ2uKk"
+VAPID_SUBJECT    = "mailto:info@musenailandspa.com"
 # SQUARE_BASE_URL = "https://connect.squareup.com"
 # Uncomment and set to the sandbox URL during testing:
 # SQUARE_BASE_URL = "https://connect.squareupsandbox.com"
