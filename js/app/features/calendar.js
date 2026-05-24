@@ -92,7 +92,7 @@ export function renderTodaysAppointments() {
   listEl.innerHTML = rows.map(r => {
     const timeStr = r.startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
     const qs = r.qm?.status;
-    const stat = qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : (r.startDt < new Date() ? ['#ea580c','Not in'] : ['','']);
+    const stat = qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af','Unconfirmed']);
     const svcLines = [];
     r.persons.forEach((lines, pnm) => { const fn = (pnm.split(' ')[0]||pnm).trim(); lines.forEach(l => { const s = cfg().services.find(x=>x.id===l.svcId); const tech = l.calId ? (_calCalendars.find(c=>c.id===l.calId)?.name||'') : 'Unassigned'; svcLines.push(`${escHtml(fn)} · ${escHtml(s?.label||l.svcId||'service')}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
     const svcHtml = svcLines.slice(0,8).map(t => `<div style="font-size:10px;color:var(--md-on-surface-variant);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`).join('');
