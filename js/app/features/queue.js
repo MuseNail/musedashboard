@@ -17,24 +17,68 @@ const q     = () => getState().queue;
 const svc   = id => cfg().services.find(s => s.id === id);
 const staffById = id => cfg().staff.find(s => s.id === id);
 const activeStaff = () => cfg().staff.filter(s => !cfg().inactive_staff.includes(s.id));
-// ── Stations (editable in Settings; synced as config.stations) ────────────────
-// Each station = { id, type:'P'|'M', label }. id is the STABLE key (used as the
-// a.station value + station_layout key), so renaming only changes the label and
-// never breaks seated customers, floor layout, or historical records. When
-// config.stations is empty we fall back to the original P1–P12 / M1–M15 set, so
-// existing installs behave identically until the operator edits the list.
+// ── Station categories + stations (editable in Settings; synced as config) ────
+// A CATEGORY = { id, label, color, w, h } stored in config.station_categories.
+//   id    = STABLE key referenced by station.type (renaming only changes label).
+//   color = floor-plan accent; w/h = default tile size for that category's stations.
+// A STATION = { id, type, label } in config.stations. id is the STABLE key (used as
+// the a.station value + station_layout key), so renaming only changes the label and
+// never breaks seated customers, floor layout, or historical records. When either
+// list is empty we fall back to the original Pedicure/Manicure defaults, so existing
+// installs behave identically until the operator edits them.
+export const DEFAULT_CATEGORIES = [
+  { id: 'P', label: 'Pedicure', color: '#1a5c7a', w: 152, h: 116 },
+  { id: 'M', label: 'Manicure', color: '#785a1a', w: 108, h: 70  },
+];
 export const DEFAULT_STATIONS = [
   ...Array.from({length:12}, (_,i)=>({ id:`P${i+1}`, type:'P', label:`P${i+1}` })),
   ...Array.from({length:15}, (_,i)=>({ id:`M${i+1}`, type:'M', label:`M${i+1}` })),
 ];
+const CATEGORY_PALETTE = ['#1a5c7a','#785a1a','#5c3d8f','#2a7a4f','#7a2a1a','#1a5252','#7a1a5c'];
+export function stationCategories() { const c = cfg().station_categories; return Array.isArray(c) && c.length ? c : DEFAULT_CATEGORIES; }
+export function categoryDef(typeId) { const cats = stationCategories(); return cats.find(c => c.id === typeId) || cats[0]; }
 export function stationDefs() { const s = cfg().stations; return Array.isArray(s) && s.length ? s : DEFAULT_STATIONS; }
 export function getStations()  { return stationDefs().map(s => s.id); }
 export function stationType(id) { const d = stationDefs().find(s => s.id === id); return d ? d.type : (id && id[0] === 'M' ? 'M' : 'P'); }
 export function stationLabel(id){ const d = stationDefs().find(s => s.id === id); return d ? (d.label || d.id) : id; }
 function commitStations(next) { dispatch('config.set', { key: 'stations', value: next }); }
+function commitCategories(next) { dispatch('config.set', { key: 'station_categories', value: next }); }
 
+// ── Category CRUD ─────────────────────────────────────────────────────────────
+export function addStationCategory() {
+  const cats = stationCategories().map(c => ({ ...c }));
+  const ids = new Set(cats.map(c => c.id));
+  let id = '';
+  for (let i = 0; i < 26; i++) { const ch = String.fromCharCode(65 + i); if (!ids.has(ch)) { id = ch; break; } }
+  if (!id) { let n = 1; while (ids.has(`C${n}`)) n++; id = `C${n}`; }
+  cats.push({ id, label: 'New Category', color: CATEGORY_PALETTE[cats.length % CATEGORY_PALETTE.length], w: 130, h: 90 });
+  commitCategories(cats);
+  return id;
+}
+export function renameStationCategory(id, label) {
+  commitCategories(stationCategories().map(c => c.id === id ? { ...c, label: (label || '').trim() || c.id } : { ...c }));
+}
+export function setStationCategoryColor(id, color) {
+  commitCategories(stationCategories().map(c => c.id === id ? { ...c, color: color || c.color } : { ...c }));
+}
+export function deleteStationCategory(id) {
+  if (stationCategories().length <= 1) { showToast('Keep at least one category'); return false; }
+  const used = stationDefs().some(s => s.type === id);
+  if (used) { showToast(`Move or remove this category's stations first`); return false; }
+  commitCategories(stationCategories().filter(c => c.id !== id).map(c => ({ ...c })));
+  return true;
+}
+export function confirmDeleteStationCategory(id) {
+  const cat = categoryDef(id);
+  const doDel = () => { if (deleteStationCategory(id)) renderStationsSettings(); };
+  if (window.showWarnModal) window.showWarnModal('Delete category?', `Remove the "${cat?.label || id}" category?`, doDel);
+  else if (confirm(`Delete category ${cat?.label || id}?`)) doDel();
+}
+
+// ── Station CRUD ──────────────────────────────────────────────────────────────
 export function addStation(type) {
-  const t = type === 'M' ? 'M' : 'P';
+  const cats = stationCategories();
+  const t = cats.some(c => c.id === type) ? type : cats[0].id;
   const defs = stationDefs().map(s => ({ ...s }));
   const ids = new Set(defs.map(s => s.id));
   let n = 1; while (ids.has(`${t}${n}`)) n++;
@@ -47,7 +91,7 @@ export function renameStation(id, label) {
   commitStations(stationDefs().map(s => s.id === id ? { ...s, label: (label || '').trim() || s.id } : { ...s }));
 }
 export function setStationType(id, type) {
-  const t = type === 'M' ? 'M' : 'P';
+  const t = stationCategories().some(c => c.id === type) ? type : stationCategories()[0].id;
   commitStations(stationDefs().map(s => s.id === id ? { ...s, type: t } : { ...s }));
 }
 export function deleteStation(id) {
@@ -64,30 +108,36 @@ export function confirmDeleteStation(id) {
 export function renderStationsSettings() {
   const el = document.getElementById('settings-stations-section'); if (!el) return;
   const defs = stationDefs();
-  const group = (type, title) => {
-    const list = defs.filter(s => s.type === type);
+  const cats = stationCategories();
+  const typeOpts = sel => cats.map(c => `<option value="${c.id}" ${sel===c.id?'selected':''}>${(c.label||c.id).replace(/"/g,'&quot;')}</option>`).join('');
+  const group = cat => {
+    const list = defs.filter(s => s.type === cat.id);
     const rows = list.map(s => `
       <div class="flex items-center gap-2 bg-surface-container-lowest rounded-xl px-3 py-2 border border-surface-container-high">
         <input value="${(s.label || s.id).replace(/"/g,'&quot;')}" onchange="renameStation('${s.id}',this.value);renderStationsSettings()"
           class="flex-1 bg-transparent border-b border-surface-container-high py-1 text-sm font-headline focus:border-primary outline-none">
         <select onchange="setStationType('${s.id}',this.value);renderStationsSettings()" class="text-xs font-body border border-surface-container-high rounded-lg px-1.5 py-1 bg-transparent">
-          <option value="P" ${s.type==='P'?'selected':''}>Pedi</option>
-          <option value="M" ${s.type==='M'?'selected':''}>Mani</option>
+          ${typeOpts(s.type)}
         </select>
         <button onclick="confirmDeleteStation('${s.id}')" class="w-8 h-8 rounded-lg text-outline hover:text-error hover:bg-error/10 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
       </div>`).join('');
-    return `<div class="mb-4">
-      <div class="flex items-center justify-between mb-2">
-        <div class="font-headline font-semibold text-on-surface">${title} <span class="text-xs font-body text-on-surface-variant">(${list.length})</span></div>
-        <button onclick="addStation('${type}');renderStationsSettings()" class="text-xs font-headline font-bold text-primary flex items-center gap-1 hover:opacity-70"><span class="material-symbols-outlined" style="font-size:16px">add</span>Add</button>
+    return `<div class="mb-4 border border-surface-container-high rounded-2xl p-3">
+      <div class="flex items-center gap-2 mb-2">
+        <input type="color" value="${cat.color || '#1a5c7a'}" onchange="setStationCategoryColor('${cat.id}',this.value);renderStationsSettings()" title="Floor-plan color"
+          class="w-7 h-7 rounded-lg border border-surface-container-high bg-transparent cursor-pointer flex-shrink-0 p-0">
+        <input value="${(cat.label || cat.id).replace(/"/g,'&quot;')}" onchange="renameStationCategory('${cat.id}',this.value);renderStationsSettings()"
+          class="flex-1 bg-transparent border-b border-surface-container-high py-1 text-sm font-headline font-semibold focus:border-primary outline-none">
+        <span class="text-xs font-body text-on-surface-variant">(${list.length})</span>
+        <button onclick="addStation('${cat.id}');renderStationsSettings()" class="text-xs font-headline font-bold text-primary flex items-center gap-1 hover:opacity-70"><span class="material-symbols-outlined" style="font-size:16px">add</span>Station</button>
+        <button onclick="confirmDeleteStationCategory('${cat.id}')" title="Delete category" class="w-8 h-8 rounded-lg text-outline hover:text-error hover:bg-error/10 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">delete_sweep</span></button>
       </div>
-      <div class="space-y-1.5">${rows || '<div class="text-xs font-body text-on-surface-variant italic px-1">None yet</div>'}</div>
+      <div class="space-y-1.5">${rows || '<div class="text-xs font-body text-on-surface-variant italic px-1">No stations yet</div>'}</div>
     </div>`;
   };
   el.innerHTML = `
-    <p class="text-xs font-body text-on-surface-variant mb-4">Stations appear on the Floor Plan and in the Assign &amp; Price station picker. Renaming keeps history intact; a station can't be deleted while a customer is seated there.</p>
-    ${group('P','Pedicure')}
-    ${group('M','Manicure')}`;
+    <p class="text-xs font-body text-on-surface-variant mb-4">Categories group stations on the Floor Plan (each has its own color &amp; zone). Stations appear on the Floor Plan and in the Assign &amp; Price station picker. Renaming keeps history intact; a station can't be deleted while a customer is seated there, and a category can't be deleted while it still has stations.</p>
+    ${cats.map(group).join('')}
+    <button onclick="addStationCategory();renderStationsSettings()" class="w-full mt-1 py-2.5 rounded-xl border border-dashed border-surface-container-high text-sm font-headline font-bold text-primary flex items-center justify-center gap-1 hover:bg-primary/5"><span class="material-symbols-outlined" style="font-size:18px">add</span>Add category</button>`;
 }
 
 const upsert = entry => dispatch('queue.upsert', { entry });

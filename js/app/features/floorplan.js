@@ -10,7 +10,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap } from '../utils.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince } from './status.js';
-import { getStations, stationDefs, stationType, stationLabel } from './queue.js';
+import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef } from './queue.js';
 import { getActiveTurnsOrder, getTechStatusColor } from './turns.js';
 
 const cfg = () => getState().config;
@@ -23,25 +23,34 @@ const _selected = new Set();   // station ids selected in edit mode
 let _fpLetters = new Map();    // groupId → A/B/C party tag (matches queue/turns)
 
 const GAP = 10;
-const DEF = { P: { w: 152, h: 116 }, M: { w: 108, h: 70 } };   // pedi larger (3 techs/4 svcs), mani compact (1 tech/3 svcs)
-const ACCENT = { P: '#1a5c7a', M: '#785a1a' };
+// Per-category default tile size + accent color now live in config.station_categories
+// (categoryDef). catDims/catColor read from there with a safe fallback so the floor
+// plan keeps working even for a station whose category was removed.
+function catDims(typeId)  { const c = categoryDef(typeId); return { w: c?.w || 120, h: c?.h || 90 }; }
+function catColor(typeId) { return categoryDef(typeId)?.color || '#1a5c7a'; }
 
 function containerW() { const g = document.getElementById('floorplan-grid'); return g && g.clientWidth ? g.clientWidth : 720; }
 
-// Deterministic default layout: pedicure zone on top, manicure zone below.
+// Deterministic default layout: each category gets its own zone, stacked top→bottom
+// in category order. A station's default slot = its index within its category's grid,
+// offset below all earlier categories' zones.
 function computedDefault(id) {
-  const type = stationType(id), { w, h } = DEF[type], W = containerW();
+  const type = stationType(id), { w, h } = catDims(type), W = containerW();
+  let yOffset = 0;
+  for (const c of stationCategories()) {
+    if (c.id === type) break;
+    const cnt = stationDefs().filter(s => s.type === c.id).length;
+    if (!cnt) continue;
+    const cw = c.w || 120, ch = c.h || 90;
+    const cPerRow = Math.max(1, Math.floor((W + GAP) / (cw + GAP)));
+    yOffset += Math.ceil(cnt / cPerRow) * (ch + GAP) + 26;
+  }
   const list = stationDefs().filter(s => s.type === type).map(s => s.id);
   const idx = Math.max(0, list.indexOf(id));
   const perRow = Math.max(1, Math.floor((W + GAP) / (w + GAP)));
   const col = idx % perRow, row = Math.floor(idx / perRow);
-  let y = row * (h + GAP);
-  if (type === 'M') {
-    const pCount = stationDefs().filter(s => s.type === 'P').length;
-    const pPerRow = Math.max(1, Math.floor((W + GAP) / (DEF.P.w + GAP)));
-    y += Math.ceil(pCount / pPerRow) * (DEF.P.h + GAP) + 26;
-  }
-  return { x: col * (w + GAP), y, w, h, fill: ACCENT[type], outline: ACCENT[type], shape: 'rounded' };
+  const y = yOffset + row * (h + GAP);
+  return { x: col * (w + GAP), y, w, h, fill: catColor(type), outline: catColor(type), shape: 'rounded' };
 }
 function layout() { return cfg().station_layout || {}; }
 function layoutFor(id) { return { ...computedDefault(id), ...(layout()[id] || {}) }; }
@@ -84,7 +93,7 @@ function stationHtml(id, entry) {
   // Empty (or any station while editing the layout) shows the editor's custom color.
   // In the live view, an occupied seat MATCHES the customer's status:
   // GREEN in service, BLUE complete (ready to pay), ORANGE waiting.
-  const accent = ACCENT[stationType(id)];
+  const accent = catColor(stationType(id));
   let bg = (L.fill || accent) + '17', border = L.outline || accent;
   if (entry && !floorEditMode) {
     if (live) { bg = '#bfe6bd'; border = '#2a7a4f'; }
