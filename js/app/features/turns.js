@@ -238,6 +238,10 @@ export function renderTurnsTechGrid() {
   grid.querySelectorAll('.turns-slot-row').forEach(row => {
     row.addEventListener('wheel', e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && row.scrollWidth > row.clientWidth) { row.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
   });
+  // Rebuilding innerHTML snaps every row's horizontal scroll back to the first turn.
+  // Keep the LATEST turn (rightmost, including the trailing "+" slot) in view instead.
+  // scrollLeft past max clamps to the end; rAF lets layout settle first (needed on iPad).
+  requestAnimationFrame(() => grid.querySelectorAll('.turns-slot-row').forEach(row => { row.scrollLeft = row.scrollWidth; }));
 }
 
 export function renderTurnsQueue() {
