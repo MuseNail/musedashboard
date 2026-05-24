@@ -498,6 +498,14 @@ export function showGroupAssignModal(entryId) {
   renderGroupAssignTabs();
   renderGroupAssignContent();
   const m = document.getElementById('group-assign-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
+  // Smart focus: opening the modal for an in-service customer → jump straight to the
+  // price field for the service in progress, since pricing it is the next logical step.
+  const ae = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
+  const inSvc = ae && (ae.assignments || []).find(a => getAssignmentStatus(ae, a) === 'inservice');
+  if (inSvc) setTimeout(() => {
+    const el = document.querySelector(`#group-assign-content [data-service-id="${inSvc.serviceId}"] .assign-cost`);
+    if (el) { el.focus(); el.select && el.select(); }
+  }, 60);
 }
 
 function renderGroupAssignTabs() {
