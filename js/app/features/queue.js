@@ -8,8 +8,9 @@ import { dispatch } from '../sync.js';
 import { showToast, formatElapsed, byName, todayStr, openNumpad, partyLetterMap } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
-import { getAssignmentStatus, applyEntryStatus, setAssignmentStatus, isPaidStatus } from './status.js';
+import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
+import { serviceTimeInfo } from './servicetime.js';
 import { squareUpsertCustomer, showEditCustomer, customerDirectory, closeCustomerNote } from './square-customers.js';
 
 const cfg   = () => getState().config;
@@ -242,6 +243,8 @@ function buildQueueRow(e) {
     if (tech) parts.push('→ ' + tech.name);
     if (a.station) parts.push('@ ' + a.station);
     if (a.cost) parts.push('$' + Number(a.cost).toFixed(2));
+    const sti = serviceTimeInfo(a);
+    if (sti) parts.push(`<span style="color:${sti.color};font-weight:700">${sti.text}</span>`);
     return parts.join(' ');
   }).join(' · ');
   const totalDisplay = e.totalCost ? `<span class="font-semibold text-primary ml-1">$${e.totalCost.toFixed(2)}</span>` : '';
@@ -291,10 +294,10 @@ export function updateStatus(id, status) {
   const entry = q().find(e => String(e.id) === String(id));
   if (!entry) return;
   if (entry.assignments && entry.assignments.length > 0) {
-    if (status === 'inservice') entry.assignments.forEach(a => { if (a.techId && (getAssignmentStatus(entry, a) === 'waiting' || getAssignmentStatus(entry, a) === 'complete')) a.status = 'inservice'; });
-    else if (status === 'waiting') entry.assignments.forEach(a => { if (getAssignmentStatus(entry, a) === 'inservice') a.status = 'waiting'; });
-    else if (status === 'complete') entry.assignments.forEach(a => { if (a.techId) a.status = 'complete'; });
-    else if (status === 'paid') entry.assignments.forEach(a => { if (a.techId) a.status = 'paid'; });
+    if (status === 'inservice') entry.assignments.forEach(a => { if (a.techId && (getAssignmentStatus(entry, a) === 'waiting' || getAssignmentStatus(entry, a) === 'complete')) applyAssignmentStatus(a, 'inservice'); });
+    else if (status === 'waiting') entry.assignments.forEach(a => { if (getAssignmentStatus(entry, a) === 'inservice') applyAssignmentStatus(a, 'waiting'); });
+    else if (status === 'complete') entry.assignments.forEach(a => { if (a.techId) applyAssignmentStatus(a, 'complete'); });
+    else if (status === 'paid') entry.assignments.forEach(a => { if (a.techId) applyAssignmentStatus(a, 'paid'); });
     applyEntryStatus(entry);
   } else { if (entry.status !== status) entry.statusSince = Date.now(); entry.status = status; }
   if (entry.status === 'paid') window.saveRecord?.(entry);
@@ -954,7 +957,7 @@ export function confirmReopen(entryId) {
   if (!entry) return;
   showWarnModal('Reopen this ticket?', `This will move ${entry.name} back to "In Service."`, () => {
     if (entry.assignments && entry.assignments.length) {
-      entry.assignments.forEach(a => { if (isPaidStatus(getAssignmentStatus(entry, a)) || getAssignmentStatus(entry, a) === 'complete') a.status = 'inservice'; });
+      entry.assignments.forEach(a => { if (isPaidStatus(getAssignmentStatus(entry, a)) || getAssignmentStatus(entry, a) === 'complete') applyAssignmentStatus(a, 'inservice'); });
       applyEntryStatus(entry);
     } else { if (entry.status !== 'inservice') entry.statusSince = Date.now(); entry.status = 'inservice'; }
     entry.completedAt = null;

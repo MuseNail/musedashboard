@@ -12,6 +12,7 @@ import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap } from
 import { getAssignmentStatus, isPaidStatus, entryStatusSince } from './status.js';
 import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef } from './queue.js';
 import { getActiveTurnsOrder, getTechStatusColor } from './turns.js';
+import { serviceTimeInfo } from './servicetime.js';
 
 const cfg = () => getState().config;
 const q   = () => getState().queue;
@@ -79,7 +80,9 @@ function entryInservice(e) { return activeAssignments(e).some(a => getAssignment
 function custLines(e, stationId, fs = 1) {
   return activeAssignments(e).filter(a => a.station === stationId).map(a => {
     const s = a.serviceId ? svc(a.serviceId) : null, t = a.techId ? staffById(a.techId) : null;
-    return `<div class="truncate" style="font-size:${Math.round(10 * fs)}px;color:#374151">${s ? s.label : 'Service'}${t ? ' · ' + t.name.split(' ')[0] : ''}${a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}</div>`;
+    const sti = serviceTimeInfo(a);
+    const stiHtml = sti ? `<div style="font-size:${Math.round(9 * fs)}px;font-weight:700;color:${sti.color}">${sti.text}</div>` : '';
+    return `<div class="truncate" style="font-size:${Math.round(10 * fs)}px;color:#374151">${s ? s.label : 'Service'}${t ? ' · ' + t.name.split(' ')[0] : ''}${a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}</div>${stiHtml}`;
   }).join('');
 }
 

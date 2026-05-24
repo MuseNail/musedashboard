@@ -25,9 +25,10 @@ import * as settings from './features/settings.js';
 import * as calendar from './features/calendar.js';
 import * as floorplan from './features/floorplan.js';
 import * as appearance from './features/appearance.js';
+import * as servicetime from './features/servicetime.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;

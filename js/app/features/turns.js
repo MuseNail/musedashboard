@@ -3,8 +3,9 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap } from '../utils.js';
 import { canDo } from '../session.js';
-import { getAssignmentStatus, isPaidStatus, entryStatusSince } from './status.js';
+import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus } from './status.js';
 import { renderQueue, updateStats, showGroupAssignModal, switchGroupTab } from './queue.js';
+import { serviceTimeInfo } from './servicetime.js';
 
 const cfg = () => getState().config;
 const q   = () => getState().queue;
@@ -128,7 +129,7 @@ export function acceptSuggestion(entryId, serviceId) {
   let a = entry.assignments.find(x => x.serviceId === serviceId);
   if (!a) { a = { serviceId, status: 'waiting' }; entry.assignments.push(a); }
   a.techId = sug.techId;
-  a.status = 'waiting';
+  applyAssignmentStatus(a, 'waiting');
   if (!a.assignedAt) a.assignedAt = Date.now();
   dispatch('queue.upsert', { entry });
   showGroupAssignModal(String(entryId));
@@ -208,6 +209,7 @@ export function renderTurnsTechGrid() {
           <button onclick="showGroupAssignModal('${e.id}')" class="w-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px${outline}">
             <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="opacity:0.75">${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
+            ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
             <div class="text-[9px] opacity-60">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></div>
           </button></div>`;
       }

@@ -8,6 +8,7 @@ import { canDo, getActiveUser } from '../session.js';
 import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
 import { squareUpsertCustomer } from './square-customers.js';
+import { avgServiceTime, fmtDur } from './servicetime.js';
 import { LOGO_PATH, PHOTOS_PROXY } from '../config.js';
 
 const cfg = () => getState().config;
@@ -197,7 +198,7 @@ export function drillDownStaff(techId) {
   const d = window._currentReportData; if (!d) return;
   const tech = staffById(techId), name = tech?.name || 'Unknown', commPct = tech?.commission != null ? tech.commission : null;
   const rows = [];
-  d.filtered.forEach(r => (r.assignments||[]).forEach(a => { if (a.techId !== techId) return; rows.push({ customer: r.name, service: svc(a.serviceId)?.label || a.serviceId, cost: a.cost||0, comm: commPct!=null?(a.cost||0)*commPct/100:null, station: a.station||'', time: new Date(r.checkinTime), turnType: classifyTurn(a.cost||0, a.serviceId||'') }); }));
+  d.filtered.forEach(r => (r.assignments||[]).forEach(a => { if (a.techId !== techId) return; rows.push({ customer: r.name, serviceId: a.serviceId, service: svc(a.serviceId)?.label || a.serviceId, cost: a.cost||0, comm: commPct!=null?(a.cost||0)*commPct/100:null, station: a.station||'', time: new Date(r.checkinTime), turnType: classifyTurn(a.cost||0, a.serviceId||''), durMs: a.serviceMs||0 }); }));
   const totalBilled = rows.reduce((s,r)=>s+r.cost,0);
   const totalComm = commPct != null ? totalBilled*commPct/100 : null;
   const totalTurns = rows.reduce((s,r)=>s+(r.turnType==='full'?1:r.turnType==='half'?0.5:0),0);
@@ -205,8 +206,18 @@ export function drillDownStaff(techId) {
     <div class="flex-1 px-4 py-3 text-center"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Total Billed</div><div class="font-headline font-bold text-on-surface text-lg">$${totalBilled.toFixed(2)}</div></div>
     ${totalComm!=null?`<div class="flex-1 px-4 py-3 text-center"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Commission (${commPct}%)</div><div class="font-headline font-bold text-primary text-lg">$${totalComm.toFixed(2)}</div></div><div class="flex-1 px-4 py-3 text-center"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Salon Keeps</div><div class="font-headline font-bold text-on-surface text-lg">$${(totalBilled-totalComm).toFixed(2)}</div></div>`:''}
     <div class="flex-1 px-4 py-3 text-center"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Turns</div><div class="font-headline font-bold text-primary text-lg">${totalTurns}</div></div></div>`;
-  const rowsHtml = rows.map(row => { const badge = row.turnType==='full'?'1t':row.turnType==='half'?'½t':'B'; const color = row.turnType==='bonus'?'#f5c870':'#1a5252'; return `<div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-on-surface text-sm">${row.customer}</span><span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style="background:${color}20;color:${color}">${badge}</span></div><div class="text-xs font-body text-on-surface-variant">${row.service}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div>${row.comm!=null?`<div class="text-xs font-body text-primary">comm $${row.comm.toFixed(2)}</div>`:''}</div></div>`; }).join('');
-  showDrillPanel(`${name} — Service Detail`, summary + rowsHtml);
+  // Average service time per service this tech performed (outlier-filtered, all-time
+  // benchmark — the same number the live bubbles compare against). "—" until there
+  // are enough clean samples.
+  const avgBySvc = [...new Set(rows.map(r => r.serviceId).filter(Boolean))].map(sid => {
+    const { avgMs, n } = avgServiceTime(techId, sid);
+    return { label: svc(sid)?.label || sid, avgMs, n };
+  });
+  const avgBlock = avgBySvc.length ? `<div class="mb-4">
+    <div class="text-[11px] font-body text-on-surface-variant uppercase tracking-widest mb-1.5">Avg Service Time</div>
+    <div class="flex flex-wrap gap-1.5">${avgBySvc.map(x => `<span class="text-xs font-body bg-surface-container-lowest border border-surface-container-high rounded-lg px-2.5 py-1"><span class="text-on-surface font-semibold">${x.label}</span> · <span class="${x.avgMs!=null?'text-primary font-bold':'text-outline'}">${x.avgMs!=null?'~'+fmtDur(x.avgMs):'—'}</span>${x.avgMs!=null?`<span class="text-outline"> (${x.n})</span>`:''}</span>`).join('')}</div></div>` : '';
+  const rowsHtml = rows.map(row => { const badge = row.turnType==='full'?'1t':row.turnType==='half'?'½t':'B'; const color = row.turnType==='bonus'?'#f5c870':'#1a5252'; return `<div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-on-surface text-sm">${row.customer}</span><span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style="background:${color}20;color:${color}">${badge}</span>${row.durMs?`<span class="text-[10px] font-body text-on-surface-variant">${fmtDur(row.durMs)}</span>`:''}</div><div class="text-xs font-body text-on-surface-variant">${row.service}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div>${row.comm!=null?`<div class="text-xs font-body text-primary">comm $${row.comm.toFixed(2)}</div>`:''}</div></div>`; }).join('');
+  showDrillPanel(`${name} — Service Detail`, summary + avgBlock + rowsHtml);
 }
 export function drillDownService(sid) {
   const d = window._currentReportData; if (!d) return;

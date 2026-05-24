@@ -40,10 +40,28 @@ export function entryStatusSince(entry) {
   return entry.statusSince || (entry.checkinTime ? new Date(entry.checkinTime).getTime() : Date.now());
 }
 
+// Per-assignment in-service clock. Accumulates the time THIS service spent
+// "In Service" into a.serviceMs across however many spells (so "Back to In
+// Service" then "Complete" again adds correctly), tracking the current spell's
+// start in a.svcStartedAt. Both fields ride along on the assignment object, so
+// they sync to every device and persist onto the saved record automatically.
+// Call this instead of assigning a.status directly so timing is never missed.
+export function applyAssignmentStatus(a, newStatus) {
+  if (!a) return;
+  const prev = a.status || 'waiting';
+  if (prev !== 'inservice' && newStatus === 'inservice') {
+    a.svcStartedAt = Date.now();
+  } else if (prev === 'inservice' && newStatus !== 'inservice' && a.svcStartedAt) {
+    a.serviceMs = (a.serviceMs || 0) + (Date.now() - a.svcStartedAt);
+    a.svcStartedAt = 0;
+  }
+  a.status = newStatus;
+}
+
 export function setAssignmentStatus(entry, serviceId, newStatus) {
   if (!entry.assignments) entry.assignments = [];
   const a = entry.assignments.find(x => x.serviceId === serviceId);
-  if (a) a.status = newStatus;
+  if (a) applyAssignmentStatus(a, newStatus);
   applyEntryStatus(entry);
   dispatch('queue.upsert', { entry });
   if (entry.status === 'paid') window.saveRecord?.(entry);   // finalize the sale only at Paid
