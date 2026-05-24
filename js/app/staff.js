@@ -9,15 +9,17 @@
 // isolation is the server-auth item, intentionally out of scope here.)
 import * as store from './store.js';
 import * as sync from './sync.js';
-import { showToast } from './utils.js';
+import { showToast, localDateStr, todayStr } from './utils.js';
 import { deriveEntryStatus, isPaidStatus } from './features/status.js';
 
-const cfg   = () => store.getState().config;
-const queue = () => store.getState().queue;
-const svc   = id => (cfg().services || []).find(s => s.id === id);
+const cfg     = () => store.getState().config;
+const queue   = () => store.getState().queue;
+const records = () => store.getState().records;
+const svc     = id => (cfg().services || []).find(s => s.id === id);
 
 const MY_KEY = 'muse_staff_id';            // device-local: which tech is signed in on THIS device
 let myId = localStorage.getItem(MY_KEY) || null;
+let _view = 'active';                      // 'active' | 'history'
 const _priceDraft = {};                    // `${entryId}:${serviceId}` -> typed price (survives re-render)
 
 // ── Pure helpers (exported for unit tests) ───────────────────────────────────
@@ -36,6 +38,27 @@ export function myActiveAssignments(queueArr, techId) {
     (e.assignments || []).forEach(a => { if (a.techId && a.techId === techId) out.push({ entry: e, assignment: a }); });
   });
   return out;
+}
+// This tech's COMPLETED work (complete + paid), merging the live queue with stored
+// records (queue wins by id), excluding deletions — same source/rule as the
+// dashboard turns "billed today", so the tech's totals match the front desk.
+// Returns { name, serviceId, cost, date, time, paid } lines, newest first.
+export function myHistory(queueArr, recordsArr, deletions, techId) {
+  if (!techId) return [];
+  const deleted = new Set((deletions || []).map(String));
+  (recordsArr || []).forEach(r => { if (r.status === 'deleted') deleted.add(String(r.id)); });
+  const liveIds = new Set(), src = [];
+  (queueArr || []).forEach(e => { if (deleted.has(String(e.id))) return; liveIds.add(String(e.id)); src.push(e); });
+  (recordsArr || []).forEach(r => { if (r.status === 'deleted' || deleted.has(String(r.id)) || liveIds.has(String(r.id))) return; src.push(r); });
+  const lines = [];
+  src.forEach(rec => (rec.assignments || []).forEach(a => {
+    if (a.techId !== techId) return;
+    const st = a.status || 'waiting';
+    if (st !== 'complete' && !isPaidStatus(st)) return;
+    const when = rec.checkinTime || rec.completedAt;
+    lines.push({ name: rec.name || 'Guest', serviceId: a.serviceId, cost: a.cost || 0, date: localDateStr(new Date(when)), time: rec.completedAt || when, paid: isPaidStatus(st) });
+  }));
+  return lines.sort((a, b) => new Date(b.time) - new Date(a.time));
 }
 
 const me = () => (cfg().staff || []).find(s => s.id === myId) || null;
@@ -57,7 +80,7 @@ function statusChip(status) {
 function render() {
   const meStaff = me();
   if (!meStaff) return renderLogin();
-  renderList(meStaff);
+  renderMain(meStaff);
 }
 
 function renderLogin(errMsg) {
@@ -68,35 +91,63 @@ function renderLogin(errMsg) {
   if (status) status.textContent = errMsg || (connecting ? 'Connecting…' : '');
 }
 
-function renderList(meStaff) {
+function todayStats() {
+  const today = todayStr();
+  const lines = myHistory(queue(), records(), store.getState().deletions, myId).filter(l => l.date === today);
+  return { total: lines.reduce((s, l) => s + l.cost, 0), count: lines.length };
+}
+
+function renderMain(meStaff) {
   document.getElementById('staff-login').classList.add('hidden');
   document.getElementById('staff-main').classList.remove('hidden');
   document.getElementById('staff-tech-name').textContent = meStaff.name;
   const dot = document.getElementById('staff-conn');
   if (dot) dot.style.background = store.getState().connected ? '#2a7a4f' : '#e8730a';
 
+  const st = todayStats();
+  const activeCount = myActiveAssignments(queue(), myId).length;
+  const tab = (id, label) => `<button onclick="staffTab('${id}')"
+    class="flex-1 py-3 rounded-xl font-headline font-bold text-base transition-all ${_view === id ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}">${label}</button>`;
+
+  document.getElementById('staff-list').innerHTML = `
+    <div class="rounded-2xl bg-primary text-on-primary px-5 py-4 mb-3 flex items-end justify-between shadow-sm">
+      <div><div class="text-xs font-body uppercase tracking-widest opacity-80">Today</div>
+        <div class="font-headline font-extrabold leading-none" style="font-size:40px">$${st.total.toFixed(0)}</div></div>
+      <div class="text-right font-body opacity-90"><div class="text-2xl font-headline font-bold leading-none">${st.count}</div>
+        <div class="text-xs uppercase tracking-widest">${st.count === 1 ? 'service' : 'services'}</div></div>
+    </div>
+    <div class="flex gap-2 mb-3">${tab('active', `Now (${activeCount})`)}${tab('history', 'History')}</div>
+    <div>${_view === 'active' ? renderActiveHtml() : renderHistoryHtml()}</div>`;
+}
+
+function renderActiveHtml() {
   const rows = myActiveAssignments(queue(), myId);
-  const listEl = document.getElementById('staff-list');
   if (rows.length === 0) {
-    listEl.innerHTML = `<div class="text-center text-on-surface-variant font-body py-20 px-6">
-      <span class="material-symbols-outlined" style="font-size:48px;opacity:0.4">event_available</span>
-      <div class="mt-3 text-lg">No customers assigned to you right now.</div>
-      <div class="text-sm mt-1 text-outline-variant">They'll appear here the moment the front desk assigns you.</div></div>`;
-    return;
+    return `<div class="text-center text-on-surface-variant font-body py-16 px-6">
+      <span class="material-symbols-outlined" style="font-size:52px;opacity:0.4">event_available</span>
+      <div class="mt-3 text-xl font-headline font-bold">No one assigned to you</div>
+      <div class="text-sm mt-1 text-outline-variant">A customer shows up here the moment the front desk assigns you.</div></div>`;
   }
-  // Group the tech's service lines under each customer.
   const byEntry = new Map();
   rows.forEach(({ entry, assignment }) => {
     if (!byEntry.has(entry.id)) byEntry.set(entry.id, { entry, items: [] });
     byEntry.get(entry.id).items.push(assignment);
   });
-  listEl.innerHTML = [...byEntry.values()].map(({ entry, items }) => cardHtml(entry, items)).join('');
+  // In-service customers first (the one being worked on draws focus).
+  const cards = [...byEntry.values()].sort((a, b) => {
+    const ai = a.items.some(x => x.status === 'inservice') ? 0 : 1;
+    const bi = b.items.some(x => x.status === 'inservice') ? 0 : 1;
+    return ai - bi;
+  });
+  return cards.map(({ entry, items }) => cardHtml(entry, items)).join('');
 }
 
 function cardHtml(entry, assignments) {
-  return `<div class="bg-surface-container-lowest rounded-2xl border border-surface-container-high p-4 mb-3 shadow-sm">
-    <div class="font-headline font-bold text-lg text-on-surface mb-3">${esc(entry.name || 'Guest')}</div>
-    <div class="space-y-3">${assignments.map(a => lineHtml(entry, a)).join('')}</div>
+  const live = assignments.some(a => a.status === 'inservice');
+  const ring = live ? 'border-primary' : 'border-surface-container-high';
+  return `<div class="bg-surface-container-lowest rounded-2xl border-2 ${ring} p-4 mb-3 shadow-sm">
+    <div class="font-headline font-extrabold text-2xl text-on-surface mb-3 leading-tight">${esc(entry.name || 'Guest')}</div>
+    <div class="space-y-4">${assignments.map(a => lineHtml(entry, a)).join('')}</div>
   </div>`;
 }
 
@@ -108,27 +159,52 @@ function lineHtml(entry, a) {
   const priceVal = (key in _priceDraft) ? _priceDraft[key] : (a.cost ? a.cost : '');
   const placeholder = (s && s.baseCost != null) ? Number(s.baseCost).toFixed(2) : '0.00';
   const btn = (txt, fn, primary) => `<button onclick="${fn}('${entry.id}','${esc(a.serviceId)}')"
-    class="px-4 py-2 rounded-xl font-headline font-bold text-sm transition-all active:scale-95 ${primary
+    class="flex-1 py-4 rounded-xl font-headline font-bold text-lg transition-all active:scale-95 ${primary
       ? 'bg-primary hover:bg-primary-dim text-on-primary'
       : 'border-2 border-primary text-primary hover:bg-primary/10'}">${txt}</button>`;
   const start    = status === 'waiting' ? btn('Start', 'staffStart', false) : '';
   const complete = (status === 'waiting' || status === 'inservice') ? btn('Complete', 'staffComplete', true) : '';
   const reopen   = status === 'complete' ? btn('Reopen', 'staffReopen', false) : '';
-  return `<div class="border-t border-surface-container-high pt-3 first:border-t-0 first:pt-0">
-    <div class="flex items-center justify-between mb-2">
-      <span class="font-headline font-semibold text-on-surface">${esc(label)}</span>${statusChip(status)}
+  return `<div class="border-t border-surface-container-high pt-4 first:border-t-0 first:pt-0">
+    <div class="flex items-center justify-between mb-3">
+      <span class="font-headline font-bold text-xl text-on-surface">${esc(label)}</span>${statusChip(status)}
     </div>
-    <div class="flex items-center gap-2 flex-wrap">
-      <div class="flex items-center gap-1">
-        <span class="text-on-surface-variant font-headline text-lg">$</span>
-        <input type="text" inputmode="decimal" value="${priceVal}" placeholder="${placeholder}"
-          oninput="staffPriceInput('${entry.id}','${esc(a.serviceId)}',this.value)"
-          class="w-28 bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-lg font-body text-right focus:outline-none focus:border-primary">
-      </div>
-      <div class="flex-1"></div>
-      ${start}${reopen}${complete}
+    <div class="flex items-center gap-2 mb-3">
+      <span class="text-on-surface-variant font-headline text-2xl">$</span>
+      <input type="text" inputmode="decimal" value="${priceVal}" placeholder="${placeholder}"
+        oninput="staffPriceInput('${entry.id}','${esc(a.serviceId)}',this.value)"
+        class="flex-1 bg-surface-container border-2 border-surface-container-high rounded-xl px-4 py-3 text-3xl font-headline text-right focus:outline-none focus:border-primary">
     </div>
+    <div class="flex gap-2">${start}${reopen}${complete}</div>
   </div>`;
+}
+
+function renderHistoryHtml() {
+  const lines = myHistory(queue(), records(), store.getState().deletions, myId);
+  if (lines.length === 0) {
+    return `<div class="text-center text-on-surface-variant font-body py-16 px-6">
+      <span class="material-symbols-outlined" style="font-size:52px;opacity:0.4">history</span>
+      <div class="mt-3 text-xl font-headline font-bold">No completed services yet</div>
+      <div class="text-sm mt-1 text-outline-variant">Services you finish today show up here with your daily total.</div></div>`;
+  }
+  const byDate = {};
+  lines.forEach(l => { (byDate[l.date] = byDate[l.date] || []).push(l); });
+  const today = todayStr();
+  return Object.keys(byDate).sort().reverse().map(date => {
+    const items = byDate[date];
+    const total = items.reduce((s, l) => s + l.cost, 0);
+    const dateLabel = date === today ? 'Today' : new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const rowsHtml = items.map(l => `<div class="flex items-center justify-between py-2 border-t border-surface-container-high first:border-t-0">
+      <div class="min-w-0"><div class="font-headline font-semibold text-on-surface truncate">${esc(l.name)}</div>
+        <div class="text-sm font-body text-on-surface-variant truncate">${esc(svc(l.serviceId)?.label || 'Service')}</div></div>
+      <div class="font-headline font-bold text-lg text-on-surface flex-shrink-0 ml-2">$${l.cost.toFixed(0)}${l.paid ? '' : ' <span class="text-xs text-outline-variant font-body">pending</span>'}</div>
+    </div>`).join('');
+    return `<div class="bg-surface-container-lowest rounded-2xl border border-surface-container-high p-4 mb-3">
+      <div class="flex items-center justify-between mb-1">
+        <span class="font-headline font-bold text-lg text-on-surface">${dateLabel}</span>
+        <span class="font-headline font-extrabold text-xl text-primary">$${total.toFixed(0)} · ${items.length}</span>
+      </div>${rowsHtml}</div>`;
+  }).join('');
 }
 
 // ── Actions ───────────────────────────────────────
@@ -161,6 +237,7 @@ window.staffReopen = (entryId, serviceId) => {
   updateAssignment(entryId, serviceId, a => { a.status = 'inservice'; });
   showToast('Reopened');
 };
+window.staffTab = (v) => { _view = (v === 'history' ? 'history' : 'active'); render(); };
 
 window.staffPinSubmit = () => {
   const input = document.getElementById('staff-pin-entry');
