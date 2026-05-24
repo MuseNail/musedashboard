@@ -1358,8 +1358,9 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      GROUP ASSIGN MODAL (multi-guest tabs)
 ═══════════════════════════════════════════════ -->
-<div id="group-assign-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-2xl shadow-2xl fade-up mx-4 max-h-[92vh] flex flex-col">
+<div id="group-assign-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40 px-4">
+  <div class="flex items-stretch justify-center gap-3 w-full" style="max-height:92vh">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-2xl shadow-2xl fade-up max-h-[92vh] flex flex-col">
     <div class="flex items-center justify-between p-6 border-b border-surface-container-high flex-shrink-0">
       <h2 class="text-xl font-headline font-bold text-on-surface">Assign & Price</h2>
       <button onclick="closeGroupAssignModal()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
@@ -1385,6 +1386,18 @@ tailwind.config = {
         </button>
       </div>
     </div>
+  </div>
+  <!-- Today's transaction note — a separate panel beside the assign modal (does not obstruct it) -->
+  <div id="assign-notes-panel" class="bg-surface-container-lowest rounded-2xl shadow-2xl fade-up max-h-[92vh] flex flex-col flex-shrink-0" style="width:300px">
+    <div class="flex items-center gap-2 p-5 border-b border-surface-container-high flex-shrink-0">
+      <span class="material-symbols-outlined text-secondary" style="font-size:18px">sticky_note_2</span>
+      <h3 class="font-headline font-bold text-on-surface text-base">Today's Note</h3>
+    </div>
+    <div class="flex-grow flex flex-col p-4 min-h-0">
+      <p class="text-[11px] font-body text-on-surface-variant mb-2">For this transaction today — separate from the customer's saved note.</p>
+      <textarea id="assign-txn-note" placeholder="Notes for today's visit…" oninput="saveAssignTxnNote()" class="flex-grow w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="min-height:200px"></textarea>
+    </div>
+  </div>
   </div>
 </div>
 

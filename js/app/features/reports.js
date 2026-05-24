@@ -27,7 +27,7 @@ export function saveRecord(entry) {
   const record = {
     id: String(entry.id), name: entry.name, phone: entry.phone || '',
     services: entry.services, assignments: entry.assignments || [], items: entry.items || [], fees: entry.fees || [],
-    discount: entry.discount || 0, discountNote: entry.discountNote || '', totalCost: entry.totalCost || 0,
+    discount: entry.discount || 0, discountNote: entry.discountNote || '', txnNote: entry.txnNote || '', totalCost: entry.totalCost || 0,
     checkinTime: typeof entry.checkinTime === 'string' ? entry.checkinTime : new Date(entry.checkinTime).toISOString(),
     completedAt: entry.completedAt, status: entry.status, isAppointment: entry.isAppointment || false,
     loggedBy: getActiveUser()?.name || '',

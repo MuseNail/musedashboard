@@ -564,6 +564,7 @@ export function saveCurrentGroupTabInputs() {
     if (newName) entry.name = newName;
     entry.phone = newPhone;
   }
+  const noteEl = document.getElementById('assign-txn-note'); if (noteEl) entry.txnNote = noteEl.value;
   const rows = document.querySelectorAll('#group-assign-content [data-service-id]');
   if (!entry.assignments) entry.assignments = [];
   rows.forEach(row => {
@@ -711,6 +712,15 @@ export function renderGroupAssignContent() {
       <span class="font-body font-semibold text-on-surface text-sm">Subtotal</span>
       <span id="group-subtotal" class="font-headline font-bold text-primary">$0.00</span></div>`;
   updateGroupTotal();
+  // Load this tab's transaction note into the side notes panel (per active entry).
+  const noteEl = document.getElementById('assign-txn-note'); if (noteEl) noteEl.value = entry.txnNote || '';
+}
+
+// Today's-transaction note (the side panel) — saves to the active entry as you type.
+export function saveAssignTxnNote() {
+  const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
+  const el = document.getElementById('assign-txn-note');
+  if (entry && el) entry.txnNote = el.value;
 }
 
 export function toggleGroupService(sid) {
