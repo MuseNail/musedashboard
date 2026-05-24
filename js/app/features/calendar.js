@@ -94,7 +94,7 @@ export function renderTodaysAppointments() {
     const qs = r.qm?.status;
     const stat = qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af','Unconfirmed']);
     const svcLines = [];
-    r.persons.forEach((lines, pnm) => { const fn = (pnm.split(' ')[0]||pnm).trim(); lines.forEach(l => { const s = cfg().services.find(x=>x.id===l.svcId); const tech = l.calId ? (_calCalendars.find(c=>c.id===l.calId)?.name||'') : 'Unassigned'; svcLines.push(`${escHtml(fn)} · ${escHtml(s?.label||l.svcId||'service')}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
+    r.persons.forEach((lines, pnm) => { const fn = (pnm.split(' ')[0]||pnm).trim(); lines.forEach(l => { const s = cfg().services.find(x=>x.id===l.svcId); const tech = l.calId ? (_calCalendars.find(c=>c.id===l.calId)?.name||'') : 'Unassigned'; svcLines.push(`${escHtml(s?.label||l.svcId||'service')} · ${escHtml(fn)}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
     const svcHtml = svcLines.slice(0,8).map(t => `<div style="font-size:10px;color:var(--md-on-surface-variant);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`).join('');
     return `<div onclick="calEventClick(event,'${_e(r.primaryCalId)}','${_e(r.primaryEv.id)}','${_e(r.name)}','',true)" class="rounded-lg border border-surface-container-high hover:bg-surface-container cursor-pointer px-2.5 py-2 transition-colors" style="background:var(--md-surface-container-lowest)">
       <div class="flex items-center gap-1.5" style="line-height:1.2">
@@ -224,6 +224,11 @@ export function calRenderGrid() {
   const railEl = document.getElementById('cal-right-rail');
   const railW = (railEl && railEl.style.display !== 'none') ? 280 : 0;
   const COL_W = Math.max(120, Math.floor((window.innerWidth - TIME_W - railW - 48) / visible.length));
+  // When few calendars are shown (e.g. the unassigned-only view), a column gets very
+  // wide. Cap each appointment bubble at ~2.5× its width when ALL calendars are in
+  // view, so a lone wide column doesn't stretch bubbles across the whole screen.
+  const normalColW = Math.max(120, Math.floor((window.innerWidth - TIME_W - railW - 48) / Math.max(1, _calCalendars.length)));
+  const maxBubbleW = normalColW * 2.5;
   const now = new Date(), isToday = now.toDateString() === _calDate.toDateString(), nowMin = now.getHours()*60 + now.getMinutes();
 
   let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;border-bottom:2px solid var(--md-outline-variant);background:var(--md-surface-container-lowest)"><div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;border-right:2px solid var(--md-outline-variant)"></div>`;
@@ -275,7 +280,7 @@ export function calRenderGrid() {
       const gid = first.extendedProperties?.private?.museGroupId || '';
       const linkedCals = gid && groupCals[gid] ? [...groupCals[gid]].filter(c => c !== cal.id) : [];
       const linked = linkedCals.length > 0;
-      const innerW = COL_W - 8, gap = laneCount > 1 ? 3 : 0;
+      const innerW = Math.min(COL_W - 8, maxBubbleW), gap = laneCount > 1 ? 3 : 0;
       const laneW = (innerW - gap*(laneCount-1)) / laneCount;
       const bLeft = 4 + lane*(laneW + gap);
       const primaryEv = evs.find(e => (e.extendedProperties?.private||{}).musePrimary === '1') || first;
@@ -316,7 +321,7 @@ export function calRenderGrid() {
       else if (isPast && isAppt) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; }
       else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt → tinted by this tech's color
       const phoneLine = [timeStr, primaryPhone].filter(Boolean).join('  ·  ');
-      const svcHtml = svcRows.map(r => `<div style="font-size:10px;color:${tc};opacity:0.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35">${escHtml(r.fn)}${r.fn&&r.label?' — ':''}${escHtml(r.label)}</div>`).join('');
+      const svcHtml = svcRows.map(r => `<div style="font-size:10px;color:${tc};opacity:0.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35">${escHtml(r.label)}${r.fn&&r.label?' — ':''}${escHtml(r.fn)}</div>`).join('');
       const linkIcon = linked ? `<span title="${_e('Same appointment — also on ' + linkedCals.map(calName).join(', '))}" class="material-symbols-outlined" style="font-size:12px;color:${border};flex-shrink:0;transform:rotate(-45deg)">link</span>` : '';
       body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(primaryEv.id)}','${_e(primaryName)}','${_e(notes)}',${isAppt})" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
         + `<div style="display:flex;align-items:center;gap:2px;overflow:hidden;line-height:1.25">${linkIcon}${chips}${confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0">✓</span>':''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}</span></div>`
@@ -768,7 +773,21 @@ export function showEditApptModal(calId, eventId) {
   document.getElementById('appt-phone').value = _apptPhone(ev);
   _apptLines = _parseApptLines(ev, calId);
   if (_apptLines.length === 0) _apptLines.push({ svcId:'', calId });
+  // Rebuild the rest of the party from the booking's other events so editing a
+  // multi-guest appointment shows + edits EVERY guest (not just the primary).
+  _apptExtraGuests = [];
+  if (_apptEditGroupId) {
+    const seen = new Set([cleanName.trim().toLowerCase()]);
+    Object.entries(_calEvents).forEach(([cid, list]) => (list||[]).forEach(e => {
+      if ((e.extendedProperties?.private?.museGroupId||'') !== _apptEditGroupId) return;
+      const nm = (e.extendedProperties?.private?.museName || (e.summary||'').split(' — ')[0] || '').trim();
+      if (!nm || seen.has(nm.toLowerCase())) return; seen.add(nm.toLowerCase());
+      const gp = nm.split(' ');
+      _apptExtraGuests.push({ first: gp[0]||'', last: gp.slice(1).join(' ')||'', phone: e.extendedProperties?.private?.musePhone || _apptPhone(e) || '', lines: _parseApptLines(e, cid) });
+    }));
+  }
   renderApptServiceLines();
+  renderApptExtraGuests();
   const m = document.getElementById('appt-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
 export function closeApptModal() { const m = document.getElementById('appt-modal'); m.classList.add('hidden'); m.style.display = ''; _apptEditId = null; _apptExtraGuests = []; _apptEditGroupId = ''; const eg = document.getElementById('appt-extra-guests'); if (eg) eg.innerHTML = ''; }
@@ -815,6 +834,16 @@ export async function saveAppt() {
   // be gathered at quick check-in. Reuse the edited booking's id when editing.
   const groupId = _apptEditGroupId || ('apptgrp_' + Date.now().toString(36));
 
+  // When editing, remember the booking's existing events (except the primary, which
+  // is updated in place below) so we can delete them after re-inserting — otherwise
+  // re-saving a party would leave duplicate/orphan guest events behind.
+  const oldGroupRefs = [];
+  if (_apptEditId && _apptEditGroupId) {
+    Object.entries(_calEvents).forEach(([cid, list]) => (list||[]).forEach(e => {
+      if ((e.extendedProperties?.private?.museGroupId||'') === _apptEditGroupId && e.id !== _apptEditId) oldGroupRefs.push({ calId: cid, id: e.id });
+    }));
+  }
+
   try {
     showToast('Saving…');
     for (let i = 0; i < people.length; i++) {
@@ -842,6 +871,9 @@ export async function saveAppt() {
       }
       if (p.phone) squareUpsertCustomer({ name: p.name, phone: p.phone });   // add/refresh each booked customer in Square
     }
+    // Remove the booking's stale pre-edit events (old guest events + old extra-cal
+    // copies) now that fresh ones are inserted — keeps the calendar duplicate-free.
+    for (const ref of oldGroupRefs) { try { await gapi.client.calendar.events.delete({ calendarId: ref.calId, eventId: ref.id }); } catch {} }
     closeApptModal(); await calLoadAndRender(true);
     showToast(people.length > 1 ? `Appointment saved for ${people.length} guests ✓` : 'Appointment saved ✓');
   } catch (err) { showToast('Save failed: ' + (err.result?.error?.message || 'Unknown error')); }
