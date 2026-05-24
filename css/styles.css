@@ -307,3 +307,25 @@
 
   /* Softer elevation on cards & modal panels (replaces hard hairline look) */
   .fixed.inset-0 > div[class*="max-w-"] { box-shadow: 0 24px 60px -12px rgba(0,0,0,.4), 0 8px 24px -8px rgba(0,0,0,.25) !important; }
+
+  /* ── Compact density (cosmetic pass 2) ────────────────────────────────────
+     id-scoped so it reliably overrides inline Tailwind padding/margin utilities.
+     Trims row padding + inter-row gaps so long lists show more without scrolling. */
+  #turns-waiting-list [data-entry-id], #turns-active-list [data-entry-id] { padding-top: 6px !important; padding-bottom: 6px !important; }
+  #services-merged-list > div, #staff-list > div, #customer-dir-list > div,
+  #items-list > div, #fees-list > div, #fdusers-list > div {
+    padding-top: 9px !important; padding-bottom: 9px !important; margin-bottom: 6px !important;
+  }
+  #queue-list > div { margin-bottom: 12px !important; }            /* tighten the gap between status groups */
+  #queue-list .space-y-2 > * + * { margin-top: 5px !important; }   /* tighten between cards in a group */
+  #cal-appts-list > div { padding-top: 6px !important; padding-bottom: 6px !important; }
+
+  /* ── Button restyle (cosmetic pass 2) ─────────────────────────────────────
+     Primary = subtle teal gradient + soft shadow (skip nav tabs + round action
+     buttons). Secondary outline picks up a faint tonal fill. UI only. */
+  button.bg-primary:not(.dash-tab):not(.q-action-btn):not(.mswitch) {
+    background-image: linear-gradient(180deg, #237370, var(--primary));
+    box-shadow: 0 4px 12px -3px rgba(26,82,82,.45);
+  }
+  button.bg-primary:not(.dash-tab):not(.q-action-btn):not(.mswitch):active { box-shadow: 0 2px 6px -2px rgba(26,82,82,.5); }
+  button.border-2.border-primary.text-primary { background-color: rgba(26,82,82,0.08); }
