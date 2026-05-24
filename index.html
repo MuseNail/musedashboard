@@ -544,6 +544,11 @@ tailwind.config = {
             <button onclick="calNavDay(1)" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors" style="width:32px;height:32px;flex-shrink:0">
               <span class="material-symbols-outlined" style="font-size:18px">chevron_right</span>
             </button>
+            <!-- Unassigned-only toggle -->
+            <button id="cal-unassigned-toggle" onclick="toggleUnassignedOnly()" title="Show only unassigned appointments" class="flex items-center gap-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors" style="height:32px;padding:0 12px">
+              <span class="material-symbols-outlined" style="font-size:16px">person_off</span>
+              <span>Unassigned</span>
+            </button>
             <!-- Calendar selector -->
             <div class="relative">
               <button onclick="toggleCalSelector()" class="flex items-center gap-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors" style="height:32px;padding:0 12px">
@@ -585,8 +590,21 @@ tailwind.config = {
             <!-- Side-by-side grid (built by JS) -->
             <div id="cal-grid" class="hidden flex-1 min-h-0"></div>
           </div>
+          <!-- Right rail: Today's Appointments (top) + Tasks (bottom) -->
+          <div id="cal-right-rail" class="flex flex-col gap-3" style="width:260px;flex-shrink:0">
+          <!-- Today's Appointments -->
+          <div id="cal-appts-panel" class="flex flex-col rounded-xl border overflow-hidden" style="flex:1 1 0;min-height:0;background:var(--md-surface);border-color:var(--md-outline-variant);box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+            <div class="flex items-center justify-between px-3 py-2.5 border-b border-surface-container-high">
+              <div class="flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-primary" style="font-size:16px">event_note</span>
+                <span class="font-headline font-bold text-on-surface text-sm" id="cal-appts-title">Today's Appointments</span>
+              </div>
+              <span id="cal-appts-count" class="text-[10px] font-body font-semibold text-on-surface-variant"></span>
+            </div>
+            <div id="cal-appts-list" class="flex-1 overflow-y-auto no-scroll p-2 space-y-1.5"></div>
+          </div>
           <!-- Tasks panel -->
-          <div id="cal-tasks-panel" class="hidden flex-col rounded-xl border overflow-hidden" style="width:260px;flex-shrink:0;background:var(--md-surface);border-color:var(--md-outline-variant);box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+          <div id="cal-tasks-panel" class="hidden flex-col rounded-xl border overflow-hidden" style="flex:1 1 0;min-height:0;background:var(--md-surface);border-color:var(--md-outline-variant);box-shadow:0 2px 8px rgba(0,0,0,0.08)">
             <div class="flex items-center justify-between px-3 py-2.5 border-b border-surface-container-high">
               <div class="flex items-center gap-1.5">
                 <span class="material-symbols-outlined text-primary" style="font-size:16px">task_alt</span>
@@ -611,6 +629,7 @@ tailwind.config = {
             <!-- Tasks list -->
             <div id="tasks-list" class="flex-1 overflow-y-auto no-scroll p-2 space-y-1"></div>
           </div>
+          </div><!-- /cal-right-rail -->
         </div>
       </div>
 
@@ -759,6 +778,7 @@ tailwind.config = {
             <button id="gcal-disconnect-btn" onclick="calSignOut();renderGcalSettings()" class="hidden w-full flex items-center justify-center gap-2 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-surface-container">
               <span class="material-symbols-outlined" style="font-size:18px">logout</span> Disconnect
             </button>
+            <div id="gcal-calendar-list" class="border-t border-surface-container-high pt-3 space-y-0.5"></div>
           </div>
         </div>
         <!-- Leaf: Data Backup & Restore -->

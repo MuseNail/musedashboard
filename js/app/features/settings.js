@@ -183,6 +183,7 @@ export function renderGcalSettings() {
   if (status) { status.textContent = on ? '✓ Connected' : 'Not connected'; status.style.color = on ? '#2a7a4f' : ''; }
   document.getElementById('gcal-connect-btn')?.classList.toggle('hidden', on);
   document.getElementById('gcal-disconnect-btn')?.classList.toggle('hidden', !on);
+  window.renderGcalCalendarList?.();
 }
 
 // ── App Info (Data & System leaf) ─────────────────

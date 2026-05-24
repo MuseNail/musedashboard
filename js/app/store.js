@@ -16,6 +16,7 @@ function emptyConfig() {
     hidden_services: [], hidden_dash_services: [], inactive_staff: [],
     logo: null, turns_order: [], turns_break: [], turns_off: [],
     role_permissions: {}, photos: {}, square_config: null, station_layout: {}, stations: [], customer_notes: {},
+    unassigned_cal_id: '',
   };
 }
 
