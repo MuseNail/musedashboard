@@ -190,9 +190,14 @@ function lineHtml(entry, a) {
 }
 
 function renderHistoryHtml() {
-  const lines = myHistory(queue(), records(), store.getState().deletions, myId);
+  // Staff app keeps the last 30 days of history visible.
+  const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0); cutoff.setDate(cutoff.getDate() - 29);
+  const lines = myHistory(queue(), records(), store.getState().deletions, myId)
+    .filter(l => new Date(l.date + 'T12:00:00') >= cutoff);
+  const dlBtn = `<button onclick="staffDownloadTodayPdf()" class="w-full mb-3 rounded-xl bg-surface-container text-on-surface py-3 font-headline font-bold text-sm flex items-center justify-center gap-2 active:scale-95">
+    <span class="material-symbols-outlined" style="font-size:18px">picture_as_pdf</span> Download today's transactions (PDF)</button>`;
   if (lines.length === 0) {
-    return `<div class="text-center text-on-surface-variant font-body py-16 px-6">
+    return dlBtn + `<div class="text-center text-on-surface-variant font-body py-16 px-6">
       <span class="material-symbols-outlined" style="font-size:52px;opacity:0.4">history</span>
       <div class="mt-3 text-xl font-headline font-bold">No completed services yet</div>
       <div class="text-sm mt-1 text-outline-variant">Services you finish today show up here with your daily total.</div></div>`;
@@ -200,7 +205,7 @@ function renderHistoryHtml() {
   const byDate = {};
   lines.forEach(l => { (byDate[l.date] = byDate[l.date] || []).push(l); });
   const today = todayStr();
-  return Object.keys(byDate).sort().reverse().map(date => {
+  return dlBtn + Object.keys(byDate).sort().reverse().map(date => {
     const items = byDate[date];
     const total = items.reduce((s, l) => s + l.cost, 0);
     const dateLabel = date === today ? 'Today' : new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -216,6 +221,37 @@ function renderHistoryHtml() {
       </div>${rowsHtml}</div>`;
   }).join('');
 }
+
+// ── Today's transactions → printable PDF ──────────────────────────────────────
+// Mirrors the dashboard's print-to-PDF approach (open an HTML doc + window.print);
+// on iOS the print sheet offers "Save to Files" / share as PDF.
+function buildStaffTodayHtml(techName, lines) {
+  const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const total = lines.reduce((s, l) => s + l.cost, 0);
+  const logo = cfg().logo || '';
+  const rows = lines.map(l => `<tr><td>${esc(svc(l.serviceId)?.label || 'Service')}</td><td>${esc(l.name)}</td><td>${l.paid ? 'Paid' : 'Pending'}</td><td style="text-align:right">$${l.cost.toFixed(2)}</td></tr>`).join('');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse — ${esc(techName)} — ${dateLabel}</title><style>
+    body{font-family:Arial,sans-serif;font-size:13px;color:#222;margin:24px}.h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0}
+    h1{color:#1a5252;font-size:19px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
+    .tot{background:#1a5252;color:#fff;border-radius:10px;padding:12px 18px;display:inline-block;margin:14px 0 18px}.tot .v{font-size:26px;font-weight:800;line-height:1}.tot .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
+    table{width:100%;border-collapse:collapse}th{background:#1a5252;color:#fff;padding:7px 9px;text-align:left;font-size:12px}td{padding:6px 9px;border-bottom:1px solid #e0e0e0;font-size:12px}tr:nth-child(even) td{background:#fafafa}
+    .footer{margin-top:22px;font-size:10px;color:#999;text-align:center}
+  </style></head><body>
+    <div class="h">${logo ? `<img src="${logo}" class="logo" onerror="this.style.display='none'">` : ''}<div><h1>Muse Nails &amp; Spa</h1><p class="sub">${esc(techName)} · ${dateLabel}</p></div></div>
+    <div class="tot"><div class="v">$${total.toFixed(2)}</div><div class="l">${lines.length} service${lines.length === 1 ? '' : 's'} today</div></div>
+    <table><thead><tr><th>Service</th><th>Customer</th><th>Status</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
+}
+window.staffDownloadTodayPdf = () => {
+  const today = todayStr();
+  const lines = myHistory(queue(), records(), store.getState().deletions, myId).filter(l => l.date === today);
+  if (!lines.length) { showToast('No transactions today yet.'); return; }
+  const url = URL.createObjectURL(new Blob([buildStaffTodayHtml(me()?.name || 'Technician', lines)], { type: 'text/html' }));
+  const win = window.open(url, '_blank');
+  if (win) setTimeout(() => win.print(), 600);
+  URL.revokeObjectURL(url);
+  showToast('PDF opened — use Print → Save as PDF');
+};
 
 // ── Actions ───────────────────────────────────────
 function updateAssignment(entryId, serviceId, mut) {

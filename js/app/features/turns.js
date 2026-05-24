@@ -2,6 +2,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap } from '../utils.js';
+import { GROUP_COLORS } from '../config.js';
 import { canDo } from '../session.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus } from './status.js';
 import { renderQueue, updateStats, showGroupAssignModal, switchGroupTab } from './queue.js';
@@ -154,6 +155,15 @@ export function renderTurnsTechGrid() {
 
   const order = getActiveTurnsOrder();
   const partyLetters = partyLetterMap(q());   // same party letter as the queue/side cards
+  // A single customer with services under 2+ different techs shows up in multiple
+  // rows by design — tag each of their slots with a matching colored link chip so
+  // the front desk can see at a glance that they're the same person.
+  const splitTags = new Map();   // entryId -> color
+  let _splitN = 0;
+  q().forEach(e => {
+    const techs = new Set((e.assignments || []).filter(a => a.techId).map(a => a.techId));
+    if (techs.size >= 2) { splitTags.set(String(e.id), GROUP_COLORS[_splitN % GROUP_COLORS.length]); _splitN++; }
+  });
   let activeCount = 0;
   if (order.length === 0) {
     grid.innerHTML = '<div class="text-sm font-body text-on-surface-variant py-8 text-center opacity-60"><span class="material-symbols-outlined text-4xl block mb-2">swap_vert</span>No technicians added today.<br>Click <strong>Technicians</strong> to set up the turn order.</div>';
@@ -205,9 +215,11 @@ export function renderTurnsTechGrid() {
         const costStr = a.cost ? '$' + Number(a.cost).toFixed(0) : '';
         const timeStr = new Date(e.checkinTime).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
         const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0;margin-right:2px">${partyLetters.get(e.groupId)||'•'}</span>` : '';
+        const splitColor = splitTags.get(String(e.id));
+        const splitTag = splitColor ? `<span title="Same customer — also has a service with another tech" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;background:${splitColor};color:#fff;flex-shrink:0;margin-right:2px"><span class="material-symbols-outlined" style="font-size:11px;font-variation-settings:'FILL' 1">link</span></span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
           <button onclick="showGroupAssignModal('${e.id}')" class="w-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px${outline}">
-            <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="opacity:0.75">${turnLabel}</span>` : ''}</div>
+            <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="opacity:0.75">${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
             ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
             <div class="text-[9px] opacity-60">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></div>
