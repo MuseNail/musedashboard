@@ -1175,7 +1175,7 @@ tailwind.config = {
       <div class="flex items-center gap-3">
         <label class="flex items-center gap-2 cursor-pointer">
           <div class="relative">
-            <input type="checkbox" id="manual-is-appointment" class="sr-only peer">
+            <input type="checkbox" id="manual-is-appointment" class="sr-only peer" onchange="toggleManualApptTech()">
             <div class="w-5 h-5 rounded border-2 border-outline-variant peer-checked:bg-primary peer-checked:border-primary transition-all flex items-center justify-center">
               <span class="material-symbols-outlined text-on-primary hidden peer-checked:block" style="font-size:13px;font-variation-settings:'FILL' 1,'wght' 600">check</span>
             </div>
@@ -1188,6 +1188,14 @@ tailwind.config = {
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
+    </div>
+
+    <!-- Appointment technician (shown only when "Appointment" is checked) -->
+    <div id="manual-appt-tech-wrap" class="hidden mb-4">
+      <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest block mb-1">Technician <span class="text-outline normal-case tracking-normal">(optional)</span></label>
+      <select id="manual-appt-tech" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2.5 text-sm font-body focus:border-primary outline-none">
+        <option value="">— Leave unassigned —</option>
+      </select>
     </div>
 
     <!-- Primary guest -->

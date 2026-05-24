@@ -373,8 +373,22 @@ export function showManualAdd() {
   document.getElementById('manual-guests-container').innerHTML = '';
   addManualGuest();
   const appt = document.getElementById('manual-is-appointment'); if (appt) appt.checked = false;
+  const tw = document.getElementById('manual-appt-tech-wrap'); if (tw) tw.classList.add('hidden');
+  const ts = document.getElementById('manual-appt-tech'); if (ts) { ts.innerHTML = '<option value="">— Leave unassigned —</option>'; ts.value = ''; }
   const m = document.getElementById('manual-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   setTimeout(() => document.getElementById('manual-phone-1')?.focus(), 100);
+}
+// Appointment check-ins can pre-assign a technician. Show the picker only when the
+// "Appointment" box is checked; populate it with active staff (lazily, keeping any
+// current choice). Leaving it blank leaves the check-in unassigned.
+export function toggleManualApptTech() {
+  const on = document.getElementById('manual-is-appointment')?.checked;
+  const wrap = document.getElementById('manual-appt-tech-wrap'); if (!wrap) return;
+  wrap.classList.toggle('hidden', !on);
+  const sel = document.getElementById('manual-appt-tech');
+  if (on && sel && sel.options.length <= 1) {
+    sel.innerHTML = '<option value="">— Leave unassigned —</option>' + activeStaff().slice().sort(byName).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  }
 }
 export function addManualGuest() { manualGuestCount++; renderManualGuestCard(manualGuestCount); }
 export function removeManualGuest(idx) { document.getElementById(`manual-guest-${idx}`)?.remove(); }
@@ -387,6 +401,7 @@ export function closeManualAdd() {
 export function submitManualAdd() {
   const newEntries = [];
   const isAppointment = document.getElementById('manual-is-appointment')?.checked || false;
+  const apptTechId = isAppointment ? (document.getElementById('manual-appt-tech')?.value || '') : '';
   for (let i = 1; i <= manualGuestCount; i++) {
     const card = document.getElementById(`manual-guest-${i}`);
     if (!card) continue;
@@ -396,7 +411,11 @@ export function submitManualAdd() {
     else { phone = document.getElementById(`manual-phone-${i}`)?.value.trim() || ''; first = document.getElementById(`manual-first-${i}`)?.value.trim() || ''; last = document.getElementById(`manual-last-${i}`)?.value.trim() || ''; }
     if (!first) { showToast('Please enter a first name for each guest.'); return; }
     const services = Array.from(card.querySelectorAll('.service-btn.selected')).map(b => b.dataset.service);
-    newEntries.push({ id: Date.now() * 1000 + Math.floor(Math.random() * 1000), name: first + (last ? ' ' + last : ''), phone, services, status: 'waiting', checkinTime: new Date().toISOString(), isNew: false, skipSquare: sameContact, isAppointment });
+    const entry = { id: Date.now() * 1000 + Math.floor(Math.random() * 1000), name: first + (last ? ' ' + last : ''), phone, services, status: 'waiting', checkinTime: new Date().toISOString(), isNew: false, skipSquare: sameContact, isAppointment };
+    // Appointment + chosen tech → pre-assign that tech to each service (remembered on
+    // the check-in). Blank tech leaves it unassigned (no assignments created here).
+    if (apptTechId && services.length) entry.assignments = services.map(sid => ({ serviceId: sid, techId: apptTechId, station: '', status: 'waiting', cost: 0, assignedAt: Date.now() }));
+    newEntries.push(entry);
   }
   if (newEntries.length === 0) return;
   if (newEntries.length > 1) {
