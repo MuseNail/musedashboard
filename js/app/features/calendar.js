@@ -159,7 +159,7 @@ export function calRenderGrid() {
       if (topMin < 0 || topMin >= (END_HOUR-START_HOUR)*60) return;
       const top = (topMin/SLOT_MINS)*SLOT_H, ht = (durMin/SLOT_MINS)*SLOT_H;
       const timeStr = startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}), title = ev.summary||'', desc = ev.description||'';
-      const ext = ev.extendedProperties?.private || {}, notes = _apptNotes(ev);
+      const ext = ev.extendedProperties?.private || {}, notes = _apptNotes(ev), confirmed = ext.museConfirmed === '1';
       const hasPhone = !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(desc);
       const knownSvcs = cfg().services.some(s => title.toLowerCase().includes(s.label.toLowerCase()));
       const isAppt = hasPhone || knownSvcs || ext.museLines !== undefined, isPast = startDt < now;
@@ -180,7 +180,7 @@ export function calRenderGrid() {
       else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt → tinted by this tech's color
       const chips = cfg().services.filter(s => title.toLowerCase().includes(s.label.toLowerCase()) || desc.toLowerCase().includes(s.label.toLowerCase())).map(s => { const g = SVC_GROUPS.find(x => x.ids.some(id => s.id.toLowerCase().includes(id))); return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${g?.color||'#455a64'};margin-right:2px;flex-shrink:0"></span>`; }).join('');
       const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,' ').replace(/\r/g,'');
-      body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(ev.id)}','${_e(title||'Event')}','${_e(desc)}',${isAppt})" style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)"><div style="display:flex;align-items:center;gap:2px;overflow:hidden">${chips}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${title||'Event'}</span></div>${ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75">${timeStr}</div>`:''}${sl&&ht>44?`<div style="font-size:9px;font-weight:700;color:${border}">${sl}</div>`:''}${notes&&ht>58?`<div style="font-size:9px;color:${tc};opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${notes.split('\n')[0].replace(/</g,'&lt;')}</div>`:''}</div>`;
+      body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(ev.id)}','${_e(title||'Event')}','${_e(desc)}',${isAppt})" style="position:absolute;left:5px;right:5px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)"><div style="display:flex;align-items:center;gap:2px;overflow:hidden">${chips}${confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0">✓</span>':''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${title||'Event'}</span></div>${ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75">${timeStr}</div>`:''}${sl&&ht>44?`<div style="font-size:9px;font-weight:700;color:${border}">${sl}</div>`:''}${notes&&ht>44?`<div style="font-size:9px;color:${tc};opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📝 ${notes.split('\n')[0].replace(/</g,'&lt;')}</div>`:''}</div>`;
     });
     body += '</div></div>';
   });
@@ -308,6 +308,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   const cal = _calCalendars.find(c => c.id === calId);
   const startDt = new Date(ev.start.dateTime || ev.start.date);
   const phone = _apptPhone(ev), rawPhone = phone.replace(/\D/g, ''), notes = _apptNotes(ev);
+  const confirmed = ev.extendedProperties?.private?.museConfirmed === '1';
   let queueMatch = queue().find(x => x.calEventId && x.calEventId === eventId);
   if (!queueMatch && rawPhone) queueMatch = queue().find(x => { const p = (x.phone||'').replace(/\D/g,''); return p && p === rawPhone; });
   if (!queueMatch) { const fullName = title.trim().toLowerCase(); if (fullName.length > 2) queueMatch = queue().find(x => x.name && x.name.trim().toLowerCase() === fullName && !(rawPhone && (x.phone||'').replace(/\D/g,''))); }
@@ -318,12 +319,14 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   else if (queueMatch?.status === 'inservice') statusBadge = '<span style="color:#16a34a;font-size:11px;font-weight:700">● In Service</span>';
   else if (queueMatch?.status === 'waiting') statusBadge = '<span style="color:#2563eb;font-size:11px;font-weight:700">● Checked In</span>';
   else if (startDt < new Date() && isAppt) statusBadge = '<span style="color:#ea580c;font-size:11px;font-weight:700">⚠ Not Checked In</span>';
+  const confirmBadge = confirmed ? '<span style="color:#16a34a;font-size:11px;font-weight:700">✓ Confirmed</span>' : '';
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${title}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
-    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${cal?.name||''}</span> · ${startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</p>${phone?`<p>📞 ${phone}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${statusBadge?`<div class="mt-1">${statusBadge}</div>`:''}</div>
+    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${cal?.name||''}</span> · ${startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</p>${phone?`<p>📞 ${phone}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
     <div class="space-y-2">
       ${isAppt ? `<button onclick="calQuickCheckin('${calId}','${eventId}'); this.closest('.fixed').remove()" class="${queueMatch?'hidden':''} w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Quick Check-In</button>
       ${queueMatch?`<button onclick="this.closest('.fixed').remove(); showGroupAssignModal('${queueMatch.id}')" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">assignment_ind</span> Assign & Price</button>`:''}
+      <button onclick="calToggleConfirmed('${calId}','${eventId}'); this.closest('.fixed').remove()" class="w-full ${confirmed?'bg-secondary-container text-on-secondary-container':'border-2 border-primary text-primary hover:bg-primary/10'} py-2.5 rounded-xl font-headline font-bold text-sm transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">${confirmed?'event_available':'check_circle'}</span> ${confirmed?'Confirmed — tap to undo':'Mark Confirmed'}</button>
       <button onclick="this.closest('.fixed').remove(); showEditApptModal('${calId}','${eventId}')" class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Edit Appointment</button>` : `
       <button onclick="this.closest('.fixed').remove(); showConvertToApptModal('${calId}','${eventId}')" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">event_available</span> Convert to Appointment</button>
       <button onclick="this.closest('.fixed').remove(); showEditApptModal('${calId}','${eventId}')" class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Edit Event</button>`}
@@ -331,6 +334,20 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
       <button onclick="if(confirm('Cancel this appointment?')) { deleteAppt('${calId}','${eventId}'); this.closest('.fixed').remove(); }" class="w-full text-error py-2 rounded-xl font-headline font-semibold text-sm hover:bg-error/10 transition-colors">Cancel / Delete</button>
     </div></div>`;
   document.body.appendChild(modal);
+}
+
+// Toggle the "confirmed" flag on an appointment (stored in extendedProperties so it
+// syncs through Google Calendar; shown as a ✓ on the bubble + popup).
+export async function calToggleConfirmed(calId, eventId) {
+  const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
+  if (!ev) return;
+  const nowConfirmed = ev.extendedProperties?.private?.museConfirmed === '1';
+  try {
+    showToast('Saving…');
+    await gapi.client.calendar.events.patch({ calendarId: calId, eventId, resource: { extendedProperties: { private: { museConfirmed: nowConfirmed ? null : '1' } } } });
+    showToast(nowConfirmed ? 'Marked unconfirmed' : 'Appointment confirmed ✓');
+    await calLoadAndRender(true);
+  } catch (err) { showToast('Update failed: ' + (err.result?.error?.message || 'Unknown error')); }
 }
 
 // Build a queue entry from one calendar event (returns null if that person is
