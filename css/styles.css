@@ -265,6 +265,10 @@
     transition: transform .08s ease, box-shadow .15s ease, background-color .15s ease, color .15s ease;
   }
   button:active, [onclick]:active, [role="button"]:active { transform: scale(0.975); }
+  /* …but NOT the numpad keys — the scale-on-tap made rapid amount entry feel "bouncy"
+     on iPad. Keep their background-flash feedback, drop the transform. */
+  .numpad-key { transition: background-color .1s ease !important; }
+  .numpad-key:active { transform: none !important; }
 
   /* Slick pill switch — shared by services / active-staff / role-permission
      toggles (identical markup: a track div + an absolutely-positioned knob div).
