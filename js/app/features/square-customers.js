@@ -4,7 +4,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, formatPhone, autoCapitalize } from '../utils.js';
+import { showToast, formatPhone, autoCapitalize, dismissNumpad } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
 
 const cfg = () => getState().config;
@@ -86,6 +86,7 @@ export function fillFromCustomer(customer, guestIdx, prefix, phoneId, firstId, l
   if (phoneEl) phoneEl.value = formatted;
   if (firstEl) firstEl.value = customer.given_name;
   if (lastEl)  lastEl.value  = customer.family_name;
+  dismissNumpad();   // a pick already set the phone — close the floating numpad without clobbering it
   [`ac-phone-${guestIdx}`, `ac-first-${guestIdx}`, `mac-phone-${guestIdx}`, `mac-first-${guestIdx}`].forEach(id => {
     const el = document.getElementById(id); if (el) { el.innerHTML = ''; el.classList.add('hidden'); }
   });

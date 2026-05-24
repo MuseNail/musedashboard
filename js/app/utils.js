@@ -118,11 +118,15 @@ export function openNumpad(inputEl, label, mode) {
   document.getElementById('numpad-label').textContent = label || (_numpadMode === 'percent' ? 'Percent' : 'Cost');
   document.getElementById('numpad-dot-key').textContent  = '.';
   _numpadUpdateDisplay();
+  _setNumpadChrome(false);   // amounts: dimmed modal (no autocomplete to preserve)
   const m = document.getElementById('numpad-modal');
   m.classList.remove('hidden'); m.style.display = 'flex';
   inputEl.blur();
 }
 
+// Phone numpad is a FLOATING panel (no full-screen backdrop) and updates the input
+// live as you type, so the customer autocomplete stays visible and tappable above
+// it. iPad's native "tel" keyboard is the full QWERTY, so this gives a clean numpad.
 export function openPhoneNumpad(inputEl, label) {
   if (window.matchMedia('(pointer: fine)').matches) return;
   _numpadMode = 'phone'; _numpadTarget = inputEl; _numpadCallback = null;
@@ -131,10 +135,30 @@ export function openPhoneNumpad(inputEl, label) {
   document.getElementById('numpad-dot-key').textContent  = '';
   document.getElementById('numpad-plus-key').textContent = '';
   _numpadUpdateDisplay();
+  _setNumpadChrome(true);   // floating: lets the autocomplete show + be tapped
   const m = document.getElementById('numpad-modal');
   m.classList.remove('hidden'); m.style.display = 'flex';
   inputEl.blur();
 }
+
+// Floating = no dim backdrop, clicks pass through everywhere except the panel
+// itself (so the autocomplete dropdown stays interactive). Modal = the original
+// dimmed bottom sheet used for amounts.
+function _setNumpadChrome(floating) {
+  const m = document.getElementById('numpad-modal'); if (!m) return;
+  const panel = m.firstElementChild;
+  if (floating) { m.classList.remove('bg-on-surface/40'); m.style.pointerEvents = 'none'; if (panel) panel.style.pointerEvents = 'auto'; }
+  else { m.classList.add('bg-on-surface/40'); m.style.pointerEvents = ''; if (panel) panel.style.pointerEvents = ''; }
+}
+// Live-write the phone field as digits are typed so the autocomplete filters.
+function _numpadSyncPhone() {
+  if (!_numpadTarget) return;
+  _numpadTarget.value = _numpadRaw;   // acSearch → formatPhone reformats on input
+  _numpadTarget.dispatchEvent(new Event('input', { bubbles: true }));
+}
+// Hide the numpad WITHOUT writing back (used when an autocomplete pick already set
+// the field — confirming would clobber it with the partial typed digits).
+export function dismissNumpad() { _closeNumpadModal(); }
 
 function _numpadUpdateDisplay() {
   const el = document.getElementById('numpad-display');
@@ -162,7 +186,7 @@ export function numpadKey(key) {
       if (_numpadRaw.length + 2 <= 10) _numpadRaw += '00';
       else if (_numpadRaw.length + 1 <= 10) _numpadRaw += '0';
     } else { _numpadRaw += key; }
-    _numpadUpdateDisplay();
+    _numpadUpdateDisplay(); _numpadSyncPhone();
     return;
   }
   if (_numpadMode === 'percent') {
@@ -182,7 +206,7 @@ export function numpadKey(key) {
   _numpadUpdateDisplay();
 }
 
-export function numpadBackspace() { _numpadRaw = _numpadRaw.slice(0, -1); _numpadUpdateDisplay(); }
+export function numpadBackspace() { _numpadRaw = _numpadRaw.slice(0, -1); _numpadUpdateDisplay(); if (_numpadMode === 'phone') _numpadSyncPhone(); }
 
 export function numpadConfirm() {
   if (_numpadTarget) {
@@ -223,13 +247,10 @@ export function showToast(msg) {
 }
 
 // ── Global listeners (run once on import) ─────────────────────────────────────
-// Close autocomplete dropdowns on outside click.
+// Close autocomplete dropdowns on outside click — but NOT when tapping the floating
+// phone numpad, so digit keys can filter the list instead of dismissing it.
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('.ac-input-wrap')) {
+  if (!e.target.closest('.ac-input-wrap') && !e.target.closest('#numpad-modal')) {
     document.querySelectorAll('.autocomplete-list').forEach(d => { d.innerHTML = ''; d.classList.add('hidden'); });
   }
 });
-// Phone fields use the device's native numeric keypad (NOT the custom numpad):
-// the native keypad docks at the bottom and leaves the input + its customer
-// autocomplete visible and tappable, so returning customers can be auto-filled.
-// (The custom numpad is still used for cost entry, where there's no autocomplete.)

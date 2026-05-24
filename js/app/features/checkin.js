@@ -64,7 +64,7 @@ export function addGuestCard() {
         <div class="space-y-4">
           <div class="ac-input-wrap">
             <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest px-1 block mb-1">Phone Number</label>
-            <input id="phone-${idx}" type="tel" placeholder="(555) 000-0000" autocomplete="off" oninput="acSearch(this, ${idx}, 'phone')"
+            <input id="phone-${idx}" type="tel" placeholder="(555) 000-0000" autocomplete="off" onfocus="openPhoneNumpad(this)" oninput="acSearch(this, ${idx}, 'phone')"
               class="w-full bg-transparent border-b border-surface-container-high py-2 text-xl font-headline font-light focus:border-primary transition-colors placeholder:text-surface-container-highest">
             <div id="ac-phone-${idx}" class="autocomplete-list hidden"></div>
           </div>
@@ -107,7 +107,7 @@ export function addGuestCard() {
         <div id="manual-contact-fields-${idx}" class="space-y-3">
           <div class="ac-input-wrap">
             <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest block mb-1">Phone Number</label>
-            <input id="phone-${idx}" type="tel" placeholder="(555) 000-0000" autocomplete="off" oninput="acSearch(this, ${idx}, 'phone')"
+            <input id="phone-${idx}" type="tel" placeholder="(555) 000-0000" autocomplete="off" onfocus="openPhoneNumpad(this)" oninput="acSearch(this, ${idx}, 'phone')"
               class="w-full bg-transparent border-b border-surface-container-high py-2 text-xl font-headline font-light focus:border-primary transition-colors placeholder:text-surface-container-highest">
             <div id="ac-phone-${idx}" class="autocomplete-list hidden"></div>
           </div>

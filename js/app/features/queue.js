@@ -319,7 +319,7 @@ function renderManualGuestCard(idx) {
     <div id="manual-contact-fields-${idx}" class="space-y-3">
       <div class="ac-input-wrap">
         <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest block mb-1">Phone Number</label>
-        <input id="manual-phone-${idx}" type="tel" placeholder="(555) 000-0000" autocomplete="off" oninput="acSearchManual(this, ${idx}, 'phone')"
+        <input id="manual-phone-${idx}" type="tel" placeholder="(555) 000-0000" autocomplete="off" onfocus="openPhoneNumpad(this)" oninput="acSearchManual(this, ${idx}, 'phone')"
           class="w-full border-b border-surface-container-high bg-transparent py-2 text-base font-headline font-light focus:border-primary transition-colors placeholder:text-surface-container-highest">
         <div id="mac-phone-${idx}" class="autocomplete-list hidden"></div>
       </div>
