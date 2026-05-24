@@ -1238,6 +1238,12 @@ tailwind.config = {
         <p class="text-[11px] font-body text-on-surface-variant mt-1">Leave blank for no commission tracking</p>
       </div>
       <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Staff App PIN</label>
+        <input id="staff-pin-input" type="text" inputmode="numeric" autocomplete="off" placeholder="e.g. 1234"
+          class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+        <p class="text-[11px] font-body text-on-surface-variant mt-1">Personal code this tech uses to open the Staff app. Leave blank if they don't use it.</p>
+      </div>
+      <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Services this tech performs</label>
         <div class="grid grid-cols-4 gap-2" id="staff-services-picker"></div>
         <p class="text-[11px] font-body text-on-surface-variant mt-1">Leave all unselected to allow all services</p>

@@ -78,6 +78,7 @@ export function showAddStaff() {
   document.getElementById('staff-modal-title').textContent = 'Add Technician';
   document.getElementById('staff-name-input').value = '';
   document.getElementById('staff-commission-input').value = '';
+  const pinEl = document.getElementById('staff-pin-input'); if (pinEl) pinEl.value = '';
   document.getElementById('staff-edit-id').value = '';
   renderStaffServicesPicker([]);
   const m = document.getElementById('staff-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
@@ -90,6 +91,7 @@ export function showEditStaff(id) {
   document.getElementById('staff-modal-title').textContent = 'Edit Technician';
   document.getElementById('staff-name-input').value = st.name;
   document.getElementById('staff-commission-input').value = st.commission != null ? st.commission : '';
+  const pinEl = document.getElementById('staff-pin-input'); if (pinEl) pinEl.value = st.pin || '';
   document.getElementById('staff-edit-id').value = id;
   renderStaffServicesPicker(st.services || []);
   const m = document.getElementById('staff-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
@@ -103,16 +105,19 @@ export function saveStaff() {
   const name = document.getElementById('staff-name-input').value.trim();
   const commRaw = document.getElementById('staff-commission-input').value.trim();
   const commission = commRaw !== '' ? parseFloat(commRaw) : null;
+  const pin = (document.getElementById('staff-pin-input')?.value || '').trim();
   const editId = document.getElementById('staff-edit-id').value;
   const selectedSvcs = [...document.querySelectorAll('#staff-services-picker .service-btn.selected')].map(b => b.dataset.service);
   if (!name) { showToast('Please enter a name.'); return; }
   if (commission !== null && (isNaN(commission) || commission < 0 || commission > 100)) { showToast('Commission must be 0–100.'); return; }
+  // Soft-warn (don't block) if this Staff-App PIN collides with another tech's — same PIN logs in as whoever matches first.
+  if (pin && cfg().staff.some(s => s.id !== editId && s.pin === pin)) showToast('Heads up: another tech already uses that PIN.');
   const staff = [...cfg().staff];
   if (editId) {
     const i = staff.findIndex(s => s.id === editId);
-    if (i >= 0) staff[i] = { ...staff[i], name, commission, services: selectedSvcs };
+    if (i >= 0) staff[i] = { ...staff[i], name, commission, services: selectedSvcs, pin };
   } else {
-    staff.push({ id: `staff-${Date.now()}`, name, commission, services: selectedSvcs });
+    staff.push({ id: `staff-${Date.now()}`, name, commission, services: selectedSvcs, pin });
   }
   setStaff(staff);
   closeStaffModal();
