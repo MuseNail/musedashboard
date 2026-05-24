@@ -625,7 +625,7 @@ export function renderGroupAssignContent() {
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Technician</label>
             <select class="assign-tech w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="updateGroupTotal()"><option value="">— Unassigned —</option>${techOptions(a.techId)}</select></div>
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Station</label>
-            <select class="assign-station w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"><option value="">— None —</option>${stationOptions(a.station)}</select></div>
+            <select class="assign-station w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"><option value="">— None —</option>${stationOptions(a.station || entry.station)}</select></div>
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
             <input type="text" inputmode="decimal" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.cost != null && a.cost !== 0 ? a.cost : ''}"
               class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
