@@ -533,6 +533,10 @@ export function acceptAssignSuggestion(serviceId, techId) {
 export function saveCurrentGroupTabInputs() {
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
   if (!entry) return;
+  // Per-customer name/phone are editable inline in the modal — capture them so
+  // EVERY checked-in customer (not just the primary) can be edited here.
+  const nameEl = document.getElementById('ga-name'); if (nameEl) { const v = nameEl.value.trim(); if (v) entry.name = v; }
+  const phoneEl = document.getElementById('ga-phone'); if (phoneEl) entry.phone = phoneEl.value.trim();
   const rows = document.querySelectorAll('#group-assign-content [data-service-id]');
   if (!entry.assignments) entry.assignments = [];
   rows.forEach(row => {
@@ -655,10 +659,12 @@ export function renderGroupAssignContent() {
 
   const hasSupplement = cfg().items.length > 0 || cfg().fees.length > 0;
   content.innerHTML = `
-    <div class="flex items-center gap-2 mb-3"><span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${color}"></span>
-      <span class="font-headline font-bold text-on-surface">${entry.name}</span>
-      ${entry.phone ? `<span class="text-xs font-body text-on-surface-variant">· ${entry.phone}</span>` : ''}
-      ${entry.groupLabel ? `<span class="text-[10px] font-body italic" style="color:${color}">${entry.groupLabel}</span>` : ''}</div>
+    <div class="flex items-center gap-2 mb-3 flex-wrap"><span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${color}"></span>
+      <input id="ga-name" type="text" value="${(entry.name||'').replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="Customer name"
+        class="font-headline font-bold text-on-surface bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 flex-1" style="min-width:120px">
+      <input id="ga-phone" type="tel" value="${(entry.phone||'').replace(/"/g,'&quot;')}" onfocus="openPhoneNumpad(this)" placeholder="Phone"
+        class="text-sm font-body text-on-surface-variant bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-36 flex-shrink-0">
+      ${entry.groupLabel ? `<span class="text-[10px] font-body italic flex-shrink-0" style="color:${color}">${entry.groupLabel}</span>` : ''}</div>
     <div class="mb-1"><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Services</label>
       <div class="grid grid-cols-4 gap-2 mb-4">${svcPicker}</div></div>
     ${serviceRows}
@@ -678,6 +684,7 @@ export function renderGroupAssignContent() {
 }
 
 export function toggleGroupService(sid) {
+  saveCurrentGroupTabInputs();   // preserve typed name/phone/costs before the re-render
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
   if (!entry) return;
   if (entry.services.includes(sid)) {
