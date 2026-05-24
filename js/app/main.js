@@ -123,7 +123,30 @@ function applySquarePaidFlag() {
   else localStorage.removeItem('muse_sq_paid');
 }
 window.addEventListener('storage', e => { if (e.key === 'muse_sq_paid' && e.newValue) applySquarePaidFlag(); });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) applySquarePaidFlag(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); } });
+
+// Installed-PWA fallback for the Square charge. On iOS a Home-Screen app is resumed
+// after the Square hand-off WITHOUT the callback data, so the muse_sq_paid handoff
+// above never fires (there's no return tab). But proceedSquarePayment stashed
+// muse_sq_pending in this app's own storage right before launching Square, so on
+// resume we ask the operator whether the charge went through — iOS gives us no way to
+// know — and mark Paid on confirm. Handled once: the pending flag is cleared the moment
+// we prompt, and we skip if the Safari return tab already wrote muse_sq_paid.
+function checkSquarePending() {
+  let pend; try { pend = JSON.parse(localStorage.getItem('muse_sq_pending') || 'null'); } catch (e) { return; }
+  if (!pend || !pend.ids || !pend.ids.length) return;
+  if (Date.now() - (pend.at || 0) > 8 * 60 * 1000) { localStorage.removeItem('muse_sq_pending'); return; }
+  if (localStorage.getItem('muse_sq_paid')) return;   // Safari return tab is handling it
+  localStorage.removeItem('muse_sq_pending');          // handle once
+  const ids = pend.ids.map(String);
+  const amt = pend.cents ? ` — $${(pend.cents / 100).toFixed(2)}` : '';
+  const who = pend.names || 'this customer';
+  const markPaid = () => {
+    ids.forEach(id => { const e = store.getState().queue.find(x => String(x.id) === id); if (e && !['paid', 'done'].includes(e.status)) window.updateStatus?.(id, 'paid'); });
+    utils.showToast('Marked paid');
+  };
+  if (window.showWarnModal) window.showWarnModal('Square payment complete?', `Mark ${who}${amt} as Paid? Tap Confirm if the charge went through in Square, or Cancel if it was canceled.`, markPaid);
+}
 
 // ── Store subscription → re-render the active panel on (remote) changes ───────
 function updateSyncIndicator(state) {

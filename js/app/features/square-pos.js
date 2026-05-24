@@ -74,8 +74,10 @@ export function proceedSquarePayment() {
     notes: `Muse${_pendingPay.names ? ' · ' + _pendingPay.names : ''}`,
     options: { supported_tender_types: ['CREDIT_CARD', 'CASH', 'OTHER', 'SQUARE_GIFT_CARD', 'CARD_ON_FILE'] },
   };
-  // Stash the party so the return tab can mark them Paid on a successful charge.
-  try { localStorage.setItem('muse_sq_pending', JSON.stringify({ ids: _pendingPay.ids || [], at: Date.now() })); } catch (e) {}
+  // Stash the party (+ names/amount) so we can mark them Paid on return. The Safari
+  // return tab uses this to write muse_sq_paid; the installed PWA — which iOS resumes
+  // WITHOUT the callback data — uses it for the confirm-on-resume prompt (see main.js).
+  try { localStorage.setItem('muse_sq_pending', JSON.stringify({ ids: _pendingPay.ids || [], names: _pendingPay.names || '', cents: _pendingPay.cents || 0, at: Date.now() })); } catch (e) {}
   closeSquareConfirm();
   window.location.href = `square-commerce-v1://payment/create?data=${encodeURIComponent(JSON.stringify(data))}`;
 }
