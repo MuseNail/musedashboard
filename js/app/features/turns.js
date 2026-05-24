@@ -670,3 +670,28 @@ function renderTurnsHistoryView() {
     if (justDragged) { justDragged = false; e.stopPropagation(); e.preventDefault(); }
   }, true);
 })();
+
+// ── Resizable Turns/Waiting divider (device-local width) ──────────────────────
+// Drag #turns-split-handle to widen/narrow the waiting+active panel; the tech grid
+// (flex-grow) takes the rest. Width persists per device (like the calendar-hours pref).
+(function initTurnsSplit() {
+  const KEY = 'muse_turns_split', MIN = 260, MAX = 680;
+  const panel = () => document.getElementById('turns-side-panel');
+  function restore() { const v = parseInt(localStorage.getItem(KEY) || '', 10); const p = panel(); if (p && v >= MIN && v <= MAX) p.style.width = v + 'px'; }
+  document.addEventListener('DOMContentLoaded', restore); restore();
+  let dragging = false;
+  document.addEventListener('pointerdown', e => {
+    if (!(e.target.closest && e.target.closest('#turns-split-handle'))) return;
+    dragging = true; e.preventDefault(); document.body.style.userSelect = 'none';
+  });
+  document.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const p = panel(); if (!p) return;
+    const w = Math.max(MIN, Math.min(MAX, p.getBoundingClientRect().right - e.clientX));
+    p.style.width = w + 'px';
+  });
+  document.addEventListener('pointerup', () => {
+    if (!dragging) return; dragging = false; document.body.style.userSelect = '';
+    const p = panel(); if (p) localStorage.setItem(KEY, String(parseInt(p.style.width, 10) || 380));
+  });
+})();
