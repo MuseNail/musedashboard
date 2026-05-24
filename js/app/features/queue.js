@@ -465,6 +465,7 @@ export function saveEditCheckin() {
 // ── Group Assign / Price modal ────────────────────
 let groupAssignEntries = [];
 let activeGroupTab = 0;
+const _custEditedIds = new Set();   // entries whose name/phone were edited here → sync to Square on Save
 export function activeGroupEntryId() { return groupAssignEntries[activeGroupTab]; }
 
 export function showGroupAssignModal(entryId) {
@@ -533,10 +534,17 @@ export function acceptAssignSuggestion(serviceId, techId) {
 export function saveCurrentGroupTabInputs() {
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
   if (!entry) return;
-  // Per-customer name/phone are editable inline in the modal — capture them so
-  // EVERY checked-in customer (not just the primary) can be edited here.
-  const nameEl = document.getElementById('ga-name'); if (nameEl) { const v = nameEl.value.trim(); if (v) entry.name = v; }
-  const phoneEl = document.getElementById('ga-phone'); if (phoneEl) entry.phone = phoneEl.value.trim();
+  // Per-customer first/last/phone are editable inline in the modal — capture them so
+  // EVERY checked-in customer (not just the primary) can be edited here. If name or
+  // phone actually changed, flag the entry to sync back to Square on Save.
+  const firstEl = document.getElementById('ga-first'), lastEl = document.getElementById('ga-last'), phoneEl = document.getElementById('ga-phone');
+  if (firstEl || lastEl || phoneEl) {
+    const newName = [firstEl?.value.trim() || '', lastEl?.value.trim() || ''].filter(Boolean).join(' ');
+    const newPhone = phoneEl ? phoneEl.value.trim() : (entry.phone || '');
+    if ((newName && newName !== entry.name) || newPhone !== (entry.phone || '')) _custEditedIds.add(String(entry.id));
+    if (newName) entry.name = newName;
+    entry.phone = newPhone;
+  }
   const rows = document.querySelectorAll('#group-assign-content [data-service-id]');
   if (!entry.assignments) entry.assignments = [];
   rows.forEach(row => {
@@ -658,10 +666,13 @@ export function renderGroupAssignContent() {
   }).join('');
 
   const hasSupplement = cfg().items.length > 0 || cfg().fees.length > 0;
+  const _nm = (entry.name||'').trim().split(/\s+/), _first = _nm[0] || '', _last = _nm.slice(1).join(' ') || '';
   content.innerHTML = `
     <div class="flex items-center gap-2 mb-3 flex-wrap"><span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${color}"></span>
-      <input id="ga-name" type="text" value="${(entry.name||'').replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="Customer name"
-        class="font-headline font-bold text-on-surface bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 flex-1" style="min-width:120px">
+      <input id="ga-first" type="text" value="${_first.replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="First"
+        class="font-headline font-bold text-on-surface bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-24 flex-shrink-0">
+      <input id="ga-last" type="text" value="${_last.replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="Last"
+        class="font-headline font-semibold text-on-surface bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-24 flex-shrink-0">
       <input id="ga-phone" type="tel" value="${(entry.phone||'').replace(/"/g,'&quot;')}" onfocus="openPhoneNumpad(this)" placeholder="Phone"
         class="text-sm font-body text-on-surface-variant bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-36 flex-shrink-0">
       ${entry.groupLabel ? `<span class="text-[10px] font-body italic flex-shrink-0" style="color:${color}">${entry.groupLabel}</span>` : ''}</div>
@@ -727,7 +738,7 @@ export function updateGroupTotal() {
 
 export function closeGroupAssignModal() {
   const m = document.getElementById('group-assign-modal'); m.classList.add('hidden'); m.style.display = '';
-  groupAssignEntries = [];
+  groupAssignEntries = []; _custEditedIds.clear();
 }
 
 function collectGroupAssignments() { saveCurrentGroupTabInputs(); return groupAssignEntries.map(id => q().find(e => String(e.id) === id)).filter(Boolean); }
@@ -736,6 +747,10 @@ function validateGroupAssignments(entries) { return entries.filter(e => !e.assig
 export function saveGroupAssignments() {
   const entries = collectGroupAssignments();
   entries.forEach(e => { applyEntryStatus(e); upsert(e); });
+  // Sync customers whose name/phone were edited here back to Square. squareUpsertCustomer
+  // requires a first name + phone (no-ops without a phone), updates an existing record by
+  // phone, else creates — i.e. exactly: first+phone → sync; no phone → never sync.
+  entries.forEach(e => { if (_custEditedIds.has(String(e.id))) squareUpsertCustomer(e); });
   closeGroupAssignModal();
   renderQueue(); updateStats(); window.renderTurns?.();
   showToast('Assignments saved');
