@@ -10,7 +10,7 @@ import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, setAssignmentStatus, isPaidStatus } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
-import { squareUpsertCustomer, showEditCustomer, customerDirectory } from './square-customers.js';
+import { squareUpsertCustomer, showEditCustomer, customerDirectory, closeCustomerNote } from './square-customers.js';
 
 const cfg   = () => getState().config;
 const q     = () => getState().queue;
@@ -373,6 +373,7 @@ export function showManualAdd() {
   document.getElementById('manual-guests-container').innerHTML = '';
   addManualGuest();
   const appt = document.getElementById('manual-is-appointment'); if (appt) appt.checked = false;
+  document.getElementById('manual-note-panel')?.classList.add('hidden');   // note panel appears only when a returning customer is picked
   const tw = document.getElementById('manual-appt-tech-wrap'); if (tw) tw.classList.add('hidden');
   const ts = document.getElementById('manual-appt-tech'); if (ts) { ts.innerHTML = '<option value="">— Leave unassigned —</option>'; ts.value = ''; }
   const m = document.getElementById('manual-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
@@ -393,6 +394,7 @@ export function toggleManualApptTech() {
 export function addManualGuest() { manualGuestCount++; renderManualGuestCard(manualGuestCount); }
 export function removeManualGuest(idx) { document.getElementById(`manual-guest-${idx}`)?.remove(); }
 export function closeManualAdd() {
+  closeCustomerNote();   // flush + hide the customer-note side panel
   const m = document.getElementById('manual-modal'); m.classList.add('hidden'); m.style.display = '';
   manualGuestCount = 0;
   const c = document.getElementById('manual-guests-container'); if (c) c.innerHTML = '';

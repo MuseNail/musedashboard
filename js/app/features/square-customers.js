@@ -98,30 +98,37 @@ export function fillFromCustomer(customer, guestIdx, prefix, phoneId, firstId, l
     showCustomerNote(customer.id, [customer.given_name, customer.family_name].filter(Boolean).join(' '), customerNote(customer.id));
   }
 }
-let _noteCustomerId = null;
+// Customer note lives as a SIDE PANEL beside the dashboard check-in (#manual-note-panel),
+// not a screen-covering modal: it opens when a returning customer is picked, auto-saves
+// as you type, the Save button saves without closing the check-in, and it closes (after
+// flushing) when the check-in window closes.
+let _noteCustomerId = null, _noteSaveTimer = null;
 export function showCustomerNote(squareId, name, note) {
   const nameEl = document.getElementById('customer-note-name');
   const editEl = document.getElementById('customer-note-edit');
-  const m = document.getElementById('customer-note-modal');
-  if (!m || !editEl) return;
+  const panel = document.getElementById('manual-note-panel');
+  if (!panel || !editEl) return;
   _noteCustomerId = squareId || null;
   if (nameEl) nameEl.textContent = name || '';
   editEl.value = note || '';
-  m.classList.remove('hidden'); m.style.display = 'flex';
+  panel.classList.remove('hidden');
 }
-export function saveCustomerNoteInline() {
-  const editEl = document.getElementById('customer-note-edit');
-  if (!_noteCustomerId || !editEl) { closeCustomerNote(); return; }
+function _persistCustomerNote() {
+  if (!_noteCustomerId) return;
+  const editEl = document.getElementById('customer-note-edit'); if (!editEl) return;
   const val = editEl.value.trim();
   const notes = { ...(cfg().customer_notes || {}) };
   if (val) notes[_noteCustomerId] = val; else delete notes[_noteCustomerId];
   dispatch('config.set', { key: 'customer_notes', value: notes });
-  showToast('Note saved');
-  closeCustomerNote();
 }
+// Auto-save shortly after typing stops (debounced — no dispatch per keystroke).
+export function autoSaveCustomerNote() { clearTimeout(_noteSaveTimer); _noteSaveTimer = setTimeout(_persistCustomerNote, 600); }
+// "Save note" button — save now, but DON'T close the check-in window.
+export function saveCustomerNoteInline() { clearTimeout(_noteSaveTimer); _persistCustomerNote(); showToast('Note saved'); }
+// Called when the check-in (manual-add) modal closes: flush any pending edit, then hide.
 export function closeCustomerNote() {
-  const m = document.getElementById('customer-note-modal');
-  if (m) { m.classList.add('hidden'); m.style.display = ''; }
+  clearTimeout(_noteSaveTimer); _persistCustomerNote();
+  const panel = document.getElementById('manual-note-panel'); if (panel) panel.classList.add('hidden');
   _noteCustomerId = null;
 }
 
