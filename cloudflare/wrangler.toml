@@ -2,6 +2,14 @@ name               = "musedashboard"
 main               = "worker.js"
 compatibility_date = "2024-11-20"
 
+# ── Observability ──────────────────────────────────────────────────────────────
+# Persist console.* output so errors are queryable in the Cloudflare dashboard
+# (Workers & Pages → musedashboard → Logs) instead of being ephemeral. Free tier
+# included; also viewable live with `wrangler tail`. head_sampling_rate=1 = keep all.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 # ── Cron Trigger ───────────────────────────────────────────────────────────────
 # Fires at 10:30 UTC = 2:30 AM PST (winter) / 3:30 AM PDT (summer) — always BEFORE
 # the client's 4 AM day-reset, so the queue is still intact. Exports yesterday's

@@ -182,6 +182,18 @@ function buildDailyBackup(state, dateStr) {
 
 export default {
   async fetch(request, env) {
+    // Top-level guard: any unhandled throw is logged (visible in Workers Logs /
+    // `wrangler tail`) and returned as a clean CORS 500 instead of an opaque crash.
+    try {
+      return await this._handle(request, env);
+    } catch (e) {
+      let p = '?'; try { p = new URL(request.url).pathname; } catch {}
+      console.error('[fetch] unhandled', request.method, p, '-', (e && e.message) || String(e));
+      return json({ error: 'internal error' }, 500);
+    }
+  },
+
+  async _handle(request, env) {
     const url     = new URL(request.url);
     const path    = url.pathname;
     const method  = request.method.toUpperCase();
@@ -247,6 +259,7 @@ export default {
       const id    = env.SALON_DO.idFromName(salonId);
       const stub  = env.SALON_DO.get(id);
       const doRes = await stub.fetch(request);
+      if (doRes.status >= 500) console.error('[state]', method, path, '->', doRes.status);
       // Re-wrap with CORS so cross-origin clients (GitHub Pages, local dev) are allowed.
       const body  = await doRes.text();
       return new Response(body, {
@@ -289,6 +302,9 @@ export default {
         body: hasBody ? await request.arrayBuffer() : undefined,
       });
 
+      // Log non-2xx Square responses by status + path only (never bodies/headers —
+      // they carry tokens + customer PII) so API failures are diagnosable.
+      if (upstream.status >= 400) console.warn('[square]', method, squarePath, '->', upstream.status);
       const body = await upstream.arrayBuffer();
       return new Response(body, {
         status:  upstream.status,
@@ -483,9 +499,11 @@ export class MuseSalonDO {
           await this.state.storage.delete('giftcard:' + payload.id);
           break;
         default:
+          console.warn('[mutate] unknown op:', op);
           return { error: 'unknown op: ' + op };
       }
     } catch (e) {
+      console.error('[mutate]', op, 'failed:', (e && e.message) || String(e));
       return { error: 'apply failed: ' + (e && e.message || String(e)) };
     }
 
@@ -545,7 +563,7 @@ export class MuseSalonDO {
           await this.state.storage.delete(toDelete.slice(i, i + 128));
         }
       }
-    } catch (e) { /* swallow — backup is best-effort */ }
+    } catch (e) { console.error('[alarm] backup failed:', (e && e.message) || String(e)); }   // best-effort; re-armed below
     await this.state.storage.setAlarm(Date.now() + this.BACKUP_INTERVAL_MS);
   }
 
