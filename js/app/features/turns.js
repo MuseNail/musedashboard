@@ -591,6 +591,12 @@ function renderTurnsHistoryView() {
   let dragEntryId = null, dragTechId = null, dragClone = null, isDragging = false;
   const DRAG_THRESH = 6; let startX = 0, startY = 0, pendingEntry = null;
   let justDragged = false;   // suppress the click that trails a real drag (so a reorder doesn't also open Assign&Price)
+  // Touch: a customer bubble only becomes draggable after a tap-and-hold, so a normal
+  // swipe scrolls the tech's turn row (overflow-x) / the waiting list instead of grabbing
+  // the bubble. Mouse keeps the move-threshold drag (no drag-to-scroll on desktop).
+  let longPressTimer = null, longPressArmed = false, pointerKind = 'mouse';
+  const LONG_PRESS_MS = 400;   // hold this long before a bubble lifts
+  const TOUCH_CANCEL = 10;     // finger travel (px) before the hold fires = "scroll", not "grab"
   function getTarget(e, selector) { let el = e.target; while (el && el !== document.body) { if (el.matches && el.matches(selector)) return el; el = el.parentElement; } return null; }
   function startDrag(card) {
     isDragging = true; dragEntryId = card.dataset.entryId; dragTechId = card.dataset.techId || null;
@@ -638,11 +644,17 @@ function renderTurnsHistoryView() {
     if (e.button !== 0) return;
     const card = getTarget(e, '.turns-filled-slot, #turns-waiting-list [data-entry-id], #turns-active-list [data-entry-id]');
     if (!card) return;
-    // Filled slots ARE <button>s — we still allow a drag to start on them (the old
-    // `closest('button')` guard blocked all grid reordering). We don't preventDefault,
-    // so a tap still fires the button's click (opens Assign&Price); a move past the
-    // threshold becomes a drag and endDrag suppresses the trailing click.
-    startX = e.clientX; startY = e.clientY; pendingEntry = card;
+    // We don't preventDefault, so a tap still fires the button's click (opens
+    // Assign&Price); a drag suppresses the trailing click via justDragged.
+    startX = e.clientX; startY = e.clientY; pendingEntry = card; longPressArmed = false;
+    pointerKind = e.pointerType || 'mouse';
+    clearTimeout(longPressTimer);
+    if (pointerKind === 'touch') {
+      // Arm the drag only after a stationary hold; a swipe cancels it (below) so the row scrolls.
+      longPressTimer = setTimeout(() => {
+        if (pendingEntry && !isDragging) { longPressArmed = true; startDrag(pendingEntry); if (navigator.vibrate) navigator.vibrate(12); }
+      }, LONG_PRESS_MS);
+    }
   });
   document.addEventListener('pointermove', function(e) {
     if (isDragging && dragClone) {
@@ -657,16 +669,28 @@ function renderTurnsHistoryView() {
       });
       return;
     }
-    if (pendingEntry && !isDragging) { const dx = e.clientX - startX, dy = e.clientY - startY; if (Math.sqrt(dx*dx+dy*dy) > DRAG_THRESH) startDrag(pendingEntry); }
+    if (pendingEntry && !isDragging) {
+      const dx = e.clientX - startX, dy = e.clientY - startY, dist = Math.sqrt(dx*dx + dy*dy);
+      if (pointerKind === 'touch') {
+        // Moved before the hold fired → it's a scroll, not a grab: stand down.
+        if (dist > TOUCH_CANCEL) { clearTimeout(longPressTimer); pendingEntry = null; }
+      } else if (dist > DRAG_THRESH) {
+        startDrag(pendingEntry);
+      }
+    }
   });
-  document.addEventListener('pointerup', function(e) { if (isDragging) endDrag(e); else pendingEntry = null; isDragging = false; });
+  document.addEventListener('pointerup', function(e) { clearTimeout(longPressTimer); if (isDragging) endDrag(e); else pendingEntry = null; isDragging = false; longPressArmed = false; });
   document.addEventListener('pointercancel', function() {
+    clearTimeout(longPressTimer); longPressArmed = false;
     isDragging = false; if (dragClone) { dragClone.remove(); dragClone = null; }
     document.querySelectorAll('.turns-filled-slot, #turns-waiting-list [data-entry-id], #turns-active-list [data-entry-id]').forEach(c => { c.style.opacity=''; c.style.transform=''; });
     document.querySelectorAll('.turns-empty-slot').forEach(s => s.classList.remove('turns-drop-highlight'));
     document.querySelectorAll('.turns-reorder-target').forEach(s => s.classList.remove('turns-reorder-target'));
     pendingEntry = null; dragEntryId = null; dragTechId = null;
   });
+  // While a touch-drag is live, stop the page/row from scrolling under the clone.
+  // Non-passive so preventDefault actually cancels the scroll on iOS Safari.
+  document.addEventListener('touchmove', function(e) { if (isDragging) e.preventDefault(); }, { passive: false });
   // After a real drag, swallow the trailing click so a filled slot's onclick
   // (open Assign&Price) doesn't fire on top of the reorder. Capture phase → runs
   // before the inline onclick and stops it reaching the target.
