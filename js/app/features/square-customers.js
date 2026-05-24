@@ -90,25 +90,38 @@ export function fillFromCustomer(customer, guestIdx, prefix, phoneId, firstId, l
     const el = document.getElementById(id); if (el) { el.innerHTML = ''; el.classList.add('hidden'); }
   });
   // On a DASHBOARD check-in (manual-add uses `manual-*` field ids) — NOT the
-  // customer-facing check-in screen — surface the saved manual note for a
-  // returning customer chosen from autofill.
-  if (/^manual-/.test(firstId || '')) {
-    const note = customerNote(customer.id);
-    if (note) showCustomerNote([customer.given_name, customer.family_name].filter(Boolean).join(' '), note);
+  // customer-facing check-in screen — open the note editor for a returning
+  // customer chosen from autofill, so the front desk can read AND add/update a
+  // note in the moment (pre-filled with any existing note).
+  if (/^manual-/.test(firstId || '') && customer.id) {
+    showCustomerNote(customer.id, [customer.given_name, customer.family_name].filter(Boolean).join(' '), customerNote(customer.id));
   }
 }
-export function showCustomerNote(name, note) {
+let _noteCustomerId = null;
+export function showCustomerNote(squareId, name, note) {
   const nameEl = document.getElementById('customer-note-name');
-  const bodyEl = document.getElementById('customer-note-body');
+  const editEl = document.getElementById('customer-note-edit');
   const m = document.getElementById('customer-note-modal');
-  if (!m || !bodyEl) return;
+  if (!m || !editEl) return;
+  _noteCustomerId = squareId || null;
   if (nameEl) nameEl.textContent = name || '';
-  bodyEl.textContent = note || '';
+  editEl.value = note || '';
   m.classList.remove('hidden'); m.style.display = 'flex';
+}
+export function saveCustomerNoteInline() {
+  const editEl = document.getElementById('customer-note-edit');
+  if (!_noteCustomerId || !editEl) { closeCustomerNote(); return; }
+  const val = editEl.value.trim();
+  const notes = { ...(cfg().customer_notes || {}) };
+  if (val) notes[_noteCustomerId] = val; else delete notes[_noteCustomerId];
+  dispatch('config.set', { key: 'customer_notes', value: notes });
+  showToast('Note saved');
+  closeCustomerNote();
 }
 export function closeCustomerNote() {
   const m = document.getElementById('customer-note-modal');
   if (m) { m.classList.add('hidden'); m.style.display = ''; }
+  _noteCustomerId = null;
 }
 
 export function buildDropdown(customers, dropdownId, guestIdx, phoneId, firstId, lastId) {

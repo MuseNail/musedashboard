@@ -2070,17 +2070,21 @@ tailwind.config = {
 </div>
 
 <!-- ═══════════════════════════════════════════════
-     CUSTOMER NOTE POPUP (shown on check-in when an existing customer is picked)
+     CUSTOMER NOTE POPUP (dashboard check-in: view + edit a returning customer's note)
 ═══════════════════════════════════════════════ -->
 <div id="customer-note-modal" class="fixed inset-0 z-[90] hidden items-center justify-center bg-on-surface/40 px-4">
   <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl fade-up">
-    <div class="flex items-center gap-2 mb-3">
+    <div class="flex items-center gap-2 mb-1">
       <span class="material-symbols-outlined text-secondary">sticky_note_2</span>
       <h2 class="text-lg font-headline font-bold text-on-surface">Customer Note</h2>
     </div>
-    <div class="text-sm font-body font-semibold text-on-surface-variant mb-1" id="customer-note-name"></div>
-    <div class="bg-secondary-container/40 border border-surface-container-high rounded-xl p-3 text-base font-body text-on-surface whitespace-pre-wrap max-h-60 overflow-y-auto" id="customer-note-body"></div>
-    <button onclick="closeCustomerNote()" class="w-full mt-4 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Got it</button>
+    <div class="text-sm font-body font-semibold text-on-surface-variant mb-2" id="customer-note-name"></div>
+    <textarea id="customer-note-edit" rows="4" placeholder="Add a note for this customer (allergies, preferences, etc.)"
+      class="w-full bg-secondary-container/40 border border-surface-container-high rounded-xl p-3 text-base font-body text-on-surface focus:outline-none focus:border-primary resize-none"></textarea>
+    <div class="flex gap-2 mt-4">
+      <button onclick="saveCustomerNoteInline()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Save note</button>
+      <button onclick="closeCustomerNote()" class="px-4 py-3 rounded-xl border-2 border-outline-variant text-on-surface-variant font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Close</button>
+    </div>
   </div>
 </div>
 
