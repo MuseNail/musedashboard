@@ -2119,26 +2119,26 @@ tailwind.config = {
     </div>
     <!-- Keys -->
     <div class="grid grid-cols-4 gap-px bg-surface-container-high" style="padding:1px">
-      <button onclick="numpadKey('1')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">1</button>
-      <button onclick="numpadKey('2')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">2</button>
-      <button onclick="numpadKey('3')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">3</button>
-      <button onclick="numpadBackspace()" class="numpad-key bg-surface-container-lowest text-on-surface-variant py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors flex items-center justify-center">
+      <button onpointerdown="event.preventDefault();numpadKey('1')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">1</button>
+      <button onpointerdown="event.preventDefault();numpadKey('2')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">2</button>
+      <button onpointerdown="event.preventDefault();numpadKey('3')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">3</button>
+      <button onpointerdown="event.preventDefault();numpadBackspace()" class="numpad-key bg-surface-container-lowest text-on-surface-variant py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors flex items-center justify-center">
         <span class="material-symbols-outlined" style="font-size:26px">backspace</span>
       </button>
-      <button onclick="numpadKey('4')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">4</button>
-      <button onclick="numpadKey('5')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">5</button>
-      <button onclick="numpadKey('6')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">6</button>
-      <button onclick="numpadKey('+')" id="numpad-plus-key" class="numpad-key bg-surface-container-lowest text-primary text-2xl font-headline font-bold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">+</button>
-      <button onclick="numpadKey('7')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">7</button>
-      <button onclick="numpadKey('8')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">8</button>
-      <button onclick="numpadKey('9')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">9</button>
-      <button onclick="numpadConfirm()" class="numpad-key bg-primary text-on-primary text-base font-headline font-bold py-5 hover:bg-primary-dim active:scale-95 transition-all" style="grid-row: span 2">
+      <button onpointerdown="event.preventDefault();numpadKey('4')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">4</button>
+      <button onpointerdown="event.preventDefault();numpadKey('5')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">5</button>
+      <button onpointerdown="event.preventDefault();numpadKey('6')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">6</button>
+      <button onpointerdown="event.preventDefault();numpadKey('+')" id="numpad-plus-key" class="numpad-key bg-surface-container-lowest text-primary text-2xl font-headline font-bold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">+</button>
+      <button onpointerdown="event.preventDefault();numpadKey('7')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">7</button>
+      <button onpointerdown="event.preventDefault();numpadKey('8')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">8</button>
+      <button onpointerdown="event.preventDefault();numpadKey('9')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">9</button>
+      <button onpointerdown="event.preventDefault();numpadConfirm()" class="numpad-key bg-primary text-on-primary text-base font-headline font-bold py-5 hover:bg-primary-dim active:scale-95 transition-all" style="grid-row: span 2">
         <span class="material-symbols-outlined block mb-0.5" style="font-size:24px">check</span>
         <span style="font-size:11px">Done</span>
       </button>
-      <button onclick="numpadKey('00')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">00</button>
-      <button onclick="numpadKey('0')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">0</button>
-      <button onclick="numpadKey('.')" id="numpad-dot-key" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">.</button>
+      <button onpointerdown="event.preventDefault();numpadKey('00')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">00</button>
+      <button onpointerdown="event.preventDefault();numpadKey('0')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">0</button>
+      <button onpointerdown="event.preventDefault();numpadKey('.')" id="numpad-dot-key" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">.</button>
     </div>
   </div>
 </div>
