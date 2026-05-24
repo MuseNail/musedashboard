@@ -10,7 +10,7 @@
 import * as store from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr } from './utils.js';
-import { deriveEntryStatus, isPaidStatus } from './features/status.js';
+import { applyEntryStatus, isPaidStatus } from './features/status.js';
 
 const cfg     = () => store.getState().config;
 const queue   = () => store.getState().queue;
@@ -173,7 +173,7 @@ function lineHtml(entry, a) {
       <span class="text-on-surface-variant font-headline text-2xl">$</span>
       <input type="text" inputmode="decimal" value="${priceVal}" placeholder="${placeholder}"
         oninput="staffPriceInput('${entry.id}','${esc(a.serviceId)}',this.value)"
-        class="flex-1 bg-surface-container border-2 border-surface-container-high rounded-xl px-4 py-3 text-3xl font-headline text-right focus:outline-none focus:border-primary">
+        class="w-40 bg-surface-container border-2 border-surface-container-high rounded-xl px-4 py-3 text-3xl font-headline text-right focus:outline-none focus:border-primary">
     </div>
     <div class="flex gap-2">${start}${reopen}${complete}</div>
   </div>`;
@@ -215,7 +215,7 @@ function updateAssignment(entryId, serviceId, mut) {
   const a = (entry.assignments || []).find(x => x.serviceId === serviceId && x.techId === myId);
   if (!a) { showToast('That service is no longer assigned to you'); return; }
   mut(a);
-  entry.status = deriveEntryStatus(entry);
+  applyEntryStatus(entry);                          // sets status + stamps statusSince (per-status timer)
   sync.dispatch('queue.upsert', { entry });        // optimistic local apply → subscribe re-renders
 }
 

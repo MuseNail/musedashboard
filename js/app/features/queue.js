@@ -8,7 +8,7 @@ import { dispatch } from '../sync.js';
 import { showToast, formatElapsed, byName, todayStr } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
-import { getAssignmentStatus, deriveEntryStatus, setAssignmentStatus, isPaidStatus } from './status.js';
+import { getAssignmentStatus, applyEntryStatus, setAssignmentStatus, isPaidStatus } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { squareUpsertCustomer, showEditCustomer, customerDirectory } from './square-customers.js';
 
@@ -243,8 +243,8 @@ export function updateStatus(id, status) {
     else if (status === 'waiting') entry.assignments.forEach(a => { if (getAssignmentStatus(entry, a) === 'inservice') a.status = 'waiting'; });
     else if (status === 'complete') entry.assignments.forEach(a => { if (a.techId) a.status = 'complete'; });
     else if (status === 'paid') entry.assignments.forEach(a => { if (a.techId) a.status = 'paid'; });
-    entry.status = deriveEntryStatus(entry);
-  } else entry.status = status;
+    applyEntryStatus(entry);
+  } else { if (entry.status !== status) entry.statusSince = Date.now(); entry.status = status; }
   if (entry.status === 'paid') window.saveRecord?.(entry);
   upsert(entry);
   renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
@@ -454,7 +454,7 @@ export function saveEditCheckin() {
   entry.phone = phone;
   entry.services = svcs;
   if (entry.assignments) entry.assignments = entry.assignments.filter(a => svcs.includes(a.serviceId));
-  entry.status = deriveEntryStatus(entry);
+  applyEntryStatus(entry);
   upsert(entry);
   if (!entry.skipSquare) squareUpsertCustomer(entry);   // propagate a name/phone fix to Square + cache
   closeEditCheckin();
@@ -570,7 +570,7 @@ export function saveCurrentGroupTabInputs() {
   entry.discount = discountAmt;
   entry.discountNote = discountNote;
   entry.totalCost = Math.max(0, svcSubtotal + itemTotal + feeTotal - discountAmt);
-  entry.status = deriveEntryStatus(entry);
+  applyEntryStatus(entry);
   setTimeout(updateGroupTotal, 0);
 }
 
@@ -721,7 +721,7 @@ function validateGroupAssignments(entries) { return entries.filter(e => !e.assig
 
 export function saveGroupAssignments() {
   const entries = collectGroupAssignments();
-  entries.forEach(e => { e.status = deriveEntryStatus(e); upsert(e); });
+  entries.forEach(e => { applyEntryStatus(e); upsert(e); });
   closeGroupAssignModal();
   renderQueue(); updateStats(); window.renderTurns?.();
   showToast('Assignments saved');
@@ -833,8 +833,10 @@ export function confirmReopen(entryId) {
   const entry = q().find(e => String(e.id) === String(entryId));
   if (!entry) return;
   showWarnModal('Reopen this ticket?', `This will move ${entry.name} back to "In Service."`, () => {
-    entry.status = 'inservice';
-    if (entry.assignments) entry.assignments.forEach(a => { if (isPaidStatus(getAssignmentStatus(entry, a)) || getAssignmentStatus(entry, a) === 'complete') a.status = 'inservice'; });
+    if (entry.assignments && entry.assignments.length) {
+      entry.assignments.forEach(a => { if (isPaidStatus(getAssignmentStatus(entry, a)) || getAssignmentStatus(entry, a) === 'complete') a.status = 'inservice'; });
+      applyEntryStatus(entry);
+    } else { if (entry.status !== 'inservice') entry.statusSince = Date.now(); entry.status = 'inservice'; }
     entry.completedAt = null;
     upsert(entry);
     renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();

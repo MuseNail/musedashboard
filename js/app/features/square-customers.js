@@ -85,6 +85,23 @@ export function fillFromCustomer(customer, guestIdx, prefix, phoneId, firstId, l
   [`ac-phone-${guestIdx}`, `ac-first-${guestIdx}`, `mac-phone-${guestIdx}`, `mac-first-${guestIdx}`].forEach(id => {
     const el = document.getElementById(id); if (el) { el.innerHTML = ''; el.classList.add('hidden'); }
   });
+  // Surface the saved note for a returning customer chosen from autofill.
+  const dir = customerDirectory.find(c => c.squareId === customer.id);
+  const note = (dir?.note || '').trim();
+  if (note) showCustomerNote([customer.given_name, customer.family_name].filter(Boolean).join(' '), note);
+}
+export function showCustomerNote(name, note) {
+  const nameEl = document.getElementById('customer-note-name');
+  const bodyEl = document.getElementById('customer-note-body');
+  const m = document.getElementById('customer-note-modal');
+  if (!m || !bodyEl) return;
+  if (nameEl) nameEl.textContent = name || '';
+  bodyEl.textContent = note || '';
+  m.classList.remove('hidden'); m.style.display = 'flex';
+}
+export function closeCustomerNote() {
+  const m = document.getElementById('customer-note-modal');
+  if (m) { m.classList.add('hidden'); m.style.display = ''; }
 }
 
 export function buildDropdown(customers, dropdownId, guestIdx, phoneId, firstId, lastId) {

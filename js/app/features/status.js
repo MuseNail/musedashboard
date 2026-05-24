@@ -23,11 +23,28 @@ export function deriveEntryStatus(entry) {
   return 'waiting';
 }
 
+// Set entry.status from its assignments AND stamp entry.statusSince when the
+// status actually changes, so views can show a timer that resets per status
+// (waiting → inservice → complete). Call this instead of assigning entry.status
+// directly, BEFORE dispatching, so statusSince syncs to every device.
+export function applyEntryStatus(entry) {
+  const prev = entry.status;
+  const next = deriveEntryStatus(entry);
+  if (next !== prev) entry.statusSince = Date.now();
+  entry.status = next;
+  return next;
+}
+// ms timestamp the entry entered its current status (falls back to check-in =
+// waiting start for entries that haven't transitioned yet).
+export function entryStatusSince(entry) {
+  return entry.statusSince || (entry.checkinTime ? new Date(entry.checkinTime).getTime() : Date.now());
+}
+
 export function setAssignmentStatus(entry, serviceId, newStatus) {
   if (!entry.assignments) entry.assignments = [];
   const a = entry.assignments.find(x => x.serviceId === serviceId);
   if (a) a.status = newStatus;
-  entry.status = deriveEntryStatus(entry);
+  applyEntryStatus(entry);
   dispatch('queue.upsert', { entry });
   if (entry.status === 'paid') window.saveRecord?.(entry);   // finalize the sale only at Paid
   window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.(); window.renderFloorPlan?.();

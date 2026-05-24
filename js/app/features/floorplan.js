@@ -8,8 +8,8 @@
 // Assign & Price. Reuses the a.station field (set on all the customer's assignments).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr, localDateStr } from '../utils.js';
-import { getAssignmentStatus, isPaidStatus } from './status.js';
+import { showToast, todayStr, localDateStr, formatElapsed } from '../utils.js';
+import { getAssignmentStatus, isPaidStatus, entryStatusSince } from './status.js';
 import { getStations, stationDefs, stationType, stationLabel } from './queue.js';
 
 const cfg = () => getState().config;
@@ -92,7 +92,10 @@ function stationHtml(id, entry) {
   let content;
   if (entry) {
     content = `<div class="${floorEditMode ? '' : 'floor-bubble cursor-pointer'} h-full w-full flex flex-col justify-center px-1.5 py-1 overflow-hidden" ${floorEditMode ? '' : `data-entry-id="${entry.id}"`}>
-      <div class="font-semibold truncate" style="font-size:${Math.round(11 * fs)}px;color:#1f2937">${entry.name}</div>
+      <div class="flex items-baseline justify-between gap-1">
+        <div class="font-semibold truncate" style="font-size:${Math.round(11 * fs)}px;color:#1f2937">${entry.name}</div>
+        <span class="flex-shrink-0" style="font-size:${Math.round(9 * fs)}px;color:#52606d" data-checkin-ts="${entryStatusSince(entry)}">${formatElapsed(entryStatusSince(entry))}</span>
+      </div>
       <div class="overflow-hidden leading-tight">${custLines(entry, id, fs)}</div></div>`;
   } else {
     content = `<div class="h-full w-full flex items-center justify-center" style="font-size:${Math.round(12 * fs)}px;font-weight:800;color:${border};opacity:0.55">${stationLabel(id)}</div>`;

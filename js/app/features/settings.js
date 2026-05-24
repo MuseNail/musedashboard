@@ -55,10 +55,13 @@ export function updatePermissionGatedUI() {
   if (document.getElementById('panel-transactions')?.classList.contains('active')) window.renderTransactions?.();
   if (document.getElementById('panel-reports')?.classList.contains('active')) window.runReport?.();
   // Visibility of the role-permissions section is owned by the settings drill-down
-  // (it's an admin-only leaf). Keep the wrapper hidden here so it never leaks into
-  // another open leaf; the drill-down un-hides it when that leaf is opened.
+  // (it's an admin-only leaf). Re-hide the wrapper so it never leaks into another
+  // open leaf — BUT NOT while that leaf is the one currently open, or toggling a
+  // permission (which fires a config change → this fn) would blank the screen.
   const permSection = document.getElementById('settings-role-permissions');
-  if (permSection) permSection.classList.add('hidden');
+  const permContent = document.getElementById('settings-perms-section');
+  const leafOpen = permContent && !permContent.classList.contains('hidden');
+  if (permSection && !leafOpen) permSection.classList.add('hidden');
 }
 
 // ── Audit log (synced — deletions + refunds, read from the DO snapshot) ─────────

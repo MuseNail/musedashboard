@@ -2069,6 +2069,21 @@ tailwind.config = {
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════
+     CUSTOMER NOTE POPUP (shown on check-in when an existing customer is picked)
+═══════════════════════════════════════════════ -->
+<div id="customer-note-modal" class="fixed inset-0 z-[90] hidden items-center justify-center bg-on-surface/40 px-4">
+  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl fade-up">
+    <div class="flex items-center gap-2 mb-3">
+      <span class="material-symbols-outlined text-secondary">sticky_note_2</span>
+      <h2 class="text-lg font-headline font-bold text-on-surface">Customer Note</h2>
+    </div>
+    <div class="text-sm font-body font-semibold text-on-surface-variant mb-1" id="customer-note-name"></div>
+    <div class="bg-secondary-container/40 border border-surface-container-high rounded-xl p-3 text-base font-body text-on-surface whitespace-pre-wrap max-h-60 overflow-y-auto" id="customer-note-body"></div>
+    <button onclick="closeCustomerNote()" class="w-full mt-4 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Got it</button>
+  </div>
+</div>
+
 <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden pointer-events-none">
   <div class="bg-on-surface text-surface px-5 py-3 rounded-xl text-sm font-body font-medium shadow-2xl fade-up" id="toast-text"></div>
 </div>
