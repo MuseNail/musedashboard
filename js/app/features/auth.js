@@ -28,12 +28,14 @@ export function updateLoggedInDisplay() {
 
   window.updateHistoricalButtonVisibility?.();
   window.updatePermissionGatedUI?.();
+  window.applyUserTheme?.();   // load the logged-in user's per-login theme
 }
 
 // ── PIN modal ─────────────────────────────────────
 export function showPinModal() {
   pinBuffer = '';
   setActiveUser(null);
+  window.applyUserTheme?.();   // revert to the default palette on the login screen
   updatePinDots();
   document.getElementById('pin-error').classList.add('hidden');
   document.getElementById('pin-matched-user').textContent = '';

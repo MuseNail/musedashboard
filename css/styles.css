@@ -1,4 +1,31 @@
-﻿  * { box-sizing: border-box; }
+﻿  /* ── Theme tokens ──────────────────────────────────────────────────────────
+     Default = the original light palette. The Tailwind classes (bg-primary,
+     text-on-surface, …) read these vars. A per-login theme overrides --primary*
+     (accent) inline on <html>; the Light/Dark base is set via [data-appearance].
+     Only the chrome is themed — semantic status colors (waiting/in-service/
+     complete) stay fixed in JS since they carry meaning. */
+  :root {
+    --primary: #1a5252; --primary-dim: #0f3d3d; --primary-container: #8fd4d3;
+    --on-primary: #ffffff; --on-primary-container: #0a2e2e;
+    --secondary: #5c4010; --secondary-container: #f5c870; --on-secondary-container: #3a2800;
+    --surface: #e8ecee; --surface-container-lowest: #f5f7f8; --surface-container-low: #dde2e5;
+    --surface-container: #d0d6da; --surface-container-high: #c2cacd; --surface-container-highest: #b4bec2;
+    --on-surface: #000000; --on-surface-variant: #1a1a1a;
+    --outline: #4a5258; --outline-variant: #7a858a;
+    --error: #8b1c1a; --error-container: #e85a57;
+  }
+  /* Dark base: recolor only the surface/text/outline family; the accent (--primary*)
+     is layered on top per-login. */
+  html[data-appearance="dark"] {
+    --surface: #10161a; --surface-container-lowest: #161d22; --surface-container-low: #1c252b;
+    --surface-container: #222d33; --surface-container-high: #2b373e; --surface-container-highest: #36454d;
+    --on-surface: #f1f5f7; --on-surface-variant: #c3ccd1;
+    --outline: #8c979d; --outline-variant: #4a565c;
+    --secondary-container: #5c4010; --on-secondary-container: #f5c870;
+  }
+  html[data-appearance="dark"] body { background: var(--surface); }
+
+  * { box-sizing: border-box; }
   body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
   h1,h2,h3,.font-headline { font-family: 'Manrope', sans-serif; }
   .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }

@@ -27,26 +27,28 @@ tailwind.config = {
   theme: {
     extend: {
       colors: {
-        primary: "#1a5252",
-        "primary-dim": "#0f3d3d",
-        "primary-container": "#8fd4d3",
-        "on-primary": "#ffffff",
-        "on-primary-container": "#0a2e2e",
-        secondary: "#5c4010",
-        "secondary-container": "#f5c870",
-        "on-secondary-container": "#3a2800",
-        surface: "#e8ecee",
-        "surface-container-lowest": "#f5f7f8",
-        "surface-container-low": "#dde2e5",
-        "surface-container": "#d0d6da",
-        "surface-container-high": "#c2cacd",
-        "surface-container-highest": "#b4bec2",
-        "on-surface": "#000000",
-        "on-surface-variant": "#1a1a1a",
-        outline: "#4a5258",
-        "outline-variant": "#7a858a",
-        error: "#8b1c1a",
-        "error-container": "#e85a57",
+        // CSS-variable tokens (themeable per-login in Settings → Appearance). The
+        // hex fallback = the original light palette, so the default look is unchanged.
+        primary: "var(--primary, #1a5252)",
+        "primary-dim": "var(--primary-dim, #0f3d3d)",
+        "primary-container": "var(--primary-container, #8fd4d3)",
+        "on-primary": "var(--on-primary, #ffffff)",
+        "on-primary-container": "var(--on-primary-container, #0a2e2e)",
+        secondary: "var(--secondary, #5c4010)",
+        "secondary-container": "var(--secondary-container, #f5c870)",
+        "on-secondary-container": "var(--on-secondary-container, #3a2800)",
+        surface: "var(--surface, #e8ecee)",
+        "surface-container-lowest": "var(--surface-container-lowest, #f5f7f8)",
+        "surface-container-low": "var(--surface-container-low, #dde2e5)",
+        "surface-container": "var(--surface-container, #d0d6da)",
+        "surface-container-high": "var(--surface-container-high, #c2cacd)",
+        "surface-container-highest": "var(--surface-container-highest, #b4bec2)",
+        "on-surface": "var(--on-surface, #000000)",
+        "on-surface-variant": "var(--on-surface-variant, #1a1a1a)",
+        outline: "var(--outline, #4a5258)",
+        "outline-variant": "var(--outline-variant, #7a858a)",
+        error: "var(--error, #8b1c1a)",
+        "error-container": "var(--error-container, #e85a57)",
       },
       fontFamily: {
         headline: ["Manrope"],
@@ -713,6 +715,11 @@ tailwind.config = {
         <!-- Leaf: Stations -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="settings-stations-section" class="hidden px-5 py-4"></div>
+        </div>
+
+        <!-- Leaf: Appearance -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="settings-appearance-section" class="hidden px-5 py-4"></div>
         </div>
 
         <!-- Leaf: Square -->

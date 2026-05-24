@@ -24,9 +24,10 @@ import * as giftcards from './features/giftcards.js';
 import * as settings from './features/settings.js';
 import * as calendar from './features/calendar.js';
 import * as floorplan from './features/floorplan.js';
+import * as appearance from './features/appearance.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -273,6 +274,7 @@ function boot() {
   setupBackHandler();                 // OS back returns to the previous screen, never reloads the PWA
   sync.start();                       // connect to the DO, hydrate from cache + snapshot
   store.subscribe(onStateChange);
+  appearance.applyUserTheme();        // default light palette until a user logs in
 
   utils.startClock();
   utils.updateDeskDate();

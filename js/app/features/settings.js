@@ -240,6 +240,7 @@ const SETTINGS_NAV = [
   ]},
   { id:'business', title:'Business', desc:'Branding', items:[
     { label:'Business Logo', sub:'Header & report logo', content:'logo-section' },
+    { label:'Appearance', sub:'Your theme — light/dark + accent color', content:'settings-appearance-section', render:'renderAppearanceSettings' },
   ]},
   { id:'data', title:'Data & System', desc:'Backup, logs & info', items:[
     { label:'Backup & Restore', sub:'Export / import data', content:'backup-section' },
