@@ -2,7 +2,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, localDateStr, formatPhone, byName } from '../utils.js';
-import { customerDirectory, squareCustomers, squareUpsertCustomer } from './square-customers.js';
+import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer } from './square-customers.js';
 import { squarePushBooking } from './square-pos.js';
 
 const GCAL_CLIENT_ID = '174518644579-5vgt7vvllm2ekpk0gb8l4sa4f3va9r9l.apps.googleusercontent.com';
@@ -16,6 +16,13 @@ const queue = () => getState().queue;
 let _calGapiLoaded = false, _calGisLoaded = false, _calTokenClient = null, _calRefreshTimer = null;
 let _calDate = new Date(), _calCalendars = [], _calEvents = {}, _calPrimaryId = '';
 let _unassignedOnly = false;
+// Today's-Appointments panel filter (device-local): hide past-time + finished rows.
+let _apptsUpcomingOnly = localStorage.getItem('muse_cal_upcoming') === '1';
+export function toggleApptsUpcoming() {
+  _apptsUpcomingOnly = !_apptsUpcomingOnly;
+  localStorage.setItem('muse_cal_upcoming', _apptsUpcomingOnly ? '1' : '0');
+  renderTodaysAppointments();
+}
 let _apptEditId = null, _apptLines = [], _apptExtraGuests = [], _apptEditGroupId = '';
 let _calSyncTimer = null, _calSelectorDraft = null, _calDragIdx = null;
 let _calSlotH = 52, _calSlotMins = 30, _calTouchStartDist = null;
@@ -78,21 +85,35 @@ export function renderTodaysAppointments() {
     const startDt = new Date(pev.start.dateTime || pev.start.date);
     const name = ppriv.musePrimaryName || ppriv.museName || (pev.summary||'').split(' — ')[0] || 'Guest';
     const confirmed = items.some(it => (it.ev.extendedProperties?.private||{}).museConfirmed === '1');
+    const noShow = items.some(it => (it.ev.extendedProperties?.private||{}).museNoShow === '1');
     const persons = new Map();
     items.forEach(({ ev }) => { const pnm = ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || name; if (!persons.has(pnm)) persons.set(pnm, _parseApptLines(ev, '')); });
     let qm = null;
     items.forEach(({ ev }) => { if (qm) return; const ph = _apptPhone(ev).replace(/\D/g,''); qm = queue().find(x => x.calEventId && String(x.calEventId)===String(ev.id)) || (ph ? queue().find(x => (x.phone||'').replace(/\D/g,'')===ph) : null); });
-    rows.push({ startMin: startDt.getHours()*60 + startDt.getMinutes(), startDt, name, confirmed, persons, primaryEv: pev, primaryCalId: primary.calId, qm });
+    rows.push({ startMin: startDt.getHours()*60 + startDt.getMinutes(), startDt, name, confirmed, noShow, persons, primaryEv: pev, primaryCalId: primary.calId, qm });
   });
   rows.sort((a,b) => a.startMin - b.startMin);
-  if (countEl) countEl.textContent = rows.length ? String(rows.length) : '';
-  if (!rows.length) { listEl.innerHTML = '<div class="text-xs text-on-surface-variant text-center py-6 opacity-60">No appointments</div>'; return; }
+  // Upcoming-only filter: hide rows whose time has passed OR that are finished
+  // (Complete / Paid / No-Show). Device-local toggle in the panel header.
+  const _now = new Date();
+  const shown = _apptsUpcomingOnly
+    ? rows.filter(r => r.startDt >= _now && !r.noShow && !['complete','paid','done'].includes(r.qm?.status))
+    : rows;
+  const fbtn = document.getElementById('cal-appts-filter-btn');
+  if (fbtn) {
+    fbtn.classList.toggle('text-primary', _apptsUpcomingOnly);
+    fbtn.classList.toggle('bg-primary/10', _apptsUpcomingOnly);
+    fbtn.classList.toggle('text-on-surface-variant', !_apptsUpcomingOnly);
+    fbtn.title = _apptsUpcomingOnly ? 'Showing upcoming only — tap to show all' : 'Show upcoming only';
+  }
+  if (countEl) countEl.textContent = shown.length ? String(shown.length) : '';
+  if (!shown.length) { listEl.innerHTML = `<div class="text-xs text-on-surface-variant text-center py-6 opacity-60">${_apptsUpcomingOnly ? 'No upcoming appointments' : 'No appointments'}</div>`; return; }
   const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
   const escHtml = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  listEl.innerHTML = rows.map(r => {
+  listEl.innerHTML = shown.map(r => {
     const timeStr = r.startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
     const qs = r.qm?.status;
-    const stat = qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af','Unconfirmed']);
+    const stat = r.noShow ? ['#dc2626','No Show'] : qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af','Unconfirmed']);
     const svcLines = [];
     r.persons.forEach((lines, pnm) => { const fn = (pnm.split(' ')[0]||pnm).trim(); lines.forEach(l => { const s = cfg().services.find(x=>x.id===l.svcId); const tech = l.calId ? (_calCalendars.find(c=>c.id===l.calId)?.name||'') : 'Unassigned'; svcLines.push(`${escHtml(s?.label||l.svcId||'service')} · ${escHtml(fn)}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
     const svcHtml = svcLines.slice(0,8).map(t => `<div style="font-size:10px;color:var(--md-on-surface-variant);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`).join('');
@@ -288,6 +309,7 @@ export function calRenderGrid() {
       const primaryName = ppriv.musePrimaryName || ppriv.museName || (primaryEv.summary||'').split(' — ')[0] || 'Guest';
       const primaryPhone = ppriv.musePrimaryPhone || _apptPhone(primaryEv);
       const notes = _apptNotes(first), confirmed = evs.some(e => (e.extendedProperties?.private||{}).museConfirmed === '1'), isPast = startDt < now;
+      const noShow = evs.some(e => (e.extendedProperties?.private||{}).museNoShow === '1');
       // Appointment-ness + a queue match from ANY event in the booking. Match a queue
       // entry only by the check-in link or exact phone — never by loose name prefix.
       let isAppt = false, qm = null;
@@ -320,11 +342,13 @@ export function calRenderGrid() {
       else if (qs==='waiting') { bg='#dbeafe'; border='#2563eb'; tc='#1e3a8a'; }
       else if (isPast && isAppt) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; }
       else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt → tinted by this tech's color
+      if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }   // no-show overrides all
+
       const phoneLine = [timeStr, primaryPhone].filter(Boolean).join('  ·  ');
       const svcHtml = svcRows.map(r => `<div style="font-size:10px;color:${tc};opacity:0.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35">${escHtml(r.label)}${r.fn&&r.label?' — ':''}${escHtml(r.fn)}</div>`).join('');
       const linkIcon = linked ? `<span title="${_e('Same appointment — also on ' + linkedCals.map(calName).join(', '))}" class="material-symbols-outlined" style="font-size:12px;color:${border};flex-shrink:0;transform:rotate(-45deg)">link</span>` : '';
       // Once the appointment is checked in, show its queue status as a badge on the bubble.
-      const qLabel = { waiting:'Checked In', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[qs] || '';
+      const qLabel = noShow ? 'No Show' : { waiting:'Checked In', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[qs] || '';
       const qBadge = qLabel ? `<span style="flex-shrink:0;font-size:7.5px;font-weight:800;color:#fff;background:${border};border-radius:999px;padding:1px 5px;white-space:nowrap">${qLabel}</span>` : '';
       body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(primaryEv.id)}','${_e(primaryName)}','${_e(notes)}',${isAppt})" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
         + `<div style="display:flex;align-items:center;gap:2px;overflow:hidden;line-height:1.25">${linkIcon}${chips}${confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0">✓</span>':''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}</span>${qBadge}</div>`
@@ -475,6 +499,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   const startDt = new Date(ev.start.dateTime || ev.start.date);
   const phone = _apptPhone(ev), rawPhone = phone.replace(/\D/g, ''), notes = _apptNotes(ev);
   const confirmed = ev.extendedProperties?.private?.museConfirmed === '1';
+  const noShow = ev.extendedProperties?.private?.museNoShow === '1';
   let queueMatch = queue().find(x => x.calEventId && x.calEventId === eventId);
   if (!queueMatch && rawPhone) queueMatch = queue().find(x => { const p = (x.phone||'').replace(/\D/g,''); return p && p === rawPhone; });
   if (!queueMatch) { const fullName = title.trim().toLowerCase(); if (fullName.length > 2) queueMatch = queue().find(x => x.name && x.name.trim().toLowerCase() === fullName && !(rawPhone && (x.phone||'').replace(/\D/g,''))); }
@@ -485,6 +510,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   else if (queueMatch?.status === 'inservice') statusBadge = '<span style="color:#16a34a;font-size:11px;font-weight:700">● In Service</span>';
   else if (queueMatch?.status === 'waiting') statusBadge = '<span style="color:#2563eb;font-size:11px;font-weight:700">● Checked In</span>';
   else if (startDt < new Date() && isAppt) statusBadge = '<span style="color:#ea580c;font-size:11px;font-weight:700">⚠ Not Checked In</span>';
+  if (noShow) statusBadge = '<span style="color:#dc2626;font-size:11px;font-weight:700">⊘ No Show</span>';
   const confirmBadge = confirmed ? '<span style="color:#16a34a;font-size:11px;font-weight:700">✓ Confirmed</span>' : '';
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${title}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
@@ -493,6 +519,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
       ${isAppt ? `<button onclick="calQuickCheckin('${calId}','${eventId}'); this.closest('.fixed').remove()" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Quick Check-In</button>
       ${queueMatch?`<button onclick="this.closest('.fixed').remove(); showGroupAssignModal('${queueMatch.id}')" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">assignment_ind</span> Assign & Price</button>`:''}
       <button onclick="calToggleConfirmed('${calId}','${eventId}'); this.closest('.fixed').remove()" class="w-full ${confirmed?'bg-secondary-container text-on-secondary-container':'border-2 border-primary text-primary hover:bg-primary/10'} py-2.5 rounded-xl font-headline font-bold text-sm transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">${confirmed?'event_available':'check_circle'}</span> ${confirmed?'Confirmed — tap to undo':'Mark Confirmed'}</button>
+      <button onclick="calMarkNoShow('${calId}','${eventId}'); this.closest('.fixed').remove()" class="w-full ${noShow?'bg-error/15 text-error':'border-2 border-outline-variant text-on-surface hover:bg-surface-container'} py-2.5 rounded-xl font-headline font-semibold text-sm transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">person_off</span> ${noShow?'No Show — tap to undo':'Mark No Show'}</button>
       <button onclick="this.closest('.fixed').remove(); showEditApptModal('${calId}','${eventId}')" class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Edit Appointment</button>` : `
       <button onclick="this.closest('.fixed').remove(); showConvertToApptModal('${calId}','${eventId}')" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">event_available</span> Convert to Appointment</button>
       <button onclick="this.closest('.fixed').remove(); showEditApptModal('${calId}','${eventId}')" class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Edit Event</button>`}
@@ -513,6 +540,29 @@ export async function calToggleConfirmed(calId, eventId) {
     await gapi.client.calendar.events.patch({ calendarId: calId, eventId, resource: { extendedProperties: { private: { museConfirmed: nowConfirmed ? null : '1' } } } });
     showToast(nowConfirmed ? 'Marked unconfirmed' : 'Appointment confirmed ✓');
     await calLoadAndRender(true);
+  } catch (err) { showToast('Update failed: ' + (err.result?.error?.message || 'Unknown error')); }
+}
+
+// Mark an appointment "No Show" (museNoShow flag in extendedProperties, synced via
+// Google Calendar — shown as a red badge on the bubble + today's panel, and hidden by
+// the upcoming-only filter). On marking, open the matched customer's account so the
+// front desk can notate it (match by phone to the Square directory).
+export async function calMarkNoShow(calId, eventId) {
+  const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
+  if (!ev) return;
+  const isNoShow = ev.extendedProperties?.private?.museNoShow === '1';
+  try {
+    showToast('Saving…');
+    await gapi.client.calendar.events.patch({ calendarId: calId, eventId, resource: { extendedProperties: { private: { museNoShow: isNoShow ? null : '1' } } } });
+    showToast(isNoShow ? 'No-show cleared' : 'Marked No Show');
+    await calLoadAndRender(true);
+    if (isNoShow) return;
+    // Open the customer's account to notate the no-show — match the appointment phone
+    // to the Square directory (last 10 digits). No match → nothing to note against.
+    const raw = _apptPhone(ev).replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+    const cust = raw ? customerDirectory.find(c => (c.phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1') === raw) : null;
+    if (cust) showEditCustomer(cust.squareId);
+    else showToast('No matching customer in directory to note');
   } catch (err) { showToast('Update failed: ' + (err.result?.error?.message || 'Unknown error')); }
 }
 

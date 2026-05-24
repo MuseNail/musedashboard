@@ -600,7 +600,12 @@ tailwind.config = {
                 <span class="material-symbols-outlined text-primary" style="font-size:16px">event_note</span>
                 <span class="font-headline font-bold text-on-surface text-sm" id="cal-appts-title">Today's Appointments</span>
               </div>
-              <span id="cal-appts-count" class="text-[10px] font-body font-semibold text-on-surface-variant"></span>
+              <div class="flex items-center gap-1">
+                <span id="cal-appts-count" class="text-[10px] font-body font-semibold text-on-surface-variant"></span>
+                <button id="cal-appts-filter-btn" onclick="toggleApptsUpcoming()" title="Show upcoming only" class="w-6 h-6 rounded-md flex items-center justify-center text-on-surface-variant hover:bg-surface-container transition-colors">
+                  <span class="material-symbols-outlined" style="font-size:17px">filter_list</span>
+                </button>
+              </div>
             </div>
             <div id="cal-appts-list" class="flex-1 overflow-y-auto no-scroll p-2 space-y-1.5"></div>
           </div>
