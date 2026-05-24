@@ -153,7 +153,7 @@ function cardHtml(entry, assignments) {
   const live = assignments.some(a => a.status === 'inservice');
   const ring = live ? 'border-primary' : 'border-surface-container-high';
   const note = (entry.txnNote || '').trim();
-  const noteHtml = note ? `<div class="text-sm text-on-surface-variant mb-3 whitespace-pre-line">${esc(note)}</div>` : '';
+  const noteHtml = note ? `<div class="text-base text-on-surface-variant mb-3 whitespace-pre-line">${esc(note)}</div>` : '';
   return `<div class="bg-surface-container-lowest rounded-2xl border-2 ${ring} p-4 mb-3 shadow-sm">
     <div class="font-headline font-extrabold text-2xl text-on-surface ${note ? 'mb-1' : 'mb-3'} leading-tight">${esc(entry.name || 'Guest')}</div>
     ${noteHtml}
