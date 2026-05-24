@@ -183,17 +183,26 @@
   .fp-step { min-width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--outline-variant, #c2cacd); background: transparent; font-size: 14px; font-weight: 700; color: inherit; touch-action: manipulation; }
   .fp-step.fp-on { background: #1a5252; color: #fff; border-color: #1a5252; }
 
-  /* Drag sources need touch-action:none so iOS doesn't claim the gesture for
-     scrolling (which fires pointercancel and aborts the pointer-event drag).
-     Must come AFTER the manipulation rule above to win. Descendants included
-     because the touch lands on the inner button/text, not the wrapper. Also
-     suppress text-selection + the long-press callout that interfere with drag. */
-  .turns-filled-slot, .turns-filled-slot *,
-  #turns-waiting-list [data-entry-id], #turns-waiting-list [data-entry-id] *,
-  #turns-active-list [data-entry-id], #turns-active-list [data-entry-id] *,
+  /* Floor-plan drag sources + the tech-reorder handle drag IMMEDIATELY on touch,
+     on a canvas with no scroll to preserve — touch-action:none so iOS doesn't claim
+     the gesture for scrolling (which fires pointercancel and aborts the pointer drag).
+     Must come AFTER the manipulation rule above to win; descendants included because
+     the touch lands on the inner button/text, not the wrapper. */
   .floor-bubble, .floor-bubble *, .floor-station, .floor-station *,
   .tech-drag-handle {
     touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  /* Turns bubbles drag via tap-and-hold (see initTurnsDrag), so they MUST still allow
+     native panning — otherwise a swipe can't scroll a tech's overflowing turn row or the
+     waiting list. The long-press arms the drag while the finger is still (no scroll has
+     started); a non-passive touchmove preventDefault then blocks scroll for the drag. */
+  .turns-filled-slot, .turns-filled-slot *,
+  #turns-waiting-list [data-entry-id], #turns-waiting-list [data-entry-id] *,
+  #turns-active-list [data-entry-id], #turns-active-list [data-entry-id] * {
+    touch-action: pan-x pan-y;
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
