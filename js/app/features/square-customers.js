@@ -8,6 +8,10 @@ import { showToast, formatPhone, autoCapitalize } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
 
 const cfg = () => getState().config;
+// Manual customer notes are app-owned + synced (config.customer_notes, keyed by
+// Square id) — kept SEPARATE from Square's `note` field, which the app uses for
+// the auto "last check-in" stamp. This is what the check-in popup shows.
+const customerNote = id => ((cfg().customer_notes || {})[id] || '').trim();
 
 export let squareCustomers   = [];
 export let customerDirectory = [];
@@ -85,10 +89,13 @@ export function fillFromCustomer(customer, guestIdx, prefix, phoneId, firstId, l
   [`ac-phone-${guestIdx}`, `ac-first-${guestIdx}`, `mac-phone-${guestIdx}`, `mac-first-${guestIdx}`].forEach(id => {
     const el = document.getElementById(id); if (el) { el.innerHTML = ''; el.classList.add('hidden'); }
   });
-  // Surface the saved note for a returning customer chosen from autofill.
-  const dir = customerDirectory.find(c => c.squareId === customer.id);
-  const note = (dir?.note || '').trim();
-  if (note) showCustomerNote([customer.given_name, customer.family_name].filter(Boolean).join(' '), note);
+  // On a DASHBOARD check-in (manual-add uses `manual-*` field ids) — NOT the
+  // customer-facing check-in screen — surface the saved manual note for a
+  // returning customer chosen from autofill.
+  if (/^manual-/.test(firstId || '')) {
+    const note = customerNote(customer.id);
+    if (note) showCustomerNote([customer.given_name, customer.family_name].filter(Boolean).join(' '), note);
+  }
 }
 export function showCustomerNote(name, note) {
   const nameEl = document.getElementById('customer-note-name');
@@ -219,7 +226,7 @@ export function showEditCustomer(squareId) {
   document.getElementById('edit-cust-last').value      = c.lastName;
   document.getElementById('edit-cust-phone').value     = c.phone;
   document.getElementById('edit-cust-email').value     = c.email;
-  document.getElementById('edit-cust-notes').value     = c.note;
+  document.getElementById('edit-cust-notes').value     = customerNote(c.squareId);   // app-owned manual note (not Square's auto stamp)
   const m = document.getElementById('edit-customer-modal');
   m.classList.remove('hidden'); m.style.display = 'flex';
 }
@@ -238,8 +245,12 @@ export async function saveEditCustomer() {
   if (!first) { showToast('First name is required.'); return; }
 
   const local = customerDirectory.find(x => x.squareId === squareId);
-  if (local) { local.firstName = first; local.lastName = last; local.phone = phone; local.email = email; local.note = note; }
+  if (local) { local.firstName = first; local.lastName = last; local.phone = phone; local.email = email; }
   localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
+  // Manual note → app-owned synced store (kept out of Square's auto-stamped note).
+  const notes = { ...(cfg().customer_notes || {}) };
+  if (note) notes[squareId] = note; else delete notes[squareId];
+  dispatch('config.set', { key: 'customer_notes', value: notes });
   const sc = squareCustomers.find(c => c.id === squareId);
   if (sc) { sc.given_name = first; sc.family_name = last; sc.phone = phone; sc.display = `${first} ${last}`.trim(); }
 
@@ -256,7 +267,7 @@ export async function saveEditCustomer() {
     try {
       await fetch(`${SQUARE_PROXY}/v2/customers/${squareId}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ given_name: first, family_name: last, phone_number: phone, email_address: email, note }),
+        body: JSON.stringify({ given_name: first, family_name: last, phone_number: phone, email_address: email }),   // note stays app-owned (Square note = auto last-checkin stamp)
       });
       showToast('Customer updated in Square ✓');
     } catch (e) { showToast('Saved locally (Square update failed)'); }
