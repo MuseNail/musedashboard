@@ -92,8 +92,8 @@ function stationHtml(id, entry) {
   let content;
   if (entry) {
     content = `<div class="${floorEditMode ? '' : 'floor-bubble cursor-pointer'} h-full w-full flex flex-col justify-center px-1.5 py-1 overflow-hidden" ${floorEditMode ? '' : `data-entry-id="${entry.id}"`}>
-      <div class="flex items-baseline justify-between gap-1">
-        <div class="font-semibold truncate" style="font-size:${Math.round(11 * fs)}px;color:#1f2937">${entry.name}</div>
+      <div class="flex items-start justify-between gap-1">
+        <div class="font-semibold" style="font-size:${Math.round(11 * fs)}px;color:#1f2937;flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.15">${entry.name}</div>
         <span class="flex-shrink-0" style="font-size:${Math.round(9 * fs)}px;color:#52606d" data-checkin-ts="${entryStatusSince(entry)}">${formatElapsed(entryStatusSince(entry))}</span>
       </div>
       <div class="overflow-hidden leading-tight">${custLines(entry, id, fs)}</div></div>`;
