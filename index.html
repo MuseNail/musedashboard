@@ -2034,7 +2034,19 @@ tailwind.config = {
         </div>
         <div>
           <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Time *</label>
-          <input type="time" id="appt-time" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2.5 text-sm font-body focus:border-primary outline-none">
+          <input type="hidden" id="appt-time">
+          <div class="flex items-center gap-1.5">
+            <select id="appt-hour" onchange="syncApptTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none">
+              <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9" selected>9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
+            </select>
+            <span class="font-headline font-bold text-on-surface-variant">:</span>
+            <select id="appt-min" onchange="syncApptTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none">
+              <option value="00" selected>00</option><option value="15">15</option><option value="30">30</option><option value="45">45</option>
+            </select>
+            <select id="appt-ampm" onchange="syncApptTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none">
+              <option value="AM" selected>AM</option><option value="PM">PM</option>
+            </select>
+          </div>
         </div>
       </div>
       <div>

@@ -720,6 +720,26 @@ export function addApptServiceLine(svcId, calId) { _apptLines.push({ svcId: svcI
 export function removeApptLine(i) { _apptLines.splice(i,1); if (_apptLines.length === 0) addApptServiceLine(); else renderApptServiceLines(); }
 export function updateApptLine(i, field, val) { if (field === 'svc') _apptLines[i].svcId = val; else _apptLines[i].calId = val; }
 
+// Time picker = Hour : Min · AM/PM dropdowns syncing into the hidden #appt-time
+// (24h "HH:MM") that saveAppt reads. setApptTimeFields loads them from a 24h time
+// (minute snapped to the nearest 15).
+export function syncApptTime() {
+  const h = parseInt(document.getElementById('appt-hour')?.value || '9', 10);
+  const m = document.getElementById('appt-min')?.value || '00';
+  const ap = document.getElementById('appt-ampm')?.value || 'AM';
+  let h24 = h % 12; if (ap === 'PM') h24 += 12;
+  const el = document.getElementById('appt-time'); if (el) el.value = `${String(h24).padStart(2,'0')}:${m}`;
+}
+function setApptTimeFields(h24, m) {
+  h24 = (((parseInt(h24, 10) || 0) % 24) + 24) % 24; m = parseInt(m, 10) || 0;
+  m = Math.round(m / 15) * 15; if (m === 60) { m = 0; h24 = (h24 + 1) % 24; }
+  const ap = h24 >= 12 ? 'PM' : 'AM'; let h12 = h24 % 12; if (h12 === 0) h12 = 12;
+  const hs = document.getElementById('appt-hour'); if (hs) hs.value = String(h12);
+  const ms = document.getElementById('appt-min'); if (ms) ms.value = String(m).padStart(2, '0');
+  const aps = document.getElementById('appt-ampm'); if (aps) aps.value = ap;
+  const el = document.getElementById('appt-time'); if (el) el.value = `${String(h24).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 export function showNewApptModal(calId, hour, minute, techName) {
   _apptEditId = null; _apptLines = []; _apptExtraGuests = []; _apptEditGroupId = '';
   const eg = document.getElementById('appt-extra-guests'); if (eg) eg.innerHTML = '';
@@ -729,7 +749,7 @@ export function showNewApptModal(calId, hour, minute, techName) {
   ['appt-name','appt-first','appt-last','appt-phone','appt-notes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('appt-delete-btn').classList.add('hidden');
   document.getElementById('appt-date').value = localDateStr(new Date(_calDate));
-  document.getElementById('appt-time').value = `${String(hour ?? 9).padStart(2,'0')}:${String(minute ?? 0).padStart(2,'0')}`;
+  setApptTimeFields(hour ?? 9, minute ?? 0);
   const matchedCal = _calCalendars.find(c => c.name === techName);
   addApptServiceLine('', matchedCal?.id || calId || '');
   const m = document.getElementById('appt-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
@@ -747,7 +767,7 @@ export function showConvertToApptModal(calId, eventId) {
   document.getElementById('appt-first').value = parts[0] || ''; document.getElementById('appt-last').value = parts.slice(1).join(' ') || '';
   document.getElementById('appt-name').value = title; document.getElementById('appt-phone').value = phone; document.getElementById('appt-notes').value = '';
   document.getElementById('appt-date').value = localDateStr(startDt);
-  document.getElementById('appt-time').value = `${String(startDt.getHours()).padStart(2,'0')}:${String(startDt.getMinutes()).padStart(2,'0')}`;
+  setApptTimeFields(startDt.getHours(), startDt.getMinutes());
   document.getElementById('appt-delete-btn').classList.remove('hidden');
   const durSel = document.getElementById('appt-duration'); if (durSel) durSel.value = [...durSel.options].reduce((a,b)=>Math.abs(parseInt(b.value)-durMins)<Math.abs(parseInt(a.value)-durMins)?b:a).value;
   renderApptServiceLines();
@@ -767,7 +787,7 @@ export function showEditApptModal(calId, eventId) {
   document.getElementById('appt-name').value = cleanName;
   document.getElementById('appt-notes').value = _apptNotes(ev);
   document.getElementById('appt-date').value = localDateStr(startDt);
-  document.getElementById('appt-time').value = `${String(startDt.getHours()).padStart(2,'0')}:${String(startDt.getMinutes()).padStart(2,'0')}`;
+  setApptTimeFields(startDt.getHours(), startDt.getMinutes());
   document.getElementById('appt-delete-btn').classList.remove('hidden');
   const durSel = document.getElementById('appt-duration'); durSel.value = [...durSel.options].reduce((a,b)=>Math.abs(parseInt(b.value)-durMins)<Math.abs(parseInt(a.value)-durMins)?b:a).value;
   document.getElementById('appt-phone').value = _apptPhone(ev);
