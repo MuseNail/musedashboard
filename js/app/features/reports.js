@@ -236,6 +236,37 @@ export function openCompareMenu(ev) {
 }
 export function closeCompareMenu() { const m = document.getElementById('compare-menu'); if (m) m.classList.add('hidden'); }
 
+// ── Generic single-day picker (Turns & Queue history) ──────────────────────
+// A one-day calendar styled like the Reports date popup. The trigger passes the
+// current value + an onPick callback (e.g. loadTurnsHistory / loadQueueHistory).
+let _dayPickMonth = null, _dayPickSel = null, _dayPickCb = null;
+export function openDayPicker(ev, opts = {}) {
+  _dayPickCb = typeof opts.onPick === 'function' ? opts.onPick : null;
+  _dayPickSel = /^\d{4}-\d{2}-\d{2}$/.test(opts.value || '') ? opts.value : null;
+  const base = _dayPickSel ? new Date(_dayPickSel + 'T12:00:00') : new Date();
+  _dayPickMonth = new Date(base.getFullYear(), base.getMonth(), 1);
+  const m = document.getElementById('day-picker-modal'); if (m) m.classList.remove('hidden');
+  renderDayPicker(); _anchorPanel('day-picker-panel', ev);
+}
+export function closeDayPicker() { const m = document.getElementById('day-picker-modal'); if (m) m.classList.add('hidden'); }
+export function dayPickerNavMonth(delta) { _dayPickMonth = new Date(_dayPickMonth.getFullYear(), _dayPickMonth.getMonth() + delta, 1); renderDayPicker(); }
+export function dayPickerPick(ds) { closeDayPicker(); if (_dayPickCb) _dayPickCb(ds); }
+function renderDayPicker() {
+  const lbl = document.getElementById('day-picker-month');
+  if (lbl) lbl.textContent = _dayPickMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const grid = document.getElementById('day-picker-grid'); if (!grid) return;
+  const y = _dayPickMonth.getFullYear(), m = _dayPickMonth.getMonth();
+  const startDow = new Date(y, m, 1).getDay(), daysIn = new Date(y, m + 1, 0).getDate();
+  const today = localDateStr(new Date());
+  let cells = ['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => `<div class="dp-dow">${d}</div>`).join('');
+  for (let i = 0; i < startDow; i++) cells += '<div></div>';
+  for (let d = 1; d <= daysIn; d++) {
+    const ds = localDateStr(new Date(y, m, d));
+    cells += `<button onclick="dayPickerPick('${ds}')" class="dp-day${ds === today ? ' today' : ''}${ds === _dayPickSel ? ' sel' : ''}">${d}</button>`;
+  }
+  grid.innerHTML = cells;
+}
+
 function updateDateButtons() {
   const lbl = rangeLabel(), cmp = compareLabel();
   document.querySelectorAll('.date-btn-label').forEach(el => el.textContent = lbl);

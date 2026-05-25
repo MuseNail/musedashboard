@@ -499,18 +499,20 @@ export function archiveTurnsForToday() {
   turnsHistory = pruned; saveTurnsHistory();
   setOrder([]);
 }
+export function openTurnsHistoryPicker(ev) {
+  window.openDayPicker?.(ev, { value: turnsViewingHistory || todayStr(), onPick: loadTurnsHistory });
+}
 export function loadTurnsHistory(dateStr) {
   const today = todayStr();
   if (!dateStr || dateStr === today) { clearTurnsHistory(); return; }
   turnsViewingHistory = dateStr;
-  document.getElementById('turns-today-btn')?.classList.remove('hidden');
+  const btn = document.getElementById('turns-date-btn-val'); if (btn) btn.textContent = new Date(dateStr+'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
   document.getElementById('turns-date-label').textContent = new Date(dateStr+'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
   renderTurnsTechGrid(); renderTurnsQueue();
 }
 export function clearTurnsHistory() {
   turnsViewingHistory = null;
-  const di = document.getElementById('turns-history-date'); if (di) di.value = todayStr();
-  document.getElementById('turns-today-btn')?.classList.add('hidden');
+  const btn = document.getElementById('turns-date-btn-val'); if (btn) btn.textContent = 'Today';
   const lbl = document.getElementById('turns-date-label'); if (lbl) lbl.textContent = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
   renderTurns();
 }

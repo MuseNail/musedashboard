@@ -149,17 +149,19 @@ const upsert = entry => dispatch('queue.upsert', { entry });
 // any extra storage. View is read-only — actions only make sense on today's live queue.
 let queueViewingHistory = null;
 
+export function openQueueHistoryPicker(ev) {
+  window.openDayPicker?.(ev, { value: (queueViewingHistory && queueViewingHistory.date) || todayStr(), onPick: loadQueueHistory });
+}
 export function loadQueueHistory(dateStr) {
   if (!dateStr || dateStr === todayStr()) { clearQueueHistory(); return; }
   const hist = JSON.parse(localStorage.getItem('muse_turns_history') || '{}')[dateStr];
   queueViewingHistory = { date: dateStr, snapshot: (hist && hist.snapshot) || [] };
-  document.getElementById('clear-history-btn')?.classList.remove('hidden');
+  const btn = document.getElementById('queue-date-btn-val'); if (btn) btn.textContent = new Date(dateStr+'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
   renderQueue();
 }
 export function clearQueueHistory() {
   queueViewingHistory = null;
-  const di = document.getElementById('queue-history-date'); if (di) di.value = todayStr();
-  document.getElementById('clear-history-btn')?.classList.add('hidden');
+  const btn = document.getElementById('queue-date-btn-val'); if (btn) btn.textContent = 'Today';
   renderQueue();
 }
 

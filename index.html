@@ -292,8 +292,11 @@ tailwind.config = {
           </button>
           <!-- History date picker -->
           <div class="flex items-center gap-2 ml-2">
-            <input type="date" id="queue-history-date" class="bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="loadQueueHistory(this.value)">
-            <button onclick="clearQueueHistory()" id="clear-history-btn" class="hidden text-xs font-body text-primary underline">Today</button>
+            <button onclick="openQueueHistoryPicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
+              <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
+              <span class="text-sm font-headline font-bold text-on-surface" id="queue-date-btn-val">Today</span>
+            </button>
           </div>
           <button onclick="showManualAdd()" class="ml-auto flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-body font-semibold bg-primary text-on-primary hover:bg-primary-dim transition-all shadow-sm">
             <span class="material-symbols-outlined" style="font-size:18px">person_add</span> Add Guest
@@ -493,6 +496,18 @@ tailwind.config = {
         </div>
       </div>
 
+      <!-- Shared single-day picker (Turns & Queue history) — matches the Reports date popup -->
+      <div id="day-picker-modal" class="fixed inset-0 z-50 hidden" onclick="if(event.target===this)closeDayPicker()">
+        <div id="day-picker-panel" class="bg-surface rounded-2xl shadow-2xl overflow-auto p-4" style="position:fixed;width:min(320px,calc(100vw - 16px));max-height:82vh">
+          <div class="flex items-center justify-between mb-3">
+            <button onclick="dayPickerNavMonth(-1)" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
+            <div id="day-picker-month" class="font-headline font-bold text-on-surface text-sm"></div>
+            <button onclick="dayPickerNavMonth(1)" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+          </div>
+          <div id="day-picker-grid" class="dp-grid"></div>
+        </div>
+      </div>
+
       <!-- ── TRANSACTIONS PANEL ── -->
       <div class="dash-panel" id="panel-transactions">
         <div class="flex items-center justify-between mb-5">
@@ -550,9 +565,12 @@ tailwind.config = {
               <h2 class="text-xl font-headline font-bold text-on-surface">Technician Turns</h2>
               <p class="text-sm font-body text-on-surface-variant mt-0.5" id="turns-date-label">Today</p>
             </div>
-            <!-- Date select for history -->
-            <input type="date" id="turns-history-date" class="bg-surface-container border border-surface-container-high rounded-lg px-3 py-1.5 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="loadTurnsHistory(this.value)">
-            <button onclick="clearTurnsHistory()" id="turns-today-btn" class="hidden text-xs font-body text-primary underline">Today</button>
+            <!-- Date select for history (matches Reports date picker) -->
+            <button onclick="openTurnsHistoryPicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
+              <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
+              <span class="text-sm font-headline font-bold text-on-surface" id="turns-date-btn-val">Today</span>
+            </button>
           </div>
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant">
