@@ -327,10 +327,10 @@ tailwind.config = {
         <!-- Date range selector -->
         <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5">
           <div class="flex gap-2 flex-wrap mb-3">
-            <button onclick="setReportRange('today')" id="rng-today" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-primary text-on-primary transition-all">Today</button>
-            <button onclick="setReportRange('week')" id="rng-week" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">This Week</button>
-            <button onclick="setReportRange('month')" id="rng-month" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">This Month</button>
-            <button onclick="setReportRange('custom')" id="rng-custom" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Custom</button>
+            <button onclick="setReportRange('today')" id="rng-today" data-range="today" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
+            <button onclick="setReportRange('week')" id="rng-week" data-range="week" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">This Week</button>
+            <button onclick="setReportRange('month')" id="rng-month" data-range="month" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">This Month</button>
+            <button onclick="setReportRange('custom')" id="rng-custom" data-range="custom" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Custom</button>
           </div>
           <div id="custom-range-inputs" class="hidden grid grid-cols-2 gap-3">
             <div>
@@ -447,9 +447,20 @@ tailwind.config = {
               class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical
             </button>
-            <button onclick="txnToday()" class="px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-bold text-sm hover:bg-primary-dim transition-colors">Today</button>
-            <input type="date" id="txn-date-filter" class="bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="renderTransactions()">
-            <button onclick="document.getElementById('txn-date-filter').value=''; renderTransactions()" class="text-xs font-body text-primary underline">All</button>
+            <button onclick="setReportRange('today')" data-range="today" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
+            <button onclick="setReportRange('week')" data-range="week" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Week</button>
+            <button onclick="setReportRange('month')" data-range="month" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Month</button>
+            <button onclick="setReportRange('custom')" data-range="custom" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Custom</button>
+          </div>
+        </div>
+        <div id="txn-custom-inputs" class="hidden grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">From</label>
+            <input type="date" id="txn-from" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="setReportRange('custom'); runReport(); renderTransactions()">
+          </div>
+          <div>
+            <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">To</label>
+            <input type="date" id="txn-to" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="setReportRange('custom'); runReport(); renderTransactions()">
           </div>
         </div>
         <div id="txn-history-banner" class="hidden mb-3 px-4 py-2.5 rounded-xl bg-secondary-container/50 border border-secondary text-sm font-body font-bold text-on-surface flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:18px">history</span><span id="txn-history-banner-text"></span></div>

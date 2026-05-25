@@ -54,11 +54,26 @@ export function buildCombinedRecords() {
 // ── Report range ──────────────────────────────────
 export function setReportRange(type) {
   reportRange.type = type;
-  document.querySelectorAll('.rng-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(`rng-${type}`)?.classList.add('active');
-  const customInputs = document.getElementById('custom-range-inputs');
-  if (type === 'custom') { customInputs?.classList.remove('hidden'); customInputs?.classList.add('grid'); }
-  else { customInputs?.classList.add('hidden'); customInputs?.classList.remove('grid'); runReport(); }
+  syncRangeButtons();
+  const showCustom = type === 'custom';
+  ['custom-range-inputs','txn-custom-inputs'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    el.classList.toggle('hidden', !showCustom); el.classList.toggle('grid', showCustom);
+  });
+  // Reports + Transactions share one date window — refresh both so they always match.
+  if (!showCustom) { runReport(); renderTransactions(); }
+}
+// Highlight the matching range chip in BOTH the Reports and Transactions panels.
+function syncRangeButtons() {
+  document.querySelectorAll('.rng-btn').forEach(b => b.classList.toggle('active', b.dataset.range === reportRange.type));
+}
+function rangeLabel() {
+  if (reportRange.type === 'today') return 'Today';
+  if (reportRange.type === 'week') return 'This Week';
+  if (reportRange.type === 'month') return 'This Month';
+  const d = getReportDates(); if (!d) return 'Custom';
+  const fmt = x => x.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  return `${fmt(d.from)} – ${fmt(d.to)}`;
 }
 
 function getReportDates() {
@@ -66,7 +81,8 @@ function getReportDates() {
   if (reportRange.type === 'today') return { from: new Date(now.getFullYear(),now.getMonth(),now.getDate()), to: new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59) };
   if (reportRange.type === 'week') { const day = now.getDay() === 0 ? 6 : now.getDay() - 1; const from = new Date(now); from.setDate(now.getDate()-day); from.setHours(0,0,0,0); const to = new Date(from); to.setDate(from.getDate()+6); to.setHours(23,59,59,999); return { from, to }; }
   if (reportRange.type === 'month') return { from: new Date(now.getFullYear(),now.getMonth(),1), to: new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59) };
-  const f = document.getElementById('report-from')?.value, t = document.getElementById('report-to')?.value;
+  const f = document.getElementById('report-from')?.value || document.getElementById('txn-from')?.value;
+  const t = document.getElementById('report-to')?.value || document.getElementById('txn-to')?.value;
   if (!f || !t) return null;
   return { from: new Date(f+'T00:00:00'), to: new Date(t+'T23:59:59') };
 }
@@ -234,20 +250,21 @@ function showDrillPanel(title, html) {
 export function closeDrillDown() { document.getElementById('rpt-drill-panel').classList.add('hidden'); }
 
 // ── Transactions list ─────────────────────────────
-export function txnToday() { const el = document.getElementById('txn-date-filter'); if (el) el.value = todayStr(); renderTransactions(); }
+export function txnToday() { setReportRange('today'); }
 export function renderTransactions() {
   const list = document.getElementById('txn-list'), empty = document.getElementById('txn-empty');
   if (!list) return;
-  const dateFilter = document.getElementById('txn-date-filter')?.value;
+  syncRangeButtons();
+  const dates = getReportDates();   // shared Reports window (Today / Week / Month / Custom)
   const banner = document.getElementById('txn-history-banner');
   if (banner) {
-    const isPast = dateFilter && dateFilter !== todayStr();
-    banner.classList.toggle('hidden', !isPast);
+    const notToday = reportRange.type !== 'today';
+    banner.classList.toggle('hidden', !notToday);
     const bt = document.getElementById('txn-history-banner-text');
-    if (isPast && bt) bt.textContent = `Viewing ${new Date(dateFilter+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'})} — not today`;
+    if (notToday && bt) bt.textContent = `Showing: ${rangeLabel()}`;
   }
   let combined = buildCombinedRecords();
-  if (dateFilter) combined = combined.filter(r => localDateStr(new Date(r.checkinTime)) === dateFilter);
+  if (dates) combined = combined.filter(r => { const d = new Date(r.checkinTime); return d >= dates.from && d <= dates.to; });
   combined = combined.filter(r => isPaidStatus(r.status) || r.status === 'refund').sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime));
   if (combined.length === 0) { list.innerHTML = ''; empty?.classList.remove('hidden'); return; }
   empty?.classList.add('hidden');
@@ -285,16 +302,40 @@ export function renderTransactions() {
   list.innerHTML = blocks.map(b => {
     if (b.type === 'solo') return txnCard(b.record);
     if (b.members.length === 1) return txnCard(b.members[0]);
+    // A party was charged together in Square, so show ONE transaction with the
+    // combined total (matching the Square report). Tap to expand the per-customer
+    // tickets, which keep their own Refund / Delete / Edit actions.
     const total = b.members.reduce((s,m)=>s+(m.totalCost||0),0), c = b.color, letter = letters.get(b.groupId) || '•';
     const primary = (b.members.find(m=>/\(primary\)/i.test(m.groupLabel||'')) || b.members[0]).name;
-    return `<div style="border:1.5px solid ${c}66;background:${c}0d;border-radius:14px;padding:8px">
-      <div class="flex items-center justify-between px-2 py-1.5">
-        <div class="flex items-center gap-2"><span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;background:${c};color:#fff;font-size:11px;font-weight:800">${letter}</span><span class="font-headline font-bold text-sm" style="color:${c}">${primary} · party of ${b.members.length}</span></div>
-        <span class="font-headline font-extrabold" style="color:${c}">$${total.toFixed(2)}</span>
+    const dt = new Date(b.members[0].checkinTime);
+    const timeStr = dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), dateStr = dt.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    const svcSet = [...new Set(b.members.flatMap(m => (m.services||[]).map(sid => svc(sid)?.label||sid)))];
+    const svcSummary = svcSet.slice(0,5).join(', ') + (svcSet.length>5?'…':'');
+    return `<div style="border:1.5px solid ${c}66;background:${c}0d;border-radius:14px;overflow:hidden">
+      <div onclick="togglePartyTxn(this)" class="cursor-pointer px-5 py-4 flex items-start justify-between">
+        <div class="flex-grow min-w-0">
+          <div class="flex items-center gap-2 flex-wrap mb-1">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:6px;background:${c};color:#fff;font-size:11px;font-weight:800;flex-shrink:0">${letter}</span>
+            <span class="font-headline font-bold text-on-surface">${primary} · party of ${b.members.length}</span>
+            <span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold badge-done">paid</span>
+            <span class="material-symbols-outlined party-chevron text-on-surface-variant" style="font-size:18px;transition:transform .15s">expand_more</span>
+          </div>
+          <div class="text-xs font-body text-on-surface-variant mb-1">${svcSummary || '—'}</div>
+          <div class="text-[11px] font-body text-outline">${dateStr} · ${timeStr} · tap to expand</div>
+        </div>
+        <div class="text-right ml-4 flex-shrink-0"><div class="text-lg font-headline font-extrabold" style="color:${c}">$${total.toFixed(2)}</div></div>
       </div>
-      <div class="space-y-2">${b.members.map(txnCard).join('')}</div>
+      <div class="party-members hidden space-y-2 px-2 pb-2">${b.members.map(txnCard).join('')}</div>
     </div>`;
   }).join('');
+}
+// Expand/collapse a party transaction's per-customer tickets.
+export function togglePartyTxn(headerEl) {
+  const members = headerEl.parentElement.querySelector('.party-members');
+  const chev = headerEl.querySelector('.party-chevron');
+  if (!members) return;
+  members.classList.toggle('hidden');
+  if (chev) chev.style.transform = members.classList.contains('hidden') ? '' : 'rotate(180deg)';
 }
 export function updateHistoricalButtonVisibility() { document.getElementById('add-historical-btn')?.classList.toggle('hidden', !canDo('historicalEntry')); }
 
