@@ -197,10 +197,19 @@ function calSetStatus(msg) {
 
 // ── Date nav ──────────────────────────────────────
 function calUpdateDateLabel() { const el = document.getElementById('cal-date-label'); if (el) el.textContent = _calDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); calUpdateDateInput(); }
-function calUpdateDateInput() { const inp = document.getElementById('cal-date-input'); if (inp) inp.value = localDateStr(_calDate); }
+function calUpdateDateInput() {
+  const btn = document.getElementById('cal-date-btn-val');
+  if (btn) { const isToday = new Date().toDateString() === _calDate.toDateString(); btn.textContent = isToday ? 'Today' : _calDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+}
 export function calNavDay(delta) { _calDate = new Date(_calDate); _calDate.setDate(_calDate.getDate() + delta); calUpdateDateLabel(); calLoadAndRender(); }
 export function calGoToday() { _calDate = new Date(); calUpdateDateLabel(); calLoadAndRender(); }
 export function calPickDate(val) { if (!val) return; _calDate = new Date(val + 'T12:00:00'); calUpdateDateLabel(); calLoadAndRender(); }
+// Square-style date popup: Today / In 1–6 weeks presets + month calendar (shared openDayPicker).
+export function openCalDatePicker(ev) {
+  const today = new Date();
+  const presets = [0, 1, 2, 3, 4, 5, 6].map(n => { const d = new Date(today); d.setDate(d.getDate() + n * 7); return { label: n === 0 ? 'Today' : `In ${n} week${n > 1 ? 's' : ''}`, date: localDateStr(d) }; });
+  window.openDayPicker?.(ev, { value: localDateStr(_calDate), onPick: calPickDate, presets });
+}
 
 export async function calLoadAndRender(silent) {
   if (!silent) calSetStatus('Loading calendars…');

@@ -245,6 +245,15 @@ export function openDayPicker(ev, opts = {}) {
   _dayPickSel = /^\d{4}-\d{2}-\d{2}$/.test(opts.value || '') ? opts.value : null;
   const base = _dayPickSel ? new Date(_dayPickSel + 'T12:00:00') : new Date();
   _dayPickMonth = new Date(base.getFullYear(), base.getMonth(), 1);
+  // Optional left rail of quick presets (e.g. Calendar's Today / In 1–6 weeks).
+  const rail = document.getElementById('day-picker-presets');
+  const hasPresets = Array.isArray(opts.presets) && opts.presets.length > 0;
+  if (rail) {
+    rail.classList.toggle('hidden', !hasPresets);
+    rail.innerHTML = hasPresets ? opts.presets.map(p => `<button onclick="dayPickerPick('${p.date}')" class="dp-preset${p.date === _dayPickSel ? ' active' : ''}">${p.label}</button>`).join('') : '';
+  }
+  const panel = document.getElementById('day-picker-panel');
+  if (panel) panel.style.width = `min(${hasPresets ? 440 : 320}px, calc(100vw - 16px))`;
   const m = document.getElementById('day-picker-modal'); if (m) m.classList.remove('hidden');
   renderDayPicker(); _anchorPanel('day-picker-panel', ev);
 }
