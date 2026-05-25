@@ -110,6 +110,21 @@ export function formatPhone(input) {
 
 // ── Numeric Keypad ────────────────────────────────
 let _numpadTarget = null, _numpadRaw = '', _numpadCallback = null, _numpadMode = 'cost';
+let _numpadHostObs = null;
+// Auto-close the numpad if the modal/popup that owns the field it's editing closes
+// (gets `hidden`, display:none, or removed) — so closing a modal also dismisses the
+// numpad without needing to hit OK. Watches the field's nearest containing modal.
+function _watchNumpadHost(inputEl) {
+  if (_numpadHostObs) { _numpadHostObs.disconnect(); _numpadHostObs = null; }
+  const host = inputEl?.closest?.('[id$="-modal"], .fixed');
+  if (!host || host.id === 'numpad-modal') return;
+  const check = () => {
+    if (host.classList.contains('hidden') || host.style.display === 'none' || !host.isConnected) _closeNumpadModal();
+  };
+  _numpadHostObs = new MutationObserver(check);
+  _numpadHostObs.observe(host, { attributes: true, attributeFilter: ['class', 'style'] });
+  if (host.parentElement) _numpadHostObs.observe(host.parentElement, { childList: true });
+}
 
 export function openNumpad(inputEl, label, mode) {
   if (window.matchMedia('(pointer: fine)').matches) return;
@@ -130,6 +145,7 @@ export function openNumpad(inputEl, label, mode) {
   const m = document.getElementById('numpad-modal');
   m.classList.remove('hidden'); m.style.display = 'flex';
   inputEl.blur();
+  _watchNumpadHost(inputEl);
 }
 
 // Phone numpad is a FLOATING panel (no full-screen backdrop) and updates the input
@@ -147,6 +163,7 @@ export function openPhoneNumpad(inputEl, label) {
   const m = document.getElementById('numpad-modal');
   m.classList.remove('hidden'); m.style.display = 'flex';
   inputEl.blur();
+  _watchNumpadHost(inputEl);
 }
 
 // Floating = no dim backdrop, clicks pass through everywhere except the panel
@@ -238,6 +255,7 @@ export function numpadConfirm() {
 }
 export function closeNumpad() { numpadConfirm(); }
 function _closeNumpadModal() {
+  if (_numpadHostObs) { _numpadHostObs.disconnect(); _numpadHostObs = null; }
   const m = document.getElementById('numpad-modal');
   m.classList.add('hidden'); m.style.display = '';
   _numpadTarget = null; _numpadRaw = '';

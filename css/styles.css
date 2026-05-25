@@ -284,11 +284,13 @@
   /* The whole numpad never scrolls — stops a stray touch from rubber-banding the page
      behind the bottom sheet. Taps/clicks still work. */
   #numpad-modal { touch-action: none; overscroll-behavior: contain; }
-  /* Pin the panel to the viewport bottom DIRECTLY (composited) instead of via the fixed
-     parent's flex `items-end`. iOS repositions a flex-end fixed child whenever a
-     descendant changes — and the amount updates on every tap — which made the whole
-     panel "jump" each keypress. Fixed+translateZ keeps it on its own stable layer. */
-  #numpad-modal > div { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%) translateZ(0); }
+  /* Center the panel as a fixed, composited dialog — NOT a flex/bottom-anchored child.
+     iOS kept repainting/repositioning the bottom-anchored fixed panel on every tap (the
+     amount display updates each keypress); centering it away from the viewport edge on
+     its own layer, with no transitions, stops the per-tap jump. !important beats the
+     cosmetic [onclick]:active scale (the panel has an onclick=stopPropagation). */
+  #numpad-modal > div { position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%) translateZ(0) !important; }
+  #numpad-modal, #numpad-modal * { transition: none !important; }
 
   /* Slick pill switch — shared by services / active-staff / role-permission
      toggles (identical markup: a track div + an absolutely-positioned knob div).
