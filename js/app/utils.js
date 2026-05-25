@@ -201,13 +201,6 @@ function _numpadUpdateDisplay() {
     const cents = parseInt(_numpadRaw || '0', 10);
     el.textContent = '$' + (cents / 100).toFixed(2);
   }
-  // TEMP iPad-jump diagnostic — overwrites the numpad label with live metrics so we can
-  // see WHAT moves on each tap. Remove once the jump is solved.
-  try {
-    const _p = document.querySelector('#numpad-modal > div'), _lab = document.getElementById('numpad-label');
-    if (_p && _lab) { const pr = _p.getBoundingClientRect(), dr = el.getBoundingClientRect();
-      _lab.textContent = `pTop ${Math.round(pr.top)} · pH ${Math.round(pr.height)} · dH ${Math.round(dr.height)} · scroll ${Math.round(window.scrollY)} · vh ${Math.round(window.innerHeight)}`; }
-  } catch (e) {}
 }
 
 export function numpadKey(key) {

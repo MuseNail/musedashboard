@@ -285,8 +285,12 @@
      behind the bottom sheet. Taps/clicks still work. */
   #numpad-modal { touch-action: none; overscroll-behavior: contain; }
   #numpad-modal, #numpad-modal * { transition: none !important; }
-  /* Keep the amount on one line — a wide number wrapping would grow the display and
-     reflow/jump the panel. */
+  /* THE jump fix: the backdrop (#numpad-modal, onclick=closeNumpad) and panel
+     (onclick=stopPropagation) both match the cosmetic `[onclick]:active{scale(.975)}`,
+     and :active propagates up from the pressed key — so the whole numpad scaled/snapped
+     on every tap. Kill any transform on the numpad and its descendants while active. */
+  #numpad-modal, #numpad-modal *, #numpad-modal:active, #numpad-modal *:active { transform: none !important; }
+  /* Keep the amount on one line so a wide number can't reflow the panel. */
   #numpad-display { white-space: nowrap; overflow: hidden; }
 
   /* Slick pill switch — shared by services / active-staff / role-permission
