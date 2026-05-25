@@ -35,7 +35,7 @@ export const DEFAULT_STATIONS = [
   ...Array.from({length:12}, (_,i)=>({ id:`P${i+1}`, type:'P', label:`P${i+1}` })),
   ...Array.from({length:15}, (_,i)=>({ id:`M${i+1}`, type:'M', label:`M${i+1}` })),
 ];
-const CATEGORY_PALETTE = ['#1a5c7a','#785a1a','#5c3d8f','#2a7a4f','#7a2a1a','#1a5252','#7a1a5c'];
+const CATEGORY_PALETTE = ['#1a5c7a','#785a1a','#5c3d8f','#2a7a4f','#7a2a1a','#2f80d8','#7a1a5c'];
 export function stationCategories() { const c = cfg().station_categories; return Array.isArray(c) && c.length ? c : DEFAULT_CATEGORIES; }
 export function categoryDef(typeId) { const cats = stationCategories(); return cats.find(c => c.id === typeId) || cats[0]; }
 export function stationDefs() { const s = cfg().stations; return Array.isArray(s) && s.length ? s : DEFAULT_STATIONS; }
@@ -276,7 +276,7 @@ function buildQueueRow(e) {
         ${e.groupId
           ? `<button onclick="showSplitMergeModal('${id}')" title="Split/Merge" class="${btnCls} bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:19px">call_split</span></button>`
           : `<button onclick="showMergeSelectModal('${id}')" title="Merge" class="${btnCls} bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:19px">merge</span></button>`}
-        ${e.status === 'waiting' ? `<button onclick="tryAdvanceStatus('${id}','inservice')" title="In Service" class="${btnCls}" style="background:#8fd4d3;color:#0a2e2e;"><span class="material-symbols-outlined" style="font-size:19px">play_circle</span></button>` : ''}
+        ${e.status === 'waiting' ? `<button onclick="tryAdvanceStatus('${id}','inservice')" title="In Service" class="${btnCls}" style="background:#bcdcfb;color:#0a2e2e;"><span class="material-symbols-outlined" style="font-size:19px">play_circle</span></button>` : ''}
         ${e.status === 'inservice' ? `
           <button onclick="updateStatus('${id}','waiting')" title="Back to Waiting" class="${btnCls}" style="background:#f5c870;color:#3a2800;"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
           <button onclick="tryAdvanceStatus('${id}','complete')" title="Complete" class="${btnCls}" style="background:#1a5c7a;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">task_alt</span></button>` : ''}
@@ -413,7 +413,7 @@ export function toggleManualSameContact(idx) {
   const firstOnlyFields = document.getElementById(`manual-firstonly-fields-${idx}`);
   cb.checked = !cb.checked;
   if (cb.checked) {
-    if (box) { box.style.background = '#1a5252'; box.style.borderColor = '#1a5252'; }
+    if (box) { box.style.background = '#2f80d8'; box.style.borderColor = '#2f80d8'; }
     checkIcon?.classList.remove('hidden');
     contactFields?.classList.add('hidden'); firstOnlyFields?.classList.remove('hidden');
   } else {
@@ -568,7 +568,7 @@ function renderGroupAssignTabs() {
   tabs.innerHTML = groupAssignEntries.map((id, i) => {
     const entry = q().find(e => String(e.id) === id);
     if (!entry) return '';
-    const isActive = i === activeGroupTab, color = entry.groupColor || '#1a5252';
+    const isActive = i === activeGroupTab, color = entry.groupColor || '#2f80d8';
     return `<div class="flex items-center gap-1">
         <button onclick="switchGroupTab(${i})" class="px-4 py-2 rounded-full text-sm font-body font-semibold transition-all flex items-center gap-2 ${isActive ? 'text-white' : 'bg-surface-container text-on-surface hover:bg-surface-container-high'}" style="${isActive ? `background:${color}` : ''}">
           <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${color}"></span>${entry.name.split(' ')[0]}
@@ -674,7 +674,7 @@ export function saveCurrentGroupTabInputs() {
 export function renderGroupAssignContent() {
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
   if (!entry) return;
-  const color = entry.groupColor || '#1a5252';
+  const color = entry.groupColor || '#2f80d8';
   const content = document.getElementById('group-assign-content');
   const checkedIn = activeStaff().filter(s => cfg().turns_order.includes(s.id)).sort(byName);
   const techOptions = sel => {
@@ -703,7 +703,7 @@ export function renderGroupAssignContent() {
     return `
       <div class="bg-surface-container-low rounded-xl p-4 border border-surface-container-high mb-3" data-service-id="${sid}">
         <div class="flex items-center justify-between mb-3">
-          <div class="font-headline font-semibold text-on-surface flex items-center gap-2 flex-wrap">${s.label}${sug ? `<button onclick="acceptAssignSuggestion('${sid}','${sug.techId}')" title="Assign ${sug.techName}" class="text-[10px] px-2 py-0.5 rounded-full font-body font-semibold hover:opacity-80" style="background:#1a525218;color:#1a5252">→ ${sug.techName} ✓</button>` : ''}</div>
+          <div class="font-headline font-semibold text-on-surface flex items-center gap-2 flex-wrap">${s.label}${sug ? `<button onclick="acceptAssignSuggestion('${sid}','${sug.techId}')" title="Assign ${sug.techName}" class="text-[10px] px-2 py-0.5 rounded-full font-body font-semibold hover:opacity-80" style="background:#2f80d818;color:#2f80d8">→ ${sug.techName} ✓</button>` : ''}</div>
           <button onclick="cycleServiceStatus('${entry.id}','${sid}','${nextStatus}')" class="text-[11px] px-3 py-1 rounded-full font-body font-semibold transition-all hover:opacity-80" style="${statusBtnStyle}">${statusLabel} ›</button>
         </div>
         <div class="grid grid-cols-3 gap-3">

@@ -15,7 +15,7 @@ import { showToast } from '../utils.js';
 const cfg = () => getState().config;
 const ROOT = document.documentElement;
 const FALLBACK_KEY = 'muse_theme_fallback';
-const DEFAULT_ACCENT = '#1a5252';
+const DEFAULT_ACCENT = '#2f80d8';
 const ACCENT_VARS = ['--primary', '--primary-dim', '--primary-container', '--on-primary', '--on-primary-container'];
 
 let _draft = null;   // { base, accent } while editing in Settings
@@ -86,7 +86,7 @@ export function renderAppearanceSettings(reinit = true) {
   if (reinit || !_draft) _draft = { ...(currentUserTheme() || { base: 'light', accent: DEFAULT_ACCENT }) };
   if (!isHex(_draft.accent)) _draft.accent = DEFAULT_ACCENT;
   const who = au?.name || 'this device';
-  const swatches = ['#1a5252', '#2563eb', '#7048e8', '#c2255c', '#e8590c', '#2b8a3e', '#5c4010', '#0f172a'];
+  const swatches = ['#2f80d8', '#1a5252', '#7048e8', '#c2255c', '#e8590c', '#2b8a3e', '#5c4010', '#0f172a'];
   const baseBtn = (val, label) => `<button onclick="appearanceSetBase('${val}')"
     class="flex-1 py-2 rounded-lg font-headline font-bold text-sm transition-all ${_draft.base === val ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}">${label}</button>`;
   const swatch = c => `<button onclick="appearancePick('${c}')" title="${c}" class="w-8 h-8 rounded-full border-2 ${_draft.accent.toLowerCase() === c.toLowerCase() ? 'border-on-surface' : 'border-surface-container-high'}" style="background:${c}"></button>`;

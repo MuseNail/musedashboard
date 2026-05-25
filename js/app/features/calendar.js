@@ -58,10 +58,10 @@ export function renderGcalCalendarList() {
     + _calCalendars.map(c => {
         const isU = c.id === uid, isP = c.id === _calPrimaryId;
         return `<label class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer">
-          <input type="radio" name="unassigned-cal" ${isU?'checked':''} onchange="setUnassignedCal('${c.id.replace(/'/g,"\\'")}')" style="accent-color:#1a5252;width:16px;height:16px;flex-shrink:0">
+          <input type="radio" name="unassigned-cal" ${isU?'checked':''} onchange="setUnassignedCal('${c.id.replace(/'/g,"\\'")}')" style="accent-color:#2f80d8;width:16px;height:16px;flex-shrink:0">
           <span style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></span>
           <span class="flex-grow text-sm font-body text-on-surface">${c.name}${isP?' <span style="font-size:10px;color:#9ca3af">(primary)</span>':''}</span>
-          ${isU?'<span style="font-size:10px;font-weight:600;color:#1a5252">Unassigned →</span>':''}
+          ${isU?'<span style="font-size:10px;font-weight:600;color:#2f80d8">Unassigned →</span>':''}
         </label>`;
       }).join('');
 }
@@ -119,7 +119,7 @@ export function renderTodaysAppointments() {
     const svcHtml = svcLines.slice(0,8).map(t => `<div style="font-size:10px;color:var(--md-on-surface-variant);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`).join('');
     return `<div onclick="calEventClick(event,'${_e(r.primaryCalId)}','${_e(r.primaryEv.id)}','${_e(r.name)}','',true)" class="rounded-lg border border-surface-container-high hover:bg-surface-container cursor-pointer px-2.5 py-2 transition-colors" style="background:var(--md-surface-container-lowest)">
       <div class="flex items-center gap-1.5" style="line-height:1.2">
-        <span style="font-size:11px;font-weight:700;color:#1a5252;flex-shrink:0">${timeStr}</span>
+        <span style="font-size:11px;font-weight:700;color:#2f80d8;flex-shrink:0">${timeStr}</span>
         ${r.confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;font-size:11px;flex-shrink:0">✓</span>':''}
         <span style="font-size:12px;font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(r.name)}</span>
         ${stat[1]?`<span style="font-size:9px;font-weight:700;color:${stat[0]};flex-shrink:0">${stat[1]}</span>`:''}
@@ -208,8 +208,8 @@ export async function calLoadAndRender(silent) {
     const calListResp = await gapi.client.calendar.calendarList.list({ minAccessRole: 'owner' });
     const items = calListResp.result.items || [];
     const systemNames = ['contacts','holiday','birthday','other calendar','united states'];
-    _calCalendars = items.filter(c => { const name = (c.summary||'').toLowerCase(); return !systemNames.some(s => name.includes(s)) && c.id !== 'primary'; }).map(c => ({ id: c.id, name: c.summary, color: c.backgroundColor || '#1a5252' }));
-    if (_calCalendars.length === 0) { const p = items.find(c => c.id === 'primary' || c.primary); if (p) _calCalendars = [{ id: p.id, name: 'Primary', color: '#1a5252' }]; }
+    _calCalendars = items.filter(c => { const name = (c.summary||'').toLowerCase(); return !systemNames.some(s => name.includes(s)) && c.id !== 'primary'; }).map(c => ({ id: c.id, name: c.summary, color: c.backgroundColor || '#2f80d8' }));
+    if (_calCalendars.length === 0) { const p = items.find(c => c.id === 'primary' || c.primary); if (p) _calCalendars = [{ id: p.id, name: 'Primary', color: '#2f80d8' }]; }
     _calPrimaryId = (items.find(c => c.primary) || {}).id || _calPrimaryId;
     const dayStart = new Date(_calDate); dayStart.setHours(0,0,0,0);
     const dayEnd = new Date(_calDate); dayEnd.setHours(23,59,59,999);
@@ -411,7 +411,7 @@ export function toggleUnassignedOnly() {
 }
 function updateUnassignedToggleBtn() {
   const btn = document.getElementById('cal-unassigned-toggle'); if (!btn) return;
-  btn.style.background = _unassignedOnly ? 'var(--md-primary,#1a5252)' : '';
+  btn.style.background = _unassignedOnly ? 'var(--md-primary,#2f80d8)' : '';
   btn.style.color = _unassignedOnly ? '#fff' : '';
   btn.classList.toggle('bg-surface-container', !_unassignedOnly);
   btn.title = _unassignedOnly ? 'Showing unassigned only — tap to show all calendars' : 'Show only unassigned appointments';
@@ -442,7 +442,7 @@ export function renderCalSelectorList() {
   if (!list || _calCalendars.length === 0) return;
   if (!_calSelectorDraft) _calSelectorDraft = { order: _calCalendars.map(c => c.id), hidden: new Set(_calHidden) };
   const draftCals = _calSelectorDraft.order.map(id => _calCalendars.find(c => c.id === id)).filter(Boolean);
-  list.innerHTML = draftCals.map((c,i) => { const isHidden = _calSelectorDraft.hidden.has(c.id); return `<div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none" data-cal-idx="${i}"><span onpointerdown="calReorderStart(event,${i})" class="material-symbols-outlined" style="font-size:14px;flex-shrink:0;color:#6b7280;cursor:grab;touch-action:none">drag_indicator</span><div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div><span class="flex-grow text-sm font-body text-on-surface" onclick="calDraftToggle('${c.id}')">${c.name}</span><div onclick="calDraftToggle('${c.id}')" style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;border:2.5px solid ${isHidden?'#9ca3af':'#1a5252'};background:${isHidden?'#fff':'#1a5252'}">${!isHidden?'<span class="material-symbols-outlined" style="font-size:13px;color:#fff;font-variation-settings:\'FILL\' 1;line-height:1">check</span>':''}</div></div>`; }).join('');
+  list.innerHTML = draftCals.map((c,i) => { const isHidden = _calSelectorDraft.hidden.has(c.id); return `<div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none" data-cal-idx="${i}"><span onpointerdown="calReorderStart(event,${i})" class="material-symbols-outlined" style="font-size:14px;flex-shrink:0;color:#6b7280;cursor:grab;touch-action:none">drag_indicator</span><div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div><span class="flex-grow text-sm font-body text-on-surface" onclick="calDraftToggle('${c.id}')">${c.name}</span><div onclick="calDraftToggle('${c.id}')" style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;border:2.5px solid ${isHidden?'#9ca3af':'#2f80d8'};background:${isHidden?'#fff':'#2f80d8'}">${!isHidden?'<span class="material-symbols-outlined" style="font-size:13px;color:#fff;font-variation-settings:\'FILL\' 1;line-height:1">check</span>':''}</div></div>`; }).join('');
   const visCount = draftCals.filter(c => !_calSelectorDraft.hidden.has(c.id)).length;
   const lbl = document.getElementById('cal-selector-label'); if (lbl) lbl.textContent = visCount === _calCalendars.length ? 'Calendars' : `${visCount}/${_calCalendars.length}`;
 }
@@ -638,7 +638,7 @@ function _showQuickCheckinPicker(party) {
   const rows = party.map((p,i) => {
     const svcs = _parseApptLines(p.ev,'').map(l => cfg().services.find(s=>s.id===l.svcId)?.label || '').filter(Boolean).join(', ');
     return `<label class="flex items-start gap-3 px-3 py-2.5 rounded-xl border ${p.already?'border-surface-container-high opacity-60':'border-primary/40 cursor-pointer hover:bg-primary/5'}">
-      <input type="checkbox" data-q-idx="${i}" ${p.already?'checked disabled':'checked'} style="width:18px;height:18px;margin-top:2px;accent-color:#1a5252;flex-shrink:0">
+      <input type="checkbox" data-q-idx="${i}" ${p.already?'checked disabled':'checked'} style="width:18px;height:18px;margin-top:2px;accent-color:#2f80d8;flex-shrink:0">
       <div class="min-w-0"><div class="font-body font-semibold text-sm text-on-surface">${esc(p.name)}${p.already?' <span class="text-[10px] font-semibold text-on-surface-variant">· checked in</span>':''}</div>
         ${svcs?`<div class="text-xs text-on-surface-variant truncate">${esc(svcs)}</div>`:''}</div>
     </label>`;
@@ -983,7 +983,7 @@ function renderTasks(tasks) {
   const container = document.getElementById('tasks-list'); if (!container) return;
   if (!tasks.length) { container.innerHTML = '<div class="text-xs text-on-surface-variant text-center py-6 opacity-60">No tasks — all caught up!</div>'; return; }
   container.innerHTML = tasks.map(t => { const done = t.status === 'completed', due = t.due ? new Date(t.due) : null, dueStr = due ? due.toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '', overdue = due && due < new Date() && !done, lid = _currentListId;
-    return `<div class="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-container transition-colors group"><button onclick="toggleTask('${lid}','${t.id}','${done?'needsAction':'completed'}')" class="flex-shrink-0 transition-colors mt-0.5" style="width:16px;height:16px;min-width:16px;min-height:16px;aspect-ratio:1/1;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};background:${done?'#1a5252':'#fff'};display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box">${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;line-height:1;font-variation-settings:\'FILL\' 1">check</span>':''}</button><div class="flex-1 min-w-0" style="line-height:1.3"><div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}">${t.title||'(no title)'}</div>${t.notes?`<div class="text-[10px] text-on-surface-variant truncate">${t.notes}</div>`:''}${dueStr?`<div class="text-[10px] font-semibold ${overdue?'text-error':'text-on-surface-variant'}">${overdue?'⚠ ':''}${dueStr}</div>`:''}</div><button onclick="deleteTask('${lid}','${t.id}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all mt-0.5"><span class="material-symbols-outlined" style="font-size:12px">close</span></button></div>`;
+    return `<div class="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-container transition-colors group"><button onclick="toggleTask('${lid}','${t.id}','${done?'needsAction':'completed'}')" class="flex-shrink-0 transition-colors mt-0.5" style="width:16px;height:16px;min-width:16px;min-height:16px;aspect-ratio:1/1;border-radius:50%;border:2px solid ${done?'#2f80d8':'#9ca3af'};background:${done?'#2f80d8':'#fff'};display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box">${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;line-height:1;font-variation-settings:\'FILL\' 1">check</span>':''}</button><div class="flex-1 min-w-0" style="line-height:1.3"><div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}">${t.title||'(no title)'}</div>${t.notes?`<div class="text-[10px] text-on-surface-variant truncate">${t.notes}</div>`:''}${dueStr?`<div class="text-[10px] font-semibold ${overdue?'text-error':'text-on-surface-variant'}">${overdue?'⚠ ':''}${dueStr}</div>`:''}</div><button onclick="deleteTask('${lid}','${t.id}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all mt-0.5"><span class="material-symbols-outlined" style="font-size:12px">close</span></button></div>`;
   }).join('');
 }
 export function toggleTasksPanel() {

@@ -1,5 +1,5 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
-export const APP_VERSION = 'v3.03';
+export const APP_VERSION = 'v3.04';
 export const APP_NAME    = 'musedashboard';
 export const STAFF_PIN   = '1234'; // fallback when no front desk users are configured
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
@@ -22,12 +22,12 @@ export const DEFAULT_ROLE_PERMISSIONS = {
 };
 
 export const GROUP_COLORS = [
-  '#1a5252','#785a1a','#5c3d8f','#1a5c7a','#7a2a1a',
+  '#2f80d8','#785a1a','#5c3d8f','#1a5c7a','#7a2a1a',
   '#2a7a4f','#7a1a5c','#4f4f1a','#1a3a7a','#7a4f1a',
 ];
 
 export const SCHEDULE_COLORS = {
-  working:  { bg: '#1a5252', text: '#ffffff', label: 'Working'  },
+  working:  { bg: '#2f80d8', text: '#ffffff', label: 'Working'  },
   off:      { bg: '#f5c870', text: '#3a2800', label: 'Off'      },
   sick:     { bg: '#fa746f', text: '#ffffff', label: 'Sick'     },
   vacation: { bg: '#adb3b5', text: '#000000', label: 'Vacation' },

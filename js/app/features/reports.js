@@ -315,7 +315,7 @@ export function runReport() {
             <span class="material-symbols-outlined text-on-surface-variant flex-shrink-0" style="font-size:18px">chevron_right</span></div>
           <div class="flex border-t border-surface-container-high divide-x divide-surface-container-high">
             <div class="flex-1 px-4 py-2 text-center"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Billed</div><div class="font-headline font-bold text-on-surface text-base">$${data.income.toFixed(2)}</div></div>
-            ${commAmt!=null?`<div class="flex-1 px-4 py-2 text-center" style="background:rgba(26,82,82,0.06)"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Commission (${commPct}%)</div><div class="font-headline font-bold text-primary text-base">$${commAmt.toFixed(2)}</div></div><div class="flex-1 px-4 py-2 text-center"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Salon Keeps</div><div class="font-headline font-bold text-on-surface text-base">$${(data.income-commAmt).toFixed(2)}</div></div>`:''}
+            ${commAmt!=null?`<div class="flex-1 px-4 py-2 text-center" style="background:rgba(47,128,216,0.06)"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Commission (${commPct}%)</div><div class="font-headline font-bold text-primary text-base">$${commAmt.toFixed(2)}</div></div><div class="flex-1 px-4 py-2 text-center"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Salon Keeps</div><div class="font-headline font-bold text-on-surface text-base">$${(data.income-commAmt).toFixed(2)}</div></div>`:''}
           </div></div>`;
       }).join('');
   }
@@ -340,7 +340,7 @@ export function runReport() {
   if (feesBreakdown) {
     const entries = Object.entries(feeMap).sort((a,b)=>b[1].total-a[1].total);
     feesBreakdown.innerHTML = entries.length === 0 ? '<p class="text-sm font-body text-on-surface-variant py-2">No fees charged in this period.</p>'
-      : entries.map(([feeId,data])=>{ const fee = cfg().fees.find(f=>f.id===feeId); return `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(26,82,82,0.10)"><span class="material-symbols-outlined" style="font-size:16px;color:#1a5252">receipt</span></div><div><div class="font-headline font-semibold text-on-surface text-sm">${fee?.label||feeId}</div><div class="text-xs font-body text-on-surface-variant">${data.count} time${data.count!==1?'s':''} charged</div></div></div><div class="font-headline font-bold text-on-surface">$${data.total.toFixed(2)}</div></div>`; }).join('');
+      : entries.map(([feeId,data])=>{ const fee = cfg().fees.find(f=>f.id===feeId); return `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(47,128,216,0.10)"><span class="material-symbols-outlined" style="font-size:16px;color:#2f80d8">receipt</span></div><div><div class="font-headline font-semibold text-on-surface text-sm">${fee?.label||feeId}</div><div class="text-xs font-body text-on-surface-variant">${data.count} time${data.count!==1?'s':''} charged</div></div></div><div class="font-headline font-bold text-on-surface">$${data.total.toFixed(2)}</div></div>`; }).join('');
   }
   const itemMap = {};
   filtered.forEach(r => (r.items||[]).forEach(x => { if (!x.itemId || !x.qty || x.qty <= 0) return; if (!itemMap[x.itemId]) itemMap[x.itemId] = { revenue:0, qty:0 }; itemMap[x.itemId].revenue += (x.price||0)*(x.qty||0); itemMap[x.itemId].qty += x.qty||0; }));
@@ -527,7 +527,7 @@ export function drillDownStaff(techId) {
   const avgBlock = avgBySvc.length ? `<div class="mb-4">
     <div class="text-[11px] font-body text-on-surface-variant uppercase tracking-widest mb-1.5">Avg Service Time</div>
     <div class="flex flex-wrap gap-1.5">${avgBySvc.map(x => `<span class="text-xs font-body bg-surface-container-lowest border border-surface-container-high rounded-lg px-2.5 py-1"><span class="text-on-surface font-semibold">${x.label}</span> · <span class="${x.avgMs!=null?'text-primary font-bold':'text-outline'}">${x.avgMs!=null?'~'+fmtDur(x.avgMs):'—'}</span>${x.avgMs!=null?`<span class="text-outline"> (${x.n})</span>`:''}</span>`).join('')}</div></div>` : '';
-  const rowsHtml = rows.map(row => { const badge = row.turnType==='full'?'1t':row.turnType==='half'?'½t':'B'; const color = row.turnType==='bonus'?'#f5c870':'#1a5252'; return `<div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-on-surface text-sm">${row.customer}</span><span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style="background:${color}20;color:${color}">${badge}</span>${row.durMs?`<span class="text-[10px] font-body text-on-surface-variant">${fmtDur(row.durMs)}</span>`:''}</div><div class="text-xs font-body text-on-surface-variant">${row.service}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div>${row.comm!=null?`<div class="text-xs font-body text-primary">comm $${row.comm.toFixed(2)}</div>`:''}</div></div>`; }).join('');
+  const rowsHtml = rows.map(row => { const badge = row.turnType==='full'?'1t':row.turnType==='half'?'½t':'B'; const color = row.turnType==='bonus'?'#f5c870':'#2f80d8'; return `<div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-on-surface text-sm">${row.customer}</span><span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style="background:${color}20;color:${color}">${badge}</span>${row.durMs?`<span class="text-[10px] font-body text-on-surface-variant">${fmtDur(row.durMs)}</span>`:''}</div><div class="text-xs font-body text-on-surface-variant">${row.service}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div>${row.comm!=null?`<div class="text-xs font-body text-primary">comm $${row.comm.toFixed(2)}</div>`:''}</div></div>`; }).join('');
   showDrillPanel(`${name} — Service Detail`, summary + avgBlock + rowsHtml);
 }
 export function drillDownService(sid) {
@@ -754,10 +754,10 @@ export function payrollExportPDF() {
   const th2 = T.map(() => `<th class="num sep">This</th><th class="num">Last</th>`).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Payroll — ${_eTxn(period)}</title><style>
     @page{size:8.5in 11in landscape;margin:.4in} body{font-family:Arial,sans-serif;margin:0;color:#222}
-    h1{color:#1a5252;font-size:15px;margin:0 0 8px} table{border-collapse:collapse;width:100%;font-size:9px}
+    h1{color:#2f80d8;font-size:15px;margin:0 0 8px} table{border-collapse:collapse;width:100%;font-size:9px}
     th,td{padding:3px 6px;border-bottom:1px solid #ddd;white-space:nowrap;text-align:left}
-    thead th{background:#1a5252;color:#fff} thead{display:table-header-group} tr{page-break-inside:avoid}
-    .num{text-align:right} .last{color:#888} .rl{font-weight:700;background:#f0f3f3} .sep{border-left:2px solid #1a5252} .sec td{background:#e8eded;font-weight:700;text-transform:uppercase;font-size:8px}
+    thead th{background:#2f80d8;color:#fff} thead{display:table-header-group} tr{page-break-inside:avoid}
+    .num{text-align:right} .last{color:#888} .rl{font-weight:700;background:#f0f3f3} .sep{border-left:2px solid #2f80d8} .sec td{background:#e8eded;font-weight:700;text-transform:uppercase;font-size:8px}
   </style></head><body>
     <h1>Muse Nails &amp; Spa — Payroll · ${_eTxn(period)}</h1>
     <table><thead><tr><th class="rl"></th>${th1}</tr><tr><th class="rl"></th>${th2}</tr></thead><tbody>${rows}</tbody></table>
@@ -787,9 +787,9 @@ export function payrollExportStaffPDF() {
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Staff Billing — ${_eTxn(period)}</title><style>
     @page{size:8.5in 11in landscape;margin:.5in} body{font-family:Arial,sans-serif;margin:0;color:#222}
     .h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{max-width:140px;max-height:54px;object-fit:contain;border-radius:8px}
-    h1{color:#1a5252;font-size:22px;margin:0}.sub{color:#666;margin:0;font-size:13px}
-    .tot{background:#1a5252;color:#fff;border-radius:10px;padding:12px 18px;display:inline-block;margin:14px 0 16px}.tot .v{font-size:26px;font-weight:800;line-height:1}.tot .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
-    table{border-collapse:collapse;width:60%;font-size:13px}th{background:#1a5252;color:#fff;padding:7px 10px;text-align:left}td{padding:7px 10px;border-bottom:1px solid #e0e0e0}.num{text-align:right}tr:nth-child(even) td{background:#fafafa}tfoot td{font-weight:800;border-top:2px solid #1a5252;background:#fff}
+    h1{color:#2f80d8;font-size:22px;margin:0}.sub{color:#666;margin:0;font-size:13px}
+    .tot{background:#2f80d8;color:#fff;border-radius:10px;padding:12px 18px;display:inline-block;margin:14px 0 16px}.tot .v{font-size:26px;font-weight:800;line-height:1}.tot .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
+    table{border-collapse:collapse;width:60%;font-size:13px}th{background:#2f80d8;color:#fff;padding:7px 10px;text-align:left}td{padding:7px 10px;border-bottom:1px solid #e0e0e0}.num{text-align:right}tr:nth-child(even) td{background:#fafafa}tfoot td{font-weight:800;border-top:2px solid #2f80d8;background:#fff}
     .rf{margin-top:14px;padding:10px 14px;background:#fdecec;border:1px solid #f3c0c0;border-radius:8px;color:#a01818;font-size:13px;width:60%;box-sizing:border-box}.rl2{font-weight:600}.rn{margin-top:4px;font-size:11px;color:#8a3a3a}
   </style></head><body>${sections}</body></html>`;
   const u = URL.createObjectURL(new Blob([html], { type: 'text/html' })); const w = window.open(u, '_blank'); if (w) setTimeout(() => w.print(), 600); URL.revokeObjectURL(u);
@@ -842,7 +842,7 @@ export function renderTransactions() {
   const blocks = []; const partyIdx = {};
   combined.forEach(r => {
     if (r.groupId && r.status !== 'refund') {
-      if (partyIdx[r.groupId] == null) { partyIdx[r.groupId] = blocks.length; blocks.push({ type:'party', groupId:r.groupId, color:r.groupColor||'#1a5252', members:[] }); }
+      if (partyIdx[r.groupId] == null) { partyIdx[r.groupId] = blocks.length; blocks.push({ type:'party', groupId:r.groupId, color:r.groupColor||'#2f80d8', members:[] }); }
       blocks[partyIdx[r.groupId]].members.push(r);
     } else blocks.push({ type:'solo', record:r });
   });
@@ -946,9 +946,9 @@ function buildTxnHtml(rows) {
   const tr = rows.map(r => `<tr><td>${r.date}</td><td>${r.time}</td><td>${_eTxn(r.customer)}</td><td style="text-align:center">${r.party}</td><td>${_eTxn(r.services)}</td><td>${_eTxn(r.techs)}</td><td>${_eTxn(r.items)}</td><td style="text-align:right">${r.fees?'$'+r.fees:''}</td><td style="text-align:right">${r.discount?'-$'+r.discount:''}</td><td style="text-align:right">${r.total}</td><td>${r.status}</td></tr>`).join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Transactions — ${_eTxn(rangeLabel())}</title><style>
     body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:20px}.h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{max-width:140px;max-height:52px;width:auto;height:auto;object-fit:contain;border-radius:8px;flex-shrink:0}
-    h1{color:#1a5252;font-size:18px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
-    .tot{background:#1a5252;color:#fff;border-radius:10px;padding:10px 16px;display:inline-block;margin:12px 0 16px}.tot .v{font-size:22px;font-weight:800;line-height:1}.tot .l{font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
-    table{width:100%;border-collapse:collapse}th{background:#1a5252;color:#fff;padding:5px 6px;text-align:left;font-size:10px}td{padding:4px 6px;border-bottom:1px solid #e0e0e0;font-size:10px;vertical-align:top}tr:nth-child(even) td{background:#fafafa}
+    h1{color:#2f80d8;font-size:18px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
+    .tot{background:#2f80d8;color:#fff;border-radius:10px;padding:10px 16px;display:inline-block;margin:12px 0 16px}.tot .v{font-size:22px;font-weight:800;line-height:1}.tot .l{font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
+    table{width:100%;border-collapse:collapse}th{background:#2f80d8;color:#fff;padding:5px 6px;text-align:left;font-size:10px}td{padding:4px 6px;border-bottom:1px solid #e0e0e0;font-size:10px;vertical-align:top}tr:nth-child(even) td{background:#fafafa}
     .footer{margin-top:20px;font-size:10px;color:#999;text-align:center}
   </style></head><body>
     <div class="h">${logo?`<img src="${logo}" class="logo" onerror="this.style.display='none'">`:''}<div><h1>Muse Nails &amp; Spa — Transactions</h1><p class="sub">${_eTxn(rangeLabel())} · ${rows.length} ticket${rows.length===1?'':'s'}</p></div></div>
@@ -991,9 +991,9 @@ function buildReportHtml(d) {
   const logo = cfg().logo || LOGO_PATH;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Report ${period}</title><style>
     body{font-family:Arial,sans-serif;font-size:12px;color:#222;margin:24px}.report-header{display:flex;align-items:center;gap:16px;margin-bottom:8px}.report-logo{max-width:140px;max-height:56px;width:auto;height:auto;object-fit:contain;border-radius:8px;flex-shrink:0}
-    h1{color:#1a5252;font-size:20px;margin:0 0 2px}h2{color:#1a5252;font-size:14px;margin:20px 0 8px;border-bottom:2px solid #1a5252;padding-bottom:4px}
-    .summary{display:flex;gap:24px;margin:12px 0 20px;flex-wrap:wrap}.card{background:#f5f5f5;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center}.card .val{font-size:20px;font-weight:bold;color:#1a5252}.card .lbl{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.5px}.card.amber .val{color:#a05000}
-    table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#1a5252;color:#fff;padding:6px 8px;text-align:left;font-size:11px}td{padding:5px 8px;border-bottom:1px solid #e0e0e0;font-size:11px}tr:nth-child(even) td{background:#fafafa}.footer{margin-top:24px;font-size:10px;color:#999;text-align:center}
+    h1{color:#2f80d8;font-size:20px;margin:0 0 2px}h2{color:#2f80d8;font-size:14px;margin:20px 0 8px;border-bottom:2px solid #2f80d8;padding-bottom:4px}
+    .summary{display:flex;gap:24px;margin:12px 0 20px;flex-wrap:wrap}.card{background:#f5f5f5;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center}.card .val{font-size:20px;font-weight:bold;color:#2f80d8}.card .lbl{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.5px}.card.amber .val{color:#a05000}
+    table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#2f80d8;color:#fff;padding:6px 8px;text-align:left;font-size:11px}td{padding:5px 8px;border-bottom:1px solid #e0e0e0;font-size:11px}tr:nth-child(even) td{background:#fafafa}.footer{margin-top:24px;font-size:10px;color:#999;text-align:center}
   </style></head><body>
     <div class="report-header">${logo?`<img src="${logo}" class="report-logo" onerror="this.style.display='none'">`:''}<div><h1>Muse Nails &amp; Spa — Daily Report</h1><p style="color:#666;margin:0">${period}</p></div></div>
     <div class="summary"><div class="card"><div class="val">$${d.totalIncome.toFixed(2)}</div><div class="lbl">Total Billed</div></div><div class="card"><div class="val">${d.guestCount}</div><div class="lbl">Guests Served</div></div><div class="card"><div class="val">$${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}</div><div class="lbl">Avg Ticket</div></div><div class="card"><div class="val">$${shopKeeps.toFixed(2)}</div><div class="lbl">Shop Keeps</div></div><div class="card amber"><div class="val">$${totalComm.toFixed(2)}</div><div class="lbl">Commission Owed</div></div></div>

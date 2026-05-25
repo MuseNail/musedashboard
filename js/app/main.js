@@ -91,7 +91,7 @@ function toggleStaffScheduleView() {
   const showingSchedule = !scheduleView.classList.contains('hidden');
   listView.classList.toggle('hidden', !showingSchedule);
   scheduleView.classList.toggle('hidden', showingSchedule);
-  if (btn) { btn.style.background = showingSchedule ? '' : '#1a5252'; btn.style.color = showingSchedule ? '' : '#fff'; }
+  if (btn) { btn.style.background = showingSchedule ? '' : '#2f80d8'; btn.style.color = showingSchedule ? '' : '#fff'; }
   if (!showingSchedule) staff.renderSchedule();
 }
 function showStaffListView() {
@@ -307,9 +307,9 @@ function handleSquarePosReturn() {
     <div style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#e8ecee;font-family:-apple-system,system-ui,sans-serif;">
       <div style="text-align:center;padding:32px;max-width:340px;">
         <div style="font-size:56px;line-height:1;margin-bottom:16px;">${errored ? '⚠️' : '✓'}</div>
-        <div style="font-size:22px;font-weight:800;color:#1a5252;margin-bottom:8px;">${errored ? 'Payment not completed' : 'Payment complete'}</div>
+        <div style="font-size:22px;font-weight:800;color:#2f80d8;margin-bottom:8px;">${errored ? 'Payment not completed' : 'Payment complete'}</div>
         <div style="font-size:15px;color:#555;margin-bottom:24px;">You can close this tab and return to the Muse dashboard.</div>
-        <button onclick="window.close()" style="background:#1a5252;color:#fff;border:none;padding:14px 28px;border-radius:14px;font-size:16px;font-weight:700;">Close tab</button>
+        <button onclick="window.close()" style="background:#2f80d8;color:#fff;border:none;padding:14px 28px;border-radius:14px;font-size:16px;font-weight:700;">Close tab</button>
       </div>
     </div>`;
   try { window.close(); } catch (e) {}

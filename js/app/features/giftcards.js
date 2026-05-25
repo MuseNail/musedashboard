@@ -104,7 +104,7 @@ export function renderGiftCards() {
     const balance = (g.amount||0) - (g.amountUsed||0);
     const isRedeemed = balance <= 0 && (g.dateUsed || g.amountUsed > 0);
     const isPartial = g.amountUsed > 0 && balance > 0;
-    const sc = isRedeemed ? { bg:'rgba(200,230,197,0.2)', border:'#2a7a4f', label:'Redeemed', lc:'#2a7a4f' } : isPartial ? { bg:'rgba(255,224,178,0.2)', border:'#d4860a', label:'Partial', lc:'#a05000' } : { bg:'', border:'#c8d4d8', label:'Active', lc:'#1a5252' };
+    const sc = isRedeemed ? { bg:'rgba(200,230,197,0.2)', border:'#2a7a4f', label:'Redeemed', lc:'#2a7a4f' } : isPartial ? { bg:'rgba(255,224,178,0.2)', border:'#d4860a', label:'Partial', lc:'#a05000' } : { bg:'', border:'#c8d4d8', label:'Active', lc:'#2f80d8' };
     return `<div class="rounded-xl border flex items-center gap-0 overflow-hidden" style="background:${sc.bg};border-color:${sc.border}">
       <div class="flex-shrink-0 flex items-center justify-center font-headline font-extrabold text-xl px-4 self-stretch" style="width:88px;background:${sc.border}22;border-right:1px solid ${sc.border}40;color:${sc.lc}">$${(g.amount||0).toFixed(0)}</div>
       <div class="flex-shrink-0 flex items-center justify-center px-3" style="width:96px"><span class="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style="background:${sc.border}20;color:${sc.lc}">${sc.label}</span></div>
@@ -114,7 +114,7 @@ export function renderGiftCards() {
       <div class="flex-shrink-0 text-xs font-body px-2 truncate" style="width:110px">${g.to ? `<span class="text-on-surface-variant">To: </span><span class="text-on-surface">${g.to}</span>` : '<span class="text-outline-variant">—</span>'}</div>
       <div class="flex-shrink-0 text-xs font-body text-on-surface-variant px-2" style="width:110px">${g.phone || '—'}</div>
       <div class="flex-grow min-w-0 text-xs font-body text-on-surface-variant italic truncate px-2">${g.notes || ''}</div>
-      <div class="flex-shrink-0 text-right px-3 py-3" style="width:90px"><div class="text-[10px] text-on-surface-variant leading-none mb-0.5">Balance</div><div class="text-base font-headline font-extrabold leading-none" style="color:${balance>0?'#1a5252':'#aaa'}">$${balance.toFixed(2)}</div>${g.amountUsed>0?`<div class="text-[10px] text-on-surface-variant mt-0.5">$${g.amountUsed.toFixed(2)} used</div>`:''}</div>
+      <div class="flex-shrink-0 text-right px-3 py-3" style="width:90px"><div class="text-[10px] text-on-surface-variant leading-none mb-0.5">Balance</div><div class="text-base font-headline font-extrabold leading-none" style="color:${balance>0?'#2f80d8':'#aaa'}">$${balance.toFixed(2)}</div>${g.amountUsed>0?`<div class="text-[10px] text-on-surface-variant mt-0.5">$${g.amountUsed.toFixed(2)} used</div>`:''}</div>
       <div class="flex-shrink-0 flex gap-1 px-2">
         <button onclick="showEditGiftCard('${g.id}')" title="Edit" class="w-9 h-9 rounded-xl bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors active:scale-95"><span class="material-symbols-outlined" style="font-size:18px">edit</span></button>
         <button onclick="deleteGiftCard('${g.id}')" title="Delete" class="w-9 h-9 rounded-xl bg-surface-container hover:bg-error/15 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors active:scale-95"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>

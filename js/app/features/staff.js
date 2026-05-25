@@ -248,7 +248,7 @@ export function toggleRepeatSchedule() {
   const box = document.getElementById('repeat-toggle-box');
   const chk = document.getElementById('repeat-toggle-check');
   cb.checked = !cb.checked;
-  if (cb.checked) { box.style.background = '#1a5252'; box.style.borderColor = '#1a5252'; chk.classList.remove('hidden'); }
+  if (cb.checked) { box.style.background = '#2f80d8'; box.style.borderColor = '#2f80d8'; chk.classList.remove('hidden'); }
   else { box.style.background = 'transparent'; box.style.borderColor = ''; chk.classList.add('hidden'); }
 }
 
