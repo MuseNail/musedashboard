@@ -486,7 +486,8 @@ tailwind.config = {
             <p class="text-sm font-body text-on-surface-variant mt-0.5">Per-tech commission, check &amp; cash by pay period</p>
           </div>
           <div class="flex items-center gap-2 flex-wrap justify-end">
-            <button onclick="payrollExportPDF()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+            <button onclick="payrollExportPDF()" title="Full payroll table (landscape)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+            <button onclick="payrollExportStaffPDF()" title="Per-tech billed total + by day — for handing to staff" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">badge</span> Staff PDF</button>
             <button onclick="payrollExportCSV()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
           </div>
         </div>

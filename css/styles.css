@@ -325,6 +325,9 @@
   .data-table tbody tr:nth-child(even) .sticky-col { background: var(--md-surface-container); }
   .data-table thead .sticky-col { z-index: 3; background: #1a5252; }
   .data-table .section-row td { background: var(--md-surface-container); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--md-on-surface-variant); }
+  .data-table .sticky-col { max-width: 130px; }
+  /* Solid divider between column-groups (e.g. each staff on the Payroll table). */
+  .data-table .staff-sep { border-left: 2px solid var(--md-on-surface-variant); }
 
   /* Lift the item being dragged (turns ghost is already styled; match the others) */
   .tech-order-item.dragging, .floor-bubble.dragging {
