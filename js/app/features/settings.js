@@ -217,6 +217,33 @@ export function completeSetup() {
 }
 export function skipSetup() { sessionStorage.setItem('muse_setup_skipped', '1'); hideSetupWizard(); showToast('Running without Square. You can connect later in Settings.'); }
 
+// ── Pay period (config.pay_period) — drives the Reports/Transactions quick button ─
+export function renderPayPeriodSettings() {
+  const el = document.getElementById('settings-payperiod-section'); if (!el) return;
+  const pp = cfg().pay_period || {}; const type = pp.type || 'weekly';
+  const needsStart = type === 'weekly' || type === 'biweekly';
+  const lbl = 'text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1';
+  const inp = 'w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary';
+  el.innerHTML = `
+    <p class="text-xs font-body text-on-surface-variant mb-4">Sets the <strong>Pay Period</strong> quick button in Reports &amp; Transactions (and the pay-period option for scheduled report emails).</p>
+    <label class="${lbl}">Period</label>
+    <select id="pp-type" onchange="savePayPeriod(); renderPayPeriodSettings()" class="${inp} mb-3">
+      <option value="weekly" ${type==='weekly'?'selected':''}>Weekly</option>
+      <option value="biweekly" ${type==='biweekly'?'selected':''}>Bi-weekly (every 2 weeks)</option>
+      <option value="bimonthly" ${type==='bimonthly'?'selected':''}>Bi-monthly (1st–15th, 16th–end of month)</option>
+    </select>
+    ${needsStart ? `<label class="${lbl}">Period start date</label>
+      <input type="date" id="pp-start" value="${pp.startDate||''}" onchange="savePayPeriod()" class="${inp}">
+      <p class="text-[11px] font-body text-on-surface-variant mt-1">Repeats every ${type==='biweekly'?'14':'7'} days from this date — e.g., a Monday start runs Mon–Sun.</p>` : ''}`;
+}
+export function savePayPeriod() {
+  const type = document.getElementById('pp-type')?.value || 'weekly';
+  const startDate = document.getElementById('pp-start')?.value || (cfg().pay_period||{}).startDate || '';
+  dispatch('config.set', { key: 'pay_period', value: { type, startDate } });
+  showToast('Pay period saved');
+  window.renderTransactions?.(); window.runReport?.();
+}
+
 // ── Orchestrator ──────────────────────────────────
 // ── Settings drill-down navigation ────────────────────────────────────────────
 // Groups existing setting sections into 6 categories. Content is already rendered
@@ -235,6 +262,7 @@ const SETTINGS_NAV = [
   { id:'workflow', title:'Workflow', desc:'How the floor runs', items:[
     { label:'Turn Thresholds', sub:'Full / half / bonus cutoffs', content:'turns-thresh-section' },
     { label:'Stations', sub:'Add, rename & delete pedicure / manicure seats', content:'settings-stations-section', render:'renderStationsSettings' },
+    { label:'Pay Period', sub:'Weekly / bi-weekly / bi-monthly for the quick button', content:'settings-payperiod-section', render:'renderPayPeriodSettings', adminOnly:true },
     { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section' },
   ]},
   { id:'integrations', title:'Integrations', desc:'Square & Google', items:[

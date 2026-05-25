@@ -74,13 +74,32 @@ function rangeLabel() {
   if (reportRange.type === 'month') return 'This Month';
   const d = getReportDates(); if (!d) return 'Custom';
   const fmt = x => x.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  if (reportRange.type === 'payperiod') return `Pay Period (${fmt(d.from)} – ${fmt(d.to)})`;
   return `${fmt(d.from)} – ${fmt(d.to)}`;
 }
 
+// Current pay period from config.pay_period: weekly/biweekly anchored at startDate,
+// or bimonthly (1st–15th, 16th–end). Returns { from, to }.
+function payPeriodDates(now = new Date()) {
+  const pp = cfg().pay_period || {};
+  const type = pp.type || 'weekly';
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (type === 'bimonthly') {
+    if (today.getDate() <= 15) return { from: new Date(today.getFullYear(), today.getMonth(), 1), to: new Date(today.getFullYear(), today.getMonth(), 15, 23,59,59) };
+    return { from: new Date(today.getFullYear(), today.getMonth(), 16), to: new Date(today.getFullYear(), today.getMonth()+1, 0, 23,59,59) };
+  }
+  const len = type === 'biweekly' ? 14 : 7, msDay = 86400000;
+  const anchor = pp.startDate ? new Date(pp.startDate + 'T00:00:00') : today;
+  const mod = (((Math.floor((today - anchor) / msDay)) % len) + len) % len;
+  const from = new Date(today.getTime() - mod * msDay); from.setHours(0,0,0,0);
+  const to = new Date(from.getTime() + (len-1) * msDay); to.setHours(23,59,59,999);
+  return { from, to };
+}
 function getReportDates() {
   const now = new Date();
   if (reportRange.type === 'today') return { from: new Date(now.getFullYear(),now.getMonth(),now.getDate()), to: new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59) };
   if (reportRange.type === 'week') { const day = now.getDay() === 0 ? 6 : now.getDay() - 1; const from = new Date(now); from.setDate(now.getDate()-day); from.setHours(0,0,0,0); const to = new Date(from); to.setDate(from.getDate()+6); to.setHours(23,59,59,999); return { from, to }; }
+  if (reportRange.type === 'payperiod') return payPeriodDates(now);
   if (reportRange.type === 'month') return { from: new Date(now.getFullYear(),now.getMonth(),1), to: new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59) };
   const f = document.getElementById('report-from')?.value || document.getElementById('txn-from')?.value;
   const t = document.getElementById('report-to')?.value || document.getElementById('txn-to')?.value;
@@ -399,7 +418,7 @@ function buildTxnHtml(rows) {
   const net = rows.reduce((s,r)=>s+r.totalNum,0);
   const tr = rows.map(r => `<tr><td>${r.date}</td><td>${r.time}</td><td>${_eTxn(r.customer)}</td><td style="text-align:center">${r.party}</td><td>${_eTxn(r.services)}</td><td>${_eTxn(r.techs)}</td><td>${_eTxn(r.items)}</td><td style="text-align:right">${r.fees?'$'+r.fees:''}</td><td style="text-align:right">${r.discount?'-$'+r.discount:''}</td><td style="text-align:right">${r.total}</td><td>${r.status}</td></tr>`).join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Transactions — ${_eTxn(rangeLabel())}</title><style>
-    body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:20px}.h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{width:50px;height:50px;object-fit:cover;border-radius:8px;flex-shrink:0}
+    body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:20px}.h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{max-width:140px;max-height:52px;width:auto;height:auto;object-fit:contain;border-radius:8px;flex-shrink:0}
     h1{color:#1a5252;font-size:18px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
     .tot{background:#1a5252;color:#fff;border-radius:10px;padding:10px 16px;display:inline-block;margin:12px 0 16px}.tot .v{font-size:22px;font-weight:800;line-height:1}.tot .l{font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
     table{width:100%;border-collapse:collapse}th{background:#1a5252;color:#fff;padding:5px 6px;text-align:left;font-size:10px}td{padding:4px 6px;border-bottom:1px solid #e0e0e0;font-size:10px;vertical-align:top}tr:nth-child(even) td{background:#fafafa}
@@ -444,7 +463,7 @@ function buildReportHtml(d) {
   const txRows = d.filtered.map(r => { const dt = new Date(r.checkinTime); const staffNames = [...new Set((r.assignments||[]).filter(a=>a.techId).map(a=>staffById(a.techId)?.name||'').filter(Boolean))].join(', '); return `<tr><td>${dt.toLocaleDateString()}</td><td>${fmtT(dt)}</td><td>${r.name}</td><td>${r.services.map(sid=>svc(sid)?.label||sid).join(', ')}</td><td>${staffNames||'—'}</td><td>$${(r.totalCost||0).toFixed(2)}</td><td>${r.status}</td></tr>`; }).join('');
   const logo = cfg().logo || LOGO_PATH;
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Report ${period}</title><style>
-    body{font-family:Arial,sans-serif;font-size:12px;color:#222;margin:24px}.report-header{display:flex;align-items:center;gap:16px;margin-bottom:8px}.report-logo{width:56px;height:56px;object-fit:cover;border-radius:8px;flex-shrink:0}
+    body{font-family:Arial,sans-serif;font-size:12px;color:#222;margin:24px}.report-header{display:flex;align-items:center;gap:16px;margin-bottom:8px}.report-logo{max-width:140px;max-height:56px;width:auto;height:auto;object-fit:contain;border-radius:8px;flex-shrink:0}
     h1{color:#1a5252;font-size:20px;margin:0 0 2px}h2{color:#1a5252;font-size:14px;margin:20px 0 8px;border-bottom:2px solid #1a5252;padding-bottom:4px}
     .summary{display:flex;gap:24px;margin:12px 0 20px;flex-wrap:wrap}.card{background:#f5f5f5;border-radius:8px;padding:10px 16px;min-width:120px;text-align:center}.card .val{font-size:20px;font-weight:bold;color:#1a5252}.card .lbl{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.5px}.card.amber .val{color:#a05000}
     table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#1a5252;color:#fff;padding:6px 8px;text-align:left;font-size:11px}td{padding:5px 8px;border-bottom:1px solid #e0e0e0;font-size:11px}tr:nth-child(even) td{background:#fafafa}.footer{margin-top:24px;font-size:10px;color:#999;text-align:center}

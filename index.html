@@ -330,6 +330,7 @@ tailwind.config = {
             <button onclick="setReportRange('today')" id="rng-today" data-range="today" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
             <button onclick="setReportRange('week')" id="rng-week" data-range="week" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">This Week</button>
             <button onclick="setReportRange('month')" id="rng-month" data-range="month" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">This Month</button>
+            <button onclick="setReportRange('payperiod')" id="rng-payperiod" data-range="payperiod" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Pay Period</button>
             <button onclick="setReportRange('custom')" id="rng-custom" data-range="custom" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Custom</button>
           </div>
           <div id="custom-range-inputs" class="hidden grid grid-cols-2 gap-3">
@@ -452,6 +453,7 @@ tailwind.config = {
             <button onclick="setReportRange('today')" data-range="today" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
             <button onclick="setReportRange('week')" data-range="week" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Week</button>
             <button onclick="setReportRange('month')" data-range="month" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Month</button>
+            <button onclick="setReportRange('payperiod')" data-range="payperiod" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Pay Period</button>
             <button onclick="setReportRange('custom')" data-range="custom" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Custom</button>
           </div>
         </div>
@@ -753,6 +755,11 @@ tailwind.config = {
         <!-- Leaf: Stations -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="settings-stations-section" class="hidden px-5 py-4"></div>
+        </div>
+
+        <!-- Leaf: Pay Period -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="settings-payperiod-section" class="hidden px-5 py-4"></div>
         </div>
 
         <!-- Leaf: Appearance -->
