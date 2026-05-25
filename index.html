@@ -119,8 +119,8 @@ tailwind.config = {
   <!-- Front desk access (bottom-right) -->
   <div class="fixed bottom-6 right-6">
     <button onclick="showPinModal()" title="Staff Access"
-      class="flex items-center justify-center w-12 h-12 bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant rounded-xl shadow-sm transition-colors">
-      <span class="material-symbols-outlined">lock</span>
+      class="flex items-center justify-center w-24 h-24 bg-surface-container-low hover:bg-surface-container-high text-on-surface-variant rounded-2xl shadow-sm transition-colors">
+      <span class="material-symbols-outlined" style="font-size:42px">lock</span>
     </button>
   </div>
 
@@ -199,7 +199,7 @@ tailwind.config = {
 <div id="screen-desk" class="screen flex-col bg-surface min-h-screen">
 
   <!-- Top bar: logo left, nav centered, sync+user right -->
-  <header class="w-full bg-surface-container-lowest border-b border-surface-container-high sticky top-0 z-10 flex items-center gap-2" style="height:52px;padding:0 12px;min-width:0">
+  <header class="w-full bg-surface-container-lowest border-b border-surface-container-high sticky top-0 z-10 flex items-center gap-2" style="height:62px;padding:0 12px;min-width:0">
     <!-- Logo -->
     <img id="logo-desk" src="" alt="Muse" class="h-[40px] w-auto object-contain flex-shrink-0" style="border-radius:4px;" onerror="this.style.display='none'">
     <!-- Nav — centered, takes remaining space -->

@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, formatElapsed, byName, todayStr, openNumpad, partyLetterMap } from '../utils.js';
+import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, partyLetterMap } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus } from './status.js';
@@ -168,7 +168,14 @@ function renderQueueHistoryView(list, empty) {
   empty?.classList.add('hidden');
   const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' });
   const banner = `<div class="bg-secondary-container/30 rounded-xl px-4 py-2 mb-3 text-sm font-body text-on-surface-variant flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">history</span> Viewing ${dateLabel} — read only</div>`;
-  if (snapshot.length === 0) { list.innerHTML = banner + '<div class="text-center py-12 text-on-surface-variant text-sm font-body">No queue records saved for this day.</div>'; return; }
+  // Source from synced transaction records for the day (reliable + cross-device — the
+  // same source Reports & Turns history use). The device-local snapshot was unreliable
+  // (only written if archiveTurnsForToday ran on THIS device), so it's just a fallback.
+  const recs = (window.buildCombinedRecords?.() || [])
+    .filter(r => isPaidStatus(r.status) && localDateStr(new Date(r.checkinTime)) === date)
+    .map(r => ({ id: r.id, name: r.name, phone: r.phone || '', services: r.services || [], assignments: r.assignments || [], totalCost: r.totalCost || 0, status: r.status, checkinTime: r.checkinTime }));
+  const entries = recs.length ? recs : (snapshot || []);
+  if (entries.length === 0) { list.innerHTML = banner + '<div class="text-center py-12 text-on-surface-variant text-sm font-body">No queue records saved for this day.</div>'; return; }
   const badge = { waiting:'badge-waiting', inservice:'badge-inservice', complete:'badge-complete', paid:'badge-done', done:'badge-done' };
   const groups = [ { key:'waiting', label:'Waiting' }, { key:'inservice', label:'In Service' }, { key:'complete', label:'Complete' }, { key:'paid', label:'Paid' } ];
   const row = e => {
@@ -182,9 +189,9 @@ function renderQueueHistoryView(list, empty) {
       <div class="font-headline font-bold text-on-surface flex-shrink-0 ml-3">$${(e.totalCost||0).toFixed(2)}</div></div>`;
   };
   list.innerHTML = banner + groups.map(g => {
-    const entries = snapshot.filter(e => g.key === 'paid' ? isPaidStatus(e.status) : e.status === g.key);
-    if (!entries.length) return '';
-    return `<div class="mb-4"><div class="flex items-center gap-2 mb-2"><span class="text-[11px] font-headline font-bold uppercase tracking-widest text-on-surface-variant">${g.label}</span><span class="text-[11px] font-body text-on-surface-variant opacity-60">(${entries.length})</span><div class="flex-grow h-px bg-surface-container-high ml-1"></div></div><div class="space-y-2">${entries.map(row).join('')}</div></div>`;
+    const inGroup = entries.filter(e => g.key === 'paid' ? isPaidStatus(e.status) : e.status === g.key);
+    if (!inGroup.length) return '';
+    return `<div class="mb-4"><div class="flex items-center gap-2 mb-2"><span class="text-[11px] font-headline font-bold uppercase tracking-widest text-on-surface-variant">${g.label}</span><span class="text-[11px] font-body text-on-surface-variant opacity-60">(${inGroup.length})</span><div class="flex-grow h-px bg-surface-container-high ml-1"></div></div><div class="space-y-2">${inGroup.map(row).join('')}</div></div>`;
   }).join('');
 }
 
