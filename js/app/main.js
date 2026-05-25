@@ -180,21 +180,44 @@ function onStateChange(state, changed) {
   }
 }
 
-// ── Version check (display + tap-to-reload; no auto-reload loop) ───────────────
+// ── Version check (display + tap for a HARD reload; no auto-reload loop) ───────
+// The version badge is always a hard-reload button: on an installed iPad app a plain
+// reload can keep serving the cached version, so tapping it unregisters the service
+// worker + clears the cache and reloads to force the newest version. Data is untouched.
 async function checkAppVersion() {
   const badge = document.getElementById('app-version-badge');
-  if (badge) { badge.textContent = APP_VERSION; badge.title = 'musedashboard ' + APP_VERSION; }
+  if (!badge) return;
+  badge.textContent = APP_VERSION;
+  badge.title = 'Tap to reload to the latest version';
+  badge.style.cursor = 'pointer';
+  badge.onclick = promptHardReload;
   try {
     const res = await fetch('/musedashboard/version.json?_=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
-    if (data.version && data.version !== APP_VERSION && badge) {
+    if (data.version && data.version !== APP_VERSION) {
       badge.textContent = data.version + ' ↻';
       badge.title = `Update ${data.version} available — tap to reload`;
-      badge.style.cursor = 'pointer';
-      badge.onclick = () => location.reload();
     }
   } catch (e) {}
+}
+function promptHardReload() {
+  const msg = 'This clears the app cache and reloads to get the newest version. It does NOT delete any data — your queue, customers, records, and settings are safe.';
+  if (window.showWarnModal) window.showWarnModal('Reload to latest version?', msg, hardReload);
+  else if (confirm('Reload to the latest version? No data is deleted.')) hardReload();
+}
+async function hardReload() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch (e) {}
+  location.reload();
 }
 
 function registerServiceWorker() {

@@ -46,6 +46,7 @@ export function buildCombinedRecords() {
     items: e.items || [], fees: e.fees || [], discount: e.discount || 0, discountNote: e.discountNote || '',
     totalCost: e.totalCost || 0, checkinTime: e.checkinTime, completedAt: e.completedAt || null,
     status: e.status, isAppointment: e.isAppointment || false,
+    groupId: e.groupId || '', groupColor: e.groupColor || '', groupLabel: e.groupLabel || '',
   }));
   const liveIds = new Set(liveSnaps.map(r => String(r.id)));
   return [...liveSnaps, ...records().filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted' && !deletedIds.has(String(r.id)))];
