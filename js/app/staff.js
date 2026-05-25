@@ -232,9 +232,9 @@ function buildStaffTodayHtml(techName, lines) {
   const rows = lines.map(l => `<tr><td>${esc(svc(l.serviceId)?.label || 'Service')}</td><td>${esc(l.name)}</td><td>${l.paid ? 'Paid' : 'Pending'}</td><td style="text-align:right">$${l.cost.toFixed(2)}</td></tr>`).join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse — ${esc(techName)} — ${dateLabel}</title><style>
     body{font-family:Arial,sans-serif;font-size:13px;color:#222;margin:24px}.h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{max-width:140px;max-height:52px;width:auto;height:auto;object-fit:contain;border-radius:8px;flex-shrink:0}
-    h1{color:#2f80d8;font-size:19px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
-    .tot{background:#2f80d8;color:#fff;border-radius:10px;padding:12px 18px;display:inline-block;margin:14px 0 18px}.tot .v{font-size:26px;font-weight:800;line-height:1}.tot .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
-    table{width:100%;border-collapse:collapse}th{background:#2f80d8;color:#fff;padding:7px 9px;text-align:left;font-size:12px}td{padding:6px 9px;border-bottom:1px solid #e0e0e0;font-size:12px}tr:nth-child(even) td{background:#fafafa}
+    h1{color:#1a5252;font-size:19px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
+    .tot{background:#1a5252;color:#fff;border-radius:10px;padding:12px 18px;display:inline-block;margin:14px 0 18px}.tot .v{font-size:26px;font-weight:800;line-height:1}.tot .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
+    table{width:100%;border-collapse:collapse}th{background:#1a5252;color:#fff;padding:7px 9px;text-align:left;font-size:12px}td{padding:6px 9px;border-bottom:1px solid #e0e0e0;font-size:12px}tr:nth-child(even) td{background:#fafafa}
     .footer{margin-top:22px;font-size:10px;color:#999;text-align:center}
   </style></head><body>
     <div class="h">${logo ? `<img src="${logo}" class="logo" onerror="this.style.display='none'">` : ''}<div><h1>Muse Nails &amp; Spa</h1><p class="sub">${esc(techName)} · ${dateLabel}</p></div></div>

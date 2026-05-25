@@ -44,7 +44,7 @@ export async function testSquareConnection() {
   status.textContent = 'Testing connection…';
   try {
     const res = await fetch(`${SQUARE_PROXY}/v2/locations`);
-    if (res.ok) { status.textContent = '✓ Connected successfully!'; status.style.color = '#2f80d8'; updateSyncLabel('ok', 'Square synced'); }
+    if (res.ok) { status.textContent = '✓ Connected successfully!'; status.style.color = '#2a6868'; updateSyncLabel('ok', 'Square synced'); }
     else { const err = await res.json(); status.textContent = '✗ ' + (err.errors?.[0]?.detail || 'Connection failed — check your Location ID'); status.style.color = '#a83836'; updateSyncLabel('error', 'Square error'); }
   } catch (e) { status.textContent = '✗ Could not reach proxy — check Worker is deployed'; status.style.color = '#a83836'; }
 }

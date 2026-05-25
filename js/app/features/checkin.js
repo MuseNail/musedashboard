@@ -152,7 +152,7 @@ export function toggleSameContact(idx) {
   cb.checked = !cb.checked;
   if (cb.checked) {
     const existingFirst = document.getElementById(`first-${idx}`)?.value.trim() || '';
-    box.style.background = '#2f80d8'; box.style.borderColor = '#2f80d8';
+    box.style.background = '#1a5252'; box.style.borderColor = '#1a5252';
     checkIcon.classList.remove('hidden');
     contactFields.classList.add('hidden'); firstOnlyFields.classList.remove('hidden');
     const fo = document.getElementById(`first-only-${idx}`); if (fo && existingFirst) fo.value = existingFirst;

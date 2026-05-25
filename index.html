@@ -11,7 +11,7 @@
 
 <!-- PWA -->
 <link rel="manifest" href="/musedashboard/manifest.json">
-<meta name="theme-color" content="#2f80d8">
+<meta name="theme-color" content="#1a5252">
 <!-- iOS PWA — Safari ignores the manifest for most of these -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -29,9 +29,9 @@ tailwind.config = {
       colors: {
         // CSS-variable tokens (themeable per-login in Settings → Appearance). The
         // hex fallback = the original light palette, so the default look is unchanged.
-        primary: "var(--primary, #2f80d8)",
-        "primary-dim": "var(--primary-dim, #2467b3)",
-        "primary-container": "var(--primary-container, #bcdcfb)",
+        primary: "var(--primary, #1a5252)",
+        "primary-dim": "var(--primary-dim, #0f3d3d)",
+        "primary-container": "var(--primary-container, #8fd4d3)",
         "on-primary": "var(--on-primary, #ffffff)",
         "on-primary-container": "var(--on-primary-container, #0a2e2e)",
         secondary: "var(--secondary, #5c4010)",
@@ -87,7 +87,7 @@ tailwind.config = {
   <div class="w-full max-w-md flex flex-col gap-5 fade-up" style="animation-delay:0.1s">
 
     <button onclick="goTo('screen-checkin', 'walkin')"
-      class="cta group flex items-center justify-between w-full px-8 py-7 rounded-xl bg-primary bg-gradient-to-br from-primary to-primary-dim shadow-xl shadow-primary/20 hover:shadow-2xl transition-all duration-300 active:scale-[0.98]">
+      class="group flex items-center justify-between w-full px-8 py-7 rounded-xl bg-primary bg-gradient-to-br from-primary to-primary-dim shadow-xl shadow-primary/20 hover:shadow-2xl transition-all duration-300 active:scale-[0.98]">
       <div class="flex flex-col items-start text-left">
         <span class="text-[10px] font-headline font-bold tracking-widest text-primary-container uppercase mb-1">No Appointment</span>
         <span class="text-2xl font-headline font-bold text-on-primary">Walk-In Check-In</span>
@@ -98,7 +98,7 @@ tailwind.config = {
     </button>
 
     <button onclick="goTo('screen-checkin', 'appointment')"
-      class="cta group flex items-center justify-between w-full px-8 py-7 rounded-xl bg-primary bg-gradient-to-br from-primary to-primary-dim shadow-xl shadow-primary/20 hover:shadow-2xl transition-all duration-300 active:scale-[0.98]">
+      class="group flex items-center justify-between w-full px-8 py-7 rounded-xl bg-primary bg-gradient-to-br from-primary to-primary-dim shadow-xl shadow-primary/20 hover:shadow-2xl transition-all duration-300 active:scale-[0.98]">
       <div class="flex flex-col items-start text-left">
         <span class="text-[10px] font-headline font-bold tracking-widest text-primary-container uppercase mb-1">Pre-Booked</span>
         <span class="text-2xl font-headline font-bold text-on-primary">Appointment Check-In</span>
@@ -165,7 +165,7 @@ tailwind.config = {
   <footer class="fixed bottom-0 left-0 right-0 p-6 flex justify-center pointer-events-none">
     <div class="w-full max-w-md pointer-events-auto">
       <button onclick="submitCheckin()"
-        class="cta w-full bg-primary hover:bg-primary-dim text-on-primary py-5 rounded-xl font-headline font-bold text-lg tracking-tight shadow-2xl shadow-primary/30 transition-all duration-300 active:scale-95 flex items-center justify-center gap-3">
+        class="w-full bg-primary hover:bg-primary-dim text-on-primary py-5 rounded-xl font-headline font-bold text-lg tracking-tight shadow-2xl shadow-primary/30 transition-all duration-300 active:scale-95 flex items-center justify-center gap-3">
         <span>Check In</span>
         <span class="material-symbols-outlined">arrow_forward</span>
       </button>
@@ -362,8 +362,8 @@ tailwind.config = {
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3 mb-5">
-          <div class="rounded-xl p-4 border text-center" style="background:rgba(47,128,216,0.08);border-color:rgba(47,128,216,0.3)">
-            <div class="text-2xl font-headline font-extrabold" style="color:#2f80d8" id="rpt-shop-keeps">$0.00</div>
+          <div class="rounded-xl p-4 border text-center" style="background:rgba(26,82,82,0.08);border-color:rgba(26,82,82,0.3)">
+            <div class="text-2xl font-headline font-extrabold" style="color:#1a5252" id="rpt-shop-keeps">$0.00</div>
             <span class="rpt-delta" id="rpt-shop-keeps-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Shop Keeps</div>
           </div>
@@ -555,20 +555,20 @@ tailwind.config = {
             <button onclick="clearTurnsHistory()" id="turns-today-btn" class="hidden text-xs font-body text-primary underline">Today</button>
           </div>
           <div class="flex items-center gap-3">
-            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full tn-ghost text-xs font-body">
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant">
               <div class="w-2 h-2 rounded-full bg-primary"></div>
               <span>Active: <strong id="turns-active-count">0</strong></span>
             </div>
-            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full tn-ghost text-xs font-body">
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant">
               <div class="w-2 h-2 rounded-full" style="background:#f5c870"></div>
               <span>Break: <strong id="turns-break-count">0</strong></span>
             </div>
             <!-- Add/Remove technicians button -->
-            <button onclick="showTurnsTechSelector()" class="flex items-center gap-2 px-4 py-2 rounded-xl tn-ghost font-body font-semibold text-sm">
+            <button onclick="showTurnsTechSelector()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary hover:text-on-primary transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">people</span> Technicians
             </button>
             <!-- Sync Appts hidden — Square Appointments integration pending -->
-            <button onclick="showManualAdd()" class="flex items-center gap-2 px-4 py-2 rounded-xl tn-ghost-accent font-body font-semibold text-sm">
+            <button onclick="showManualAdd()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-all">
               <span class="material-symbols-outlined" style="font-size:16px">person_add</span> New Entry
             </button>
           </div>
@@ -1562,7 +1562,7 @@ tailwind.config = {
       </div>
       <div class="flex gap-2">
         <button onclick="closeSquareConfirm()" class="flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-semibold transition-all">Cancel</button>
-        <button onclick="proceedSquarePayment()" class="cta flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Pay in Square POS</button>
+        <button onclick="proceedSquarePayment()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Pay in Square POS</button>
       </div>
     </div>
   </div>

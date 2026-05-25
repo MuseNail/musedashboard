@@ -116,7 +116,7 @@ function stationHtml(id, entry) {
     content = `<div class="h-full w-full flex items-center justify-center" style="font-size:${Math.round(12 * fs)}px;font-weight:800;color:${border};opacity:0.55">${stationLabel(id)}</div>`;
   }
   return `<div class="floor-station absolute ${floorEditMode ? 'cursor-move' : ''}" data-station="${id}"
-    style="left:${L.x}px;top:${L.y}px;width:${L.w}px;height:${L.h}px;box-sizing:border-box;border:2px solid ${border};border-radius:${radius};background:${bg};overflow:hidden;${sel ? 'outline:3px solid #2f80d8;outline-offset:2px;' : ''}">
+    style="left:${L.x}px;top:${L.y}px;width:${L.w}px;height:${L.h}px;box-sizing:border-box;border:2px solid ${border};border-radius:${radius};background:${bg};overflow:hidden;${sel ? 'outline:3px solid #1a5252;outline-offset:2px;' : ''}">
     ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${border};opacity:0.65;pointer-events:none">${stationLabel(id)}</div>` : ''}
     ${content}
   </div>`;
@@ -302,8 +302,8 @@ function fpGuide(axis, pos) {
   if (!g) {
     g = document.createElement('div'); g.id = gid;
     g.style.cssText = axis === 'v'
-      ? 'position:absolute;top:0;bottom:0;width:0;border-left:1px dashed #2f80d8;pointer-events:none;z-index:50'
-      : 'position:absolute;left:0;right:0;height:0;border-top:1px dashed #2f80d8;pointer-events:none;z-index:50';
+      ? 'position:absolute;top:0;bottom:0;width:0;border-left:1px dashed #1a5252;pointer-events:none;z-index:50'
+      : 'position:absolute;left:0;right:0;height:0;border-top:1px dashed #1a5252;pointer-events:none;z-index:50';
     grid.appendChild(g);
   }
   g.style.display = ''; if (axis === 'v') g.style.left = pos + 'px'; else g.style.top = pos + 'px';
@@ -357,7 +357,7 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
     } else if (clone) {
       clone.style.left = (e.clientX - clone.offsetWidth / 2) + 'px'; clone.style.top = (e.clientY - clone.offsetHeight / 2) + 'px';
       document.querySelectorAll('.floor-station').forEach(s => { s.style.boxShadow = ''; });
-      const tgt = stationAt(e.clientX, e.clientY); if (tgt) tgt.style.boxShadow = 'inset 0 0 0 3px #2f80d8';
+      const tgt = stationAt(e.clientX, e.clientY); if (tgt) tgt.style.boxShadow = 'inset 0 0 0 3px #1a5252';
     }
   }
   function onUp(e) {

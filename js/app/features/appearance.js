@@ -15,12 +15,10 @@ import { showToast } from '../utils.js';
 const cfg = () => getState().config;
 const ROOT = document.documentElement;
 const FALLBACK_KEY = 'muse_theme_fallback';
-const DEFAULT_ACCENT = '#2f80d8';
+const DEFAULT_ACCENT = '#1a5252';
 const ACCENT_VARS = ['--primary', '--primary-dim', '--primary-container', '--on-primary', '--on-primary-container'];
-const CUSTOMER_VARS = ['--customer', '--on-customer'];
-const PRESETS = ['#2f80d8', '#1a5252', '#7048e8', '#c2255c', '#e8590c', '#2b8a3e', '#5c4010', '#0f172a'];
 
-let _draft = null;   // { base, accent, custom, recents } while editing in Settings
+let _draft = null;   // { base, accent } while editing in Settings
 
 // ── Color helpers ─────────────────────────────────
 const clamp = n => Math.max(0, Math.min(255, Math.round(n)));
@@ -39,11 +37,6 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&am
 export function applyTheme(theme) {
   const base = theme && theme.base === 'dark' ? 'dark' : 'light';
   ROOT.setAttribute('data-appearance', base);
-  // Customer-facing button color — independent of the accent.
-  const custom = theme && isHex(theme.custom) ? norm(theme.custom) : null;
-  if (custom) { ROOT.style.setProperty('--customer', custom); ROOT.style.setProperty('--on-customer', contrastText(custom)); }
-  else CUSTOMER_VARS.forEach(v => ROOT.style.removeProperty(v));
-
   const accent = theme && isHex(theme.accent) ? norm(theme.accent) : null;
   if (!accent) { ACCENT_VARS.forEach(v => ROOT.style.removeProperty(v)); return; }
   const map = {
@@ -57,7 +50,7 @@ export function applyTheme(theme) {
 }
 export function clearTheme() {
   ROOT.removeAttribute('data-appearance');
-  [...ACCENT_VARS, ...CUSTOMER_VARS].forEach(v => ROOT.style.removeProperty(v));
+  ACCENT_VARS.forEach(v => ROOT.style.removeProperty(v));
 }
 
 function currentUserTheme() {
@@ -67,10 +60,10 @@ function currentUserTheme() {
   return (cfg().fd_users || []).find(u => u.id === au.id)?.theme || null;
 }
 
-// Apply the logged-in user's saved theme (or the default light palette if none).
+// Themes removed: the app uses ONE fixed palette (green). Always clear any per-user
+// accent/base overrides so the :root tokens apply everywhere (ignores saved themes).
 export function applyUserTheme() {
-  const t = currentUserTheme();
-  if (t) applyTheme(t); else clearTheme();
+  clearTheme();
 }
 
 function persistTheme(theme) {
@@ -92,61 +85,37 @@ export function renderAppearanceSettings(reinit = true) {
   // internal re-renders (base/swatch tap) pass false to keep the in-progress draft.
   if (reinit || !_draft) _draft = { ...(currentUserTheme() || { base: 'light', accent: DEFAULT_ACCENT }) };
   if (!isHex(_draft.accent)) _draft.accent = DEFAULT_ACCENT;
-  if (!isHex(_draft.custom)) _draft.custom = _draft.accent;        // customer color defaults to the accent
-  if (!Array.isArray(_draft.recents)) _draft.recents = [];
   const who = au?.name || 'this device';
+  const swatches = ['#1a5252', '#2563eb', '#7048e8', '#c2255c', '#e8590c', '#2b8a3e', '#5c4010', '#0f172a'];
   const baseBtn = (val, label) => `<button onclick="appearanceSetBase('${val}')"
     class="flex-1 py-2 rounded-lg font-headline font-bold text-sm transition-all ${_draft.base === val ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}">${label}</button>`;
-  // One swatch; `pickFn` is the handler so the same row drives either color picker.
-  const swatch = (current, pickFn) => c => `<button onclick="${pickFn}('${c}')" title="${c}" class="w-8 h-8 rounded-full border-2 ${current.toLowerCase() === c.toLowerCase() ? 'border-on-surface' : 'border-surface-container-high'}" style="background:${c}"></button>`;
-  const swatchRow = (current, pickFn) => {
-    const presets = PRESETS.map(swatch(current, pickFn)).join('');
-    const recents = _draft.recents.length
-      ? `<span class="w-px h-6 self-center bg-surface-container-high mx-1" title="Recent custom colors"></span>` + _draft.recents.map(swatch(current, pickFn)).join('')
-      : '';
-    return `<div class="flex flex-wrap items-center gap-2">${presets}${recents}</div>`;
-  };
-  const colorBlock = (label, sub, inputId, hexId, value, previewFn, pickFn) => `
-    <div class="mb-4">
-      <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">${label}${sub ? ` <span class="normal-case tracking-normal text-on-surface-variant font-normal">${sub}</span>` : ''}</label>
-      <div class="flex items-center gap-3 mb-3">
-        <input type="color" id="${inputId}" value="${value}" oninput="${previewFn}()" class="w-12 h-10 rounded-lg border border-surface-container-high bg-transparent cursor-pointer">
-        <span class="font-body text-sm text-on-surface-variant" id="${hexId}">${value}</span>
-      </div>
-      ${swatchRow(value, pickFn)}
-    </div>`;
+  const swatch = c => `<button onclick="appearancePick('${c}')" title="${c}" class="w-8 h-8 rounded-full border-2 ${_draft.accent.toLowerCase() === c.toLowerCase() ? 'border-on-surface' : 'border-surface-container-high'}" style="background:${c}"></button>`;
   el.innerHTML = `
-    <p class="text-xs font-body text-on-surface-variant mb-4">Personalize the dashboard for <b>${esc(who)}</b>. Your theme follows your login on any device. Status colors (waiting / in&nbsp;service / complete) stay the same so the floor stays readable. Custom colors you use are remembered (up to 5) as quick swatches.</p>
+    <p class="text-xs font-body text-on-surface-variant mb-4">Personalize the dashboard for <b>${esc(who)}</b>. Your theme follows your login on any device. Status colors (waiting / in&nbsp;service / complete) stay the same so the floor stays readable.</p>
     <div class="mb-4">
       <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Base</label>
       <div class="flex gap-2">${baseBtn('light', 'Light')}${baseBtn('dark', 'Dark')}</div>
     </div>
-    ${colorBlock('Accent color', '', 'appearance-accent', 'appearance-accent-hex', _draft.accent, 'appearancePreview', 'appearancePick')}
-    ${colorBlock('Customer button color', '— walk-in &amp; check-in screens', 'appearance-custom', 'appearance-custom-hex', _draft.custom, 'appearancePreviewCustom', 'appearancePickCustom')}
+    <div class="mb-4">
+      <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Accent color</label>
+      <div class="flex items-center gap-3 mb-3">
+        <input type="color" id="appearance-accent" value="${_draft.accent}" oninput="appearancePreview()" class="w-12 h-10 rounded-lg border border-surface-container-high bg-transparent cursor-pointer">
+        <span class="font-body text-sm text-on-surface-variant" id="appearance-accent-hex">${_draft.accent}</span>
+      </div>
+      <div class="flex flex-wrap gap-2">${swatches.map(swatch).join('')}</div>
+    </div>
     <div class="flex gap-2 pt-2">
-      <button onclick="appearanceSave()" class="cta flex-1 py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Save my theme</button>
+      <button onclick="appearanceSave()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95">Save my theme</button>
       <button onclick="appearanceReset()" class="px-4 py-3 rounded-xl border-2 border-outline-variant text-on-surface-variant font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Reset</button>
     </div>`;
   applyTheme(_draft);   // live preview reflects the editor immediately
 }
 export function appearanceSetBase(base) { if (!_draft) return; _draft.base = base; applyTheme(_draft); renderAppearanceSettings(false); }
-export function appearancePick(color) { if (!_draft) return; _draft.accent = norm(color); applyTheme(_draft); renderAppearanceSettings(false); }
-export function appearancePickCustom(color) { if (!_draft) return; _draft.custom = norm(color); applyTheme(_draft); renderAppearanceSettings(false); }
+export function appearancePick(color) { if (!_draft) return; _draft.accent = color; applyTheme(_draft); renderAppearanceSettings(false); }
 export function appearancePreview() {
   if (!_draft) return;
   const v = document.getElementById('appearance-accent')?.value;
   if (isHex(v)) { _draft.accent = norm(v); applyTheme(_draft); const hx = document.getElementById('appearance-accent-hex'); if (hx) hx.textContent = _draft.accent; }
 }
-export function appearancePreviewCustom() {
-  if (!_draft) return;
-  const v = document.getElementById('appearance-custom')?.value;
-  if (isHex(v)) { _draft.custom = norm(v); applyTheme(_draft); const hx = document.getElementById('appearance-custom-hex'); if (hx) hx.textContent = _draft.custom; }
-}
-export function appearanceSave() {
-  if (!_draft) return;
-  // Remember up to 5 custom (non-preset) colors as quick swatches.
-  const used = [_draft.accent, _draft.custom].map(norm).filter(c => isHex(c) && !PRESETS.includes(c));
-  _draft.recents = [...used, ...(_draft.recents || [])].filter((c, i, a) => a.indexOf(c) === i).slice(0, 5);
-  persistTheme(_draft); applyTheme(_draft); renderAppearanceSettings(false); showToast('Theme saved');
-}
-export function appearanceReset() { _draft = { base: 'light', accent: DEFAULT_ACCENT, custom: DEFAULT_ACCENT, recents: [] }; persistTheme(null); clearTheme(); renderAppearanceSettings(); showToast('Theme reset to default'); }
+export function appearanceSave() { if (!_draft) return; persistTheme(_draft); applyTheme(_draft); showToast('Theme saved'); }
+export function appearanceReset() { _draft = { base: 'light', accent: DEFAULT_ACCENT }; persistTheme(null); clearTheme(); renderAppearanceSettings(); showToast('Theme reset to default'); }

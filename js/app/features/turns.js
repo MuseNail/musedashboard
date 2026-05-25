@@ -138,7 +138,7 @@ export function acceptSuggestion(entryId, serviceId) {
 function acceptBtnHtml(entryId, serviceId, techName) {
   // onpointerdown stop: otherwise the card's drag engine arms pendingEntry on this tap,
   // then hijacks the first scroll gesture inside the modal we open (freezes scrolling).
-  return ` <button onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();acceptSuggestion('${entryId}','${serviceId}')" title="Assign ${techName}" style="pointer-events:auto;cursor:pointer;color:#2f80d8;vertical-align:middle" class="hover:opacity-70"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;font-variation-settings:'FILL' 1">check_circle</span></button>`;
+  return ` <button onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();acceptSuggestion('${entryId}','${serviceId}')" title="Assign ${techName}" style="pointer-events:auto;cursor:pointer;color:#1a5252;vertical-align:middle" class="hover:opacity-70"><span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;font-variation-settings:'FILL' 1">check_circle</span></button>`;
 }
 
 // ── Render ────────────────────────────────────────
@@ -192,7 +192,7 @@ export function renderTurnsTechGrid() {
       <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
       <div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate leading-tight">${st.name}</div>
       <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none" style="background:${sc.bg};color:${sc.text}">${sc.label}</span>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
-      <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#2f80d8">$${billed.toFixed(0)} billed</div></div></div>`;
+      <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
 
     const MIN_SLOTS = 5;
     const totalSlots = Math.max(MIN_SLOTS, allAssign.length + 1);
@@ -283,7 +283,7 @@ export function renderTurnsQueue() {
         return `<div class="text-[10px] text-on-surface-variant leading-tight">${parts.join(' ')}${accept}</div>`;
       }).join('');
     } else {
-      serviceContent = e.services.map(sid => { const s = svc(sid), sug = es[sid]; return `<div class="text-[10px] text-on-surface-variant leading-tight">○ ${s?s.label:sid}${sug?` <span class="font-semibold" style="color:#2f80d8">→ ${sug.techName}?</span>${acceptBtnHtml(e.id, sid, sug.techName)}`:''}</div>`; }).join('');
+      serviceContent = e.services.map(sid => { const s = svc(sid), sug = es[sid]; return `<div class="text-[10px] text-on-surface-variant leading-tight">○ ${s?s.label:sid}${sug?` <span class="font-semibold" style="color:#1a5252">→ ${sug.techName}?</span>${acceptBtnHtml(e.id, sid, sug.techName)}`:''}</div>`; }).join('');
     }
     const borderColor = e.status==='inservice' ? '#2a7a4f' : e.status==='complete' ? '#1a5c7a' : '#d4860a';
     const bgTint = e.status==='inservice' ? 'rgba(200,230,197,0.25)' : e.status==='complete' ? 'rgba(207,227,239,0.45)' : 'rgba(255,224,178,0.25)';
@@ -351,7 +351,7 @@ export function assignServiceFromTurns(entryId, serviceId) {
       if (row.dataset.serviceId === serviceId) {
         const techSelect = row.querySelector('.assign-tech');
         if (techSelect && techId) techSelect.value = techId;
-        row.style.outline = '2px solid #2f80d8';
+        row.style.outline = '2px solid #1a5252';
         row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         setTimeout(() => { row.style.outline = ''; }, 1500);
         window.updateGroupTotal?.();
@@ -560,7 +560,7 @@ function renderTurnsHistoryView() {
     const st = isUnassigned ? null : staffById(tid);
     if (!isUnassigned && !st) return '';
     const name = isUnassigned ? 'Unassigned' : st.name;
-    const accent = isUnassigned ? '#9aa0a3' : '#2f80d8';
+    const accent = isUnassigned ? '#9aa0a3' : '#1a5252';
 
     let full = 0, half = 0, bonus = 0, billed = 0;
     items.forEach(({ assignment: a }) => {
@@ -579,7 +579,7 @@ function renderTurnsHistoryView() {
     const techCol = `<div class="flex items-center gap-2 w-[155px] flex-shrink-0 pr-2">${photo}
       <div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate leading-tight">${name}</div>
       <div class="flex items-center gap-1.5 mt-0.5">${turnDisplay}${bonus > 0 ? `<span class="text-[10px] text-secondary">+${bonus}b</span>` : ''}</div>
-      <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#2f80d8">$${billed.toFixed(0)} billed</div></div></div>`;
+      <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
 
     let turnCounter = 0;
     const slotHtml = items.map(({ entry: e, assignment: a }) => {
