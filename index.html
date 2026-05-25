@@ -327,24 +327,18 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Date range selector -->
+        <!-- Date range selector (Square-style: Date button + comparison) -->
         <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5">
-          <div class="flex gap-2 flex-wrap mb-3">
-            <button onclick="setReportRange('today')" id="rng-today" data-range="today" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
-            <button onclick="setReportRange('week')" id="rng-week" data-range="week" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">This Week</button>
-            <button onclick="setReportRange('month')" id="rng-month" data-range="month" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">This Month</button>
-            <button onclick="setReportRange('payperiod')" id="rng-payperiod" data-range="payperiod" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Pay Period</button>
-            <button onclick="setReportRange('custom')" id="rng-custom" data-range="custom" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Custom</button>
-          </div>
-          <div id="custom-range-inputs" class="hidden grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">From</label>
-              <input type="date" id="report-from" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="setReportRange('custom'); runReport()">
-            </div>
-            <div>
-              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">To</label>
-              <input type="date" id="report-to" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="setReportRange('custom'); runReport()">
-            </div>
+          <div class="flex gap-2 flex-wrap items-center">
+            <button onclick="openDatePicker()" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
+              <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
+            </button>
+            <button onclick="openCompareMenu()" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
+              <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">vs</span>
+              <span class="text-sm font-headline font-bold text-on-surface compare-btn-label">Prior period</span>
+            </button>
           </div>
           <p class="text-xs font-body text-on-surface-variant mt-2" id="report-range-label">Showing: Today</p>
         </div>
@@ -353,24 +347,29 @@ tailwind.config = {
         <div class="grid grid-cols-3 gap-3 mb-3">
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-2xl font-headline font-extrabold text-primary" id="rpt-total-income">$0.00</div>
+            <span class="rpt-delta" id="rpt-total-income-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Total Billed</div>
           </div>
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-total-guests">0</div>
+            <span class="rpt-delta" id="rpt-total-guests-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Guests Served</div>
           </div>
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-avg-ticket">$0.00</div>
+            <span class="rpt-delta" id="rpt-avg-ticket-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Avg Ticket</div>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-3 mb-5">
           <div class="rounded-xl p-4 border text-center" style="background:rgba(26,82,82,0.08);border-color:rgba(26,82,82,0.3)">
             <div class="text-2xl font-headline font-extrabold" style="color:#1a5252" id="rpt-shop-keeps">$0.00</div>
+            <span class="rpt-delta" id="rpt-shop-keeps-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Shop Keeps</div>
           </div>
           <div class="rounded-xl p-4 border text-center" style="background:rgba(255,224,178,0.3);border-color:rgba(212,134,10,0.4)">
             <div class="text-2xl font-headline font-extrabold" style="color:#a05000" id="rpt-total-commission">$0.00</div>
+            <span class="rpt-delta" id="rpt-total-commission-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Commission Owed</div>
           </div>
         </div>
@@ -379,26 +378,32 @@ tailwind.config = {
         <div class="grid grid-cols-2 gap-3 mb-3">
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-svc-total">$0.00</div>
+            <span class="rpt-delta" id="rpt-svc-total-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Services</div>
           </div>
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-items-total">$0.00</div>
+            <span class="rpt-delta" id="rpt-items-total-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Retail Items</div>
           </div>
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-fees-total">$0.00</div>
+            <span class="rpt-delta" id="rpt-fees-total-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Fees</div>
           </div>
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-lg font-headline font-extrabold" style="color:#c53030" id="rpt-discount-total">-$0.00</div>
+            <span class="rpt-delta" id="rpt-discount-total-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Discounts</div>
           </div>
           <div class="rounded-xl p-4 border text-center" style="background:rgba(42,122,79,0.08);border-color:rgba(42,122,79,0.3)">
             <div class="text-lg font-headline font-extrabold" style="color:#2a7a4f" id="rpt-gc-sold">$0.00</div>
+            <span class="rpt-delta" id="rpt-gc-sold-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Gift Cards Sold</div>
           </div>
           <div class="rounded-xl p-4 border text-center" style="background:rgba(42,122,79,0.08);border-color:rgba(42,122,79,0.3)">
             <div class="text-lg font-headline font-extrabold" style="color:#2a7a4f" id="rpt-gc-redeemed">$0.00</div>
+            <span class="rpt-delta" id="rpt-gc-redeemed-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Gift Cards Redeemed</div>
           </div>
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center col-span-2 hidden" id="rpt-refunds-row">
@@ -439,6 +444,37 @@ tailwind.config = {
         </div>
       </div>
 
+      <!-- Shared date-range picker popup (Reports + Transactions) -->
+      <div id="date-picker-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40 p-4" onclick="if(event.target===this)closeDatePicker()">
+        <div class="bg-surface rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
+          <div class="flex">
+            <div id="date-picker-presets" class="w-36 flex-shrink-0 border-r border-surface-container-high py-2"></div>
+            <div class="flex-1 p-4 min-w-0">
+              <div class="flex items-center justify-between mb-3">
+                <button onclick="datePickerNavMonth(-1)" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
+                <div id="date-picker-month" class="font-headline font-bold text-on-surface text-sm"></div>
+                <button onclick="datePickerNavMonth(1)" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+              </div>
+              <div id="date-picker-grid" class="dp-grid"></div>
+              <div id="date-picker-custom" class="hidden mt-3 pt-3 border-t border-surface-container-high">
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                  <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">From</label><input type="date" id="dp-from" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body text-on-surface focus:outline-none focus:border-primary"></div>
+                  <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">To</label><input type="date" id="dp-to" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body text-on-surface focus:outline-none focus:border-primary"></div>
+                </div>
+                <button onclick="applyCustomRange()" class="w-full py-2 rounded-lg bg-primary text-on-primary font-headline font-bold text-sm">Apply range</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Comparison mode menu -->
+      <div id="compare-menu" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40 p-4" onclick="if(event.target===this)closeCompareMenu()">
+        <div class="bg-surface rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden py-2">
+          <div class="px-4 py-2 text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Compare to</div>
+          <div id="compare-menu-list"></div>
+        </div>
+      </div>
+
       <!-- ── TRANSACTIONS PANEL ── -->
       <div class="dash-panel" id="panel-transactions">
         <div class="flex items-center justify-between mb-5">
@@ -453,21 +489,10 @@ tailwind.config = {
             </button>
             <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
             <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
-            <button onclick="setReportRange('today')" data-range="today" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
-            <button onclick="setReportRange('week')" data-range="week" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Week</button>
-            <button onclick="setReportRange('month')" data-range="month" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Month</button>
-            <button onclick="setReportRange('payperiod')" data-range="payperiod" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Pay Period</button>
-            <button onclick="setReportRange('custom')" data-range="custom" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Custom</button>
-          </div>
-        </div>
-        <div id="txn-custom-inputs" class="hidden grid-cols-2 gap-3 mb-3">
-          <div>
-            <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">From</label>
-            <input type="date" id="txn-from" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="setReportRange('custom'); runReport(); renderTransactions()">
-          </div>
-          <div>
-            <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">To</label>
-            <input type="date" id="txn-to" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="setReportRange('custom'); runReport(); renderTransactions()">
+            <button onclick="openDatePicker()" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">calendar_today</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
+            </button>
           </div>
         </div>
         <div id="txn-history-banner" class="hidden mb-3 px-4 py-2.5 rounded-xl bg-secondary-container/50 border border-secondary text-sm font-body font-bold text-on-surface flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:18px">history</span><span id="txn-history-banner-text"></span></div>

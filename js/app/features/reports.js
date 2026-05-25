@@ -19,7 +19,7 @@ const svc = id => cfg().services.find(s => s.id === id);
 const staffById = id => cfg().staff.find(s => s.id === id);
 const activeStaff = () => cfg().staff.filter(s => !cfg().inactive_staff.includes(s.id));
 
-let reportRange = { type: 'today', from: null, to: null };
+let reportRange = { type: 'today', date: null, from: null, to: null, compare: 'prior' };
 
 // ── Persist a completed entry as a record ─────────────────────────────────────
 export function saveRecord(entry) {
@@ -52,31 +52,56 @@ export function buildCombinedRecords() {
   return [...liveSnaps, ...records().filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted' && !deletedIds.has(String(r.id)))];
 }
 
-// ── Report range ──────────────────────────────────
+// ── Report range + date picker + comparison ───────
+const _sod = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const _eod = d => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+const _addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+let _dpMonth = _sod(new Date());   // month shown in the date-picker calendar
+const RANGE_PRESETS = [
+  ['today','Today'], ['yesterday','Yesterday'], ['week','This Week'], ['lastweek','Last Week'],
+  ['month','This Month'], ['lastmonth','Last Month'], ['payperiod','Pay Period'],
+  ['thisyear','This Year'], ['lastyear','Last Year'], ['custom','Custom Range'],
+];
+const COMPARE_OPTS = [['prior','Prior period'], ['year','Prior year'], ['none','No comparison']];
+const _rangeLabels = { today:'Today', yesterday:'Yesterday', week:'This Week', lastweek:'Last Week', month:'This Month', lastmonth:'Last Month', thisyear:'This Year', lastyear:'Last Year' };
+
 export function setReportRange(type) {
   reportRange.type = type;
+  if (type !== 'day') reportRange.date = null;
   syncRangeButtons();
   const showCustom = type === 'custom';
-  ['custom-range-inputs','txn-custom-inputs'].forEach(id => {
-    const el = document.getElementById(id); if (!el) return;
-    el.classList.toggle('hidden', !showCustom); el.classList.toggle('grid', showCustom);
-  });
-  // Reports + Transactions share one date window — refresh both so they always match.
-  if (!showCustom) { runReport(); renderTransactions(); }
+  // Reports + Transactions share one date window. A preset refreshes both immediately;
+  // 'custom' waits for the operator to pick from/to in the popup, then applyCustomRange().
+  if (showCustom) { renderDatePicker(); }
+  else { closeDatePicker(); runReport(); renderTransactions(); }
+  updateDateButtons();
 }
-// Highlight the matching range chip in BOTH the Reports and Transactions panels.
+export function selectRangeDay(dateStr) {
+  reportRange.type = 'day'; reportRange.date = dateStr;
+  syncRangeButtons(); closeDatePicker(); runReport(); renderTransactions(); updateDateButtons();
+}
+export function applyCustomRange() {
+  const f = document.getElementById('dp-from')?.value, t = document.getElementById('dp-to')?.value;
+  if (!f || !t) { showToast('Pick both a start and end date.'); return; }
+  if (f > t) { showToast('Start date must be before end date.'); return; }
+  reportRange.type = 'custom'; reportRange.from = f; reportRange.to = t;
+  syncRangeButtons(); closeDatePicker(); runReport(); renderTransactions(); updateDateButtons();
+}
+export function setReportCompare(mode) {
+  reportRange.compare = mode; closeCompareMenu(); runReport(); updateDateButtons();
+}
 function syncRangeButtons() {
   document.querySelectorAll('.rng-btn').forEach(b => b.classList.toggle('active', b.dataset.range === reportRange.type));
 }
 function rangeLabel() {
-  if (reportRange.type === 'today') return 'Today';
-  if (reportRange.type === 'week') return 'This Week';
-  if (reportRange.type === 'month') return 'This Month';
+  if (_rangeLabels[reportRange.type]) return _rangeLabels[reportRange.type];
   const d = getReportDates(); if (!d) return 'Custom';
   const fmt = x => x.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  if (reportRange.type === 'day') return fmt(d.from);
   if (reportRange.type === 'payperiod') return `Pay Period (${fmt(d.from)} – ${fmt(d.to)})`;
   return `${fmt(d.from)} – ${fmt(d.to)}`;
 }
+function compareLabel() { return (COMPARE_OPTS.find(o => o[0] === reportRange.compare) || COMPARE_OPTS[0])[1]; }
 
 // Current pay period from config.pay_period: weekly/biweekly anchored at startDate,
 // or bimonthly (1st–15th, 16th–end). Returns { from, to }.
@@ -96,15 +121,79 @@ function payPeriodDates(now = new Date()) {
   return { from, to };
 }
 function getReportDates() {
-  const now = new Date();
-  if (reportRange.type === 'today') return { from: new Date(now.getFullYear(),now.getMonth(),now.getDate()), to: new Date(now.getFullYear(),now.getMonth(),now.getDate(),23,59,59) };
-  if (reportRange.type === 'week') { const day = now.getDay() === 0 ? 6 : now.getDay() - 1; const from = new Date(now); from.setDate(now.getDate()-day); from.setHours(0,0,0,0); const to = new Date(from); to.setDate(from.getDate()+6); to.setHours(23,59,59,999); return { from, to }; }
-  if (reportRange.type === 'payperiod') return payPeriodDates(now);
-  if (reportRange.type === 'month') return { from: new Date(now.getFullYear(),now.getMonth(),1), to: new Date(now.getFullYear(),now.getMonth()+1,0,23,59,59) };
-  const f = document.getElementById('report-from')?.value || document.getElementById('txn-from')?.value;
-  const t = document.getElementById('report-to')?.value || document.getElementById('txn-to')?.value;
+  const now = new Date(), T = reportRange.type;
+  if (T === 'today') return { from: _sod(now), to: _eod(now) };
+  if (T === 'yesterday') { const y = _addDays(now, -1); return { from: _sod(y), to: _eod(y) }; }
+  if (T === 'day') { const d = reportRange.date ? new Date(reportRange.date + 'T12:00:00') : now; return { from: _sod(d), to: _eod(d) }; }
+  if (T === 'week' || T === 'lastweek') { const dow = now.getDay() === 0 ? 6 : now.getDay() - 1; let from = _addDays(_sod(now), -dow); if (T === 'lastweek') from = _addDays(from, -7); return { from, to: _eod(_addDays(from, 6)) }; }
+  if (T === 'payperiod') return payPeriodDates(now);
+  if (T === 'month') return { from: new Date(now.getFullYear(),now.getMonth(),1), to: _eod(new Date(now.getFullYear(),now.getMonth()+1,0)) };
+  if (T === 'lastmonth') return { from: new Date(now.getFullYear(),now.getMonth()-1,1), to: _eod(new Date(now.getFullYear(),now.getMonth(),0)) };
+  if (T === 'thisyear') return { from: new Date(now.getFullYear(),0,1), to: _eod(new Date(now.getFullYear(),11,31)) };
+  if (T === 'lastyear') return { from: new Date(now.getFullYear()-1,0,1), to: _eod(new Date(now.getFullYear()-1,11,31)) };
+  const f = reportRange.from || document.getElementById('report-from')?.value || document.getElementById('txn-from')?.value;
+  const t = reportRange.to   || document.getElementById('report-to')?.value || document.getElementById('txn-to')?.value;
   if (!f || !t) return null;
   return { from: new Date(f+'T00:00:00'), to: new Date(t+'T23:59:59') };
+}
+// Comparison window for the delta badges — the natural period preceding the current
+// selection (prior calendar month/year/pay-period, else a same-length window), or the
+// same dates one year back.
+function getCompareDates() {
+  if (!reportRange.compare || reportRange.compare === 'none') return null;
+  const cur = getReportDates(); if (!cur) return null;
+  if (reportRange.compare === 'year') { const from = new Date(cur.from); from.setFullYear(from.getFullYear()-1); const to = new Date(cur.to); to.setFullYear(to.getFullYear()-1); return { from, to }; }
+  const T = reportRange.type;
+  if (T === 'month' || T === 'lastmonth') return { from: new Date(cur.from.getFullYear(), cur.from.getMonth()-1, 1), to: _eod(new Date(cur.from.getFullYear(), cur.from.getMonth(), 0)) };
+  if (T === 'thisyear' || T === 'lastyear') return { from: new Date(cur.from.getFullYear()-1, 0, 1), to: _eod(new Date(cur.from.getFullYear()-1, 11, 31)) };
+  if (T === 'payperiod') return prevPayPeriod({ from: cur.from });
+  const days = Math.round((_sod(cur.to) - _sod(cur.from)) / 86400000) + 1;
+  return { from: _sod(_addDays(cur.from, -days)), to: _eod(_addDays(cur.from, -1)) };
+}
+
+// ── Date picker popup ─────────────────────────────
+export function openDatePicker() {
+  const cur = getReportDates();
+  _dpMonth = _sod(reportRange.type === 'day' && reportRange.date ? new Date(reportRange.date + 'T12:00:00') : (cur?.from || new Date()));
+  renderDatePicker();
+  const m = document.getElementById('date-picker-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
+}
+export function closeDatePicker() { const m = document.getElementById('date-picker-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } }
+export function datePickerNavMonth(delta) { _dpMonth = new Date(_dpMonth.getFullYear(), _dpMonth.getMonth() + delta, 1); renderDatePicker(); }
+function renderDatePicker() {
+  const presetWrap = document.getElementById('date-picker-presets');
+  if (presetWrap) presetWrap.innerHTML = RANGE_PRESETS.map(([k,l]) => `<button onclick="setReportRange('${k}')" class="dp-preset${reportRange.type===k?' active':''}">${l}</button>`).join('');
+  const monthLbl = document.getElementById('date-picker-month');
+  if (monthLbl) monthLbl.textContent = _dpMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const grid = document.getElementById('date-picker-grid');
+  if (grid) {
+    const y = _dpMonth.getFullYear(), m = _dpMonth.getMonth();
+    const startDow = new Date(y, m, 1).getDay(), daysIn = new Date(y, m+1, 0).getDate();
+    const today = localDateStr(new Date()), sel = reportRange.type === 'day' ? reportRange.date : null;
+    let cells = ['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => `<div class="dp-dow">${d}</div>`).join('');
+    for (let i = 0; i < startDow; i++) cells += '<div></div>';
+    for (let d = 1; d <= daysIn; d++) {
+      const ds = localDateStr(new Date(y, m, d));
+      cells += `<button class="dp-day${ds===today?' today':''}${ds===sel?' sel':''}" onclick="selectRangeDay('${ds}')">${d}</button>`;
+    }
+    grid.innerHTML = cells;
+  }
+  document.getElementById('date-picker-custom')?.classList.toggle('hidden', reportRange.type !== 'custom');
+}
+
+// ── Comparison menu ───────────────────────────────
+export function openCompareMenu() {
+  const wrap = document.getElementById('compare-menu-list');
+  if (wrap) wrap.innerHTML = COMPARE_OPTS.map(([k,l]) => `<button onclick="setReportCompare('${k}')" class="cmp-opt${reportRange.compare===k?' active':''}">${l}</button>`).join('');
+  const m = document.getElementById('compare-menu'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
+}
+export function closeCompareMenu() { const m = document.getElementById('compare-menu'); if (m) { m.classList.add('hidden'); m.style.display = ''; } }
+
+function updateDateButtons() {
+  const lbl = rangeLabel(), cmp = compareLabel();
+  document.querySelectorAll('.date-btn-label').forEach(el => el.textContent = lbl);
+  document.querySelectorAll('.compare-btn-label').forEach(el => el.textContent = cmp);
+  const rl = document.getElementById('report-range-label'); if (rl) rl.textContent = `Showing: ${rangeLabel()}${reportRange.compare !== 'none' ? ` · vs ${cmp}` : ''}`;
 }
 
 export function runReport() {
@@ -235,7 +324,51 @@ export function runReport() {
       row('Outstanding Balance', `$${gcOutstanding.toFixed(2)}`, 'Unredeemed value across all gift cards');
   }
 
+  renderDeltas({ totalIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold: gcSoldValue, gcRedeemed });
+  updateDateButtons();
   window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding };
+}
+
+// ── Comparison metrics + delta badges ─────────────
+// Scalar metrics for an arbitrary window, mirroring runReport's definitions exactly so
+// the comparison side lines up with the displayed cards. Used only for the prior period.
+function computeMetrics(from, to) {
+  const filtered = buildCombinedRecords().filter(r => { if (r.status === 'deleted') return false; const d = new Date(r.checkinTime); return d >= from && d <= to && (isPaidStatus(r.status) || r.status === 'refund'); });
+  const sum = (arr, f) => arr.reduce((s,x)=>s+f(x),0);
+  const svcTotal = sum(filtered, r => sum(r.assignments||[], x => x.cost||0));
+  const itemsTotal = sum(filtered, r => sum(r.items||[], x => (x.price||0)*(x.qty||0)));
+  const feesTotal = sum(filtered, r => sum(r.fees||[], x => x.amount||0));
+  const discountTotal = sum(filtered, r => r.discount||0);
+  const totalIncome = sum(filtered, r => r.totalCost||0);
+  const guestCount = filtered.filter(r => isPaidStatus(r.status)).length;
+  const avgTicket = guestCount > 0 ? totalIncome / guestCount : 0;
+  const staffInc = {};
+  filtered.forEach(r => (r.assignments||[]).forEach(a => { if (a.techId) staffInc[a.techId] = (staffInc[a.techId]||0) + (a.cost||0); }));
+  if (cfg().commission_includes_refunds) filtered.filter(r=>r.status==='refund').forEach(r => (r.refundTechBilled||[]).forEach(x => { if (x.techId) staffInc[x.techId] = (staffInc[x.techId]||0) + (x.billed||0); }));
+  const commission = Object.entries(staffInc).reduce((s,[id,inc])=>{ const t = staffById(id); return t?.commission != null ? s + inc*t.commission/100 : s; }, 0);
+  const inPeriod = ds => ds && ds >= localDateStr(from) && ds <= localDateStr(to);
+  const gcSold = giftCards().filter(g => inPeriod(g.datePurchased)).reduce((s,g)=>s+(g.amount||0),0);
+  const gcRedeemed = giftCards().filter(g => inPeriod(g.dateUsed)).reduce((s,g)=>s+(g.amountUsed||0),0);
+  return { totalIncome, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold, gcRedeemed };
+}
+const _DELTA_CARDS = [
+  ['rpt-total-income-delta','totalIncome'], ['rpt-total-guests-delta','guestCount'], ['rpt-avg-ticket-delta','avgTicket'],
+  ['rpt-shop-keeps-delta','shopKeeps'], ['rpt-total-commission-delta','commission'],
+  ['rpt-svc-total-delta','svcTotal'], ['rpt-items-total-delta','itemsTotal'], ['rpt-fees-total-delta','feesTotal'],
+  ['rpt-discount-total-delta','discountTotal'], ['rpt-gc-sold-delta','gcSold'], ['rpt-gc-redeemed-delta','gcRedeemed'],
+];
+function setDelta(id, cur, prev) {
+  const el = document.getElementById(id); if (!el) return;
+  if (prev == null || prev === 0) { el.className = 'rpt-delta na'; el.textContent = '▲ N/A'; return; }
+  const pct = (cur - prev) / Math.abs(prev) * 100, up = cur >= prev;
+  el.className = `rpt-delta ${up ? 'up' : 'down'}`;
+  el.textContent = `${up ? '▲' : '▼'} ${Math.abs(pct).toFixed(0)}%`;
+}
+function renderDeltas(cur) {
+  const on = reportRange.compare && reportRange.compare !== 'none';
+  if (!on) { _DELTA_CARDS.forEach(([id]) => { const el = document.getElementById(id); if (el) { el.textContent = ''; el.className = 'rpt-delta'; } }); return; }
+  const cmp = getCompareDates(), prev = cmp ? computeMetrics(cmp.from, cmp.to) : null;
+  _DELTA_CARDS.forEach(([id, key]) => setDelta(id, cur[key], prev ? prev[key] : null));
 }
 
 // ── Drill-downs ───────────────────────────────────
