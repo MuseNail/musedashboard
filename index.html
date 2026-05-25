@@ -442,11 +442,13 @@ tailwind.config = {
             <h2 class="text-xl font-headline font-bold text-on-surface">Transaction History</h2>
             <p class="text-sm font-body text-on-surface-variant mt-0.5">All check-ins with service and payment details</p>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap justify-end">
             <button id="add-historical-btn" onclick="showHistoricalEntryModal()"
               class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical
             </button>
+            <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+            <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
             <button onclick="setReportRange('today')" data-range="today" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
             <button onclick="setReportRange('week')" data-range="week" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Week</button>
             <button onclick="setReportRange('month')" data-range="month" class="rng-btn px-3 py-1.5 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Month</button>

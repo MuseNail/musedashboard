@@ -340,6 +340,77 @@ export function togglePartyTxn(headerEl) {
 }
 export function updateHistoricalButtonVisibility() { document.getElementById('add-historical-btn')?.classList.toggle('hidden', !canDo('historicalEntry')); }
 
+// ── Transactions export (every ticket expanded, current shared date window) ───
+// One row per customer/ticket (parties are NOT collapsed here — the owner wants the
+// full breakdown). The Party column carries the group letter so members of one Square
+// charge can be summed back together. Matches whatever range the Transactions tab shows.
+function txnExportRecords() {
+  const dates = getReportDates();
+  let combined = buildCombinedRecords();
+  if (dates) combined = combined.filter(r => { const d = new Date(r.checkinTime); return d >= dates.from && d <= dates.to; });
+  return combined.filter(r => isPaidStatus(r.status) || r.status === 'refund')
+    .sort((a,b) => new Date(a.checkinTime) - new Date(b.checkinTime));
+}
+function txnRow(r, letter) {
+  const dt = new Date(r.checkinTime), isRefund = r.status === 'refund';
+  const services = (r.services||[]).map(sid => svc(sid)?.label||sid).join('; ');
+  const techs = [...new Set((r.assignments||[]).filter(a=>a.techId).map(a=>staffById(a.techId)?.name).filter(Boolean))].join('; ');
+  const items = (r.items||[]).map(i => `${cfg().items.find(x=>x.id===i.itemId)?.label||'Item'}×${i.qty}`).join('; ');
+  const feeAmt = (r.fees||[]).reduce((s,f)=>s+(f.amount||0),0);
+  return {
+    date: dt.toLocaleDateString(), time: dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
+    customer: r.name||'', phone: r.phone||'', party: r.groupId ? (letter||'•') : '',
+    services, techs, items, fees: feeAmt ? feeAmt.toFixed(2) : '', discount: r.discount ? r.discount.toFixed(2) : '',
+    total: (isRefund?'-':'') + '$' + Math.abs(r.totalCost||0).toFixed(2), totalNum: isRefund ? -Math.abs(r.totalCost||0) : (r.totalCost||0),
+    status: isRefund ? 'refund' : 'paid',
+  };
+}
+function txnExportRows() {
+  const recs = txnExportRecords();
+  const letters = partyLetterMap(recs);
+  return recs.map(r => txnRow(r, letters.get(r.groupId)));
+}
+export function exportTransactionsCSV() {
+  const rows = txnExportRows();
+  if (!rows.length) { showToast('No transactions to export.'); return; }
+  const net = rows.reduce((s,r)=>s+r.totalNum,0);
+  const matrix = [
+    ['Muse Nails & Spa — Transactions'], [`Showing: ${rangeLabel()}`], [`Tickets: ${rows.length}`, `Net total: $${net.toFixed(2)}`], [],
+    ['Date','Time','Customer','Phone','Party','Services','Technicians','Items','Fees','Discount','Total','Status'],
+    ...rows.map(r => [r.date, r.time, r.customer, r.phone, r.party, r.services, r.techs, r.items, r.fees, r.discount, r.total, r.status]),
+  ];
+  const csv = matrix.map(line => line.map(c => `"${String(c==null?'':c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob(['﻿'+csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a'); a.href = url; a.download = `muse-transactions-${localDateStr(getReportDates()?.from || new Date())}.csv`; a.click(); URL.revokeObjectURL(url);
+  showToast('Transactions exported as CSV (opens in Excel)');
+}
+export function exportTransactionsPDF() {
+  const rows = txnExportRows();
+  if (!rows.length) { showToast('No transactions to export.'); return; }
+  const url = URL.createObjectURL(new Blob([buildTxnHtml(rows)], { type: 'text/html' }));
+  const win = window.open(url, '_blank');
+  if (win) setTimeout(() => win.print(), 600);
+  URL.revokeObjectURL(url);
+  showToast('PDF opened — use Print → Save as PDF');
+}
+const _eTxn = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function buildTxnHtml(rows) {
+  const logo = cfg().logo || LOGO_PATH;
+  const net = rows.reduce((s,r)=>s+r.totalNum,0);
+  const tr = rows.map(r => `<tr><td>${r.date}</td><td>${r.time}</td><td>${_eTxn(r.customer)}</td><td style="text-align:center">${r.party}</td><td>${_eTxn(r.services)}</td><td>${_eTxn(r.techs)}</td><td>${_eTxn(r.items)}</td><td style="text-align:right">${r.fees?'$'+r.fees:''}</td><td style="text-align:right">${r.discount?'-$'+r.discount:''}</td><td style="text-align:right">${r.total}</td><td>${r.status}</td></tr>`).join('');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Transactions — ${_eTxn(rangeLabel())}</title><style>
+    body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:20px}.h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{width:50px;height:50px;object-fit:cover;border-radius:8px;flex-shrink:0}
+    h1{color:#1a5252;font-size:18px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
+    .tot{background:#1a5252;color:#fff;border-radius:10px;padding:10px 16px;display:inline-block;margin:12px 0 16px}.tot .v{font-size:22px;font-weight:800;line-height:1}.tot .l{font-size:10px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
+    table{width:100%;border-collapse:collapse}th{background:#1a5252;color:#fff;padding:5px 6px;text-align:left;font-size:10px}td{padding:4px 6px;border-bottom:1px solid #e0e0e0;font-size:10px;vertical-align:top}tr:nth-child(even) td{background:#fafafa}
+    .footer{margin-top:20px;font-size:10px;color:#999;text-align:center}
+  </style></head><body>
+    <div class="h">${logo?`<img src="${logo}" class="logo" onerror="this.style.display='none'">`:''}<div><h1>Muse Nails &amp; Spa — Transactions</h1><p class="sub">${_eTxn(rangeLabel())} · ${rows.length} ticket${rows.length===1?'':'s'}</p></div></div>
+    <div class="tot"><div class="v">$${net.toFixed(2)}</div><div class="l">Net total</div></div>
+    <table><thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Party</th><th>Services</th><th>Tech</th><th>Items</th><th>Fees</th><th>Disc</th><th>Total</th><th>Status</th></tr></thead><tbody>${tr}</tbody></table>
+    <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
+}
+
 // ── CSV export ────────────────────────────────────
 export function exportReportExcel() {
   const d = window._currentReportData;
