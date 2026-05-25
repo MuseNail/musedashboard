@@ -152,13 +152,26 @@ function getCompareDates() {
 }
 
 // ── Date picker popup ─────────────────────────────
-export function openDatePicker() {
+let _dpDragging = false, _dpDragStart = null, _dpDragEnd = null, _dpGridWired = false;
+// Anchor a popup's top-left to the bottom-left of the button that opened it (clamped to
+// the viewport), so it reads as a dropdown off the Date/compare bubble — not a centered modal.
+function _anchorPanel(panelId, ev) {
+  const panel = document.getElementById(panelId); if (!panel) return;
+  panel.style.position = 'fixed';
+  const pw = panel.offsetWidth, ph = panel.offsetHeight;
+  const r = ev?.currentTarget?.getBoundingClientRect?.() || ev?.target?.getBoundingClientRect?.();
+  let left = r ? r.left : (window.innerWidth - pw) / 2, top = r ? r.bottom + 6 : 80;
+  left = Math.max(8, Math.min(left, window.innerWidth - pw - 8));
+  top  = Math.max(8, Math.min(top,  window.innerHeight - ph - 8));
+  panel.style.left = left + 'px'; panel.style.top = top + 'px';
+}
+export function openDatePicker(ev) {
   const cur = getReportDates();
   _dpMonth = _sod(reportRange.type === 'day' && reportRange.date ? new Date(reportRange.date + 'T12:00:00') : (cur?.from || new Date()));
-  renderDatePicker();
-  const m = document.getElementById('date-picker-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
+  const m = document.getElementById('date-picker-modal'); if (m) m.classList.remove('hidden');
+  renderDatePicker(); _wireDatePickerGrid(); _anchorPanel('date-picker-panel', ev);
 }
-export function closeDatePicker() { const m = document.getElementById('date-picker-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } }
+export function closeDatePicker() { _dpDragging = false; const m = document.getElementById('date-picker-modal'); if (m) m.classList.add('hidden'); }
 export function datePickerNavMonth(delta) { _dpMonth = new Date(_dpMonth.getFullYear(), _dpMonth.getMonth() + delta, 1); renderDatePicker(); }
 function renderDatePicker() {
   const presetWrap = document.getElementById('date-picker-presets');
@@ -169,25 +182,59 @@ function renderDatePicker() {
   if (grid) {
     const y = _dpMonth.getFullYear(), m = _dpMonth.getMonth();
     const startDow = new Date(y, m, 1).getDay(), daysIn = new Date(y, m+1, 0).getDate();
-    const today = localDateStr(new Date()), sel = reportRange.type === 'day' ? reportRange.date : null;
+    const today = localDateStr(new Date());
+    const selDay = reportRange.type === 'day' ? reportRange.date : null;
+    const rLo = reportRange.type === 'custom' ? reportRange.from : null, rHi = reportRange.type === 'custom' ? reportRange.to : null;
     let cells = ['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => `<div class="dp-dow">${d}</div>`).join('');
     for (let i = 0; i < startDow; i++) cells += '<div></div>';
     for (let d = 1; d <= daysIn; d++) {
       const ds = localDateStr(new Date(y, m, d));
-      cells += `<button class="dp-day${ds===today?' today':''}${ds===sel?' sel':''}" onclick="selectRangeDay('${ds}')">${d}</button>`;
+      const inRange = rLo && rHi && ds >= rLo && ds <= rHi;
+      cells += `<button data-date="${ds}" class="dp-day${ds===today?' today':''}${ds===selDay?' sel':''}${inRange?' dp-range':''}">${d}</button>`;
     }
     grid.innerHTML = cells;
   }
   document.getElementById('date-picker-custom')?.classList.toggle('hidden', reportRange.type !== 'custom');
+  if (reportRange.type === 'custom') {
+    const f = document.getElementById('dp-from'), t = document.getElementById('dp-to');
+    if (f && reportRange.from) f.value = reportRange.from;
+    if (t && reportRange.to) t.value = reportRange.to;
+  }
+}
+// Drag across days = a custom range (always switches to Custom); a plain tap = single day.
+// Pointer events cover both mouse and iPad touch; elementFromPoint tracks the day under the finger.
+function _dpCellDate(el) { return el?.closest?.('.dp-day')?.dataset?.date || null; }
+function _dpPaintRange() {
+  const grid = document.getElementById('date-picker-grid'); if (!grid) return;
+  const a = _dpDragStart, b = _dpDragEnd, lo = (a && b) ? (a < b ? a : b) : null, hi = (a && b) ? (a < b ? b : a) : null;
+  grid.querySelectorAll('.dp-day').forEach(c => c.classList.toggle('dp-range', !!(lo && c.dataset.date >= lo && c.dataset.date <= hi)));
+}
+function _dpFinishDrag() {
+  if (!_dpDragging) return; _dpDragging = false;
+  const a = _dpDragStart, b = _dpDragEnd; if (!a || !b) return;
+  if (a === b) { selectRangeDay(a); return; }
+  const from = a < b ? a : b, to = a < b ? b : a;
+  reportRange.type = 'custom'; reportRange.from = from; reportRange.to = to;
+  syncRangeButtons(); closeDatePicker(); runReport(); renderTransactions(); updateDateButtons();
+}
+function _wireDatePickerGrid() {
+  if (_dpGridWired) return;
+  const grid = document.getElementById('date-picker-grid'); if (!grid) return;
+  _dpGridWired = true;
+  grid.addEventListener('pointerdown', e => { const d = _dpCellDate(e.target); if (!d) return; e.preventDefault(); _dpDragging = true; _dpDragStart = _dpDragEnd = d; _dpPaintRange(); });
+  grid.addEventListener('pointermove', e => { if (!_dpDragging) return; const d = _dpCellDate(document.elementFromPoint(e.clientX, e.clientY)); if (d) { _dpDragEnd = d; _dpPaintRange(); } });
+  grid.addEventListener('pointercancel', () => { _dpDragging = false; });
+  window.addEventListener('pointerup', _dpFinishDrag);
 }
 
 // ── Comparison menu ───────────────────────────────
-export function openCompareMenu() {
+export function openCompareMenu(ev) {
   const wrap = document.getElementById('compare-menu-list');
   if (wrap) wrap.innerHTML = COMPARE_OPTS.map(([k,l]) => `<button onclick="setReportCompare('${k}')" class="cmp-opt${reportRange.compare===k?' active':''}">${l}</button>`).join('');
-  const m = document.getElementById('compare-menu'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
+  const m = document.getElementById('compare-menu'); if (m) m.classList.remove('hidden');
+  _anchorPanel('compare-panel', ev);
 }
-export function closeCompareMenu() { const m = document.getElementById('compare-menu'); if (m) { m.classList.add('hidden'); m.style.display = ''; } }
+export function closeCompareMenu() { const m = document.getElementById('compare-menu'); if (m) m.classList.add('hidden'); }
 
 function updateDateButtons() {
   const lbl = rangeLabel(), cmp = compareLabel();

@@ -330,12 +330,12 @@ tailwind.config = {
         <!-- Date range selector (Square-style: Date button + comparison) -->
         <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5">
           <div class="flex gap-2 flex-wrap items-center">
-            <button onclick="openDatePicker()" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
+            <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
               <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
               <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
             </button>
-            <button onclick="openCompareMenu()" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
+            <button onclick="openCompareMenu(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">vs</span>
               <span class="text-sm font-headline font-bold text-on-surface compare-btn-label">Prior period</span>
             </button>
@@ -444,9 +444,9 @@ tailwind.config = {
         </div>
       </div>
 
-      <!-- Shared date-range picker popup (Reports + Transactions) -->
-      <div id="date-picker-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40 p-4" onclick="if(event.target===this)closeDatePicker()">
-        <div class="bg-surface rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden">
+      <!-- Shared date-range picker popup (Reports + Transactions) — anchored to its button -->
+      <div id="date-picker-modal" class="fixed inset-0 z-50 hidden" onclick="if(event.target===this)closeDatePicker()">
+        <div id="date-picker-panel" class="bg-surface rounded-2xl shadow-2xl overflow-auto" style="position:fixed;width:min(560px,calc(100vw - 16px));max-height:82vh">
           <div class="flex">
             <div id="date-picker-presets" class="w-36 flex-shrink-0 border-r border-surface-container-high py-2"></div>
             <div class="flex-1 p-4 min-w-0">
@@ -467,9 +467,9 @@ tailwind.config = {
           </div>
         </div>
       </div>
-      <!-- Comparison mode menu -->
-      <div id="compare-menu" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40 p-4" onclick="if(event.target===this)closeCompareMenu()">
-        <div class="bg-surface rounded-2xl shadow-2xl w-full max-w-xs overflow-hidden py-2">
+      <!-- Comparison mode menu — anchored to its button -->
+      <div id="compare-menu" class="fixed inset-0 z-50 hidden" onclick="if(event.target===this)closeCompareMenu()">
+        <div id="compare-panel" class="bg-surface rounded-2xl shadow-2xl overflow-auto py-2" style="position:fixed;width:min(260px,calc(100vw - 16px));max-height:82vh">
           <div class="px-4 py-2 text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Compare to</div>
           <div id="compare-menu-list"></div>
         </div>
@@ -489,7 +489,7 @@ tailwind.config = {
             </button>
             <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
             <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
-            <button onclick="openDatePicker()" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
+            <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">calendar_today</span>
               <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
             </button>
