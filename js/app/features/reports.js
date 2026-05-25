@@ -372,6 +372,7 @@ export function runReport() {
   }
 
   renderDeltas({ totalIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold: gcSoldValue, gcRedeemed });
+  renderPerformance(filtered);
   updateDateButtons();
   window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding };
 }
@@ -416,6 +417,41 @@ function renderDeltas(cur) {
   if (!on) { _DELTA_CARDS.forEach(([id]) => { const el = document.getElementById(id); if (el) { el.textContent = ''; el.className = 'rpt-delta'; } }); return; }
   const cmp = getCompareDates(), prev = cmp ? computeMetrics(cmp.from, cmp.to) : null;
   _DELTA_CARDS.forEach(([id, key]) => setDelta(id, cur[key], prev ? prev[key] : null));
+}
+
+// ── Performance: by-hour graph + computed insights (no AI; pure stats) ─────
+const _DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const _fmtHour = h => { const ap = h < 12 ? 'a' : 'p'; const hh = h % 12 === 0 ? 12 : h % 12; return `${hh}${ap}`; };
+function renderPerformance(filtered) {
+  const wrap = document.getElementById('rpt-perf'); if (!wrap) return;
+  const byHour = Array.from({ length: 24 }, () => ({ rev: 0, n: 0 }));
+  const byDow  = Array.from({ length: 7 },  () => ({ rev: 0, n: 0 }));
+  filtered.forEach(r => {
+    if (!isPaidStatus(r.status)) return;   // activity chart = completed sales only (refunds excluded)
+    const d = new Date(r.checkinTime), rev = r.totalCost || 0;
+    byHour[d.getHours()].rev += rev; byHour[d.getHours()].n++;
+    byDow[d.getDay()].rev += rev; byDow[d.getDay()].n++;
+  });
+  const hoursWithData = byHour.map((b, i) => ({ i, ...b })).filter(b => b.n > 0);
+  if (!hoursWithData.length) { wrap.innerHTML = '<p class="text-sm font-body text-on-surface-variant py-2">No sales in this period yet.</p>'; return; }
+  const minH = Math.min(...hoursWithData.map(b => b.i)), maxH = Math.max(...hoursWithData.map(b => b.i));
+  const maxRev = Math.max(...byHour.map(b => b.rev), 1);
+  let bars = '';
+  for (let h = minH; h <= maxH; h++) {
+    const b = byHour[h], pct = Math.round(b.rev / maxRev * 100);
+    bars += `<div class="perf-col" title="${_fmtHour(h)}: $${b.rev.toFixed(2)} · ${b.n} guest${b.n !== 1 ? 's' : ''}"><div class="perf-bar" style="height:${pct}%"></div><div class="perf-x">${_fmtHour(h)}</div></div>`;
+  }
+  const busiestHour = hoursWithData.reduce((a, b) => b.rev > a.rev ? b : a);
+  const dowWithData = byDow.map((b, i) => ({ i, ...b })).filter(b => b.n > 0);
+  const busiestDow = dowWithData.reduce((a, b) => b.rev > a.rev ? b : a, dowWithData[0]);
+  const slowestDow = dowWithData.length > 1 ? dowWithData.reduce((a, b) => b.rev < a.rev ? b : a) : null;
+  const card = (label, val) => `<div class="bg-surface-container-lowest rounded-xl px-4 py-2.5 border border-surface-container-high"><div class="text-[10px] font-body uppercase tracking-widest text-on-surface-variant">${label}</div><div class="text-sm font-headline font-bold text-on-surface mt-0.5">${val}</div></div>`;
+  wrap.innerHTML = `<div class="perf-chart">${bars}</div>
+    <div class="grid grid-cols-3 gap-2 mt-4">
+      ${card('Busiest time', `${_fmtHour(busiestHour.i)}–${_fmtHour((busiestHour.i + 1) % 24)}`)}
+      ${busiestDow ? card('Busiest day', _DOW[busiestDow.i]) : ''}
+      ${slowestDow ? card('Slowest day', _DOW[slowestDow.i]) : ''}
+    </div>`;
 }
 
 // ── Drill-downs ───────────────────────────────────
