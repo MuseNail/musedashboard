@@ -7,6 +7,7 @@
   :root {
     --primary: #2f80d8; --primary-dim: #2467b3; --primary-container: #bcdcfb;
     --on-primary: #ffffff; --on-primary-container: #0c2e52;
+    --customer: #2f80d8; --on-customer: #ffffff;   /* customer-facing check-in buttons (own theme color) */
     --secondary: #5c4010; --secondary-container: #f5c870; --on-secondary-container: #3a2800;
     --surface: #ffffff; --surface-container-lowest: #ffffff; --surface-container-low: #f7f9fa;
     --surface-container: #eef2f4; --surface-container-high: #e7ecee; --surface-container-highest: #dfe5e7;
@@ -392,6 +393,10 @@
   .cta { background:var(--primary) !important; background-image:none !important; color:#fff !important; box-shadow:0 6px 16px -6px rgba(47,128,216,.6) !important; border:none !important; }
   .cta:hover { background:var(--primary-dim) !important; }
   .cta .material-symbols-outlined { color:#fff !important; }
+  /* Customer-facing CTAs (welcome check-in cards + Check In) use their OWN themed
+     color, independent of the app accent. */
+  #screen-welcome .cta, #screen-checkin .cta { background:var(--customer) !important; background-image:none !important; color:var(--on-customer) !important; }
+  #screen-welcome .cta .material-symbols-outlined, #screen-checkin .cta .material-symbols-outlined { color:var(--on-customer) !important; }
 
   /* ── Neutral (black) UI text + selected states, theme-independent ──────────
      Structural/label/selected-tab text stays black regardless of accent; accent is
@@ -401,6 +406,10 @@
   .tab-btn.bg-primary { background:#1b1b1f !important; background-image:none !important; color:#ffffff !important; border:none !important; box-shadow:none !important; }  /* active queue filter = black */
   .pin-dot.bg-primary { background:#1b1b1f !important; }                           /* PIN dots always black */
   .text-primary.uppercase.tracking-widest { color:#1b1b1f !important; }            /* section/field labels black, not azure */
+  /* Form field labels + underlines were too faint after the flat pass — darken the
+     "description" chrome for legibility; the typed values stay as-is. */
+  label.text-outline-variant { color:var(--on-surface-variant) !important; }
+  input.border-b.border-surface-container-high, textarea.border-b.border-surface-container-high { border-color:var(--outline) !important; }
 
   /* ── Reports: comparison delta badges ─────────────────────────────────── */
   .rpt-delta { display:inline-flex; align-items:center; gap:3px; margin-top:4px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; line-height:1; }
