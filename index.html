@@ -311,7 +311,10 @@ tailwind.config = {
             <h2 class="text-xl font-headline font-bold text-on-surface">Reports</h2>
             <p class="text-sm font-body text-on-surface-variant mt-0.5">Income, staff earnings & commissions</p>
           </div>
-          <div class="flex gap-2">
+          <div class="flex gap-2 flex-wrap justify-end">
+            <button onclick="showPayroll()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-bold text-sm hover:bg-primary-dim transition-colors">
+              <span class="material-symbols-outlined" style="font-size:16px">payments</span> Payroll
+            </button>
             <button onclick="exportReportExcel()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV
             </button>

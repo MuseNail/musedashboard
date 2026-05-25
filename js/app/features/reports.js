@@ -269,6 +269,73 @@ function showDrillPanel(title, html) {
 }
 export function closeDrillDown() { document.getElementById('rpt-drill-panel').classList.add('hidden'); }
 
+// ── Payroll (commission-on-services summary for the current report range) ─────
+// Reuses the report's date window (set it to Pay Period for a pay-period run). Each
+// tech's pay = their commission % × the service prices they performed (data.income).
+function payrollData() {
+  const d = window._currentReportData;
+  if (!d) return { rows: [], total: 0, from: null, to: null };
+  const rows = Object.entries(d.staffMap || {}).map(([techId, data]) => {
+    const tech = staffById(techId), commPct = tech?.commission != null ? tech.commission : null;
+    return { name: tech?.name || 'Unknown', services: data.count, billed: data.income, commPct, hasComm: commPct != null, commission: commPct != null ? data.income * commPct / 100 : 0 };
+  }).sort((a, b) => b.commission - a.commission);
+  return { rows, total: rows.reduce((s, r) => s + r.commission, 0), from: d.from, to: d.to };
+}
+const _payPeriodLabel = (from, to) => { const f = x => x ? x.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''; return from && to ? (from.toDateString() === to.toDateString() ? f(from) : `${f(from)} – ${f(to)}`) : ''; };
+export function showPayroll() {
+  if (!window._currentReportData) runReport();
+  const { rows, total, from, to } = payrollData();
+  const period = _payPeriodLabel(from, to), title = 'Payroll' + (period ? ' — ' + period : '');
+  if (!rows.length) { showDrillPanel(title, '<p class="text-sm font-body text-on-surface-variant">No assigned services in this period.</p>'); return; }
+  const head = `<div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <div class="bg-primary/10 rounded-xl px-4 py-2.5 border border-primary/30"><div class="text-[10px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">Total Commission Owed</div><div class="font-headline font-extrabold text-primary text-xl">$${total.toFixed(2)}</div></div>
+      <div class="flex gap-2">
+        <button onclick="exportPayrollPDF()" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+        <button onclick="exportPayrollCSV()" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+      </div></div>`;
+  const list = rows.map(r => `<div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between">
+      <div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm">${r.name}</div>
+        <div class="text-xs font-body text-on-surface-variant">${r.services} service${r.services !== 1 ? 's' : ''} · billed $${r.billed.toFixed(2)}${r.hasComm ? ` · ${r.commPct}%` : ' · no commission set'}</div></div>
+      <div class="font-headline font-extrabold ${r.hasComm ? 'text-primary' : 'text-outline'} flex-shrink-0 ml-3">${r.hasComm ? '$' + r.commission.toFixed(2) : '—'}</div></div>`).join('');
+  showDrillPanel(title, head + '<div class="space-y-2">' + list + '</div>');
+}
+export function exportPayrollCSV() {
+  const { rows, total, from, to } = payrollData();
+  if (!rows.length) { showToast('No payroll data to export.'); return; }
+  const fmt = d => d ? d.toLocaleDateString() : '';
+  const matrix = [
+    ['Muse Nails & Spa — Payroll'], [`Period: ${fmt(from)} – ${fmt(to)}`], ['Commission on services performed'], [],
+    ['Technician', 'Services', 'Billed', 'Commission %', 'Commission Owed'],
+    ...rows.map(r => [r.name, r.services, `$${r.billed.toFixed(2)}`, r.hasComm ? `${r.commPct}%` : '—', r.hasComm ? `$${r.commission.toFixed(2)}` : '—']),
+    [], ['Total Commission Owed', '', '', '', `$${total.toFixed(2)}`],
+  ];
+  const csv = matrix.map(line => line.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a'); a.href = url; a.download = `muse-payroll-${localDateStr(from || new Date())}.csv`; a.click(); URL.revokeObjectURL(url);
+  showToast('Payroll exported as CSV');
+}
+export function exportPayrollPDF() {
+  const { rows, total, from, to } = payrollData();
+  if (!rows.length) { showToast('No payroll data to export.'); return; }
+  const logo = cfg().logo || LOGO_PATH, period = _payPeriodLabel(from, to);
+  const tr = rows.map(r => `<tr><td>${_eTxn(r.name)}</td><td style="text-align:center">${r.services}</td><td style="text-align:right">$${r.billed.toFixed(2)}</td><td style="text-align:center">${r.hasComm ? r.commPct + '%' : '—'}</td><td style="text-align:right">${r.hasComm ? '$' + r.commission.toFixed(2) : '—'}</td><td></td></tr>`).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Payroll — ${_eTxn(period)}</title><style>
+    body{font-family:Arial,sans-serif;font-size:12px;color:#222;margin:24px}.h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{max-width:140px;max-height:54px;width:auto;height:auto;object-fit:contain;border-radius:8px;flex-shrink:0}
+    h1{color:#1a5252;font-size:19px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
+    .tot{background:#1a5252;color:#fff;border-radius:10px;padding:12px 18px;display:inline-block;margin:14px 0 16px}.tot .v{font-size:24px;font-weight:800;line-height:1}.tot .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
+    table{width:100%;border-collapse:collapse}th{background:#1a5252;color:#fff;padding:7px 9px;text-align:left;font-size:11px}td{padding:8px 9px;border-bottom:1px solid #e0e0e0;font-size:12px}tr:nth-child(even) td{background:#fafafa}
+    tfoot td{font-weight:800;border-top:2px solid #1a5252;background:#fff}
+    .footer{margin-top:22px;font-size:10px;color:#999;text-align:center}
+  </style></head><body>
+    <div class="h">${logo ? `<img src="${logo}" class="logo" onerror="this.style.display='none'">` : ''}<div><h1>Muse Nails &amp; Spa — Payroll</h1><p class="sub">${_eTxn(period)} · commission on services performed</p></div></div>
+    <div class="tot"><div class="v">$${total.toFixed(2)}</div><div class="l">Total commission owed</div></div>
+    <table><thead><tr><th>Technician</th><th>Services</th><th>Billed</th><th>Comm %</th><th>Commission</th><th>Signature</th></tr></thead><tbody>${tr}</tbody>
+    <tfoot><tr><td>Total</td><td></td><td></td><td></td><td style="text-align:right">$${total.toFixed(2)}</td><td></td></tr></tfoot></table>
+    <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
+  const u = URL.createObjectURL(new Blob([html], { type: 'text/html' })); const w = window.open(u, '_blank'); if (w) setTimeout(() => w.print(), 600); URL.revokeObjectURL(u);
+  showToast('Payroll PDF opened — Print → Save as PDF');
+}
+
 // ── Transactions list ─────────────────────────────
 export function txnToday() { setReportRange('today'); }
 export function renderTransactions() {
