@@ -274,12 +274,16 @@
     transition: transform .08s ease, box-shadow .15s ease, background-color .15s ease, color .15s ease;
   }
   button:active, [onclick]:active, [role="button"]:active { transform: scale(0.975); }
-  /* …but NOT the numpad keys — the scale-on-tap made rapid amount entry feel "bouncy"
-     on iPad. Keep their background-flash feedback, drop the transform. touch-action:none
-     (with onpointerdown handlers) makes each tap register instantly on touch-down and
-     stops the gesture from nudging the layout — no missed taps, no position jump. */
-  .numpad-key { transition: background-color .1s ease !important; touch-action: none !important; }
-  .numpad-key:active { transform: none !important; }
+  /* …but NOT the numpad keys. The cosmetic button transition above animated a
+     background/transform flash on every tap → "flicker + jump" on iPad during rapid
+     amount entry. Kill ALL motion on the keys: no transition, no transform, no shadow
+     change — just an instant (un-animated) :active background for crisp feedback.
+     touch-action:none + the onpointerdown handlers register taps on touch-down. */
+  .numpad-key { transition: none !important; transform: none !important; box-shadow: none !important; touch-action: none !important; }
+  .numpad-key:active, .numpad-key:hover, .numpad-key:focus { transform: none !important; box-shadow: none !important; }
+  /* The whole numpad never scrolls — stops a stray touch from rubber-banding the page
+     behind the bottom sheet (the "jump"). Taps/clicks still work. */
+  #numpad-modal { touch-action: none; overscroll-behavior: contain; }
 
   /* Slick pill switch — shared by services / active-staff / role-permission
      toggles (identical markup: a track div + an absolutely-positioned knob div).
