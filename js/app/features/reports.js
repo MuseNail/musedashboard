@@ -321,26 +321,30 @@ function payrollRange(from, to) {
   const inRange = r => { const d = new Date(r.checkinTime); return d >= from && d <= to; };
   const recs = buildCombinedRecords().filter(r => r.status !== 'deleted' && inRange(r));
   const byTech = {};
-  const add = (techId, billed, day) => {
-    if (!techId) return;
-    const tech = staffById(techId), pct = tech?.commission != null ? tech.commission : 0, comm = billed * pct / 100;
-    const t = byTech[techId] = byTech[techId] || { billed: 0, commission: 0, daily: {} };
-    t.billed += billed; t.commission += comm;
-    const dd = t.daily[day] = t.daily[day] || { billed: 0, commission: 0 };
-    dd.billed += billed; dd.commission += comm;
-  };
+  const ensure = id => byTech[id] = byTech[id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] };
   recs.filter(r => isPaidStatus(r.status)).forEach(r => {
     const day = localDateStr(new Date(r.checkinTime));
-    (r.assignments || []).forEach(a => add(a.techId, a.cost || 0, day));
-  });
-  // Optionally let refunds reduce each tech's billed/commission (default: off → salon
-  // absorbs the refund and tech commission is unchanged).
-  if (cfg().commission_includes_refunds) {
-    recs.filter(r => r.status === 'refund').forEach(r => {
-      const day = localDateStr(new Date(r.checkinTime));
-      (r.refundTechBilled || []).forEach(x => add(x.techId, x.billed || 0, day));
+    (r.assignments || []).forEach(a => {
+      if (!a.techId) return;
+      const tech = staffById(a.techId), pct = tech?.commission != null ? tech.commission : 0, cost = a.cost || 0, comm = cost * pct / 100;
+      const t = ensure(a.techId);
+      t.billed += cost; t.commission += comm;
+      const dd = t.daily[day] = t.daily[day] || { billed: 0, commission: 0 };
+      dd.billed += cost; dd.commission += comm;
     });
-  }
+  });
+  // Refunds are kept SEPARATE (not folded into billed/commission) so the Payroll page can
+  // show them as their own line. Whether they dock pay is decided at render time via
+  // config.commission_includes_refunds (see _netComm).
+  recs.filter(r => r.status === 'refund').forEach(r => {
+    (r.refundTechBilled || []).forEach(x => {
+      if (!x.techId) return;
+      const tech = staffById(x.techId), pct = tech?.commission != null ? tech.commission : 0, billed = x.billed || 0;
+      const t = ensure(x.techId);
+      t.refund += billed; t.refundComm += billed * pct / 100;
+      if (r.discountNote) t.refundNotes.push(r.discountNote);
+    });
+  });
   return byTech;
 }
 function techCheckAmount(tech, commission, perKey) {
@@ -366,6 +370,13 @@ const _pcmp = (cur, prev) => {
   return `<span style="color:${up ? '#16a34a' : '#dc2626'};font-size:9px;font-weight:800">${up ? '▲' : '▼'} ${Math.abs((cur - prev) / prev * 100).toFixed(0)}%</span>`;
 };
 const _m2 = n => '$' + (n || 0).toFixed(2);
+// Refunds dock pay only when the operator opts in (Settings → Commission & Refunds).
+// refundComm is already negative, so net = gross + refundComm.
+const _refImpact = c => (cfg().commission_includes_refunds ? (c.refundComm || 0) : 0);
+const _netComm   = c => (c.commission || 0) + _refImpact(c);
+const _refNote   = notes => (notes && notes.length)
+  ? ` <span title="${notes.map(n => String(n).replace(/"/g, '&quot;')).join(' · ')}" style="cursor:help;color:var(--md-on-surface-variant);font-size:11px">&#9432;</span>` : '';
+const _refCells  = (cur, prev) => `<td class="num staff-sep" style="color:#dc2626">${cur.refund ? '-$' + Math.abs(cur.refund).toFixed(2) : '—'}${_refNote(cur.refundNotes)}</td><td class="num last" style="color:#dc2626">${prev.refund ? '-$' + Math.abs(prev.refund).toFixed(2) : '—'}</td>`;
 export function renderPayrollPage() {
   const wrap = document.getElementById('payroll-cards'); if (!wrap) return;
   const cur = payrollPeriodAt(_payrollOffset), prev = prevPayPeriod(cur);
@@ -382,10 +393,11 @@ export function renderPayrollPage() {
   // Excel-style table: techs as column-groups across the top (This | Last), metrics +
   // each day as rows; sticky first column holds the row labels.
   const T = techs.map(tech => {
-    const c = curData[tech.id] || { billed: 0, commission: 0, daily: {} };
-    const p = prevData[tech.id] || { billed: 0, commission: 0, daily: {} };
-    const cChk = techCheckAmount(tech, c.commission, curKey), pChk = techCheckAmount(tech, p.commission, prevKey);
-    return { tech, c, p, cChk, pChk, cCash: Math.max(0, c.commission - cChk), pCash: Math.max(0, p.commission - pChk), isVar: (tech.checkType || 'variable') === 'variable' };
+    const c = curData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] };
+    const p = prevData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] };
+    const cComm = _netComm(c), pComm = _netComm(p);
+    const cChk = techCheckAmount(tech, cComm, curKey), pChk = techCheckAmount(tech, pComm, prevKey);
+    return { tech, c, p, cChk, pChk, cCash: Math.max(0, cComm - cChk), pCash: Math.max(0, pComm - pChk), isVar: (tech.checkType || 'variable') === 'variable' };
   });
   const pair = (cv, pv) => `<td class="num staff-sep">${_m2(cv)} ${_pcmp(cv, pv)}</td><td class="num last">${_m2(pv)}</td>`;
   const dpair = (cd, pd) => `<td class="num staff-sep">$${cd.billed.toFixed(0)}/$${cd.commission.toFixed(0)} ${_pcmp(cd.commission, pd.commission)}</td><td class="num last">$${pd.billed.toFixed(0)}/$${pd.commission.toFixed(0)}</td>`;
@@ -396,6 +408,9 @@ export function renderPayrollPage() {
   const rows = [
     `<tr><td class="sticky-col">Billed</td>${T.map(x => pair(x.c.billed, x.p.billed)).join('')}</tr>`,
     `<tr><td class="sticky-col">Commission</td>${T.map(x => pair(x.c.commission, x.p.commission)).join('')}</tr>`,
+    ...(T.some(x => x.c.refund || x.p.refund) ? [
+      `<tr><td class="sticky-col">Refunds</td>${T.map(x => _refCells(x.c, x.p)).join('')}</tr>`,
+    ] : []),
     `<tr><td class="sticky-col">Check</td>${T.map(checkCell).join('')}</tr>`,
     `<tr><td class="sticky-col">Cash</td>${T.map(x => pair(x.cCash, x.pCash)).join('')}</tr>`,
     `<tr class="section-row"><td class="sticky-col">By day ${info}</td><td colspan="${T.length * 2}"></td></tr>`,
@@ -418,8 +433,8 @@ function payrollExportRows() {
     cur,
     rows: (cfg().staff || []).filter(s => !cfg().inactive_staff.includes(s.id))
       .sort((a, b) => { const ra = order.indexOf(a.id), rb = order.indexOf(b.id); return (ra === -1 ? 1e9 : ra) - (rb === -1 ? 1e9 : rb); })
-      .map(t => { const c = data[t.id] || { billed: 0, commission: 0 }; const chk = techCheckAmount(t, c.commission, perKey); return { name: t.name, billed: c.billed, commission: c.commission, check: chk, cash: Math.max(0, c.commission - chk) }; })
-      .filter(r => r.billed || r.commission || r.check),
+      .map(t => { const c = data[t.id] || { billed: 0, commission: 0, refund: 0, refundComm: 0 }; const net = _netComm(c); const chk = techCheckAmount(t, net, perKey); return { name: t.name, billed: c.billed, commission: c.commission, refund: c.refund || 0, check: chk, cash: Math.max(0, net - chk) }; })
+      .filter(r => r.billed || r.commission || r.check || r.refund),
   };
 }
 export function payrollExportCSV() {
@@ -429,9 +444,9 @@ export function payrollExportCSV() {
   const t = k => rows.reduce((s, r) => s + r[k], 0);
   const matrix = [
     ['Muse Nails & Spa — Payroll'], [`Pay period: ${fmt(cur.from)} – ${fmt(cur.to)}`], [],
-    ['Technician', 'Billed', 'Commission', 'Check', 'Cash'],
-    ...rows.map(r => [r.name, `$${r.billed.toFixed(2)}`, `$${r.commission.toFixed(2)}`, `$${r.check.toFixed(2)}`, `$${r.cash.toFixed(2)}`]),
-    [], ['Totals', `$${t('billed').toFixed(2)}`, `$${t('commission').toFixed(2)}`, `$${t('check').toFixed(2)}`, `$${t('cash').toFixed(2)}`],
+    ['Technician', 'Billed', 'Commission', 'Refunds', 'Check', 'Cash'],
+    ...rows.map(r => [r.name, `$${r.billed.toFixed(2)}`, `$${r.commission.toFixed(2)}`, r.refund ? `-$${Math.abs(r.refund).toFixed(2)}` : '$0.00', `$${r.check.toFixed(2)}`, `$${r.cash.toFixed(2)}`]),
+    [], ['Totals', `$${t('billed').toFixed(2)}`, `$${t('commission').toFixed(2)}`, t('refund') ? `-$${Math.abs(t('refund')).toFixed(2)}` : '$0.00', `$${t('check').toFixed(2)}`, `$${t('cash').toFixed(2)}`],
   ];
   const csv = matrix.map(line => line.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
@@ -446,7 +461,7 @@ function payrollGrid() {
   const order = cfg().turns_order || [];
   const techs = (cfg().staff || []).filter(s => !cfg().inactive_staff.includes(s.id))
     .sort((a, b) => { const ra = order.indexOf(a.id), rb = order.indexOf(b.id); return (ra === -1 ? 1e9 : ra) - (rb === -1 ? 1e9 : rb); });
-  const T = techs.map(tech => { const c = curData[tech.id] || { billed: 0, commission: 0, daily: {} }, p = prevData[tech.id] || { billed: 0, commission: 0, daily: {} }; const cChk = techCheckAmount(tech, c.commission, curKey), pChk = techCheckAmount(tech, p.commission, prevKey); return { tech, c, p, cChk, pChk, cCash: Math.max(0, c.commission - cChk), pCash: Math.max(0, p.commission - pChk) }; });
+  const T = techs.map(tech => { const c = curData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] }, p = prevData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] }; const cComm = _netComm(c), pComm = _netComm(p); const cChk = techCheckAmount(tech, cComm, curKey), pChk = techCheckAmount(tech, pComm, prevKey); return { tech, c, p, cChk, pChk, cCash: Math.max(0, cComm - cChk), pCash: Math.max(0, pComm - pChk) }; });
   return { cur, T, curDays, prevDays };
 }
 // Manager PDF: the full grid, landscape, with repeating header + per-row page breaks.
@@ -461,6 +476,9 @@ export function payrollExportPDF() {
   const rows = [
     `<tr><td class="rl">Billed</td>${T.map(x => pair(x.c.billed, x.p.billed)).join('')}</tr>`,
     `<tr><td class="rl">Commission</td>${T.map(x => pair(x.c.commission, x.p.commission)).join('')}</tr>`,
+    ...(T.some(x => x.c.refund || x.p.refund) ? [
+      `<tr><td class="rl">Refunds</td>${T.map(x => `<td class="num sep" style="color:#dc2626">${x.c.refund ? '-$' + Math.abs(x.c.refund).toFixed(2) : '—'}</td><td class="num last" style="color:#dc2626">${x.p.refund ? '-$' + Math.abs(x.p.refund).toFixed(2) : '—'}</td>`).join('')}</tr>`,
+    ] : []),
     `<tr><td class="rl">Check</td>${T.map(x => pair(x.cChk, x.pChk)).join('')}</tr>`,
     `<tr><td class="rl">Cash</td>${T.map(x => pair(x.cCash, x.pCash)).join('')}</tr>`,
     `<tr class="sec"><td class="rl">By day · billed/comm</td><td colspan="${T.length * 2}"></td></tr>`,
@@ -485,17 +503,19 @@ export function payrollExportPDF() {
 // check/cash, %, or last period). For printing & handing to each tech.
 export function payrollExportStaffPDF() {
   const { cur, T, curDays } = payrollGrid();
-  const techs = T.filter(x => x.c.billed);
+  const techs = T.filter(x => x.c.billed || x.c.refund);
   if (!techs.length) { showToast('No billing this period.'); return; }
   const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const period = `${fmt(cur.from)} – ${fmt(cur.to)}`, logo = cfg().logo || LOGO_PATH;
   const sections = techs.map((x, idx) => {
     const trs = curDays.map(day => { const b = (x.c.daily[day] || { billed: 0 }).billed; const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }); return `<tr><td>${dl}</td><td class="num">$${b.toFixed(2)}</td></tr>`; }).join('');
+    const refundBlock = x.c.refund ? `<div class="rf"><div class="rl2">Refunds this period: <b>-$${Math.abs(x.c.refund).toFixed(2)}</b> &nbsp;·&nbsp; Net billed: <b>$${(x.c.billed + x.c.refund).toFixed(2)}</b></div>${(x.c.refundNotes && x.c.refundNotes.length) ? `<div class="rn">Reason${x.c.refundNotes.length > 1 ? 's' : ''}: ${x.c.refundNotes.map(_eTxn).join('; ')}</div>` : ''}</div>` : '';
     return `<section style="${idx > 0 ? 'page-break-before:always;' : ''}">
       <div class="h">${logo ? `<img src="${logo}" class="logo" onerror="this.style.display='none'">` : ''}<div><h1>${_eTxn(x.tech.name)}</h1><p class="sub">Billed · pay period ${_eTxn(period)}</p></div></div>
       <div class="tot"><div class="v">$${x.c.billed.toFixed(2)}</div><div class="l">Total billed this period</div></div>
       <table><thead><tr><th>Day</th><th class="num">Billed</th></tr></thead><tbody>${trs}</tbody>
       <tfoot><tr><td>Total</td><td class="num">$${x.c.billed.toFixed(2)}</td></tr></tfoot></table>
+      ${refundBlock}
     </section>`;
   }).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Staff Billing — ${_eTxn(period)}</title><style>
@@ -504,6 +524,7 @@ export function payrollExportStaffPDF() {
     h1{color:#1a5252;font-size:22px;margin:0}.sub{color:#666;margin:0;font-size:13px}
     .tot{background:#1a5252;color:#fff;border-radius:10px;padding:12px 18px;display:inline-block;margin:14px 0 16px}.tot .v{font-size:26px;font-weight:800;line-height:1}.tot .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
     table{border-collapse:collapse;width:60%;font-size:13px}th{background:#1a5252;color:#fff;padding:7px 10px;text-align:left}td{padding:7px 10px;border-bottom:1px solid #e0e0e0}.num{text-align:right}tr:nth-child(even) td{background:#fafafa}tfoot td{font-weight:800;border-top:2px solid #1a5252;background:#fff}
+    .rf{margin-top:14px;padding:10px 14px;background:#fdecec;border:1px solid #f3c0c0;border-radius:8px;color:#a01818;font-size:13px;width:60%;box-sizing:border-box}.rl2{font-weight:600}.rn{margin-top:4px;font-size:11px;color:#8a3a3a}
   </style></head><body>${sections}</body></html>`;
   const u = URL.createObjectURL(new Blob([html], { type: 'text/html' })); const w = window.open(u, '_blank'); if (w) setTimeout(() => w.print(), 600); URL.revokeObjectURL(u);
   showToast('Staff PDF opened — one page per tech');
@@ -760,17 +781,16 @@ export function confirmRefund() {
   if (amount <= 0) { showToast('Refund amount must be greater than zero.'); return; }
   if (amount > (_refundTxnRecord?.totalCost || 0)) { showToast('Refund cannot exceed the original total.'); return; }
   const o = _refundTxnRecord, now = new Date().toISOString();
-  // checkinTime = the ORIGINAL sale's timestamp so the refund reduces that period's
-  // totals in Reports/Payroll (not the day it was issued). completedAt = now keeps the
-  // audit log showing when the refund actually happened. refundTechBilled carries the
-  // original's per-tech billed (negated, scaled for partial refunds) so commission can
-  // optionally be reduced — see config.commission_includes_refunds.
+  // Refunds are dated to when they're issued (checkinTime = now) so they land in the
+  // CURRENT period's totals in Reports/Payroll. refundTechBilled carries the original's
+  // per-tech billed (negated, scaled for partial refunds) so the Payroll page can show a
+  // per-tech Refunds line and — when config.commission_includes_refunds is on — dock pay.
   const origTotal = o.totalCost || amount;
   const ratio = origTotal > 0 ? amount / origTotal : 1;
   const refundTechBilled = (o.assignments || [])
     .filter(a => a.techId)
     .map(a => ({ techId: a.techId, billed: -((a.cost || 0) * ratio) }));
-  const record = { id: String(Date.now()*1000 + Math.floor(Math.random()*1000)), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -amount, checkinTime: o.checkinTime || now, completedAt: now, status: 'refund', isAppointment: false, refundOf: _refundTxnId, refundTechBilled, loggedBy: getActiveUser()?.name || '' };
+  const record = { id: String(Date.now()*1000 + Math.floor(Math.random()*1000)), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -amount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: _refundTxnId, refundTechBilled, loggedBy: getActiveUser()?.name || '' };
   dispatch('record.save', { record });
   closeRefundModal();
   renderTransactions();
