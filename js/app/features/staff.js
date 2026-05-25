@@ -80,6 +80,7 @@ export function showAddStaff() {
   document.getElementById('staff-commission-input').value = '';
   const pinEl = document.getElementById('staff-pin-input'); if (pinEl) pinEl.value = '';
   document.getElementById('staff-edit-id').value = '';
+  _setStaffCheckFields('variable', '');
   renderStaffServicesPicker([]);
   const m = document.getElementById('staff-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   setTimeout(() => document.getElementById('staff-name-input').focus(), 100);
@@ -93,6 +94,7 @@ export function showEditStaff(id) {
   document.getElementById('staff-commission-input').value = st.commission != null ? st.commission : '';
   const pinEl = document.getElementById('staff-pin-input'); if (pinEl) pinEl.value = st.pin || '';
   document.getElementById('staff-edit-id').value = id;
+  _setStaffCheckFields(st.checkType || 'variable', st.checkValue != null ? st.checkValue : '');
   renderStaffServicesPicker(st.services || []);
   const m = document.getElementById('staff-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
@@ -100,12 +102,27 @@ export function showEditStaff(id) {
 export function closeStaffModal() {
   const m = document.getElementById('staff-modal'); m.classList.add('hidden'); m.style.display = '';
 }
+// Paycheck (gross) config — how the tech's check portion is set on the Payroll page.
+function _setStaffCheckFields(type, value) {
+  const ts = document.getElementById('staff-check-type'); if (ts) ts.value = type;
+  const vi = document.getElementById('staff-check-value'); if (vi) vi.value = value;
+  staffCheckTypeChanged();
+}
+export function staffCheckTypeChanged() {
+  const type = document.getElementById('staff-check-type')?.value || 'variable';
+  const wrap = document.getElementById('staff-check-value-wrap');
+  const lbl = document.getElementById('staff-check-value-label');
+  if (wrap) wrap.classList.toggle('hidden', type === 'variable');
+  if (lbl) lbl.textContent = type === 'percent' ? '% of commission' : 'Check amount ($)';
+}
 
 export function saveStaff() {
   const name = document.getElementById('staff-name-input').value.trim();
   const commRaw = document.getElementById('staff-commission-input').value.trim();
   const commission = commRaw !== '' ? parseFloat(commRaw) : null;
   const pin = (document.getElementById('staff-pin-input')?.value || '').trim();
+  const checkType = document.getElementById('staff-check-type')?.value || 'variable';
+  const checkValue = checkType === 'variable' ? null : (parseFloat(document.getElementById('staff-check-value')?.value) || 0);
   const editId = document.getElementById('staff-edit-id').value;
   const selectedSvcs = [...document.querySelectorAll('#staff-services-picker .service-btn.selected')].map(b => b.dataset.service);
   if (!name) { showToast('Please enter a name.'); return; }
@@ -115,9 +132,9 @@ export function saveStaff() {
   const staff = [...cfg().staff];
   if (editId) {
     const i = staff.findIndex(s => s.id === editId);
-    if (i >= 0) staff[i] = { ...staff[i], name, commission, services: selectedSvcs, pin };
+    if (i >= 0) staff[i] = { ...staff[i], name, commission, services: selectedSvcs, pin, checkType, checkValue };
   } else {
-    staff.push({ id: `staff-${Date.now()}`, name, commission, services: selectedSvcs, pin });
+    staff.push({ id: `staff-${Date.now()}`, name, commission, services: selectedSvcs, pin, checkType, checkValue });
   }
   setStaff(staff);
   closeStaffModal();

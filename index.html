@@ -222,6 +222,9 @@ tailwind.config = {
       <button class="dash-tab" id="nav-transactions" onclick="showDashPanel('transactions')">
         <span class="material-symbols-outlined" style="font-size:18px">receipt_long</span> Transactions
       </button>
+      <button class="dash-tab" id="nav-payroll" onclick="showDashPanel('payroll')">
+        <span class="material-symbols-outlined" style="font-size:18px">payments</span> Payroll
+      </button>
       <button class="dash-tab" id="nav-giftcards" onclick="showDashPanel('giftcards')">
         <span class="material-symbols-outlined" style="font-size:18px">card_giftcard</span> Gift Cards
       </button>
@@ -312,9 +315,6 @@ tailwind.config = {
             <p class="text-sm font-body text-on-surface-variant mt-0.5">Income, staff earnings & commissions</p>
           </div>
           <div class="flex gap-2 flex-wrap justify-end">
-            <button onclick="showPayroll()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-bold text-sm hover:bg-primary-dim transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">payments</span> Payroll
-            </button>
             <button onclick="exportReportExcel()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV
             </button>
@@ -478,6 +478,25 @@ tailwind.config = {
         </div>
       </div>
 
+      <!-- ── PAYROLL PANEL ── -->
+      <div class="dash-panel" id="panel-payroll">
+        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+          <div>
+            <h2 class="text-xl font-headline font-bold text-on-surface">Payroll</h2>
+            <p class="text-sm font-body text-on-surface-variant mt-0.5">Per-tech commission, check &amp; cash by pay period</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap justify-end">
+            <button onclick="payrollExportPDF()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+            <button onclick="payrollExportCSV()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+          </div>
+        </div>
+        <div class="flex items-center justify-center gap-3 mb-4">
+          <button onclick="payrollNav(-1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
+          <span id="payroll-period-label" class="font-headline font-bold text-on-surface text-sm min-w-[180px] text-center">Pay Period</span>
+          <button onclick="payrollNav(1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+        </div>
+        <div id="payroll-cards" class="flex gap-3 overflow-x-auto pb-3" style="scrollbar-width:thin"></div>
+      </div>
 
       <!-- ── TURNS PANEL ── -->
       <div class="dash-panel" id="panel-turns">
@@ -1319,6 +1338,20 @@ tailwind.config = {
         <input id="staff-commission-input" type="number" min="0" max="100" step="1" placeholder="e.g. 40"
           class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
         <p class="text-[11px] font-body text-on-surface-variant mt-1">Leave blank for no commission tracking</p>
+      </div>
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Paycheck (gross)</label>
+        <select id="staff-check-type" onchange="staffCheckTypeChanged()" class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-base font-body text-on-surface focus:border-primary transition-colors outline-none">
+          <option value="variable">Variable — enter on Payroll page each period</option>
+          <option value="amount">Set amount — fixed $ per pay period</option>
+          <option value="percent">Set % of commission</option>
+        </select>
+        <div id="staff-check-value-wrap" class="hidden mt-2">
+          <label id="staff-check-value-label" class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Check amount ($)</label>
+          <input id="staff-check-value" type="number" min="0" step="1" placeholder="0"
+            class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+        </div>
+        <p class="text-[11px] font-body text-on-surface-variant mt-1">The portion paid by check. Cash = commission − check.</p>
       </div>
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Staff App PIN</label>

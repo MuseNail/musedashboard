@@ -67,7 +67,7 @@ function goTo(screenId, param) {
   if (screenId === 'screen-desk') { utils.updateDeskDate(); settings.initCalHoursSelectors(); }
 }
 function showDashPanel(panel) {
-  ['queue','reports','transactions','turns','settings','giftcards','calendar','floorplan'].forEach(p => {
+  ['queue','reports','transactions','payroll','turns','settings','giftcards','calendar','floorplan'].forEach(p => {
     document.getElementById(`panel-${p}`)?.classList.remove('active');
     document.getElementById(`nav-${p}`)?.classList.remove('active');
   });
@@ -76,6 +76,7 @@ function showDashPanel(panel) {
   if (panel === 'floorplan')    floorplan.renderFloorPlan();
   if (panel === 'reports')      reports.setReportRange('today');
   if (panel === 'transactions') reports.renderTransactions();
+  if (panel === 'payroll')      reports.renderPayrollPage();
   if (panel === 'settings')     settings.renderSettingsPanel();
   if (panel === 'giftcards')    giftcards.renderGiftCards();
   if (panel === 'calendar')     calendar.initCalendar();
@@ -176,6 +177,7 @@ function onStateChange(state, changed) {
     case 'panel-queue':        queue.renderQueue(); queue.updateStats(); break;
     case 'panel-reports':      reports.runReport(); break;
     case 'panel-transactions': reports.renderTransactions(); break;
+    case 'panel-payroll':      reports.renderPayrollPage(); break;
     case 'panel-giftcards':    giftcards.renderGiftCards(); break;
   }
 }
