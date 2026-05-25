@@ -312,6 +312,20 @@
     content:''; position:absolute; left:-2px; top:-4px; width:9px; height:9px;
     border-radius:999px; background: var(--primary); box-shadow: 0 1px 3px rgba(0,0,0,.3);
   }
+  /* Reusable Excel-style data table — for reports, payroll, and any future grid.
+     Dedicated columns, sticky first column (row labels) + sticky header, right-aligned
+     numeric cells, subtle striping. Theme-aware via the --md-* vars. */
+  .data-table { border-collapse: separate; border-spacing: 0; font-family: var(--font-body); font-size: 13px; color: var(--md-on-surface); width: max-content; min-width: 100%; }
+  .data-table th, .data-table td { padding: 6px 12px; border-bottom: 1px solid var(--md-outline-variant); white-space: nowrap; text-align: left; }
+  .data-table thead th { position: sticky; top: 0; z-index: 2; background: #1a5252; color: #fff; font-weight: 700; font-size: 12px; }
+  .data-table tbody tr:nth-child(even) td { background: var(--md-surface-container-low); }
+  .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .data-table .num.last { color: var(--md-on-surface-variant); font-size: 12px; }
+  .data-table .sticky-col { position: sticky; left: 0; z-index: 1; background: var(--md-surface-container); font-weight: 600; border-right: 2px solid var(--md-outline-variant); }
+  .data-table tbody tr:nth-child(even) .sticky-col { background: var(--md-surface-container); }
+  .data-table thead .sticky-col { z-index: 3; background: #1a5252; }
+  .data-table .section-row td { background: var(--md-surface-container); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--md-on-surface-variant); }
+
   /* Lift the item being dragged (turns ghost is already styled; match the others) */
   .tech-order-item.dragging, .floor-bubble.dragging {
     box-shadow: 0 12px 30px rgba(0,0,0,.28) !important; transform: rotate(-1.5deg) scale(1.02);

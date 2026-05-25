@@ -358,31 +358,37 @@ export function renderPayrollPage() {
   const techs = (cfg().staff || []).filter(s => !cfg().inactive_staff.includes(s.id))
     .sort((a, b) => { const ra = order.indexOf(a.id), rb = order.indexOf(b.id); return (ra === -1 ? 1e9 : ra) - (rb === -1 ? 1e9 : rb); });
   if (!techs.length) { wrap.innerHTML = '<div class="text-sm text-on-surface-variant py-8 text-center w-full">No technicians configured.</div>'; return; }
-  wrap.innerHTML = techs.map(tech => {
+  // Excel-style table: techs as column-groups across the top (This | Last), metrics +
+  // each day as rows; sticky first column holds the row labels.
+  const T = techs.map(tech => {
     const c = curData[tech.id] || { billed: 0, commission: 0, daily: {} };
     const p = prevData[tech.id] || { billed: 0, commission: 0, daily: {} };
-    const cCheck = techCheckAmount(tech, c.commission, curKey), pCheck = techCheckAmount(tech, p.commission, prevKey);
-    const cCash = Math.max(0, c.commission - cCheck), pCash = Math.max(0, p.commission - pCheck);
-    const isVar = (tech.checkType || 'variable') === 'variable';
-    const line = (label, cv, pv) => `<div class="flex items-center justify-between gap-2 py-1"><span class="text-on-surface-variant text-xs">${label}</span><span class="flex items-center gap-1.5"><span class="font-headline font-bold text-on-surface text-sm">${_m2(cv)}</span>${_pcmp(cv, pv)}</span></div>`;
-    const checkRow = isVar
-      ? `<div class="flex items-center justify-between gap-2 py-1"><span class="text-on-surface-variant text-xs">Check</span><span class="flex items-center gap-1.5"><input type="number" min="0" step="1" value="${cCheck || ''}" placeholder="0" onchange="payrollSetCheck('${tech.id}',this.value)" class="w-16 bg-surface-container border border-surface-container-high rounded px-1.5 py-0.5 text-sm font-headline font-bold text-right text-on-surface focus:outline-none focus:border-primary">${_pcmp(cCheck, pCheck)}</span></div>`
-      : line(`Check${tech.checkType === 'percent' ? ` (${tech.checkValue || 0}%)` : ''}`, cCheck, pCheck);
-    const days = curDays.map((day, i) => {
-      const cd = c.daily[day] || { billed: 0, commission: 0 };
-      const pd = p.daily[prevDays[i]] || { billed: 0, commission: 0 };
-      const dlabel = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
-      return `<div class="flex items-center justify-between gap-2 py-0.5 text-[11px]"><span class="text-on-surface-variant">${dlabel}</span><span class="flex items-center gap-1"><span class="${cd.billed ? 'text-on-surface' : 'text-outline-variant'}">$${cd.billed.toFixed(0)}/$${cd.commission.toFixed(0)}</span>${_pcmp(cd.commission, pd.commission)}</span></div>`;
-    }).join('');
-    return `<div class="flex-shrink-0 w-64 bg-surface-container-lowest rounded-2xl border border-surface-container-high p-4">
-      <div class="font-headline font-bold text-on-surface text-base mb-2 truncate">${tech.name}${tech.commission != null ? ` <span class="text-xs font-body text-on-surface-variant">${tech.commission}%</span>` : ''}</div>
-      <div class="space-y-0.5 border-b border-surface-container-high pb-2 mb-2">
-        ${line('Billed', c.billed, p.billed)}${line('Commission', c.commission, p.commission)}${checkRow}${line('Cash', cCash, pCash)}
-      </div>
-      <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">By day · billed/comm</div>
-      <div>${days}</div>
-    </div>`;
-  }).join('');
+    const cChk = techCheckAmount(tech, c.commission, curKey), pChk = techCheckAmount(tech, p.commission, prevKey);
+    return { tech, c, p, cChk, pChk, cCash: Math.max(0, c.commission - cChk), pCash: Math.max(0, p.commission - pChk), isVar: (tech.checkType || 'variable') === 'variable' };
+  });
+  const bl = 'border-left:2px solid var(--md-outline-variant)';
+  const pair = (cv, pv) => `<td class="num" style="${bl}">${_m2(cv)} ${_pcmp(cv, pv)}</td><td class="num last">${_m2(pv)}</td>`;
+  const dpair = (cd, pd) => `<td class="num" style="${bl}">$${cd.billed.toFixed(0)}/$${cd.commission.toFixed(0)} ${_pcmp(cd.commission, pd.commission)}</td><td class="num last">$${pd.billed.toFixed(0)}/$${pd.commission.toFixed(0)}</td>`;
+  const checkCell = x => x.isVar
+    ? `<td class="num" style="${bl}"><input type="number" min="0" step="1" value="${x.cChk || ''}" placeholder="0" onchange="payrollSetCheck('${x.tech.id}',this.value)" style="width:62px" class="bg-surface-container border border-surface-container-high rounded px-1 py-0.5 text-sm font-headline text-right text-on-surface focus:outline-none focus:border-primary"></td><td class="num last">${_m2(x.pChk)}</td>`
+    : pair(x.cChk, x.pChk);
+  const rows = [
+    `<tr><td class="sticky-col">Billed</td>${T.map(x => pair(x.c.billed, x.p.billed)).join('')}</tr>`,
+    `<tr><td class="sticky-col">Commission</td>${T.map(x => pair(x.c.commission, x.p.commission)).join('')}</tr>`,
+    `<tr><td class="sticky-col">Check</td>${T.map(checkCell).join('')}</tr>`,
+    `<tr><td class="sticky-col">Cash</td>${T.map(x => pair(x.cCash, x.pCash)).join('')}</tr>`,
+    `<tr class="section-row"><td class="sticky-col">By day · billed / comm</td><td colspan="${T.length * 2}"></td></tr>`,
+    ...curDays.map((day, i) => {
+      const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+      return `<tr><td class="sticky-col" style="font-weight:500">${dl}</td>${T.map(x => dpair(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`;
+    }),
+  ];
+  const techHead = T.map(x => `<th colspan="2" style="text-align:center;${bl}">${x.tech.name}${x.tech.commission != null ? ` <span style="opacity:.85;font-weight:500">${x.tech.commission}%</span>` : ''}</th>`).join('');
+  const subHead = T.map(() => `<th class="num" style="${bl}">This</th><th class="num">Last</th>`).join('');
+  wrap.innerHTML = `<table class="data-table"><thead>
+      <tr><th class="sticky-col" rowspan="2"></th>${techHead}</tr>
+      <tr>${subHead}</tr></thead>
+    <tbody>${rows.join('')}</tbody></table>`;
 }
 function payrollExportRows() {
   const cur = payrollPeriodAt(_payrollOffset), data = payrollRange(cur.from, cur.to), perKey = localDateStr(cur.from);
