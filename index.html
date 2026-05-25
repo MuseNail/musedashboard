@@ -416,6 +416,20 @@ tailwind.config = {
         <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Performance by Hour</h3>
         <div id="rpt-perf" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5"></div>
 
+        <!-- Ask about your data (AI) -->
+        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Ask About Your Data</h3>
+        <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5">
+          <div class="flex gap-2">
+            <input id="ai-q" type="text" placeholder="e.g. When am I busiest? What's my slowest day?" onkeydown="if(event.key==='Enter')aiAsk()" class="flex-1 bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary">
+            <button onclick="aiAsk()" class="px-4 py-2 rounded-lg bg-primary text-on-primary font-headline font-bold text-sm">Ask</button>
+          </div>
+          <div class="flex items-center gap-3 mt-2">
+            <button onclick="aiCopyForBridge()" class="flex items-center gap-1 text-xs font-body font-semibold text-primary hover:underline"><span class="material-symbols-outlined" style="font-size:14px">content_copy</span> Copy for my Claude/ChatGPT tab</button>
+            <button onclick="aiOpenClaude()" class="flex items-center gap-1 text-xs font-body text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined" style="font-size:14px">open_in_new</span> Open claude.ai</button>
+          </div>
+          <div id="ai-answer" class="hidden mt-3 text-sm font-body text-on-surface whitespace-pre-wrap bg-surface-container rounded-lg p-3 leading-relaxed"></div>
+        </div>
+
         <!-- Per-staff breakdown -->
         <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Staff Breakdown</h3>
         <div id="rpt-staff-breakdown" class="space-y-2 mb-5"></div>

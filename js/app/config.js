@@ -1,5 +1,5 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
-export const APP_VERSION = 'v3.02';
+export const APP_VERSION = 'v3.03';
 export const APP_NAME    = 'musedashboard';
 export const STAFF_PIN   = '1234'; // fallback when no front desk users are configured
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
@@ -8,6 +8,7 @@ const ORIGIN = 'https://musedashboard.musenailandspa.workers.dev';
 export const SQUARE_PROXY = ORIGIN + '/square';
 export const PHOTOS_PROXY = ORIGIN + '/photos';
 export const STATE_PROXY  = ORIGIN + '/state';
+export const AI_PROXY     = ORIGIN + '/ai';
 export const PUSH_PROXY   = ORIGIN + '/push';
 // Web Push VAPID public key (non-secret; the matching private key is the Worker's
 // VAPID_PRIVATE_KEY secret). Used by the Muse Staff app to subscribe for assignment

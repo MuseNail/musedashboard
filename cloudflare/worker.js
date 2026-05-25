@@ -312,6 +312,30 @@ export default {
       return json(result);
     }
 
+    // ── AI analytics (Google Gemini) ────────────────────────────────────────────
+    // POST /ai/ask { question, data } → Gemini generateContent. The API key is held
+    // server-side as a secret (GEMINI_API_KEY) so it never ships in the public PWA.
+    // Owner setup: `wrangler secret put GEMINI_API_KEY` (free-tier key from aistudio.google.com).
+    if (path === '/ai/ask' && method === 'POST') {
+      if (!env.GEMINI_API_KEY) return json({ error: 'AI not configured' }, 503);
+      let body = {}; try { body = await request.json(); } catch {}
+      const question = String(body.question || '').slice(0, 2000);
+      const data     = String(body.data || '').slice(0, 24000);
+      if (!question) return json({ error: 'No question' }, 400);
+      const model = env.GEMINI_MODEL || 'gemini-2.0-flash';
+      const prompt = `You are a concise analytics assistant for a nail salon. Answer the owner's question using ONLY the data below. Give specific numbers, be brief, and say if the data can't answer it.\n\nDATA:\n${data}\n\nQUESTION: ${question}`;
+      try {
+        const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        });
+        const gJson = await gRes.json();
+        if (!gRes.ok) { console.warn('[ai]', gRes.status); return json({ error: gJson.error?.message || 'AI request failed' }, gRes.status); }
+        const answer = (gJson.candidates?.[0]?.content?.parts || []).map(p => p.text).join('').trim();
+        return json({ answer: answer || 'No answer returned.' });
+      } catch (e) { return json({ error: 'AI service unreachable' }, 502); }
+    }
+
     // ── Square Proxy ──────────────────────────────────────────────────────────
     if (path.startsWith('/square')) {
       const squareBase = env.SQUARE_BASE_URL || 'https://connect.squareup.com';

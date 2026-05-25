@@ -9,7 +9,7 @@ import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
 import { squareUpsertCustomer } from './square-customers.js';
 import { avgServiceTime, fmtDur } from './servicetime.js';
-import { LOGO_PATH, PHOTOS_PROXY } from '../config.js';
+import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY } from '../config.js';
 
 const cfg = () => getState().config;
 const records = () => getState().records;
@@ -376,6 +376,56 @@ export function runReport() {
   updateDateButtons();
   window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding };
 }
+
+// ── AI analytics: aggregate builder + ask/bridge ──────────────────────────
+// Compact human-readable summary of the SELECTED range, used both for the in-app
+// Gemini call and the "copy into your own AI tab" bridge. Aggregates only — no raw
+// customer rows leave the device.
+function buildAnalyticsSummary() {
+  const dates = getReportDates(); if (!dates) return 'No date range selected.';
+  const { from, to } = dates;
+  const filtered = buildCombinedRecords().filter(r => { if (r.status === 'deleted') return false; const d = new Date(r.checkinTime); return d >= from && d <= to && (isPaidStatus(r.status) || r.status === 'refund'); });
+  const paid = filtered.filter(r => isPaidStatus(r.status));
+  const totalIncome = filtered.reduce((s, r) => s + (r.totalCost || 0), 0);
+  const guests = paid.length, avg = guests ? totalIncome / guests : 0;
+  const byHour = Array.from({ length: 24 }, () => ({ rev: 0, n: 0 })), byDow = Array.from({ length: 7 }, () => ({ rev: 0, n: 0 })), byDay = {}, bySvc = {};
+  paid.forEach(r => {
+    const d = new Date(r.checkinTime), rev = r.totalCost || 0;
+    byHour[d.getHours()].rev += rev; byHour[d.getHours()].n++;
+    byDow[d.getDay()].rev += rev; byDow[d.getDay()].n++;
+    byDay[localDateStr(d)] = (byDay[localDateStr(d)] || 0) + rev;
+    (r.assignments || []).forEach(a => { const name = svc(a.serviceId)?.label || 'Service'; (bySvc[name] = bySvc[name] || { rev: 0, n: 0 }); bySvc[name].rev += a.cost || 0; bySvc[name].n++; });
+  });
+  const L = [];
+  L.push(`Muse Nails & Spa — ${rangeLabel()}`);
+  L.push(`Totals: revenue $${totalIncome.toFixed(2)}, guests ${guests}, avg ticket $${avg.toFixed(2)}`);
+  L.push(`By hour (rev/guests): ${byHour.map((b, i) => b.n ? `${_fmtHour(i)} $${b.rev.toFixed(0)}/${b.n}` : null).filter(Boolean).join(', ') || 'none'}`);
+  L.push(`By weekday (rev/guests): ${byDow.map((b, i) => b.n ? `${_DOW[i].slice(0, 3)} $${b.rev.toFixed(0)}/${b.n}` : null).filter(Boolean).join(', ') || 'none'}`);
+  L.push(`Top services (rev/count): ${Object.entries(bySvc).sort((a, b) => b[1].rev - a[1].rev).slice(0, 12).map(([k, v]) => `${k} $${v.rev.toFixed(0)}/${v.n}`).join(', ') || 'none'}`);
+  if (Object.keys(byDay).length > 1) L.push(`Revenue by day: ${Object.entries(byDay).sort((a, b) => a[0] < b[0] ? -1 : 1).map(([k, v]) => `${k} $${v.toFixed(0)}`).join(', ')}`);
+  return L.join('\n');
+}
+export async function aiAsk() {
+  const q = document.getElementById('ai-q')?.value?.trim();
+  const out = document.getElementById('ai-answer');
+  if (!q) { showToast('Type a question first.'); return; }
+  if (out) { out.classList.remove('hidden'); out.textContent = 'Thinking…'; }
+  try {
+    const res = await fetch(`${AI_PROXY}/ask`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, data: buildAnalyticsSummary() }) });
+    const j = await res.json().catch(() => ({}));
+    if (!out) return;
+    if (res.ok) out.textContent = j.answer || 'No answer.';
+    else if (res.status === 503 || j.error === 'AI not configured') out.textContent = 'In-app AI isn’t set up yet. Add a Gemini API key to the Worker (Settings → Worker), or use “Copy for my AI tab” below.';
+    else out.textContent = 'Error: ' + (j.error || res.status);
+  } catch (e) { if (out) out.textContent = 'Could not reach the AI service.'; }
+}
+export function aiCopyForBridge() {
+  const q = document.getElementById('ai-q')?.value?.trim() || '(type your question here)';
+  const text = `Here is my salon's data for ${rangeLabel()}.\n\n${buildAnalyticsSummary()}\n\nQuestion: ${q}`;
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => showToast('Copied — paste into your Claude/ChatGPT tab'), () => showToast('Copy failed'));
+  else showToast('Clipboard not available');
+}
+export function aiOpenClaude() { window.open('https://claude.ai/new', '_blank'); }
 
 // ── Comparison metrics + delta badges ─────────────
 // Scalar metrics for an arbitrary window, mirroring runReport's definitions exactly so
