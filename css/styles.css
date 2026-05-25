@@ -366,28 +366,41 @@
   #queue-list .space-y-2 > * + * { margin-top: 5px !important; }   /* tighten between cards in a group */
   #cal-appts-list > div { padding-top: 6px !important; padding-bottom: 6px !important; }
 
-  /* ── Ghost buttons (cosmetic pass 3) ──────────────────────────────────────
-     Filled & outlined primary buttons become flat — accent text, no fill/border at
-     rest, faint outline + barely-there wash on hover. The single true primary action
-     (Pay) keeps a solid azure fill via .cta. Excludes nav tabs, round queue actions,
-     toggles, and the check-in service buttons (which keep their selected fill). */
-  button.bg-primary:not(.dash-tab):not(.q-action-btn):not(.mswitch):not(.cta):not(.service-btn) {
+  /* ── Bubble-outline action buttons (cosmetic pass 3) ──────────────────────
+     Filled & outlined primary buttons become flat with a VISIBLE resting border
+     ("bubble") + accent text — never a fill, and text stays accent-colored on hover
+     (no more white-on-light-gray). Lighter ghost (no resting border) is reserved for
+     the .tn-ghost pills. The one true primary action (Pay) stays solid via .cta.
+     Excludes nav tabs, round queue actions, toggles, check-in service buttons,
+     and the queue filter tabs (.tab-btn, styled below). */
+  button.bg-primary:not(.dash-tab):not(.q-action-btn):not(.mswitch):not(.cta):not(.service-btn):not(.tab-btn) {
     background:transparent !important; background-image:none !important; color:var(--primary) !important;
-    box-shadow:none !important; border:1px solid transparent !important;
+    box-shadow:none !important; border:1px solid var(--outline-variant) !important;
   }
-  button.bg-primary:not(.dash-tab):not(.q-action-btn):not(.mswitch):not(.cta):not(.service-btn):hover {
-    border-color:var(--outline-variant) !important; background:rgba(0,0,0,.03) !important;
+  button.bg-primary:not(.dash-tab):not(.q-action-btn):not(.mswitch):not(.cta):not(.service-btn):not(.tab-btn):hover {
+    border-color:var(--outline) !important; background:rgba(0,0,0,.03) !important; color:var(--primary) !important;
   }
   button.border.border-primary.text-primary, button.border-2.border-primary.text-primary {
-    border-color:transparent !important; background:transparent !important;
+    border-color:var(--outline-variant) !important; background:transparent !important; color:var(--primary) !important;
   }
   button.border.border-primary.text-primary:hover, button.border-2.border-primary.text-primary:hover {
-    border-color:var(--outline-variant) !important; background:rgba(0,0,0,.03) !important;
+    border-color:var(--outline) !important; background:rgba(0,0,0,.03) !important; color:var(--primary) !important;
   }
+  button.border.border-primary.text-primary:hover .material-symbols-outlined,
+  button.border-2.border-primary.text-primary:hover .material-symbols-outlined { color:var(--primary) !important; }
   /* The one solid CTA exception (e.g. Pay with Square). */
   .cta { background:var(--primary) !important; background-image:none !important; color:#fff !important; box-shadow:0 6px 16px -6px rgba(47,128,216,.6) !important; border:none !important; }
   .cta:hover { background:var(--primary-dim) !important; }
   .cta .material-symbols-outlined { color:#fff !important; }
+
+  /* ── Neutral (black) UI text + selected states, theme-independent ──────────
+     Structural/label/selected-tab text stays black regardless of accent; accent is
+     reserved for data, the selected-tab tint, and customer buttons. */
+  .dash-tab.active { color:#1b1b1f !important; }                                   /* selected tab: tint pill + black text */
+  .dash-tab.active .material-symbols-outlined { color:#1b1b1f !important; }
+  .tab-btn.bg-primary { background:#1b1b1f !important; background-image:none !important; color:#ffffff !important; border:none !important; box-shadow:none !important; }  /* active queue filter = black */
+  .pin-dot.bg-primary { background:#1b1b1f !important; }                           /* PIN dots always black */
+  .text-primary.uppercase.tracking-widest { color:#1b1b1f !important; }            /* section/field labels black, not azure */
 
   /* ── Reports: comparison delta badges ─────────────────────────────────── */
   .rpt-delta { display:inline-flex; align-items:center; gap:3px; margin-top:4px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; line-height:1; }

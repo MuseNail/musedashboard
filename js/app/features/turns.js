@@ -239,9 +239,15 @@ export function renderTurnsTechGrid() {
     row.addEventListener('wheel', e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && row.scrollWidth > row.clientWidth) { row.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
   });
   // Rebuilding innerHTML snaps every row's horizontal scroll back to the first turn.
-  // Keep the LATEST turn (rightmost, including the trailing "+" slot) in view instead.
-  // scrollLeft past max clamps to the end; rAF lets layout settle first (needed on iPad).
-  requestAnimationFrame(() => grid.querySelectorAll('.turns-slot-row').forEach(row => { row.scrollLeft = row.scrollWidth; }));
+  // Keep the NEXT open slot (first "+") in view — don't jump to the far end. If the row
+  // fits without overflow, don't scroll at all. rAF lets layout settle first (iPad).
+  requestAnimationFrame(() => grid.querySelectorAll('.turns-slot-row').forEach(row => {
+    if (row.scrollWidth <= row.clientWidth + 1) return;            // fits — no scroll
+    const next = row.querySelector('.turns-drop-zone');            // first empty slot
+    if (!next) { row.scrollLeft = row.scrollWidth; return; }       // all full — show the end
+    const delta = (next.getBoundingClientRect().right - row.getBoundingClientRect().left) - row.clientWidth + 12;
+    if (delta > 0) row.scrollLeft += delta;                        // reveal just the next box
+  }));
 }
 
 export function renderTurnsQueue() {

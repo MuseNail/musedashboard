@@ -158,7 +158,11 @@ export function renderFloorPlan() {
 
   const tray = document.getElementById('floorplan-tray');
   if (tray) {
-    if (floorEditMode || unplaced.length === 0) tray.innerHTML = '';
+    // Always render the tray box in live mode (even when empty) so the grid below
+    // doesn't jump when guests get added/seated. Only hide it while editing layout.
+    if (floorEditMode) tray.innerHTML = '';
+    else if (unplaced.length === 0) tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
+      <div class="text-[11px] font-body font-semibold text-on-surface-variant">All guests seated — drag a guest here to un-seat.</div></div>`;
     else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not seated — drag onto a station (${unplaced.length})</div>
       <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#c8e6c5' : '#ffe0b2'};color:#1f2937;font-size:11px">${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${e.name}</span></div>`).join('')}</div></div>`;
@@ -195,8 +199,14 @@ export function renderFloorPlan() {
 function renderFloorProps() {
   const el = document.getElementById('floorplan-props');
   if (!el) return;
-  if (!floorEditMode || _selected.size === 0) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  // Box stays visible the whole time you're editing (so the layout below doesn't
+  // jump as you select/deselect); shows a hint when nothing is selected yet.
+  if (!floorEditMode) { el.classList.add('hidden'); el.innerHTML = ''; return; }
   el.classList.remove('hidden');
+  if (_selected.size === 0) {
+    el.innerHTML = `<div class="text-xs font-body text-on-surface-variant py-1">Tap a station to select it, then style it here. Shift-tap to select more than one.</div>`;
+    return;
+  }
   const ids = [..._selected];
   const ref = layoutFor(ids[0]);
   // Show the reference (first-selected) dimensions as exact numbers so two seats
@@ -205,6 +215,7 @@ function renderFloorProps() {
   const sameW = dims.every(d => Math.round(d.w) === Math.round(ref.w));
   const sameH = dims.every(d => Math.round(d.h) === Math.round(ref.h));
   const sameShape = dims.every(d => d.shape === ref.shape);
+  const sameFont = dims.every(d => (d.font || 1) === (ref.font || 1));
   const numCls = 'w-12 text-center border border-surface-container-high rounded bg-transparent py-0.5 text-xs font-body';
   el.innerHTML = `
     <div class="flex items-center gap-2 mb-2 flex-wrap">
@@ -223,7 +234,7 @@ function renderFloorProps() {
         <button onclick="fpSetProp('shape','circle')" class="fp-step ${sameShape&&ref.shape==='circle'?'fp-on':''}">◯</button>
         ${sameShape?'':'<span class="text-[10px] text-outline">mixed</span>'}
       </span>
-      <span class="flex items-center gap-1">Text <button onclick="fpTextSize(-0.1)" class="fp-step" style="font-size:11px">A−</button><button onclick="fpTextSize(0.1)" class="fp-step" style="font-size:15px">A+</button></span>
+      <span class="flex items-center gap-1">Text <button onclick="fpTextSize(-0.1)" class="fp-step" style="font-size:11px">A−</button><input type="number" step="0.1" min="0.7" max="1.8" value="${(ref.font||1).toFixed(1)}" onchange="fpSetFont(this.value)" class="${numCls}"><button onclick="fpTextSize(0.1)" class="fp-step" style="font-size:15px">A+</button>${sameFont?'':'<span class="text-[10px] text-outline">mixed</span>'}</span>
     </div>`;
 }
 function applyToSelected(mut) {
@@ -242,6 +253,7 @@ export function fpMatchSize() {
   applyToSelected(() => ({ w: ref.w, h: ref.h, shape: ref.shape }));
 }
 export function fpTextSize(delta) { applyToSelected(L => ({ font: Math.min(1.8, Math.max(0.7, Math.round(((L.font || 1) + delta) * 100) / 100)) })); }
+export function fpSetFont(val) { const n = parseFloat(val); if (!Number.isFinite(n)) return; applyToSelected(() => ({ font: Math.min(1.8, Math.max(0.7, Math.round(n * 100) / 100)) })); }
 export function fpClearSelection() { _selected.clear(); renderFloorPlan(); }
 
 export function toggleFloorEdit() { floorEditMode = !floorEditMode; _selected.clear(); renderFloorPlan(); }
@@ -358,7 +370,13 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
     const dx = e.clientX - startX, dy = e.clientY - startY;
     if (!wasDragging) {
       if (mode === 'bubble' && dragEntryId) window.showGroupAssignModal?.(dragEntryId);
-      else if (mode === 'station' && dragStation) { if (_selected.has(dragStation)) _selected.delete(dragStation); else _selected.add(dragStation); renderFloorPlan(); }
+      // Single click selects only this station (clears the rest); Shift+click adds/removes
+      // it from a multi-selection. (Touch has no Shift — multi-select by gesture is TODO.)
+      else if (mode === 'station' && dragStation) {
+        if (e.shiftKey) { if (_selected.has(dragStation)) _selected.delete(dragStation); else _selected.add(dragStation); }
+        else { _selected.clear(); _selected.add(dragStation); }
+        renderFloorPlan();
+      }
     } else if (mode === 'bubble') {
       const tgt = stationAt(e.clientX, e.clientY); if (tgt) seatCustomer(dragEntryId, tgt.dataset.station); else renderFloorPlan();
     } else if (mode === 'station' && moveStart) {
