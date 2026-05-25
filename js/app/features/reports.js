@@ -144,6 +144,15 @@ export function runReport() {
     const m = staffMap[a.techId]; m.income += a.cost||0; m.count++;
     const t = classifyTurn(a.cost||0, a.serviceId||''); if (t==='full') m.fullTurns++; else if (t==='half') m.halfTurns += 0.5; else m.bonusTurns++;
   }));
+  // Refund records carry no assignments, so by default they don't touch per-tech
+  // commission (the salon absorbs them). When opted in, subtract the refunded billed.
+  if (cfg().commission_includes_refunds) {
+    filtered.filter(r => r.status === 'refund').forEach(r => (r.refundTechBilled||[]).forEach(x => {
+      if (!x.techId) return;
+      if (!staffMap[x.techId]) staffMap[x.techId] = { income:0, count:0, fullTurns:0, halfTurns:0, bonusTurns:0 };
+      staffMap[x.techId].income += x.billed || 0;
+    }));
+  }
   const turnsOrder = cfg().turns_order || [];
   const staffEntries = Object.entries(staffMap).sort((a,b)=>{
     const ra = turnsOrder.indexOf(a[0]) === -1 ? Infinity : turnsOrder.indexOf(a[0]);
@@ -309,17 +318,29 @@ function payrollDaysInRange(from, to) {
   return days;
 }
 function payrollRange(from, to) {
-  const recs = buildCombinedRecords().filter(r => { if (r.status === 'deleted' || r.status === 'refund' || !isPaidStatus(r.status)) return false; const d = new Date(r.checkinTime); return d >= from && d <= to; });
+  const inRange = r => { const d = new Date(r.checkinTime); return d >= from && d <= to; };
+  const recs = buildCombinedRecords().filter(r => r.status !== 'deleted' && inRange(r));
   const byTech = {};
-  recs.forEach(r => (r.assignments || []).forEach(a => {
-    if (!a.techId) return;
-    const tech = staffById(a.techId), pct = tech?.commission != null ? tech.commission : 0, cost = a.cost || 0, comm = cost * pct / 100;
-    const t = byTech[a.techId] = byTech[a.techId] || { billed: 0, commission: 0, daily: {} };
-    t.billed += cost; t.commission += comm;
-    const day = localDateStr(new Date(r.checkinTime));
+  const add = (techId, billed, day) => {
+    if (!techId) return;
+    const tech = staffById(techId), pct = tech?.commission != null ? tech.commission : 0, comm = billed * pct / 100;
+    const t = byTech[techId] = byTech[techId] || { billed: 0, commission: 0, daily: {} };
+    t.billed += billed; t.commission += comm;
     const dd = t.daily[day] = t.daily[day] || { billed: 0, commission: 0 };
-    dd.billed += cost; dd.commission += comm;
-  }));
+    dd.billed += billed; dd.commission += comm;
+  };
+  recs.filter(r => isPaidStatus(r.status)).forEach(r => {
+    const day = localDateStr(new Date(r.checkinTime));
+    (r.assignments || []).forEach(a => add(a.techId, a.cost || 0, day));
+  });
+  // Optionally let refunds reduce each tech's billed/commission (default: off → salon
+  // absorbs the refund and tech commission is unchanged).
+  if (cfg().commission_includes_refunds) {
+    recs.filter(r => r.status === 'refund').forEach(r => {
+      const day = localDateStr(new Date(r.checkinTime));
+      (r.refundTechBilled || []).forEach(x => add(x.techId, x.billed || 0, day));
+    });
+  }
   return byTech;
 }
 function techCheckAmount(tech, commission, perKey) {
@@ -739,7 +760,17 @@ export function confirmRefund() {
   if (amount <= 0) { showToast('Refund amount must be greater than zero.'); return; }
   if (amount > (_refundTxnRecord?.totalCost || 0)) { showToast('Refund cannot exceed the original total.'); return; }
   const o = _refundTxnRecord, now = new Date().toISOString();
-  const record = { id: String(Date.now()*1000 + Math.floor(Math.random()*1000)), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -amount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: _refundTxnId, loggedBy: getActiveUser()?.name || '' };
+  // checkinTime = the ORIGINAL sale's timestamp so the refund reduces that period's
+  // totals in Reports/Payroll (not the day it was issued). completedAt = now keeps the
+  // audit log showing when the refund actually happened. refundTechBilled carries the
+  // original's per-tech billed (negated, scaled for partial refunds) so commission can
+  // optionally be reduced — see config.commission_includes_refunds.
+  const origTotal = o.totalCost || amount;
+  const ratio = origTotal > 0 ? amount / origTotal : 1;
+  const refundTechBilled = (o.assignments || [])
+    .filter(a => a.techId)
+    .map(a => ({ techId: a.techId, billed: -((a.cost || 0) * ratio) }));
+  const record = { id: String(Date.now()*1000 + Math.floor(Math.random()*1000)), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -amount, checkinTime: o.checkinTime || now, completedAt: now, status: 'refund', isAppointment: false, refundOf: _refundTxnId, refundTechBilled, loggedBy: getActiveUser()?.name || '' };
   dispatch('record.save', { record });
   closeRefundModal();
   renderTransactions();

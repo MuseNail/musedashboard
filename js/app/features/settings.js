@@ -244,6 +244,27 @@ export function savePayPeriod() {
   window.renderTransactions?.(); window.runReport?.();
 }
 
+// ── Commission & refunds policy (config.commission_includes_refunds) ─────────────
+export function renderCommissionSettings() {
+  const el = document.getElementById('settings-commission-section'); if (!el) return;
+  const on = !!cfg().commission_includes_refunds;
+  el.innerHTML = `
+    <p class="text-xs font-body text-on-surface-variant mb-4">When a transaction is refunded in the app, choose whether that refund <strong>reduces the technician’s commission</strong> for the original sale’s pay period.</p>
+    <label class="flex items-center justify-between gap-4 cursor-pointer">
+      <span class="text-sm font-body font-semibold text-on-surface">Refunds reduce tech commission</span>
+      <input type="checkbox" ${on ? 'checked' : ''} onchange="setCommissionIncludesRefunds(this.checked)" class="w-5 h-5 accent-primary cursor-pointer">
+    </label>
+    <p class="text-[11px] font-body text-on-surface-variant mt-2">${on
+      ? 'On — a refund subtracts the refunded amount from that technician’s billed total and commission (proportional for partial refunds).'
+      : 'Off (default) — the salon absorbs refunds; technician commission is unchanged.'}</p>`;
+}
+export function setCommissionIncludesRefunds(checked) {
+  dispatch('config.set', { key: 'commission_includes_refunds', value: !!checked });
+  renderCommissionSettings();
+  window.runReport?.(); window.renderPayrollPage?.();
+  showToast(checked ? 'Refunds will reduce commission' : 'Refunds no longer affect commission');
+}
+
 // ── Orchestrator ──────────────────────────────────
 // ── Settings drill-down navigation ────────────────────────────────────────────
 // Groups existing setting sections into 6 categories. Content is already rendered
@@ -263,6 +284,7 @@ const SETTINGS_NAV = [
     { label:'Turn Thresholds', sub:'Full / half / bonus cutoffs', content:'turns-thresh-section' },
     { label:'Stations', sub:'Add, rename & delete pedicure / manicure seats', content:'settings-stations-section', render:'renderStationsSettings' },
     { label:'Pay Period', sub:'Weekly / bi-weekly / bi-monthly for the quick button', content:'settings-payperiod-section', render:'renderPayPeriodSettings', adminOnly:true },
+    { label:'Commission & Refunds', sub:'Whether refunds reduce tech commission', content:'settings-commission-section', render:'renderCommissionSettings', adminOnly:true },
     { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section' },
   ]},
   { id:'integrations', title:'Integrations', desc:'Square & Google', items:[
