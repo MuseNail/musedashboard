@@ -215,6 +215,12 @@
   /* Dashboard panels */
   .dash-panel { display:none; }
   .dash-panel.active { display:block; }
+  /* Sticky tab header: pins a panel's title + controls row to the top of the shared
+     scroll area so it stays visible while the body scrolls. Opaque surface bg masks
+     content scrolling under it; the side padding of the scroll container is the same
+     surface colour, so the header reads as full-width. Headers using this drop their
+     own margin-bottom — the padding-bottom here provides the gap (and carries the bg). */
+  .dash-head { position: sticky; top: 62px; z-index: 9; background: var(--surface, #e8ecee); padding-top: 0.5rem; padding-bottom: 0.75rem; }
 
   /* Autocomplete dropdown */
   .autocomplete-list {
@@ -274,6 +280,11 @@
     transition: transform .08s ease, box-shadow .15s ease, background-color .15s ease, color .15s ease;
   }
   button:active, [onclick]:active, [role="button"]:active { transform: scale(0.975); }
+  /* …but NEVER a full-screen pop-up overlay. Every modal/menu backdrop carries an
+     onclick (tap-outside-to-close), so :active propagating up from a tapped button made
+     the whole overlay — and the panel inside it — scale/bounce on every tap (the same
+     bug the numpad had). Kill the transform on the overlay; buttons inside still scale. */
+  .fixed.inset-0:active { transform: none !important; }
   /* …but NOT the numpad keys. The cosmetic button transition above animated a
      background/transform flash on every tap → "flicker + jump" on iPad during rapid
      amount entry. Kill ALL motion on the keys: no transition, no transform, no shadow

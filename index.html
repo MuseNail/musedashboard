@@ -256,8 +256,9 @@ tailwind.config = {
     </div>
   </header>
 
-  <!-- Main content (full width, no sidebar) -->
-  <div class="flex-grow overflow-y-auto no-scroll p-4">
+  <!-- Main content (full width, no sidebar). The body scrolls (this grows with content);
+       no overflow here so panel .dash-head bars stick to the body viewport under the nav. -->
+  <div class="flex-grow no-scroll p-4">
 
       <!-- ── FLOOR PLAN PANEL ── -->
       <div class="dash-panel" id="panel-floorplan">
@@ -278,7 +279,7 @@ tailwind.config = {
       <!-- ── QUEUE PANEL ── -->
       <div class="dash-panel active" id="panel-queue">
         <!-- Filter tabs + Add + History date -->
-        <div class="flex gap-2 mb-3 flex-wrap items-center">
+        <div class="dash-head flex gap-2 flex-wrap items-center">
           <button onclick="filterQueue('all')" id="tab-all" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-primary text-on-primary transition-all">All</button>
           <button onclick="filterQueue('waiting')" id="tab-waiting" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Waiting</button>
           <button onclick="filterQueue('inservice')" id="tab-inservice" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">In Service</button>
@@ -314,7 +315,7 @@ tailwind.config = {
 
       <!-- ── REPORTS PANEL ── -->
       <div class="dash-panel" id="panel-reports">
-        <div class="flex items-center justify-between mb-5">
+        <div class="dash-head flex items-center justify-between">
           <div>
             <h2 class="text-xl font-headline font-bold text-on-surface">Reports</h2>
             <p class="text-sm font-body text-on-surface-variant mt-0.5">Income, staff earnings & commissions</p>
@@ -509,7 +510,7 @@ tailwind.config = {
 
       <!-- ── TRANSACTIONS PANEL ── -->
       <div class="dash-panel" id="panel-transactions">
-        <div class="flex items-center justify-between mb-5">
+        <div class="dash-head flex items-center justify-between">
           <div>
             <h2 class="text-xl font-headline font-bold text-on-surface">Transaction History</h2>
             <p class="text-sm font-body text-on-surface-variant mt-0.5">All check-ins with service and payment details</p>
@@ -541,7 +542,7 @@ tailwind.config = {
 
       <!-- ── PAYROLL PANEL ── -->
       <div class="dash-panel" id="panel-payroll">
-        <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div class="dash-head flex items-center justify-between flex-wrap gap-2">
           <div>
             <h2 class="text-xl font-headline font-bold text-on-surface">Payroll</h2>
             <p class="text-sm font-body text-on-surface-variant mt-0.5">Per-tech commission, check &amp; cash by pay period</p>
@@ -1130,7 +1131,7 @@ tailwind.config = {
            GIFT CARDS PANEL (inside dashboard)
       ═══════════════════════════════════════════════ -->
       <div id="panel-giftcards" class="dash-panel">
-        <div class="flex items-center justify-between mb-5">
+        <div class="dash-head flex items-center justify-between">
           <div>
             <h2 class="text-xl font-headline font-bold text-on-surface">Gift Cards</h2>
             <p class="text-sm font-body text-on-surface-variant mt-0.5">Track gift cards sold and redeemed</p>
