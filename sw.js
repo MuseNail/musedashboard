@@ -1,7 +1,7 @@
 // ── Service Worker (v2.72 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'muse-v3.30';
+const CACHE_NAME = 'muse-v3.31';
 
 const PRECACHE_URLS = [
   '/musedashboard/',
@@ -77,17 +77,6 @@ async function networkFirst(req) {
     cache.put(req, res.clone());
     return res;
   } catch { return caches.match(req); }
-}
-
-async function cacheFirst(req) {
-  const cached = await caches.match(req);
-  if (cached) return cached;
-  try {
-    const res = await fetch(req);
-    const cache = await caches.open(CACHE_NAME);
-    cache.put(req, res.clone());
-    return res;
-  } catch { return new Response('Offline', { status: 503 }); }
 }
 
 // ── Web Push (Muse Staff) ────────────────────────────────────────────────────

@@ -202,6 +202,24 @@ function _numpadSyncPhone() {
   _numpadTarget.value = _numpadRaw;   // acSearch → formatPhone reformats on input
   _numpadTarget.dispatchEvent(new Event('input', { bubbles: true }));
 }
+// Live-write amount/percent fields as digits are typed (mirrors _numpadSyncPhone), writing
+// exactly what numpadConfirm would. This makes the running total update as you type AND makes
+// the ✓ optional: the value already lives in the field, so any close path (tap-away, switching
+// fields, Save) keeps it — no confirm tap required, and switching fields can't drop a value.
+function _numpadSyncAmount() {
+  if (!_numpadTarget || _numpadMode === 'phone') return;
+  if (_numpadMode === 'percent') {
+    const v = parseFloat(_numpadRaw);
+    _numpadTarget.value = !isNaN(v) && v > 0 ? String(v) : '';
+  } else if (_wholeDollars()) {
+    const v = parseFloat(_numpadRaw || '0') || 0;
+    _numpadTarget.value = v > 0 ? String(v) : '';
+  } else {
+    const cents = parseInt(_numpadRaw || '0', 10);
+    _numpadTarget.value = cents > 0 ? (cents / 100).toString() : '';
+  }
+  _numpadTarget.dispatchEvent(new Event('input', { bubbles: true }));
+}
 // Hide the numpad WITHOUT writing back (used when an autocomplete pick already set
 // the field — confirming would clobber it with the partial typed digits).
 export function dismissNumpad() { _closeNumpadModal(); }
@@ -244,7 +262,7 @@ export function numpadKey(key) {
     else if (key === '00') { if (raw === '' || raw === '0') return; raw += '00'; }
     else { raw = raw === '0' ? key : raw + key; }
     if (raw.replace('.', '').length > 4) return;
-    _numpadRaw = raw; _numpadUpdateDisplay();
+    _numpadRaw = raw; _numpadUpdateDisplay(); _numpadSyncAmount();
     return;
   }
   if (key === '+') return;
@@ -260,18 +278,18 @@ export function numpadKey(key) {
       else raw = raw === '0' ? key : raw + key;
     }
     if (raw.split('.')[0].length > 6) return;
-    _numpadRaw = raw; _numpadUpdateDisplay();
+    _numpadRaw = raw; _numpadUpdateDisplay(); _numpadSyncAmount();
     return;
   }
   if (key === '.') return;
   if (key === '00') { if (_numpadRaw === '' || _numpadRaw === '0') return; _numpadRaw += '00'; }
   else { if (_numpadRaw === '0') _numpadRaw = key; else _numpadRaw += key; }
   if (_numpadRaw.length > 6) _numpadRaw = _numpadRaw.slice(0, 6);
-  _numpadUpdateDisplay();
+  _numpadUpdateDisplay(); _numpadSyncAmount();
 }
-export function numpadClear() { _numpadRaw = ''; _numpadUpdateDisplay(); if (_numpadMode === 'phone') _numpadSyncPhone(); }
+export function numpadClear() { _numpadRaw = ''; _numpadUpdateDisplay(); if (_numpadMode === 'phone') _numpadSyncPhone(); else _numpadSyncAmount(); }
 
-export function numpadBackspace() { _numpadRaw = _numpadRaw.slice(0, -1); _numpadUpdateDisplay(); if (_numpadMode === 'phone') _numpadSyncPhone(); }
+export function numpadBackspace() { _numpadRaw = _numpadRaw.slice(0, -1); _numpadUpdateDisplay(); if (_numpadMode === 'phone') _numpadSyncPhone(); else _numpadSyncAmount(); }
 
 export function numpadConfirm() {
   if (_numpadTarget) {

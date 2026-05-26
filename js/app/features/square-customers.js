@@ -134,13 +134,17 @@ export function closeCustomerNote() {
   _noteCustomerId = null;
 }
 
-export function buildDropdown(customers, dropdownId, guestIdx, phoneId, firstId, lastId) {
+export function buildDropdown(customers, dropdownId, guestIdx, phoneId, firstId, lastId, maskPhone = false) {
   const dropdown = document.getElementById(dropdownId);
   if (!dropdown) return;
   if (customers.length === 0) { dropdown.classList.add('hidden'); return; }
   dropdown.innerHTML = customers.map((c, i) => {
     const digits = c.phone.replace(/\D/g, '').replace(/^1(\d{10})$/, '$1').slice(0, 10);
-    const displayPhone = digits.length === 10 ? `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}` : c.phone;
+    // Check-in kiosk only (maskPhone): hide all but the last 4 digits so a customer typing at
+    // the front desk can't read other customers' full numbers in the suggestion list. The full
+    // number still fills the form on select (fillFromCustomer receives c.phone unchanged).
+    let displayPhone = digits.length === 10 ? `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}` : c.phone;
+    if (maskPhone && digits.length >= 4) displayPhone = `(***) ***-${digits.slice(-4)}`;
     return `
     <div class="autocomplete-item" data-ac-idx="${i}" onmousedown="fillFromCustomer(
       {id:'${c.id}',phone:'${c.phone.replace(/'/g,"\\'")}',given_name:'${c.given_name.replace(/'/g,"\\'")}',family_name:'${c.family_name.replace(/'/g,"\\'")}'},
@@ -179,7 +183,7 @@ export function acSearch(input, idx, field) {
   if (field === 'phone') formatPhone(input);
   const results = filterCustomers(input.value, field);
   const dropId = field === 'phone' ? `ac-phone-${idx}` : `ac-first-${idx}`;
-  buildDropdown(results, dropId, idx, `phone-${idx}`, `first-${idx}`, `last-${idx}`);
+  buildDropdown(results, dropId, idx, `phone-${idx}`, `first-${idx}`, `last-${idx}`, true);   // check-in screen: mask phones in the suggestion list
   const other = document.getElementById(field === 'phone' ? `ac-first-${idx}` : `ac-phone-${idx}`);
   if (other) { other.innerHTML = ''; other.classList.add('hidden'); }
 }

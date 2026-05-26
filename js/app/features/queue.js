@@ -789,7 +789,11 @@ export function renderGroupAssignContent() {
           <div class="font-headline font-semibold text-on-surface text-sm">${item.label}<span class="ml-2 text-[10px] font-body text-outline-variant uppercase tracking-widest">Retail Item</span></div>
           <div class="flex items-center gap-2">
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">Qty</label>
-            <input type="text" inputmode="numeric" value="${existing.qty || ''}" placeholder="0" class="item-qty w-12 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body text-center focus:outline-none focus:border-primary" oninput="updateGroupTotal()">
+            <div class="flex items-center rounded-lg border border-surface-container-high overflow-hidden bg-surface-container">
+              <button type="button" onclick="stepItemQty(this,-1)" aria-label="Decrease quantity" class="px-2.5 py-1.5 text-on-surface-variant font-headline font-bold text-base leading-none active:bg-surface-container-high">−</button>
+              <input type="text" inputmode="none" readonly value="${existing.qty || 0}" class="item-qty w-8 bg-transparent border-0 px-0 py-1.5 text-sm font-body text-center focus:outline-none pointer-events-none">
+              <button type="button" onclick="stepItemQty(this,1)" aria-label="Increase quantity" class="px-2.5 py-1.5 text-on-surface-variant font-headline font-bold text-base leading-none active:bg-surface-container-high">＋</button>
+            </div>
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">$</label>
             <input type="text" inputmode="none" value="${existing.price != null && existing.price !== 0 ? existing.price : ''}" placeholder="${item.price || '0.00'}" class="item-price w-16 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" onfocus="openNumpad(this,'${item.label}')" onclick="openNumpad(this,'${item.label}')" oninput="updateGroupTotal()">
           </div></div></div>`;
@@ -890,6 +894,16 @@ export function updateGroupTotal() {
   // (the whole-ticket items/fees/discount roll into the Party Total in the footer).
   const el = document.getElementById('group-subtotal'); if (el) el.textContent = `$${(isParty ? activeSvc : partyTotal).toFixed(2)}`;
   const pel = document.getElementById('group-party-total'); if (pel) pel.textContent = `$${partyTotal.toFixed(2)}`;
+}
+
+// Retail-item quantity stepper (touch-friendly, no keyboard). Min 0 — an item with a price
+// but qty 0 is intentionally NOT counted/saved anywhere (the save and total paths both gate on
+// qty > 0), so a set price never rings up until the operator steps the quantity above zero.
+export function stepItemQty(btn, delta) {
+  const inp = btn.closest('[data-item-id]')?.querySelector('.item-qty');
+  if (!inp) return;
+  inp.value = Math.max(0, (parseInt(inp.value, 10) || 0) + delta);
+  updateGroupTotal();
 }
 
 export function closeGroupAssignModal() {

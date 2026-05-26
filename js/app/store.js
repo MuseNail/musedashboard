@@ -82,7 +82,6 @@ export function hydrate(snap) {
 export function applyChange(op, payload, seq) {
   switch (op) {
     case 'config.set':    state.config[payload.key] = payload.value; break;
-    case 'turns.order':   state.config.turns_order  = payload.order; break;
     case 'queue.upsert':  upsertById(state.queue, payload.entry); break;
     case 'queue.remove':  removeById(state.queue, payload.id); break;
     case 'record.save':   upsertById(state.records, payload.record); break;

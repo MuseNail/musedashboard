@@ -431,6 +431,7 @@ export function runReport() {
   // Per-service
   const svcMap = {};
   filtered.forEach(r => {
+    if (r.status === 'refund') return;   // a refund has no assignments; without this it would fall into the count-only branch below and inflate a service's "times" by 1 (no $ impact, but wrong count)
     (r.assignments||[]).forEach(a => { if (!a.serviceId) return; if (!svcMap[a.serviceId]) svcMap[a.serviceId] = { income:0, count:0 }; svcMap[a.serviceId].income += a.cost||0; svcMap[a.serviceId].count++; });
     if (!r.assignments || r.assignments.length === 0) r.services.forEach(sid => { if (!svcMap[sid]) svcMap[sid] = { income:0, count:0 }; svcMap[sid].count++; });
   });

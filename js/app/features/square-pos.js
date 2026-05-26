@@ -1,7 +1,7 @@
 // ── Square POS deep link, orders, appointments, bookings ────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, commitNumpad } from '../utils.js';
+import { showToast, commitNumpad, ticketTotal } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
 import { customerDirectory } from './square-customers.js';
 
@@ -14,14 +14,8 @@ const queue    = () => getState().queue;
 // Requires the public Application ID as client_id and an https callback_url — see Settings → Square.
 let _pendingPay = null;
 
-// A single entry's charge, computed from its components — authoritative, so a
-// possibly-stale entry.totalCost can't make the group total wrong.
-function entryTotal(e) {
-  const svc   = (e.assignments || []).reduce((s, a) => s + (a.cost || 0), 0);
-  const items = (e.items || []).reduce((s, i) => s + ((i.price || 0) * (i.qty || 0)), 0);
-  const fees  = (e.fees || []).reduce((s, f) => s + (f.amount || 0), 0);
-  return Math.max(0, svc + items + fees - (e.discount || 0));
-}
+// A single entry's charge is computed from its parts via ticketTotal() (utils.js) — the one
+// source of truth — so a possibly-stale entry.totalCost can't make the group total wrong.
 function payLine(label, amt) {
   return `<div class="flex justify-between text-sm font-body"><span class="text-on-surface-variant">${label}</span><span class="${amt < 0 ? 'text-error' : 'text-on-surface'}">${amt < 0 ? '-' : ''}$${Math.abs(amt).toFixed(2)}</span></div>`;
 }
@@ -32,7 +26,7 @@ function payCustomerBlock(e) {
   (e.fees || []).forEach(f => { const fee = cfg().fees.find(x => x.id === f.feeId); lines.push(payLine(fee?.label || 'Fee', f.amount || 0)); });
   if (e.discount > 0) lines.push(payLine(`Discount${e.discountNote ? ' (' + e.discountNote + ')' : ''}`, -e.discount));
   return `<div class="bg-surface-container rounded-xl px-4 py-3">
-    <div class="flex justify-between items-center mb-1.5"><span class="font-headline font-bold text-on-surface">${e.name}</span><span class="font-headline font-bold text-primary">$${entryTotal(e).toFixed(2)}</span></div>
+    <div class="flex justify-between items-center mb-1.5"><span class="font-headline font-bold text-on-surface">${e.name}</span><span class="font-headline font-bold text-primary">$${ticketTotal(e).toFixed(2)}</span></div>
     ${lines.join('') || '<div class="text-xs text-on-surface-variant italic">No charges</div>'}
   </div>`;
 }
@@ -44,14 +38,14 @@ export function openSquarePOS(entryId) {
   // Group check-in → the whole party is on one ticket. To pay separately, split the
   // ticket in-app first (then each member is its own non-grouped entry).
   const party = entry.groupId ? queue().filter(e => e.groupId === entry.groupId) : [entry];
-  const cents = Math.round(party.reduce((s, e) => s + entryTotal(e), 0) * 100);
+  const cents = Math.round(party.reduce((s, e) => s + ticketTotal(e), 0) * 100);
   if (cents <= 0) { showToast('No total — assign a price first.'); return; }
   // Persist each ticket to the server BEFORE charging, and recompute its total from
   // its parts (services + items + fees − discount) as we save — so the stored total
   // can never be short the fee that's charged. Fees/prices entered in the Assign &
   // Price modal are only in memory until this point (the modal defers the sync to its
   // Save button, which the Pay-in-Square flow skips).
-  party.forEach(e => { e.totalCost = entryTotal(e); dispatch('queue.upsert', { entry: e }); });
+  party.forEach(e => { e.totalCost = ticketTotal(e); dispatch('queue.upsert', { entry: e }); });
   const body = document.getElementById('square-confirm-body');
   if (body) body.innerHTML = party.map(payCustomerBlock).join('');
   const totalEl = document.getElementById('square-confirm-total');

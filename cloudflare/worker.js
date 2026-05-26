@@ -574,9 +574,6 @@ export class MuseSalonDO {
         case 'config.set':
           await this.state.storage.put('config:' + payload.key, payload.value);
           break;
-        case 'turns.order':
-          await this.state.storage.put('config:turns_order', payload.order);
-          break;
         case 'queue.upsert': {
           const qKey = 'queue:' + payload.entry.id;
           const prevEntry = await this.state.storage.get(qKey);
