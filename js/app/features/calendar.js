@@ -28,7 +28,54 @@ let _calSyncTimer = null, _calSelectorDraft = null, _calDragIdx = null;
 let _calSlotH = 52, _calSlotMins = 30, _calTouchStartDist = null;
 let _calHidden = new Set(JSON.parse(localStorage.getItem('gcal_hidden') || '[]'));
 let _calOrder = JSON.parse(localStorage.getItem('gcal_order') || 'null');
+// Off-duty auto-hide (opt-in via config.cal_autohide_offduty): calendars whose matched
+// staff is off/sick/vacation are hidden by default each day. _calOffPeek holds the ones
+// the operator turned on for the CURRENTLY-viewed day; it resets on day navigation.
+let _calOffPeek = new Set();
 const CAL_SYNC_INTERVAL = 60000;
+
+// A calendar's tech is off on the viewed date? Maps Google calendar → staff by NAME
+// (case-insensitive, trimmed), reads the in-app schedule only (off/sick/vacation for
+// _calDate), never Google. No match (incl. Unassigned) or working/unset = not off.
+function calColumnOff(cal) {
+  if (!cal || !cal.name) return false;
+  const st = (cfg().staff || []).find(s => (s.name || '').trim().toLowerCase() === cal.name.trim().toLowerCase());
+  if (!st) return false;
+  const dstr = localDateStr(_calDate), sc = cfg().schedule || {};
+  const status = sc[dstr]?.[st.id] || sc._repeats?.[st.id]?.[new Date(dstr + 'T12:00:00').getDay()] || null;
+  return status === 'off' || status === 'sick' || status === 'vacation';
+}
+// Auto-hide active? (opt-in setting). Calendars filter + grid both consult this.
+const calAutoHideOn = () => !!cfg().cal_autohide_offduty;
+// A calendar is hidden right now if manually hidden, OR (auto-hide on AND its tech is
+// off today AND it hasn't been peeked-on for this day).
+function calIsHidden(cal) {
+  if (_calHidden.has(cal.id)) return true;
+  if (calAutoHideOn() && calColumnOff(cal) && !_calOffPeek.has(cal.id)) return true;
+  return false;
+}
+// Effective hidden-id set for seeding the Calendars filter draft (reflects what's
+// actually showing right now, so off-duty rows appear unchecked).
+function calEffectiveHiddenSet() { return new Set(_calCalendars.filter(calIsHidden).map(c => c.id)); }
+
+// ── Settings: off-duty auto-hide toggle (rendered into #cal-autohide-setting) ──
+export function renderCalAutoHideSetting() {
+  const host = document.getElementById('cal-autohide-setting'); if (!host) return;
+  const on = calAutoHideOn();
+  host.innerHTML = `<label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Off-duty staff</label>`
+    + `<div class="flex items-start justify-between gap-4">`
+    + `<div class="min-w-0"><p class="text-sm font-body font-semibold text-on-surface">Auto-hide off-duty staff</p>`
+    + `<p class="text-xs font-body text-on-surface-variant mt-0.5">Show only staff scheduled to work each day. Staff marked off, sick, or vacation are hidden automatically. Open the Calendars filter to peek at one — it re-hides when you change days.</p></div>`
+    + `<button onclick="toggleCalAutoHide()" class="flex-shrink-0 mt-0.5" aria-label="Auto-hide off-duty staff">`
+    + `<div class="mswitch relative w-14 h-7 rounded-full transition-colors ${on?'bg-primary':'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${on?'left-7':'left-0.5'}"></div></div>`
+    + `</button></div>`;
+}
+export function toggleCalAutoHide() {
+  dispatch('config.set', { key: 'cal_autohide_offduty', value: !calAutoHideOn() });
+  renderCalAutoHideSetting();
+  _calOffPeek = new Set();
+  if (document.getElementById('cal-grid')) { calRenderGridPreserveScroll(); renderCalSelectorList(); }
+}
 
 // Exposed for square-pos.squarePushBooking (via window.calEventsFor in main.js).
 export function getCalEvents(calId) { return _calEvents[calId] || []; }
@@ -216,9 +263,9 @@ function calUpdateDateInput() {
   const btn = document.getElementById('cal-date-btn-val');
   if (btn) { const isToday = new Date().toDateString() === _calDate.toDateString(); btn.textContent = isToday ? 'Today' : _calDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
 }
-export function calNavDay(delta) { _calDate = new Date(_calDate); _calDate.setDate(_calDate.getDate() + delta); calUpdateDateLabel(); calLoadAndRender(); }
-export function calGoToday() { _calDate = new Date(); calUpdateDateLabel(); calLoadAndRender(); }
-export function calPickDate(val) { if (!val) return; _calDate = new Date(val + 'T12:00:00'); calUpdateDateLabel(); calLoadAndRender(); }
+export function calNavDay(delta) { _calOffPeek = new Set(); _calDate = new Date(_calDate); _calDate.setDate(_calDate.getDate() + delta); calUpdateDateLabel(); calLoadAndRender(); }
+export function calGoToday() { _calOffPeek = new Set(); _calDate = new Date(); calUpdateDateLabel(); calLoadAndRender(); }
+export function calPickDate(val) { if (!val) return; _calOffPeek = new Set(); _calDate = new Date(val + 'T12:00:00'); calUpdateDateLabel(); calLoadAndRender(); }
 // Square-style date popup: Today / In 1–6 weeks presets + month calendar (shared openDayPicker).
 export function openCalDatePicker(ev) {
   const today = new Date();
@@ -258,9 +305,13 @@ export function calRenderGrid() {
   // off falls straight back to the previous calendars + order (nothing persisted).
   const visible = (_unassignedOnly && uCal && _calCalendars.some(c => c.id === uCal))
     ? _calCalendars.filter(c => c.id === uCal)
-    : _calCalendars.filter(c => !_calHidden.has(c.id));
+    : _calCalendars.filter(c => !calIsHidden(c));
   if (_calCalendars.length === 0) { calSetStatus('No technician calendars found.'); return; }
-  if (visible.length === 0) { calSetStatus('All calendars hidden. Use Calendars filter.'); document.getElementById('cal-loading').classList.remove('hidden'); grid.classList.add('hidden'); return; }
+  if (visible.length === 0) {
+    const hiddenByOff = calAutoHideOn() && _calCalendars.some(c => !_calHidden.has(c.id) && calColumnOff(c) && !_calOffPeek.has(c.id));
+    calSetStatus(hiddenByOff ? 'No scheduled staff today — use the Calendars filter to show an off-duty calendar.' : 'All calendars hidden. Use Calendars filter.');
+    document.getElementById('cal-loading').classList.remove('hidden'); grid.classList.add('hidden'); return;
+  }
   calSetStatus(''); document.getElementById('cal-loading').classList.add('hidden'); grid.classList.remove('hidden');
 
   const c = JSON.parse(localStorage.getItem('muse_cal_hours') || 'null');
@@ -275,17 +326,7 @@ export function calRenderGrid() {
   const normalColW = Math.max(120, Math.floor((window.innerWidth - TIME_W - railW - 48) / Math.max(1, _calCalendars.length)));
   const maxBubbleW = normalColW * 2.5;
   const now = new Date(), isToday = now.toDateString() === _calDate.toDateString(), nowMin = now.getHours()*60 + now.getMinutes();
-  // #3: grey a tech's column on their day off. Calendars map to staff by NAME (Google
-  // calendar name = staff name); uses the in-app schedule only (off / sick / vacation for the
-  // viewed date), never Google. No match or "working"/unset = normal.
-  const calColumnOff = (cal) => {
-    if (!cal || !cal.name) return false;
-    const st = (cfg().staff || []).find(s => (s.name || '').trim().toLowerCase() === cal.name.trim().toLowerCase());
-    if (!st) return false;
-    const dstr = localDateStr(_calDate), sc = cfg().schedule || {};
-    const status = sc[dstr]?.[st.id] || sc._repeats?.[st.id]?.[new Date(dstr + 'T12:00:00').getDay()] || null;
-    return status === 'off' || status === 'sick' || status === 'vacation';
-  };
+  // #3: grey a tech's column on their day off — see module-level calColumnOff().
 
   let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;position:sticky;top:0;z-index:4;border-bottom:2px solid var(--md-outline-variant);background:var(--md-surface-container-lowest)"><div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;position:sticky;left:0;z-index:5;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)"></div>`;
   visible.forEach((cal,i) => { const isLast = i === visible.length-1; const off = calColumnOff(cal); const dot = off ? '#9ca3af' : cal.color; hdr += `<div style="width:${COL_W}px;flex-shrink:0;height:${HEADER_H}px;background:${off ? '#e5e7eb' : cal.color + '18'};border-bottom:3px solid ${dot};border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'};display:flex;align-items:center;justify-content:center;gap:5px;padding:0 8px"><div style="width:10px;height:10px;border-radius:50%;background:${dot};flex-shrink:0"></div><span style="font-size:13px;font-family:var(--font-headline);font-weight:700;color:${off ? '#9ca3af' : 'var(--md-on-surface)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cal.name}${off ? ' · off' : ''}</span></div>`; });
@@ -461,7 +502,7 @@ function updateUnassignedToggleBtn() {
 export function toggleCalSelector() {
   const dd = document.getElementById('cal-selector-dropdown'); if (!dd) return;
   if (dd.classList.contains('hidden')) {
-    _calSelectorDraft = { order: _calCalendars.map(c => c.id), hidden: new Set(_calHidden) };
+    _calSelectorDraft = { order: _calCalendars.map(c => c.id), hidden: calEffectiveHiddenSet() };
     renderCalSelectorList(); dd.classList.remove('hidden');
     // Stop clicks INSIDE the dropdown from reaching the outside-click closer below.
     // (Toggling a row re-renders the list, detaching the clicked node, which would
@@ -480,9 +521,9 @@ function saveCalOrder() { _calOrder = _calCalendars.map(c => c.id); localStorage
 export function renderCalSelectorList() {
   const list = document.getElementById('cal-selector-list');
   if (!list || _calCalendars.length === 0) return;
-  if (!_calSelectorDraft) _calSelectorDraft = { order: _calCalendars.map(c => c.id), hidden: new Set(_calHidden) };
+  if (!_calSelectorDraft) _calSelectorDraft = { order: _calCalendars.map(c => c.id), hidden: calEffectiveHiddenSet() };
   const draftCals = _calSelectorDraft.order.map(id => _calCalendars.find(c => c.id === id)).filter(Boolean);
-  list.innerHTML = draftCals.map((c,i) => { const isHidden = _calSelectorDraft.hidden.has(c.id); return `<div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none" data-cal-idx="${i}"><span onpointerdown="calReorderStart(event,${i})" class="material-symbols-outlined" style="font-size:14px;flex-shrink:0;color:#6b7280;cursor:grab;touch-action:none">drag_indicator</span><div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div><span class="flex-grow text-sm font-body text-on-surface" onclick="calDraftToggle('${c.id}')">${c.name}</span><div onclick="calDraftToggle('${c.id}')" style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;border:2.5px solid ${isHidden?'#9ca3af':'#1a5252'};background:${isHidden?'#fff':'#1a5252'}">${!isHidden?'<span class="material-symbols-outlined" style="font-size:13px;color:#fff;font-variation-settings:\'FILL\' 1;line-height:1">check</span>':''}</div></div>`; }).join('');
+  list.innerHTML = draftCals.map((c,i) => { const isHidden = _calSelectorDraft.hidden.has(c.id); const offTag = (calAutoHideOn() && calColumnOff(c)) ? ` <span style="font-size:10px;color:#9ca3af;font-weight:600">· off today</span>` : ''; return `<div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none" data-cal-idx="${i}"><span onpointerdown="calReorderStart(event,${i})" class="material-symbols-outlined" style="font-size:14px;flex-shrink:0;color:#6b7280;cursor:grab;touch-action:none">drag_indicator</span><div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div><span class="flex-grow text-sm font-body text-on-surface" onclick="calDraftToggle('${c.id}')">${c.name}${offTag}</span><div onclick="calDraftToggle('${c.id}')" style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;border:2.5px solid ${isHidden?'#9ca3af':'#1a5252'};background:${isHidden?'#fff':'#1a5252'}">${!isHidden?'<span class="material-symbols-outlined" style="font-size:13px;color:#fff;font-variation-settings:\'FILL\' 1;line-height:1">check</span>':''}</div></div>`; }).join('');
   const visCount = draftCals.filter(c => !_calSelectorDraft.hidden.has(c.id)).length;
   const lbl = document.getElementById('cal-selector-label'); if (lbl) lbl.textContent = visCount === _calCalendars.length ? 'Calendars' : `${visCount}/${_calCalendars.length}`;
 }
@@ -492,7 +533,23 @@ export function calSelectorSave() {
   const ordered = []; _calSelectorDraft.order.forEach(id => { const c = _calCalendars.find(x => x.id === id); if (c) ordered.push(c); });
   _calCalendars.forEach(c => { if (!ordered.find(x => x.id === c.id)) ordered.push(c); });
   _calCalendars = ordered; saveCalOrder();
-  _calHidden = new Set(_calSelectorDraft.hidden); localStorage.setItem('gcal_hidden', JSON.stringify([..._calHidden]));
+  // Decompose the draft's checked/unchecked state into the two hide mechanisms:
+  //  • persistent manual hide (_calHidden) — only meaningful for on-duty calendars
+  //  • per-day off-duty peek (_calOffPeek) — turning ON an off-duty calendar for today
+  const newHidden = new Set(_calHidden), newPeek = new Set(_calOffPeek);
+  _calCalendars.forEach(c => {
+    const wantVisible = !_calSelectorDraft.hidden.has(c.id);
+    const off = calAutoHideOn() && calColumnOff(c);
+    if (off) {
+      if (wantVisible) { newPeek.add(c.id); newHidden.delete(c.id); }
+      else newPeek.delete(c.id);   // hidden by the off-duty default; leave any persistent hide intact
+    } else {
+      newPeek.delete(c.id);
+      if (wantVisible) newHidden.delete(c.id); else newHidden.add(c.id);
+    }
+  });
+  _calHidden = newHidden; _calOffPeek = newPeek;
+  localStorage.setItem('gcal_hidden', JSON.stringify([..._calHidden]));
   _calSelectorDraft = null;
   const dd = document.getElementById('cal-selector-dropdown'); if (dd) { dd.classList.add('hidden'); dd.style.display = ''; }
   renderCalSelectorList(); calRenderGridPreserveScroll();
@@ -1023,7 +1080,7 @@ function renderTasks(tasks) {
   const container = document.getElementById('tasks-list'); if (!container) return;
   if (!tasks.length) { container.innerHTML = '<div class="text-xs text-on-surface-variant text-center py-6 opacity-60">No tasks — all caught up!</div>'; return; }
   container.innerHTML = tasks.map(t => { const done = t.status === 'completed', due = t.due ? new Date(t.due) : null, dueStr = due ? due.toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '', overdue = due && due < new Date() && !done, lid = _currentListId;
-    return `<div class="flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-container transition-colors group"><button onclick="toggleTask('${lid}','${t.id}','${done?'needsAction':'completed'}')" class="flex-shrink-0 transition-colors mt-0.5" style="width:16px;height:16px;min-width:16px;min-height:16px;aspect-ratio:1/1;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};background:${done?'#1a5252':'#fff'};display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box">${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;line-height:1;font-variation-settings:\'FILL\' 1">check</span>':''}</button><div class="flex-1 min-w-0" style="line-height:1.3"><div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}">${t.title||'(no title)'}</div>${t.notes?`<div class="text-[10px] text-on-surface-variant truncate">${t.notes}</div>`:''}${dueStr?`<div class="text-[10px] font-semibold ${overdue?'text-error':'text-on-surface-variant'}">${overdue?'⚠ ':''}${dueStr}</div>`:''}</div><button onclick="deleteTask('${lid}','${t.id}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all mt-0.5"><span class="material-symbols-outlined" style="font-size:12px">close</span></button></div>`;
+    return `<div class="flex items-start gap-2 px-2 py-1 rounded-lg hover:bg-surface-container transition-colors group"><button onclick="toggleTask('${lid}','${t.id}','${done?'needsAction':'completed'}')" class="flex-shrink-0 transition-colors" style="width:15px;height:15px;min-width:15px;min-height:15px;margin-top:2px;aspect-ratio:1/1;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};background:${done?'#1a5252':'#fff'};display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box">${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;line-height:1;font-variation-settings:\'FILL\' 1">check</span>':''}</button><div class="flex-1 min-w-0" style="line-height:1.25"><div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}">${t.title||'(no title)'}</div>${t.notes?`<div class="text-[10px] text-on-surface-variant truncate" style="line-height:1.25">${t.notes}</div>`:''}${dueStr?`<div class="text-[10px] font-semibold ${overdue?'text-error':'text-on-surface-variant'}" style="line-height:1.25">${overdue?'⚠ ':''}${dueStr}</div>`:''}</div><button onclick="deleteTask('${lid}','${t.id}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all" style="margin-top:2px"><span class="material-symbols-outlined" style="font-size:12px">close</span></button></div>`;
   }).join('');
 }
 export function toggleTasksPanel() {

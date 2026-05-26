@@ -755,7 +755,7 @@ tailwind.config = {
               </select>
             </div>
             <!-- Tasks list -->
-            <div id="tasks-list" class="flex-1 overflow-y-auto no-scroll p-2 space-y-1"></div>
+            <div id="tasks-list" class="flex-1 overflow-y-auto no-scroll p-2 space-y-0.5"></div>
           </div>
           </div><!-- /cal-right-rail -->
         </div>
@@ -1092,6 +1092,7 @@ tailwind.config = {
         <!-- Leaf: Calendar Hours -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="settings-calhours-section" class="hidden px-5 py-4">
+            <div id="cal-autohide-setting" class="pb-4 mb-4 border-b border-surface-container-high"></div>
             <p class="text-sm font-body text-on-surface-variant mb-4">Set the earliest and latest time visible on the Calendar tab.</p>
             <div class="grid grid-cols-2 gap-4">
               <div>

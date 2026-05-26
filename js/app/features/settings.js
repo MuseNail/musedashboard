@@ -387,6 +387,7 @@ export function renderSettingsPanel() {
   renderSettingsFees();
   renderRolePermissions();
   initCalHoursSelectors();
+  window.renderCalAutoHideSetting?.();
   window.renderApptReminderSettings?.();
   const lbl = document.getElementById('last-backup-label'); if (lbl) lbl.textContent = localStorage.getItem('muse_last_backup') || 'Never';
   setLogo();
