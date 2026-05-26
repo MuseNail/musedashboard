@@ -172,14 +172,14 @@ export function renderTurnsTechGrid() {
 
   const order = getActiveTurnsOrder();
   const partyLetters = partyLetterMap(q());   // same party letter as the queue/side cards
-  // A single customer with services under 2+ different techs shows up in multiple
-  // rows by design — tag each of their slots with a matching colored link chip so
-  // the front desk can see at a glance that they're the same person.
+  // A single customer can show up as several cards in the grid — multiple services, whether
+  // with the SAME tech or split across techs. Tag every one of that customer's slots with a
+  // matching colored link chip so the front desk sees at a glance it's the same person.
   const splitTags = new Map();   // entryId -> color
   let _splitN = 0;
   q().forEach(e => {
-    const techs = new Set((e.assignments || []).filter(a => a.techId).map(a => a.techId));
-    if (techs.size >= 2) { splitTags.set(String(e.id), GROUP_COLORS[_splitN % GROUP_COLORS.length]); _splitN++; }
+    const assigned = (e.assignments || []).filter(a => a.techId).length;
+    if (assigned >= 2) { splitTags.set(String(e.id), GROUP_COLORS[_splitN % GROUP_COLORS.length]); _splitN++; }
   });
   let activeCount = 0;
   if (order.length === 0) {
@@ -249,7 +249,7 @@ export function renderTurnsTechGrid() {
         const timeStr = new Date(e.checkinTime).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
         const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0;margin-right:2px">${partyLetters.get(e.groupId)||'•'}</span>` : '';
         const splitColor = splitTags.get(String(e.id));
-        const splitTag = splitColor ? `<span title="Same customer — also has a service with another tech" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;background:${splitColor};color:#fff;flex-shrink:0;margin-right:2px"><span class="material-symbols-outlined" style="font-size:11px;font-variation-settings:'FILL' 1">link</span></span>` : '';
+        const splitTag = splitColor ? `<span title="Same customer — multiple services" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;background:${splitColor};color:#fff;flex-shrink:0;margin-right:2px"><span class="material-symbols-outlined" style="font-size:11px;font-variation-settings:'FILL' 1">link</span></span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
           <button onclick="showGroupAssignModal('${e.id}')" class="w-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px${outline}">
             <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="opacity:0.75">${turnLabel}</span>` : ''}</div>
@@ -589,13 +589,13 @@ function renderTurnsHistoryView() {
   const snap = turnsHistory[dateStr];
 
   // Same markers the live grid computes — fed from the day's records instead of q().
-  // Party letters tie multiple guests on one ticket together; split tags flag a
-  // single guest whose services landed under 2+ techs (so the two rows link up).
+  // Party letters tie multiple guests on one ticket together; link chips flag one
+  // guest with multiple service cards (same tech or split across techs).
   const partyLetters = partyLetterMap(dayRecs);
   const splitTags = new Map(); let _splitN = 0;
   dayRecs.forEach(r => {
-    const techs = new Set((r.assignments || []).filter(a => a.techId).map(a => a.techId));
-    if (techs.size >= 2) { splitTags.set(String(r.id), GROUP_COLORS[_splitN % GROUP_COLORS.length]); _splitN++; }
+    const assigned = (r.assignments || []).filter(a => a.techId).length;
+    if (assigned >= 2) { splitTags.set(String(r.id), GROUP_COLORS[_splitN % GROUP_COLORS.length]); _splitN++; }
   });
 
   let order = (snap?.order || []).filter(id => id && staffById(id));
@@ -657,7 +657,7 @@ function renderTurnsHistoryView() {
       const outline = e.groupId ? `;outline:2px solid ${e.groupColor||'#e8a230'};outline-offset:-1px` : '';
       const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0;margin-right:2px">${partyLetters.get(e.groupId)||'•'}</span>` : '';
       const splitColor = splitTags.get(String(e.id));
-      const splitTag = splitColor ? `<span title="Same customer — also has a service with another tech" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;background:${splitColor};color:#fff;flex-shrink:0;margin-right:2px"><span class="material-symbols-outlined" style="font-size:11px;font-variation-settings:'FILL' 1">link</span></span>` : '';
+      const splitTag = splitColor ? `<span title="Same customer — multiple services" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;background:${splitColor};color:#fff;flex-shrink:0;margin-right:2px"><span class="material-symbols-outlined" style="font-size:11px;font-variation-settings:'FILL' 1">link</span></span>` : '';
       const tap = canAdd ? `onclick="showHistoricalEntryModal('${e.id}')"` : '';
       return `<div class="flex-shrink-0 w-[150px] px-1">
         <button ${tap} class="w-full rounded-xl px-2 py-1.5 text-left ${canAdd ? 'active:scale-95 cursor-pointer' : 'cursor-default'} transition-all text-xs font-body" style="background:#dde2e5;color:#555;min-height:66px${outline}">
