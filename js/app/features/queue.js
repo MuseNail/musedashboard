@@ -212,6 +212,7 @@ export function renderQueue() {
   const list = document.getElementById('queue-list');
   const empty = document.getElementById('queue-empty');
   if (!list) return;
+  healLoneGroups();   // a 1-person "group" auto-ungroups (e.g. a split that left one behind)
   _partyLetters = partyLetterMap(q());   // assign party letters across the whole queue (stable across status sections)
   if (queueViewingHistory) { renderQueueHistoryView(list, empty); return; }
   let filtered = ui.currentFilter === 'all' ? [...q()] : q().filter(e => ui.currentFilter === 'paid' ? isPaidStatus(e.status) : e.status === ui.currentFilter);
@@ -863,6 +864,7 @@ export function renderGroupAssignContent() {
       <span class="font-body font-semibold text-on-surface text-sm">${isParty ? "This guest's services" : 'Subtotal'}</span>
       <span id="group-subtotal" class="font-headline font-bold text-primary">$0.00</span></div>`;
   updateGroupTotal();
+  document.getElementById('group-split-btn')?.classList.toggle('hidden', !isParty);   // Split only shown for a party
   // Load this tab's transaction note into the side notes panel (per active entry).
   const noteEl = document.getElementById('assign-txn-note'); if (noteEl) noteEl.value = entry.txnNote || '';
 }
@@ -941,6 +943,14 @@ export function closeGroupAssignModal() {
   groupAssignEntries = []; _custEditedIds.clear();
 }
 
+// Split button inside the Assign & Price modal — splits this party from here (saves + closes
+// the modal, then opens the Split Party picker for the active guest's group).
+export function splitFromAssignModal() {
+  const id = groupAssignEntries[activeGroupTab];
+  closeGroupAssignModal();
+  if (id) showSplitMergeModal(id);
+}
+
 function collectGroupAssignments() { saveCurrentGroupTabInputs(); return groupAssignEntries.map(id => q().find(e => String(e.id) === id)).filter(Boolean); }
 function validateGroupAssignments(entries) { return entries.filter(e => !e.assignments || e.assignments.length === 0 || e.assignments.some(a => !a.techId || a.cost <= 0)); }
 
@@ -1007,10 +1017,27 @@ export function showSplitMergeModal(entryId) {
 export function executeSplit() {
   const checked = [...document.querySelectorAll('[id^="split-cb-"]:checked')].map(cb => cb.id.replace('split-cb-', ''));
   if (checked.length === 0) { showToast('Select at least one guest to split.'); return; }
-  checked.forEach(id => { const e = q().find(x => String(x.id) === id); if (e) { e.groupId = null; e.groupColor = null; e.groupLabel = null; upsert(e); } });
+  const groups = new Set();
+  checked.forEach(id => { const e = q().find(x => String(x.id) === id); if (e) { if (e.groupId) groups.add(e.groupId); e.groupId = null; e.groupColor = null; e.groupLabel = null; upsert(e); } });
+  // A party needs 2+ people — if a split leaves just one member behind, un-group them too.
+  groups.forEach(gid => { const left = q().filter(e => e.groupId === gid); if (left.length === 1) { const e = left[0]; e.groupId = null; e.groupColor = null; e.groupLabel = null; upsert(e); } });
   closeSplitMergeModal();
-  renderQueue();
-  showToast(`${checked.length} guest${checked.length > 1 ? 's' : ''} split into separate ticket${checked.length > 1 ? 's' : ''}`);
+  renderQueue(); window.renderTurns?.(); window.renderFloorPlan?.();
+  showToast(`${checked.length} guest${checked.length > 1 ? 's' : ''} split into a separate ticket`);
+}
+
+// A single customer left in a "group" isn't a party — un-group them (clears the group dot,
+// outline, and "(primary)" label) so it stops looking grouped. Covers EVERY path that can
+// strand one member: split, removing/finishing the other guests, etc. — and heals tickets
+// already stuck in this state. Deferred so it never mutates the store mid-render.
+function healLoneGroups() {
+  const counts = {};
+  q().forEach(e => { if (e.groupId) counts[e.groupId] = (counts[e.groupId] || 0) + 1; });
+  const lone = q().filter(e => e.groupId && counts[e.groupId] === 1);
+  if (!lone.length) return;
+  setTimeout(() => {
+    lone.forEach(e => { const c = q().find(x => String(x.id) === String(e.id)); if (c && c.groupId && q().filter(y => y.groupId === c.groupId).length === 1) { c.groupId = null; c.groupColor = null; c.groupLabel = null; upsert(c); } });
+  }, 0);
 }
 export function closeSplitMergeModal() {
   const m = document.getElementById('split-merge-modal'); m.classList.add('hidden'); m.style.display = '';
