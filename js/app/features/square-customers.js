@@ -218,10 +218,19 @@ export function filterCustomerDir(query) { renderCustomerDir(query); }
 export function renderCustomerDir(query) {
   const list = document.getElementById('customer-dir-list');
   if (!list) return;
-  const q = (query || '').toLowerCase();
-  const filtered = customerDirectory.filter(c =>
-    !q || (c.firstName + ' ' + c.lastName).toLowerCase().includes(q) || (c.phone || '').includes(q) || (c.email || '').toLowerCase().includes(q)
-  ).slice(0, 100);
+  const q = (query || '').trim().toLowerCase();
+  // Phone match compares DIGITS-to-DIGITS: the stored phone is formatted ("(555) 318-2244"),
+  // so comparing a typed number against that string failed the moment the query spanned a
+  // "(", ")", "-" or space — i.e. 4+ digits or a full number never matched (only the bare
+  // area code did). Strip non-digits from both sides instead.
+  const qDigits = q.replace(/\D/g, '');
+  const filtered = customerDirectory.filter(c => {
+    if (!q) return true;
+    if ((c.firstName + ' ' + c.lastName).toLowerCase().includes(q)) return true;
+    if ((c.email || '').toLowerCase().includes(q)) return true;
+    if (qDigits && (c.phone || '').replace(/\D/g, '').includes(qDigits)) return true;
+    return false;
+  }).slice(0, 100);
   if (filtered.length === 0) {
     list.innerHTML = '<div class="text-sm font-body text-on-surface-variant text-center py-8">No customers found. Tap Sync Square to load.</div>';
     return;
