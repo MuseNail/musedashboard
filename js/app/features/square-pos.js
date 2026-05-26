@@ -13,6 +13,13 @@ const queue    = () => getState().queue;
 // Square Point of Sale API (iOS web): square-commerce-v1://payment/create?data=<percent-encoded JSON>.
 // Requires the public Application ID as client_id and an https callback_url — see Settings → Square.
 let _pendingPay = null;
+// R6 gift-card-as-recorded-tender (staging for the current pay session). These NEVER change
+// the Square charge — the full ticket total always goes to Square; we only record which cards
+// were used so the app's gift-card balances stay in sync. Committed when the ticket is paid.
+let _payGc = [], _payTicketId = null, _gcPickerOpen = false;
+const _gcBal = g => (g.amount || 0) - (window.gcTotalUsed ? window.gcTotalUsed(g) : 0);
+const _gcRoom = () => Math.max(0, (_pendingPay?.cents || 0) / 100 - _payGc.reduce((s, t) => s + (t.amount || 0), 0));
+const _gcStagedFor = id => _payGc.filter(t => t.giftcardId === id).reduce((s, t) => s + (t.amount || 0), 0);
 
 // A single entry's charge is computed from its parts via ticketTotal() (utils.js) — the one
 // source of truth — so a possibly-stale entry.totalCost can't make the group total wrong.
@@ -51,12 +58,20 @@ export function openSquarePOS(entryId) {
   const totalEl = document.getElementById('square-confirm-total');
   if (totalEl) totalEl.textContent = `$${(cents / 100).toFixed(2)}`;
   _pendingPay = { cents, ids: party.map(e => String(e.id)), names: party.map(e => e.name).filter(Boolean).join(', ').slice(0, 120) };
+  // R6: tie recorded gift cards to the tapped entry; preload any already staged (e.g. Pay was
+  // tapped earlier but the charge wasn't completed). Balances are only drawn down when paid.
+  _payTicketId = String(entryId);
+  _payGc = (entry.giftcardRedemptions || []).map(t => ({ giftcardId: t.giftcardId, serial: t.serial, who: t.who, amount: t.amount }));
+  _gcPickerOpen = false;
+  renderPayGc();
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
 }
 
 export function closeSquareConfirm() {
   _pendingPay = null;
+  _payGc = []; _payTicketId = null; _gcPickerOpen = false;
+  const gs = document.getElementById('square-gc-section'); if (gs) gs.innerHTML = '';
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.add('hidden'); m.style.display = ''; }
 }
@@ -79,6 +94,12 @@ export function proceedSquarePayment() {
   // return tab uses this to write muse_sq_paid; the installed PWA — which iOS resumes
   // WITHOUT the callback data — uses it for the confirm-on-resume prompt (see main.js).
   try { localStorage.setItem('muse_sq_pending', JSON.stringify({ ids: _pendingPay.ids || [], names: _pendingPay.names || '', cents: _pendingPay.cents || 0, at: Date.now() })); } catch (e) {}
+  // R6: stash the recorded gift cards on the ticket so they're logged + drawn down when it's
+  // marked Paid (on Square return). The full amount still goes to Square above — charge unchanged.
+  if (_payTicketId) {
+    const ge = queue().find(x => String(x.id) === _payTicketId);
+    if (ge) { ge.giftcardRedemptions = _payGc.map(t => ({ giftcardId: t.giftcardId, serial: t.serial, who: t.who, amount: t.amount })); dispatch('queue.upsert', { entry: ge }); }
+  }
   closeSquareConfirm();
   window.location.href = `square-commerce-v1://payment/create?data=${encodeURIComponent(JSON.stringify(data))}`;
 }
@@ -86,6 +107,62 @@ export function openSquarePOSFromModal() {
   window.saveCurrentGroupTabInputs?.();
   const entryId = window.activeGroupEntryId?.();
   if (entryId) openSquarePOS(entryId);
+}
+
+// ── R6: gift-card "used" recorder inside the Confirm Payment modal ────────────────
+// Pure bookkeeping: stage which cards were used + how much, shown under the ticket. The
+// "Charge in Square" line stays the FULL ticket total; nothing here reduces it. Staged amounts
+// are persisted onto the ticket on Proceed and committed to the card ledger when it's Paid.
+function renderPayGc() {
+  const host = document.getElementById('square-gc-section'); if (!host) return;
+  const cards = getState().giftcards || [];
+  const lines = _payGc.map(t => {
+    const g = cards.find(x => x.id === t.giftcardId);
+    const proj = g ? (_gcBal(g) - _gcStagedFor(t.giftcardId)) : 0;
+    return `<div class="flex items-center justify-between bg-primary-container/15 border border-surface-container-high rounded-lg px-3 py-2 mb-1.5">
+      <span class="text-sm font-body text-on-surface">Gift card #${t.serial || '—'}${t.who ? ' · ' + t.who : ''}</span>
+      <span class="flex items-center gap-2"><span class="text-xs font-headline font-semibold text-on-surface-variant">$${(t.amount || 0).toFixed(2)} used · bal $${proj.toFixed(2)}</span>
+      <button onclick="sqRemoveGiftcard('${t.giftcardId}')" title="Remove" class="text-outline hover:text-error flex items-center"><span class="material-symbols-outlined" style="font-size:16px">close</span></button></span>
+    </div>`;
+  }).join('');
+  const room = _gcRoom();
+  const addBtn = room > 0.001 ? `<button onclick="sqToggleGcPicker()" class="w-full border border-dashed border-primary text-primary rounded-lg py-2 text-xs font-body font-semibold hover:bg-primary/5">+ Apply gift card</button>` : '';
+  const picker = _gcPickerOpen ? `<div class="border border-surface-container-high rounded-lg mt-2 overflow-hidden">
+      <div class="px-3 py-2 bg-surface-container"><input id="sq-gc-search" oninput="filterGcPicker()" placeholder="Search serial / name…" class="w-full bg-transparent text-sm focus:outline-none text-on-surface"></div>
+      <div id="sq-gc-rows" class="max-h-44 overflow-y-auto">${_gcPickerRows(room)}</div>
+    </div>` : '';
+  host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Gift card used — optional (recorded; keeps balances in sync)</div>${lines}${addBtn}${picker}${_payGc.length ? `<div class="text-[11px] font-body text-on-surface-variant mt-2">The full total still goes to Square — Square applies the gift card to the charge. This only records the redemption.</div>` : ''}`;
+}
+function _gcPickerRows(room) {
+  const q = (document.getElementById('sq-gc-search')?.value || '').toLowerCase();
+  const cards = (getState().giftcards || [])
+    .map(g => ({ g, avail: _gcBal(g) - _gcStagedFor(g.id) }))
+    .filter(({ avail }) => avail > 0.001)
+    .filter(({ g }) => !q || (g.serial || '').toLowerCase().includes(q) || (g.to || '').toLowerCase().includes(q) || (g.from || '').toLowerCase().includes(q) || (g.phone || '').includes(q))
+    .sort((a, b) => b.avail - a.avail).slice(0, 12);
+  if (!cards.length) return `<div class="px-3 py-3 text-xs text-on-surface-variant italic">No gift cards with an available balance.</div>`;
+  return cards.map(({ g, avail }) => {
+    const who = g.to || g.from || '';
+    const deflt = Math.min(avail, room).toFixed(2);
+    return `<div class="flex items-center gap-2 px-3 py-2 border-t border-surface-container">
+      <div class="flex-1 min-w-0"><div class="text-sm font-body font-semibold text-on-surface truncate">#${g.serial || '—'}${who ? ' · ' + who : ''}</div><div class="text-[11px] text-on-surface-variant">balance $${avail.toFixed(2)}</div></div>
+      <input id="sqgc-amt-${g.id}" type="text" inputmode="decimal" value="${deflt}" class="w-20 border border-surface-container-high rounded-lg px-2 py-1 text-sm text-right text-on-surface bg-surface-container-lowest focus:outline-none focus:border-primary">
+      <button onclick="sqApplyGiftcard('${g.id}')" class="bg-primary text-on-primary rounded-lg px-3 py-1.5 text-xs font-headline font-bold flex-shrink-0">Record</button>
+    </div>`;
+  }).join('');
+}
+export function filterGcPicker() { const host = document.getElementById('sq-gc-rows'); if (host) host.innerHTML = _gcPickerRows(_gcRoom()); }
+export function sqToggleGcPicker() { _gcPickerOpen = !_gcPickerOpen; renderPayGc(); }
+export function sqRemoveGiftcard(id) { _payGc = _payGc.filter(t => t.giftcardId !== id); renderPayGc(); }
+export function sqApplyGiftcard(id) {
+  const g = (getState().giftcards || []).find(x => x.id === id); if (!g) return;
+  const want = parseFloat(document.getElementById('sqgc-amt-' + id)?.value) || 0;
+  const amt = Math.min(want, _gcBal(g) - _gcStagedFor(id), _gcRoom());
+  if (!(amt > 0.001)) { showToast('Nothing to record.'); return; }
+  const ex = _payGc.find(t => t.giftcardId === id);
+  if (ex) ex.amount = +(ex.amount + amt).toFixed(2);
+  else _payGc.push({ giftcardId: id, serial: g.serial, who: g.to || g.from || '', amount: +amt.toFixed(2) });
+  _gcPickerOpen = false; renderPayGc();
 }
 
 // ── Appointments → queue ──────────────────────────

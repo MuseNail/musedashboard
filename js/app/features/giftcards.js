@@ -16,6 +16,35 @@ export function gcRedemptions(g) {
 }
 export const gcTotalUsed = g => gcRedemptions(g).reduce((s, r) => s + (r.amount || 0), 0);
 
+// ── R6: record gift-card use at checkout (does NOT touch the Square charge) ────────
+// The app keeps its own gift-card ledger in sync with Square (which applies the real card
+// to the charge). At checkout we log a redemption + draw down the app balance, tagged with
+// the ticketId so reopening a ticket reverses exactly its draws. Never changes ticketTotal.
+function _gcCommit(card) {
+  const redemptions = (card.redemptions || []).filter(r => r && ((r.amount || 0) > 0 || r.date));
+  const amountUsed = redemptions.reduce((s, r) => s + (r.amount || 0), 0);
+  const dateUsed = redemptions.map(r => r.date).filter(Boolean).sort().pop() || '';
+  dispatch('giftcard.save', { card: { ...card, redemptions, amountUsed, dateUsed, updatedAt: new Date().toISOString() } });
+}
+export function gcReverseTicket(ticketId) {
+  if (!ticketId) return;
+  giftCards().forEach(g => {
+    const reds = gcRedemptions(g);
+    if (reds.some(r => r.ticketId === ticketId)) _gcCommit({ ...g, redemptions: reds.filter(r => r.ticketId !== ticketId) });
+  });
+}
+// Idempotent: clears this ticket's prior draws, then writes the given set. Safe to call on
+// every 'paid' event. items = [{ giftcardId, amount }].
+export function gcSyncTicket(ticketId, items) {
+  if (!ticketId) return;
+  gcReverseTicket(ticketId);
+  (items || []).forEach(it => {
+    if (!(it.amount > 0)) return;
+    const g = giftCards().find(x => x.id === it.giftcardId); if (!g) return;
+    _gcCommit({ ...g, redemptions: [...gcRedemptions(g), { date: todayStr(), amount: +it.amount, ticketId }] });
+  });
+}
+
 let _gcSortField = 'datePurchased', _gcSortDir = 'desc', _gcHideZero = false;
 let _gcRedeem = [];      // working redemption list while the modal is open
 let _gcAcMatches = [];   // recipient autocomplete matches

@@ -340,6 +340,9 @@ export function updateStatus(id, status) {
     applyEntryStatus(entry);
   } else { if (entry.status !== status) entry.statusSince = Date.now(); entry.status = status; }
   if (entry.status === 'paid') window.saveRecord?.(entry);
+  // R6: when a ticket is paid, commit any recorded gift-card use (log the redemption + draw down
+  // the app balance, tied to this ticket). Idempotent. The Square charge is unaffected.
+  if (entry.status === 'paid' && entry.giftcardRedemptions && entry.giftcardRedemptions.length) window.gcSyncTicket?.(String(entry.id), entry.giftcardRedemptions);
   upsert(entry);
   renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
 }
@@ -1064,6 +1067,8 @@ export function confirmReopen(entryId) {
       applyEntryStatus(entry);
     } else { if (entry.status !== 'inservice') entry.statusSince = Date.now(); entry.status = 'inservice'; }
     entry.completedAt = null;
+    // R6: reopening a paid ticket must restore the gift-card balances it drew down.
+    if (entry.giftcardRedemptions && entry.giftcardRedemptions.length) { window.gcReverseTicket?.(String(entry.id)); entry.giftcardRedemptions = []; }
     upsert(entry);
     renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
     showToast(`${entry.name}'s ticket reopened`);
