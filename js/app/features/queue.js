@@ -246,6 +246,9 @@ export function renderQueue() {
   }
 }
 
+// 1→1st, 2→2nd, 3→3rd, 11→11th, 12→12th, 21→21st …
+function _ordinal(n) { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+
 function buildQueueRow(e) {
   const t = new Date(e.checkinTime);
   const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -253,6 +256,23 @@ function buildQueueRow(e) {
   const badgeClass = { waiting: 'badge-waiting', inservice: 'badge-inservice', complete: 'badge-complete', paid: 'badge-done', done: 'badge-done' }[e.status] || 'badge-waiting';
   const badgeLabel = { waiting: 'Waiting', inservice: 'In Service', complete: 'Complete', paid: 'Paid', done: 'Paid' }[e.status] || e.status;
   const apptBadge = e.isAppointment ? `<span class="badge-appointment text-[10px] px-1.5 py-0.5 rounded-full font-body font-semibold">Appt</span>` : '';
+  // R5: returning-customer badge (visit #, lifetime spend, usual tech) derived from transaction
+  // records via reports.js (called on window to avoid a circular import). Only shown from the
+  // 2nd visit on, so first-timers stay clean. A paid entry is already counted in records; a
+  // not-yet-paid one is this upcoming visit, so add 1.
+  const _vh = window.customerVisitSummary?.(e.phone, e.name);
+  let visitBadge = '', visitSub = '';
+  if (_vh) {
+    const visitNum = _vh.visits + (isPaidStatus(e.status) ? 0 : 1);
+    if (visitNum >= 2) {
+      visitBadge = `<span class="text-[10px] px-1.5 py-0.5 rounded-full font-body font-semibold" style="background:#8fd4d3;color:#0f3d3d" title="Returning customer">★ ${_ordinal(visitNum)} visit</span>`;
+      const techName = _vh.usualTechId ? (staffById(_vh.usualTechId)?.name || '') : '';
+      const bits = [];
+      if (_vh.totalSpent > 0) bits.push(`$${_vh.totalSpent.toFixed(0)} lifetime`);
+      if (techName) bits.push(`usually w/ ${techName}`);
+      if (bits.length) visitSub = `<div class="text-[10px] font-body font-semibold" style="color:#1a5252">${bits.join(' · ')}</div>`;
+    }
+  }
   const assignSummary = (e.assignments || []).filter(a => a.techId || a.cost).map(a => {
     const tech = staffById(a.techId), s = svc(a.serviceId);
     const st = getAssignmentStatus(e, a);
@@ -279,13 +299,14 @@ function buildQueueRow(e) {
     <div class="queue-row ${cardBg} rounded-xl py-1.5 px-3 border flex items-stretch gap-1.5" data-id="${id}" style="${groupBorder}">
       <div class="flex-grow min-w-0 py-1">
         <div class="flex items-center gap-1 flex-wrap leading-tight">
-          ${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span>${groupTag ? ' ' + groupTag : ''}
+          ${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span>${visitBadge}${groupTag ? ' ' + groupTag : ''}
           <span class="text-[10px] px-1.5 py-0.5 rounded-full font-body font-semibold ${badgeClass}">${badgeLabel}</span>
           ${apptBadge}${totalDisplay}
           <span class="text-[10px] font-body text-outline ml-auto" data-checkin-ts="${t.getTime()}">${formatElapsed(e.checkinTime)}</span>
         </div>
         <div class="text-[11px] font-body text-on-surface-variant truncate">${serviceLabels}</div>
         ${assignSummary ? `<div class="text-[11px] font-body text-primary truncate">${assignSummary}</div>` : ''}
+        ${visitSub}
         <div class="text-[10px] font-body text-outline">${timeStr}${e.phone ? ' · ' + e.phone : ''}</div>
       </div>
       <div class="flex items-stretch gap-1 flex-shrink-0">

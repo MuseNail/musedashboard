@@ -93,6 +93,43 @@ export function renderCustomerHistory(phone, name, targetId = 'edit-cust-history
   }).join('');
 }
 
+// Lightweight per-customer summary for the queue-card "returning customer" badge (R5).
+// Same record source + matching as renderCustomerHistory, but aggregated ONCE into an index
+// and memoized so rendering N queue cards doesn't rebuild the combined-records set N times.
+// The signature (record count + queue size + paid-today count) invalidates the cache on every
+// mutation that can change the tallies (new record, queue add/remove, a ticket turning paid).
+let _visitIdxCache = null, _visitIdxSig = '';
+function _buildVisitIndex() {
+  const byPhone = new Map(), byName = new Map();
+  const bump = (map, key, r, isRef) => {
+    if (!key) return;
+    let v = map.get(key); if (!v) { v = { visits: 0, net: 0, tech: {} }; map.set(key, v); }
+    if (!isRef) { v.visits++; (r.assignments || []).forEach(a => { if (a.techId) v.tech[a.techId] = (v.tech[a.techId] || 0) + 1; }); }
+    v.net += isRef ? -Math.abs(r.totalCost || 0) : (r.totalCost || 0);
+  };
+  buildCombinedRecords().forEach(r => {
+    if (!(isPaidStatus(r.status) || r.status === 'refund')) return;
+    const isRef = r.status === 'refund';
+    bump(byPhone, _digits10(r.phone), r, isRef);
+    bump(byName, (r.name || '').trim().toLowerCase(), r, isRef);
+  });
+  return { byPhone, byName };
+}
+function _visitIndex() {
+  const sig = records().length + '|' + queue().length + '|' + queue().filter(e => isPaidStatus(e.status)).length;
+  if (!_visitIdxCache || _visitIdxSig !== sig) { _visitIdxSig = sig; _visitIdxCache = _buildVisitIndex(); }
+  return _visitIdxCache;
+}
+export function customerVisitSummary(phone, name) {
+  const idx = _visitIndex();
+  const ph = _digits10(phone), nm = (name || '').trim().toLowerCase();
+  const v = (ph && idx.byPhone.get(ph)) || (!ph && nm ? idx.byName.get(nm) : null);
+  if (!v || v.visits <= 0) return null;
+  let usualTechId = null, max = 0;
+  for (const id in v.tech) if (v.tech[id] > max) { max = v.tech[id]; usualTechId = id; }
+  return { visits: v.visits, totalSpent: v.net, usualTechId };
+}
+
 // ── Report range + date picker + comparison ───────
 const _sod = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const _eod = d => new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
