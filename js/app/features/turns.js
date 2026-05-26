@@ -516,6 +516,15 @@ export function clearTurnsHistory() {
   const lbl = document.getElementById('turns-date-label'); if (lbl) lbl.textContent = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
   renderTurns();
 }
+// Prev/next-day arrows on the Date bubble. Stepping to today (or a future day) returns
+// to the live grid; you can't go past today (no future turns).
+export function shiftTurnsDate(dir) {
+  const cur = turnsViewingHistory ? new Date(turnsViewingHistory + 'T12:00:00') : new Date();
+  cur.setDate(cur.getDate() + dir);
+  const today = new Date(); today.setHours(0,0,0,0); cur.setHours(0,0,0,0);
+  if (cur >= today) { clearTurnsHistory(); return; }
+  loadTurnsHistory(localDateStr(cur));
+}
 // Past-day grid: built from the synced transaction records for the date (the same
 // source Reports uses, so the two always agree), grouped per technician like the
 // live grid. The device-local muse_turns_history snapshot is used only as a

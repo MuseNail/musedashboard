@@ -164,6 +164,15 @@ export function clearQueueHistory() {
   const btn = document.getElementById('queue-date-btn-val'); if (btn) btn.textContent = 'Today';
   renderQueue();
 }
+// Prev/next-day arrows on the Date bubble. Stepping to today (or a future day) returns
+// to the live view; you can't go past today (no future queue history).
+export function shiftQueueDate(dir) {
+  const cur = queueViewingHistory ? new Date(queueViewingHistory.date + 'T12:00:00') : new Date();
+  cur.setDate(cur.getDate() + dir);
+  const today = new Date(); today.setHours(0,0,0,0); cur.setHours(0,0,0,0);
+  if (cur >= today) { clearQueueHistory(); return; }
+  loadQueueHistory(localDateStr(cur));
+}
 
 function renderQueueHistoryView(list, empty) {
   const { date, snapshot } = queueViewingHistory;

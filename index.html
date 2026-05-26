@@ -292,11 +292,13 @@ tailwind.config = {
           </button>
           <!-- History date picker -->
           <div class="flex items-center gap-2 ml-2">
+            <button onclick="shiftQueueDate(-1)" title="Previous day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
             <button onclick="openQueueHistoryPicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
               <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
               <span class="text-sm font-headline font-bold text-on-surface" id="queue-date-btn-val">Today</span>
             </button>
+            <button onclick="shiftQueueDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
           </div>
           <button onclick="showManualAdd()" class="ml-auto flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-body font-semibold bg-primary text-on-primary hover:bg-primary-dim transition-all shadow-sm">
             <span class="material-symbols-outlined" style="font-size:18px">person_add</span> Add Guest
@@ -333,11 +335,13 @@ tailwind.config = {
         <!-- Date range selector (Square-style: Date button + comparison) -->
         <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5">
           <div class="flex gap-2 flex-wrap items-center">
+            <button onclick="shiftReportRange(-1)" title="Previous period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
             <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
               <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
               <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
             </button>
+            <button onclick="shiftReportRange(1)" title="Next period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
             <button onclick="openCompareMenu(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">vs</span>
               <span class="text-sm font-headline font-bold text-on-surface compare-btn-label">Prior period</span>
@@ -453,16 +457,6 @@ tailwind.config = {
         <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Gift Cards</h3>
         <div id="rpt-giftcards-breakdown" class="space-y-2 mb-5"></div>
 
-        <!-- Drill-down detail panel (hidden by default) -->
-        <div id="rpt-drill-panel" class="hidden mt-5">
-          <div class="flex items-center gap-3 mb-4">
-            <button onclick="closeDrillDown()" class="flex items-center gap-1 text-sm font-body text-on-surface-variant hover:text-on-surface">
-              <span class="material-symbols-outlined" style="font-size:18px">arrow_back</span> Back
-            </button>
-            <h3 id="rpt-drill-title" class="text-base font-headline font-bold text-on-surface"></h3>
-          </div>
-          <div id="rpt-drill-list" class="space-y-2"></div>
-        </div>
       </div>
 
       <!-- Shared date-range picker popup (Reports + Transactions) — anchored to its button -->
@@ -529,10 +523,12 @@ tailwind.config = {
               class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">merge</span> Merge</button>
             <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
             <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+            <button onclick="shiftReportRange(-1)" title="Previous period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_left</span></button>
             <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">calendar_today</span>
               <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
             </button>
+            <button onclick="shiftReportRange(1)" title="Next period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>
           </div>
         </div>
         <div id="txn-history-banner" class="hidden mb-3 px-4 py-2.5 rounded-xl bg-secondary-container/50 border border-secondary text-sm font-body font-bold text-on-surface flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:18px">history</span><span id="txn-history-banner-text"></span></div>
@@ -573,11 +569,13 @@ tailwind.config = {
               <p class="text-sm font-body text-on-surface-variant mt-0.5" id="turns-date-label">Today</p>
             </div>
             <!-- Date select for history (matches Reports date picker) -->
+            <button onclick="shiftTurnsDate(-1)" title="Previous day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
             <button onclick="openTurnsHistoryPicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
               <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
               <span class="text-sm font-headline font-bold text-on-surface" id="turns-date-btn-val">Today</span>
             </button>
+            <button onclick="shiftTurnsDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
           </div>
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant">
@@ -1584,6 +1582,23 @@ tailwind.config = {
       <span id="txn-merge-count" class="text-sm font-body text-on-surface-variant">0 selected</span>
       <button onclick="mergeSelectedTxns()" class="flex items-center gap-1.5 bg-primary hover:bg-primary-dim text-on-primary px-5 py-2.5 rounded-xl font-headline font-bold transition-all"><span class="material-symbols-outlined" style="font-size:18px">merge</span> Merge</button>
     </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     REPORTS DRILL-DOWN DETAIL (staff / service popup)
+═══════════════════════════════════════════════ -->
+<div id="rpt-drill-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40 px-4" style="display:none" onclick="if(event.target===this)closeDrillDown()">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-2xl shadow-2xl fade-up max-h-[90vh] flex flex-col">
+    <div class="flex items-center justify-between gap-3 p-5 border-b border-surface-container-high flex-shrink-0">
+      <h3 id="rpt-drill-title" class="text-base font-headline font-bold text-on-surface min-w-0 truncate"></h3>
+      <div class="flex items-center gap-2 flex-shrink-0">
+        <button onclick="exportDrillCSV()" title="Export this detail to CSV" class="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+        <button onclick="exportDrillPDF()" title="Export this detail to PDF" class="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+        <button onclick="closeDrillDown()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
+      </div>
+    </div>
+    <div id="rpt-drill-list" class="flex-grow overflow-y-auto p-5 space-y-2"></div>
   </div>
 </div>
 

@@ -99,6 +99,29 @@ export function applyCustomRange() {
 export function setReportCompare(mode) {
   reportRange.compare = mode; closeCompareMenu(); runReport(); updateDateButtons();
 }
+// Prev/next arrows on the Date bubble step by the CURRENT period: a single day steps
+// ±1 day (label reads Today/Yesterday/…), a week ±1 week, a month ±1 month, the pay
+// period to the adjacent one, a custom range by its own length.
+export function shiftReportRange(dir) {
+  const cur = getReportDates(); if (!cur) return;
+  const T = reportRange.type;
+  if (T === 'today' || T === 'yesterday' || T === 'day') {
+    reportRange.type = 'day'; reportRange.date = localDateStr(_addDays(cur.from, dir)); reportRange.from = null; reportRange.to = null;
+  } else if (T === 'month' || T === 'lastmonth') {
+    const from = new Date(cur.from.getFullYear(), cur.from.getMonth() + dir, 1);
+    reportRange.type = 'custom'; reportRange.from = localDateStr(from); reportRange.to = localDateStr(new Date(from.getFullYear(), from.getMonth() + 1, 0));
+  } else if (T === 'thisyear' || T === 'lastyear') {
+    const yr = cur.from.getFullYear() + dir;
+    reportRange.type = 'custom'; reportRange.from = localDateStr(new Date(yr, 0, 1)); reportRange.to = localDateStr(new Date(yr, 11, 31));
+  } else if (T === 'payperiod') {
+    const pp = dir < 0 ? prevPayPeriod({ from: cur.from }) : nextPayPeriod({ from: cur.from });
+    reportRange.type = 'custom'; reportRange.from = localDateStr(pp.from); reportRange.to = localDateStr(pp.to);
+  } else {
+    const days = Math.round((_sod(cur.to) - _sod(cur.from)) / 86400000) + 1;   // week / lastweek / custom
+    reportRange.type = 'custom'; reportRange.from = localDateStr(_addDays(cur.from, dir * days)); reportRange.to = localDateStr(_addDays(cur.to, dir * days));
+  }
+  syncRangeButtons(); closeDatePicker(); runReport(); renderTransactions(); updateDateButtons();
+}
 function syncRangeButtons() {
   document.querySelectorAll('.rng-btn').forEach(b => b.classList.toggle('active', b.dataset.range === reportRange.type));
 }
@@ -106,7 +129,7 @@ function rangeLabel() {
   if (_rangeLabels[reportRange.type]) return _rangeLabels[reportRange.type];
   const d = getReportDates(); if (!d) return 'Custom';
   const fmt = x => x.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  if (reportRange.type === 'day') return fmt(d.from);
+  if (reportRange.type === 'day') { const diff = Math.round((_sod(d.from) - _sod(new Date())) / 86400000); return diff === 0 ? 'Today' : diff === -1 ? 'Yesterday' : diff === 1 ? 'Tomorrow' : fmt(d.from); }
   if (reportRange.type === 'payperiod') return `Pay Period (${fmt(d.from)} – ${fmt(d.to)})`;
   return `${fmt(d.from)} – ${fmt(d.to)}`;
 }
@@ -557,7 +580,10 @@ function renderPerformance(filtered) {
     </div>`;
 }
 
-// ── Drill-downs ───────────────────────────────────
+// ── Drill-downs (popup modal + CSV/PDF export) ────
+// _drill holds the structured rows for the open detail popup so Export CSV / PDF can
+// rebuild the same data the modal shows.
+let _drill = null;   // { title, columns:[], rows:[[...]], summary:[[label,val],...] }
 export function drillDownStaff(techId) {
   const d = window._currentReportData; if (!d) return;
   const tech = staffById(techId), name = tech?.name || 'Unknown', commPct = tech?.commission != null ? tech.commission : null;
@@ -581,21 +607,64 @@ export function drillDownStaff(techId) {
     <div class="text-[11px] font-body text-on-surface-variant uppercase tracking-widest mb-1.5">Avg Service Time</div>
     <div class="flex flex-wrap gap-1.5">${avgBySvc.map(x => `<span class="text-xs font-body bg-surface-container-lowest border border-surface-container-high rounded-lg px-2.5 py-1"><span class="text-on-surface font-semibold">${x.label}</span> · <span class="${x.avgMs!=null?'text-primary font-bold':'text-outline'}">${x.avgMs!=null?'~'+fmtDur(x.avgMs):'—'}</span>${x.avgMs!=null?`<span class="text-outline"> (${x.n})</span>`:''}</span>`).join('')}</div></div>` : '';
   const rowsHtml = rows.map(row => { const badge = row.turnType==='full'?'1t':row.turnType==='half'?'½t':'B'; const color = row.turnType==='bonus'?'#f5c870':'#1a5252'; return `<div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-on-surface text-sm">${row.customer}</span><span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style="background:${color}20;color:${color}">${badge}</span>${row.durMs?`<span class="text-[10px] font-body text-on-surface-variant">${fmtDur(row.durMs)}</span>`:''}</div><div class="text-xs font-body text-on-surface-variant">${row.service}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div>${row.comm!=null?`<div class="text-xs font-body text-primary">comm $${row.comm.toFixed(2)}</div>`:''}</div></div>`; }).join('');
-  showDrillPanel(`${name} — Service Detail`, summary + avgBlock + rowsHtml);
+  const turnTxt = t => t==='full'?'1 turn':t==='half'?'½ turn':'Bonus';
+  _drill = {
+    title: `${name} — Service Detail`,
+    columns: ['Date','Time','Customer','Service','Station','Turn','Service Time','Cost', ...(commPct!=null?['Commission']:[])],
+    rows: rows.map(r => [r.time.toLocaleDateString(), r.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.customer, r.service, r.station, turnTxt(r.turnType), r.durMs?fmtDur(r.durMs):'', '$'+r.cost.toFixed(2), ...(commPct!=null?['$'+(r.comm||0).toFixed(2)]:[])]),
+    summary: [['Total Billed','$'+totalBilled.toFixed(2)], ...(totalComm!=null?[[`Commission (${commPct}%)`,'$'+totalComm.toFixed(2)],['Salon Keeps','$'+(totalBilled-totalComm).toFixed(2)]]:[]), ['Turns', String(totalTurns)]],
+  };
+  showDrillPanel(_drill.title, summary + avgBlock + rowsHtml);
 }
 export function drillDownService(sid) {
   const d = window._currentReportData; if (!d) return;
   const s = svc(sid), rows = [];
   d.filtered.forEach(r => (r.assignments||[]).forEach(a => { if (a.serviceId !== sid) return; rows.push({ customer: r.name, tech: staffById(a.techId)?.name || '—', cost: a.cost||0, station: a.station||'', time: new Date(r.checkinTime) }); }));
-  showDrillPanel(`${s?.label||sid} — Detail`, rows.map(row => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div><div class="font-headline font-semibold text-on-surface text-sm">${row.customer}</div><div class="text-xs font-body text-on-surface-variant">Tech: ${row.tech}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div></div>`).join(''));
+  _drill = {
+    title: `${s?.label||sid} — Detail`,
+    columns: ['Date','Time','Customer','Technician','Station','Cost'],
+    rows: rows.map(r => [r.time.toLocaleDateString(), r.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.customer, r.tech, r.station, '$'+r.cost.toFixed(2)]),
+    summary: [['Services', String(rows.length)], ['Total', '$'+rows.reduce((acc,r)=>acc+r.cost,0).toFixed(2)]],
+  };
+  showDrillPanel(_drill.title, rows.map(row => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div><div class="font-headline font-semibold text-on-surface text-sm">${row.customer}</div><div class="text-xs font-body text-on-surface-variant">Tech: ${row.tech}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div></div>`).join(''));
 }
 function showDrillPanel(title, html) {
   document.getElementById('rpt-drill-title').textContent = title;
   document.getElementById('rpt-drill-list').innerHTML = html || '<p class="text-sm font-body text-on-surface-variant">No detail available.</p>';
-  document.getElementById('rpt-drill-panel').classList.remove('hidden');
-  document.getElementById('rpt-drill-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const m = document.getElementById('rpt-drill-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
 }
-export function closeDrillDown() { document.getElementById('rpt-drill-panel').classList.add('hidden'); }
+export function closeDrillDown() { const m = document.getElementById('rpt-drill-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } }
+export function exportDrillCSV() {
+  if (!_drill || !_drill.rows.length) { showToast('Nothing to export.'); return; }
+  const matrix = [ [_drill.title.replace(/—/g,'-')], [`Showing: ${rangeLabel()}`], ..._drill.summary, [], _drill.columns, ..._drill.rows ];
+  const csv = matrix.map(line => line.map(c => `"${String(c==null?'':c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob(['﻿'+csv], { type:'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a'); a.href = url; a.download = `muse-detail-${localDateStr(getReportDates()?.from||new Date())}.csv`; a.click(); URL.revokeObjectURL(url);
+  showToast('Detail exported as CSV (opens in Excel)');
+}
+export function exportDrillPDF() {
+  if (!_drill || !_drill.rows.length) { showToast('Nothing to export.'); return; }
+  const url = URL.createObjectURL(new Blob([buildDrillHtml(_drill)], { type:'text/html' }));
+  const win = window.open(url, '_blank'); if (win) setTimeout(() => win.print(), 600); URL.revokeObjectURL(url);
+  showToast('PDF opened — use Print → Save as PDF');
+}
+function buildDrillHtml(d) {
+  const logo = cfg().logo || LOGO_PATH;
+  const th = d.columns.map(c => `<th>${_eTxn(c)}</th>`).join('');
+  const tr = d.rows.map(r => `<tr>${r.map((c,i) => `<td${i===r.length-1?' style="text-align:right"':''}>${_eTxn(c)}</td>`).join('')}</tr>`).join('');
+  const cards = d.summary.map(([l,v]) => `<div class="card"><div class="v">${_eTxn(v)}</div><div class="l">${_eTxn(l)}</div></div>`).join('');
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${_eTxn(d.title)}</title><style>
+    body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:20px}.h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{max-width:140px;max-height:52px;object-fit:contain;border-radius:8px}
+    h1{color:#1a5252;font-size:18px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
+    .cards{display:flex;gap:12px;margin:12px 0 16px;flex-wrap:wrap}.card{background:#1a5252;color:#fff;border-radius:10px;padding:8px 16px}.card .v{font-size:18px;font-weight:800;line-height:1}.card .l{font-size:9px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
+    table{width:100%;border-collapse:collapse}th{background:#1a5252;color:#fff;padding:5px 6px;text-align:left;font-size:10px}td{padding:4px 6px;border-bottom:1px solid #e0e0e0;font-size:10px}tr:nth-child(even) td{background:#fafafa}
+    .footer{margin-top:20px;font-size:10px;color:#999;text-align:center}
+  </style></head><body>
+    <div class="h">${logo?`<img src="${logo}" class="logo" onerror="this.style.display='none'">`:''}<div><h1>${_eTxn(d.title)}</h1><p class="sub">${_eTxn(rangeLabel())}</p></div></div>
+    <div class="cards">${cards}</div>
+    <table><thead><tr>${th}</tr></thead><tbody>${tr}</tbody></table>
+    <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
+}
 
 // ── Payroll page (per-tech commission / check / cash by pay period, prev-period compare) ─
 // Its own dashboard tab. Techs are cards (horizontal scroll); each shows Billed,
