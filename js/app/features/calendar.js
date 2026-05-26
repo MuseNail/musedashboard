@@ -260,9 +260,20 @@ export function calRenderGrid() {
   const normalColW = Math.max(120, Math.floor((window.innerWidth - TIME_W - railW - 48) / Math.max(1, _calCalendars.length)));
   const maxBubbleW = normalColW * 2.5;
   const now = new Date(), isToday = now.toDateString() === _calDate.toDateString(), nowMin = now.getHours()*60 + now.getMinutes();
+  // #3: grey a tech's column on their day off. Calendars map to staff by NAME (Google
+  // calendar name = staff name); uses the in-app schedule only (off / sick / vacation for the
+  // viewed date), never Google. No match or "working"/unset = normal.
+  const calColumnOff = (cal) => {
+    if (!cal || !cal.name) return false;
+    const st = (cfg().staff || []).find(s => (s.name || '').trim().toLowerCase() === cal.name.trim().toLowerCase());
+    if (!st) return false;
+    const dstr = localDateStr(_calDate), sc = cfg().schedule || {};
+    const status = sc[dstr]?.[st.id] || sc._repeats?.[st.id]?.[new Date(dstr + 'T12:00:00').getDay()] || null;
+    return status === 'off' || status === 'sick' || status === 'vacation';
+  };
 
   let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;position:sticky;top:0;z-index:4;border-bottom:2px solid var(--md-outline-variant);background:var(--md-surface-container-lowest)"><div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;position:sticky;left:0;z-index:5;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)"></div>`;
-  visible.forEach((cal,i) => { const isLast = i === visible.length-1; hdr += `<div style="width:${COL_W}px;flex-shrink:0;height:${HEADER_H}px;background:${cal.color}18;border-bottom:3px solid ${cal.color};border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'};display:flex;align-items:center;justify-content:center;gap:5px;padding:0 8px"><div style="width:10px;height:10px;border-radius:50%;background:${cal.color};flex-shrink:0"></div><span style="font-size:13px;font-family:var(--font-headline);font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cal.name}</span></div>`; });
+  visible.forEach((cal,i) => { const isLast = i === visible.length-1; const off = calColumnOff(cal); const dot = off ? '#9ca3af' : cal.color; hdr += `<div style="width:${COL_W}px;flex-shrink:0;height:${HEADER_H}px;background:${off ? '#e5e7eb' : cal.color + '18'};border-bottom:3px solid ${dot};border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'};display:flex;align-items:center;justify-content:center;gap:5px;padding:0 8px"><div style="width:10px;height:10px;border-radius:50%;background:${dot};flex-shrink:0"></div><span style="font-size:13px;font-family:var(--font-headline);font-weight:700;color:${off ? '#9ca3af' : 'var(--md-on-surface)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cal.name}${off ? ' · off' : ''}</span></div>`; });
   hdr += `</div>`;
 
   let body = `<div id="cal-grid-body" style="display:flex;min-width:${TIME_W + COL_W*visible.length}px"><div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)">`;
@@ -277,7 +288,8 @@ export function calRenderGrid() {
   const calName = cid => _calCalendars.find(c => c.id === cid)?.name || (cid === uCal ? 'Unassigned' : cid);
   visible.forEach((cal,colIdx) => {
     const events = _calEvents[cal.id] || [], isLast = colIdx === visible.length-1, isFirst = colIdx === 0;
-    body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;${isFirst?'border-left:2px solid rgba(0,0,0,0.12);':''}${isLast?'':'border-right:2px solid rgba(0,0,0,0.12);'}min-height:${SLOTS*SLOT_H}px"><div style="position:relative;height:${SLOTS*SLOT_H}px">`;
+    const off = calColumnOff(cal);   // #3: grey the column for a tech who's off this day
+    body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;${off ? 'background:#e9ebed;opacity:0.6;' : ''}${isFirst?'border-left:2px solid rgba(0,0,0,0.12);':''}${isLast?'':'border-right:2px solid rgba(0,0,0,0.12);'}min-height:${SLOTS*SLOT_H}px"><div style="position:relative;height:${SLOTS*SLOT_H}px">`;
     for (let s = 0; s < SLOTS; s++) { const isHour = s % (60/SLOT_MINS) === 0; const h = START_HOUR + Math.floor(s*SLOT_MINS/60), m = (s*SLOT_MINS)%60; body += `<div style="position:absolute;left:0;right:0;top:${s*SLOT_H}px;height:${SLOT_H}px;border-top:${isHour?'1.5px solid rgba(0,0,0,0.12)':'1px solid rgba(0,0,0,0.05)'};cursor:pointer" onclick="calSlotClick('${cal.id}',${h},${m})"></div>`; }
     if (isToday) { const lineTop = ((nowMin - START_HOUR*60)/SLOT_MINS)*SLOT_H; if (lineTop >= 0 && lineTop <= SLOTS*SLOT_H) body += `<div style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;border-top:2px dashed #e53935;z-index:5;pointer-events:none">${colIdx===0?`<div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>`:''}</div>`; }
     // Group this column's events into bookings so a party checked in together (or
