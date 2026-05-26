@@ -35,6 +35,9 @@ Full idea (parked): collapse the two near-duplicate check-in paths (kiosk + Manu
 ### Orphaned-notes recovery check (optional)
 A small read-only diagnostic: count `config.customer_notes` entries whose key (Square ID) no longer matches any current directory customer — surfaces notes orphaned by an ID change so they can be re-mapped. Note text also survives in the nightly Sheets backup + DO config.
 
+### Explicit calendar ↔ staff mapping (owner is considering)
+Today the day-off greying (v3.42) maps a Google calendar to a staff member by **exact name** (case-insensitive, trimmed) — so "John" (calendar) vs "Jon" (staff name, e.g. from Square) won't match and the column won't grey. More robust: a small picker in Settings to explicitly link each calendar to a staff member (and feed any other calendar↔staff features), removing the name-spelling dependency. Owner is thinking about whether it's worth it.
+
 ---
 
 ## Done (shipped — kept for history)
