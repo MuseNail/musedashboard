@@ -114,6 +114,13 @@ function _openCropModal(title, showCanvas) {
 
 function _loadImageIntoCrop(src) {
   const img = new Image();
+  // Re-cropping an existing logo/photo loads it from the cross-origin R2/Worker URL. We
+  // draw it to a canvas and call toDataURL on Save — which throws (SecurityError) if the
+  // canvas is tainted by a non-CORS image. The Worker serves photos with
+  // Access-Control-Allow-Origin:*, so request it as a CORS image; the cache-buster avoids
+  // reusing a previously-cached non-CORS response for the same URL.
+  const isRemote = /^https?:/i.test(src);
+  if (isRemote) img.crossOrigin = 'anonymous';
   img.onload = () => {
     _photoCropImg = img; _photoCropZoom = 1; _photoCropOffset = { x: 0, y: 0 };
     document.getElementById('photo-crop-zoom').value = 1;
@@ -123,7 +130,8 @@ function _loadImageIntoCrop(src) {
     document.getElementById('photo-crop-save').disabled = false;
     requestAnimationFrame(() => { updatePhotoCrop(); attachCropDrag(); });
   };
-  img.src = src;
+  img.onerror = () => showToast('Could not load that image to edit.');
+  img.src = isRemote ? src + (src.includes('?') ? '&' : '?') + 'cb=' + Date.now() : src;
 }
 
 export function showPhotoUpload(type, id) {
