@@ -1056,17 +1056,17 @@ export function renderTransactions() {
     const assignRows = !isRefund && (r.assignments||[]).filter(a=>a.techId||a.cost).map(a=>`<div class="text-[11px] font-body text-primary">${svc(a.serviceId)?.label||''} → ${staffById(a.techId)?.name||'—'}${a.station?' @ '+a.station:''} ${a.cost?'· $'+a.cost.toFixed(2):''}</div>`).join('');
     const refundNote = isRefund && r.discountNote ? `<div class="text-[11px] font-body text-error mt-1">Reason: ${r.discountNote}</div>` : '';
     const isPast = new Date(r.checkinTime) < new Date(new Date().setHours(0,0,0,0));
+    const editable = !isRefund && canDo('historicalEntry') && isPast;   // whole card opens the edit modal
     const totalDisplay = isRefund ? `<div class="text-lg font-headline font-extrabold text-error">-$${Math.abs(r.totalCost||0).toFixed(2)}</div>` : `<div class="text-lg font-headline font-extrabold text-primary">$${(r.totalCost||0).toFixed(2)}</div>`;
-    return `<div class="bg-surface-container-lowest rounded-xl px-5 py-4 border ${isRefund?'border-error/30':'border-surface-container-high'}">
+    return `<div ${editable ? `onclick="showHistoricalEntryModal('${r.id}')" title="Edit transaction"` : ''} class="bg-surface-container-lowest rounded-xl px-5 py-4 border ${isRefund?'border-error/30':'border-surface-container-high'}${editable?' cursor-pointer hover:shadow-md transition-shadow':''}">
       <div class="flex items-start justify-between"><div class="flex-grow min-w-0">
         <div class="flex items-center gap-2 flex-wrap mb-1"><span class="font-headline font-bold text-on-surface">${r.name}</span><span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badgeClass}">${isRefund?'refund':r.status}</span>${!isRefund&&r.isAppointment?'<span class="badge-appointment text-[11px] px-2 py-0.5 rounded-full font-body font-semibold">Appt</span>':''}</div>
         <div class="text-xs font-body text-on-surface-variant mb-1">${serviceLabels}</div>${assignRows||''}${refundNote}
         <div class="text-[11px] font-body text-outline mt-1">${dateStr} · ${timeStr}${r.phone?' · '+r.phone:''}</div></div>
         <div class="ml-4 flex-shrink-0 flex items-center gap-2">
           <div class="flex items-center gap-1">
-            ${!isRefund&&canDo('historicalEntry')&&isPast?`<button onclick="showHistoricalEntryModal('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"><span class="material-symbols-outlined" style="font-size:14px">edit</span> Edit</button>`:''}
-            ${!isRefund&&canDo('refund')?`<button onclick="initiateRefund('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-secondary transition-colors px-2 py-1 rounded-lg hover:bg-secondary/10"><span class="material-symbols-outlined" style="font-size:14px">undo</span> Refund</button>`:''}
-            ${canDo('deleteTransaction')?`<button onclick="initiateDeleteTransaction('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-error transition-colors px-2 py-1 rounded-lg hover:bg-error/10"><span class="material-symbols-outlined" style="font-size:14px">delete</span> Delete</button>`:''}
+            ${!isRefund&&canDo('refund')?`<button onclick="event.stopPropagation();initiateRefund('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-secondary transition-colors px-2 py-1 rounded-lg hover:bg-secondary/10"><span class="material-symbols-outlined" style="font-size:14px">undo</span> Refund</button>`:''}
+            ${canDo('deleteTransaction')?`<button onclick="event.stopPropagation();initiateDeleteTransaction('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-error transition-colors px-2 py-1 rounded-lg hover:bg-error/10"><span class="material-symbols-outlined" style="font-size:14px">delete</span> Delete</button>`:''}
           </div>
           ${totalDisplay}
         </div></div></div>`;

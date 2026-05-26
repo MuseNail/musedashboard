@@ -225,7 +225,7 @@ export function renderCustomerDir(query) {
   list.innerHTML = filtered.map(c => {
     const name = [c.firstName, c.lastName].filter(Boolean).join(' ') || 'Unknown';
     return `
-      <div class="flex items-center gap-3 px-4 py-3 border-b border-surface-container-high hover:bg-surface-container transition-colors">
+      <div onclick="showEditCustomer('${c.squareId}')" title="Edit customer" class="flex items-center gap-3 px-4 py-3 border-b border-surface-container-high hover:bg-surface-container transition-colors cursor-pointer">
         <div class="w-9 h-9 rounded-full bg-primary-container flex items-center justify-center flex-shrink-0">
           <span class="text-sm font-headline font-bold text-primary">${name.charAt(0).toUpperCase()}</span>
         </div>
@@ -233,9 +233,7 @@ export function renderCustomerDir(query) {
           <div class="font-headline font-semibold text-on-surface text-sm">${name}</div>
           <div class="text-xs font-body text-on-surface-variant">${c.phone || ''}${c.email ? ' · ' + c.email : ''}</div>
         </div>
-        <button onclick="showEditCustomer('${c.squareId}')" class="w-9 h-9 rounded-full hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors flex-shrink-0">
-          <span class="material-symbols-outlined" style="font-size:18px">edit</span>
-        </button>
+        <span class="material-symbols-outlined text-on-surface-variant flex-shrink-0" style="font-size:18px">chevron_right</span>
       </div>`;
   }).join('');
 }

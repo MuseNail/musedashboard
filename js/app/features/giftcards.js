@@ -146,13 +146,13 @@ export function renderGiftCards() {
   if (!list) return;
   const q = (document.getElementById('gc-search')?.value || '').toLowerCase();
   let filtered = giftCards().filter(g => !q || (g.serial||'').toLowerCase().includes(q) || (g.from||'').toLowerCase().includes(q) || (g.to||'').toLowerCase().includes(q) || (g.phone||'').includes(q) || (g.notes||'').toLowerCase().includes(q));
-  if (_gcHideZero) filtered = filtered.filter(g => ((g.amount||0) - (g.amountUsed||0)) > 0);
+  if (_gcHideZero) filtered = filtered.filter(g => ((g.amount||0) - gcTotalUsed(g)) > 0);
   filtered = [...filtered].sort((a,b) => {
     let av, bv;
     if (_gcSortField === 'amount') { av = a.amount||0; bv = b.amount||0; }
-    else if (_gcSortField === 'balance') { av = (a.amount||0)-(a.amountUsed||0); bv = (b.amount||0)-(b.amountUsed||0); }
+    else if (_gcSortField === 'balance') { av = (a.amount||0)-gcTotalUsed(a); bv = (b.amount||0)-gcTotalUsed(b); }
     else if (_gcSortField === 'serial') { av = a.serial||''; bv = b.serial||''; }
-    else if (_gcSortField === 'status') { const order = { Active:0, Partial:1, Redeemed:2 }; const getS = g => { const bal = (g.amount||0)-(g.amountUsed||0); return bal<=0?'Redeemed':g.amountUsed>0?'Partial':'Active'; }; av = order[getS(a)]??3; bv = order[getS(b)]??3; }
+    else if (_gcSortField === 'status') { const order = { Active:0, Partial:1, Redeemed:2 }; const getS = g => { const u = gcTotalUsed(g); const bal = (g.amount||0)-u; return bal<=0&&u>0?'Redeemed':u>0?'Partial':'Active'; }; av = order[getS(a)]??3; bv = order[getS(b)]??3; }
     else { av = a.datePurchased||''; bv = b.datePurchased||''; }
     if (av < bv) return _gcSortDir === 'asc' ? -1 : 1;
     if (av > bv) return _gcSortDir === 'asc' ? 1 : -1;
@@ -160,7 +160,7 @@ export function renderGiftCards() {
   });
 
   const totalValue = giftCards().reduce((s,g)=>s+(g.amount||0),0);
-  const totalUsed = giftCards().reduce((s,g)=>s+(g.amountUsed||0),0);
+  const totalUsed = giftCards().reduce((s,g)=>s+gcTotalUsed(g),0);
   const set = (id,v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('gc-total-sold', giftCards().length); set('gc-total-value', '$'+totalValue.toFixed(2)); set('gc-total-used', '$'+totalUsed.toFixed(2)); set('gc-total-balance', '$'+(totalValue-totalUsed).toFixed(2));
 
