@@ -498,7 +498,7 @@ tailwind.config = {
 
       <!-- Shared single-day picker (Turns & Queue history, Calendar) — matches the Reports date popup -->
       <div id="day-picker-modal" class="fixed inset-0 z-50 hidden" onclick="if(event.target===this)closeDayPicker()">
-        <div id="day-picker-panel" class="bg-surface rounded-2xl shadow-2xl overflow-auto" style="position:fixed;width:min(320px,calc(100vw - 16px));max-height:82vh">
+        <div id="day-picker-panel" class="bg-surface rounded-2xl shadow-2xl overflow-auto" style="position:fixed;width:min(360px,calc(100vw - 16px));max-height:82vh">
           <div class="flex">
             <div id="day-picker-presets" class="w-32 flex-shrink-0 border-r border-surface-container-high py-2 hidden"></div>
             <div class="flex-1 p-4 min-w-0">
@@ -525,6 +525,8 @@ tailwind.config = {
               class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical
             </button>
+            <button id="txn-merge-btn" onclick="openTxnMergeModal()" title="Merge separate tickets into one party"
+              class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">merge</span> Merge</button>
             <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
             <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
             <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
@@ -1562,6 +1564,26 @@ tailwind.config = {
       <textarea id="assign-txn-note" placeholder="Notes for today's visit…" oninput="saveAssignTxnNote()" class="flex-grow w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="min-height:200px"></textarea>
     </div>
   </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     MERGE TICKETS INTO ONE PARTY (Transactions tab)
+═══════════════════════════════════════════════ -->
+<div id="txn-merge-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40 px-4" style="display:none" onclick="if(event.target===this)closeTxnMergeModal()">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-lg shadow-2xl fade-up max-h-[88vh] flex flex-col">
+    <div class="flex items-start justify-between p-5 border-b border-surface-container-high flex-shrink-0">
+      <div>
+        <h2 class="text-lg font-headline font-bold text-on-surface">Merge into one party</h2>
+        <p class="text-xs font-body text-on-surface-variant mt-0.5">Pick 2+ tickets that were really one visit. They’ll group under a single party total (totals don’t change).</p>
+      </div>
+      <button onclick="closeTxnMergeModal()" class="text-on-surface-variant hover:text-on-surface flex-shrink-0"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div id="txn-merge-list" class="flex-grow overflow-y-auto p-4 space-y-1.5"></div>
+    <div class="p-4 border-t border-surface-container-high flex items-center justify-between gap-3 flex-shrink-0">
+      <span id="txn-merge-count" class="text-sm font-body text-on-surface-variant">0 selected</span>
+      <button onclick="mergeSelectedTxns()" class="flex items-center gap-1.5 bg-primary hover:bg-primary-dim text-on-primary px-5 py-2.5 rounded-xl font-headline font-bold transition-all"><span class="material-symbols-outlined" style="font-size:18px">merge</span> Merge</button>
+    </div>
   </div>
 </div>
 

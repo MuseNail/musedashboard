@@ -9,7 +9,7 @@ import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
 import { squareUpsertCustomer } from './square-customers.js';
 import { avgServiceTime, fmtDur } from './servicetime.js';
-import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY } from '../config.js';
+import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS } from '../config.js';
 
 const cfg = () => getState().config;
 const records = () => getState().records;
@@ -262,7 +262,7 @@ export function openDayPicker(ev, opts = {}) {
     rail.innerHTML = hasPresets ? opts.presets.map(p => `<button onclick="dayPickerPick('${p.date}')" class="dp-preset${p.date === _dayPickSel ? ' active' : ''}">${p.label}</button>`).join('') : '';
   }
   const panel = document.getElementById('day-picker-panel');
-  if (panel) panel.style.width = `min(${hasPresets ? 440 : 320}px, calc(100vw - 16px))`;
+  if (panel) panel.style.width = `min(${hasPresets ? 480 : 360}px, calc(100vw - 16px))`;
   const m = document.getElementById('day-picker-modal'); if (m) m.classList.remove('hidden');
   renderDayPicker(); _anchorPanel('day-picker-panel', ev);
 }
@@ -933,7 +933,85 @@ export function togglePartyTxn(headerEl) {
   members.classList.toggle('hidden');
   if (chev) chev.style.transform = members.classList.contains('hidden') ? '' : 'rotate(180deg)';
 }
-export function updateHistoricalButtonVisibility() { document.getElementById('add-historical-btn')?.classList.toggle('hidden', !canDo('historicalEntry')); }
+export function updateHistoricalButtonVisibility() {
+  document.getElementById('add-historical-btn')?.classList.toggle('hidden', !canDo('historicalEntry'));
+  document.getElementById('txn-merge-btn')?.classList.toggle('hidden', !canDo('historicalEntry'));
+}
+
+// ── Merge separate tickets into one party ─────────────────────────────────────
+// Some tickets that were really one visit got checked in (or saved) individually, so
+// they have no shared groupId and show as separate transactions. There's no trace of
+// which belonged together, so the owner picks them by hand here: selecting 2+ assigns
+// them a shared groupId/color (reusing an existing party's if one is selected) and
+// re-saves the records, after which they bracket into one "party of N" ticket.
+let _txnMergeSel = new Set();
+function _txnMergeCandidates() {
+  const dates = getReportDates();   // same window as the Transactions tab
+  let combined = buildCombinedRecords().filter(r => isPaidStatus(r.status));   // paid only (never refunds)
+  if (dates) combined = combined.filter(r => { const d = new Date(r.checkinTime); return d >= dates.from && d <= dates.to; });
+  return combined.sort((a, b) => new Date(b.checkinTime) - new Date(a.checkinTime));
+}
+export function openTxnMergeModal() {
+  if (!canDo('historicalEntry')) { showToast('You don’t have permission to merge tickets.'); return; }
+  _txnMergeSel = new Set();
+  renderTxnMergeList();
+  const m = document.getElementById('txn-merge-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
+}
+export function closeTxnMergeModal() {
+  const m = document.getElementById('txn-merge-modal'); if (m) { m.classList.add('hidden'); m.style.display = 'none'; }
+  _txnMergeSel.clear();
+}
+export function toggleTxnMergeSelect(id) {
+  id = String(id);
+  if (_txnMergeSel.has(id)) _txnMergeSel.delete(id); else _txnMergeSel.add(id);
+  renderTxnMergeList();
+}
+function renderTxnMergeList() {
+  const wrap = document.getElementById('txn-merge-list'); if (!wrap) return;
+  const recs = _txnMergeCandidates();
+  const letters = partyLetterMap(recs);
+  if (!recs.length) {
+    wrap.innerHTML = '<div class="text-sm font-body text-on-surface-variant text-center py-10">No paid tickets in this date range.</div>';
+  } else {
+    wrap.innerHTML = recs.map(r => {
+      const dt = new Date(r.checkinTime);
+      const when = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const sel = _txnMergeSel.has(String(r.id));
+      const grp = r.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:5px;background:${r.groupColor || '#888'};color:#fff;font-size:9px;font-weight:800;margin-right:5px;vertical-align:middle">${letters.get(r.groupId) || '•'}</span>` : '';
+      const svcSummary = (r.services || []).map(sid => svc(sid)?.label || sid).join(', ');
+      return `<button type="button" onclick="toggleTxnMergeSelect('${r.id}')" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border text-left transition-all ${sel ? 'border-primary bg-primary/5' : 'border-surface-container-high hover:bg-surface-container'}">
+        <span class="material-symbols-outlined" style="font-size:20px;color:${sel ? 'var(--primary,#1a5252)' : '#9aa0a3'}">${sel ? 'check_box' : 'check_box_outline_blank'}</span>
+        <div class="flex-grow min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${grp}${r.name || '(no name)'}</div>
+          <div class="text-[11px] font-body text-on-surface-variant truncate">${when}${svcSummary ? ' · ' + svcSummary : ''}</div></div>
+        <span class="font-headline font-bold text-primary flex-shrink-0">$${(r.totalCost || 0).toFixed(2)}</span></button>`;
+    }).join('');
+  }
+  const c = document.getElementById('txn-merge-count'); if (c) c.textContent = `${_txnMergeSel.size} selected`;
+}
+function _persistGroupOnRecord(id, groupId, groupColor, groupLabel) {
+  // A ticket can be a live paid queue entry, a stored record, or both — update whichever
+  // exist so the grouping survives the next sync and shows immediately.
+  const live = queue().find(e => String(e.id) === id);
+  if (live) { live.groupId = groupId; live.groupColor = groupColor; live.groupLabel = groupLabel; dispatch('queue.upsert', { entry: live }); }
+  const stored = records().find(r => String(r.id) === id);
+  if (stored) dispatch('record.save', { record: { ...stored, groupId, groupColor, groupLabel } });
+}
+export function mergeSelectedTxns() {
+  if (!canDo('historicalEntry')) return;
+  if (_txnMergeSel.size < 2) { showToast('Select at least 2 tickets to merge.'); return; }
+  const recs = _txnMergeCandidates().filter(r => _txnMergeSel.has(String(r.id)));
+  if (recs.length < 2) { showToast('Select at least 2 tickets to merge.'); return; }
+  // Merge into an existing party if one was selected, else mint a new group.
+  const existing = recs.find(r => r.groupId);
+  const groupId = existing?.groupId || `grp-merge-${Date.now()}`;
+  const groupColor = existing?.groupColor || GROUP_COLORS[Math.floor(Math.random() * GROUP_COLORS.length)];
+  const ordered = [...recs].sort((a, b) => new Date(a.checkinTime) - new Date(b.checkinTime));   // earliest = primary
+  const primaryName = ordered[0]?.name || '';
+  ordered.forEach((r, i) => _persistGroupOnRecord(String(r.id), groupId, groupColor, i === 0 ? `${r.name} (primary)` : `${primaryName} — ${r.name}`));
+  closeTxnMergeModal();
+  renderTransactions();
+  showToast(`Merged ${recs.length} tickets into one party ✓`);
+}
 
 // ── Transactions export (every ticket expanded, current shared date window) ───
 // One row per customer/ticket (parties are NOT collapsed here — the owner wants the
