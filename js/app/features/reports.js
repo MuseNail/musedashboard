@@ -358,14 +358,18 @@ export function runReport() {
         const commAmt = commPct != null ? data.income*commPct/100 : null;
         const totalTurns = data.fullTurns + data.halfTurns;
         const avatar = tech?.photo ? `<img src="${tech.photo}" class="w-10 h-10 rounded-full object-cover flex-shrink-0">` : `<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center flex-shrink-0"><span class="text-sm font-headline font-bold text-on-surface">${name.charAt(0)}</span></div>`;
+        // Billed / Commission / Salon Keeps sit inline on the right of the staff info (one
+        // compact row) instead of a separate full-width band below it.
+        const metric = (label, val, color, bg) => `<div class="px-3 text-center flex-shrink-0 flex flex-col justify-center"${bg?` style="background:${bg}"`:''}><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest leading-tight whitespace-nowrap">${label}</div><div class="font-headline font-bold text-base leading-tight ${color||'text-on-surface'}">${val}</div></div>`;
         return `<div class="bg-surface-container-lowest rounded-xl border border-surface-container-high hover:bg-surface-container transition-colors cursor-pointer overflow-hidden" onclick="drillDownStaff('${techId}')">
-          <div class="flex items-center gap-3 px-4 py-3">${avatar}<div class="flex-grow min-w-0"><div class="font-headline font-semibold text-on-surface text-sm">${name}</div>
-            <div class="text-xs font-body text-on-surface-variant flex gap-3 mt-0.5"><span>${data.count} service${data.count!==1?'s':''}</span><span class="text-primary font-semibold">${totalTurns}t</span>${data.bonusTurns>0?`<span class="text-secondary">+${data.bonusTurns}b</span>`:''}${commPct!=null?`<span>${commPct}% commission</span>`:'<span class="text-outline italic">no commission set</span>'}</div></div>
-            <span class="material-symbols-outlined text-on-surface-variant flex-shrink-0" style="font-size:18px">chevron_right</span></div>
-          <div class="flex border-t border-surface-container-high divide-x divide-surface-container-high">
-            <div class="flex-1 px-4 py-2 text-center"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Billed</div><div class="font-headline font-bold text-on-surface text-base">$${data.income.toFixed(2)}</div></div>
-            ${commAmt!=null?`<div class="flex-1 px-4 py-2 text-center" style="background:rgba(26,82,82,0.06)"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Commission (${commPct}%)</div><div class="font-headline font-bold text-primary text-base">$${commAmt.toFixed(2)}</div></div><div class="flex-1 px-4 py-2 text-center"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">Salon Keeps</div><div class="font-headline font-bold text-on-surface text-base">$${(data.income-commAmt).toFixed(2)}</div></div>`:''}
-          </div></div>`;
+          <div class="flex items-stretch gap-3 px-4 py-3"><div class="flex items-center gap-3 flex-grow min-w-0">${avatar}<div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm">${name}</div>
+            <div class="text-xs font-body text-on-surface-variant flex gap-3 mt-0.5 flex-wrap"><span>${data.count} service${data.count!==1?'s':''}</span><span class="text-primary font-semibold">${totalTurns}t</span>${data.bonusTurns>0?`<span class="text-secondary">+${data.bonusTurns}b</span>`:''}${commPct!=null?`<span>${commPct}% commission</span>`:'<span class="text-outline italic">no commission set</span>'}</div></div></div>
+            <div class="flex items-stretch flex-shrink-0 text-center divide-x divide-surface-container-high border-l border-surface-container-high">
+              ${metric('Billed', '$'+data.income.toFixed(2))}
+              ${commAmt!=null?metric(`Commission (${commPct}%)`, '$'+commAmt.toFixed(2), 'text-primary', 'rgba(26,82,82,0.06)')+metric('Salon Keeps', '$'+(data.income-commAmt).toFixed(2)):''}
+            </div>
+            <span class="material-symbols-outlined text-on-surface-variant flex-shrink-0 self-center" style="font-size:18px">chevron_right</span></div>
+        </div>`;
       }).join('');
   }
 

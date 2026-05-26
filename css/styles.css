@@ -377,6 +377,11 @@
   /* ── Reports: comparison delta badges ─────────────────────────────────── */
   .rpt-delta { display:inline-flex; align-items:center; gap:3px; margin-top:4px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; line-height:1; }
   .rpt-delta:empty { display:none; }
+  /* Summary cards: keep the delta badge on the same line as the dollar amount (shorter
+     cards). The amount is a block <div>; making it inline-block lets the delta sit beside
+     it, and the label <div> still drops to its own line below. */
+  #panel-reports .rounded-xl.text-center > .font-headline { display:inline-block; vertical-align:middle; }
+  #panel-reports .rounded-xl.text-center > .rpt-delta { margin-top:0; margin-left:6px; vertical-align:middle; }
   .rpt-delta.up   { color:#15803d; background:rgba(22,163,74,.12); }
   .rpt-delta.down { color:#b91c1c; background:rgba(220,38,38,.12); }
   .rpt-delta.na   { color:var(--md-on-surface-variant,#6b7280); background:rgba(0,0,0,.06); }
@@ -401,7 +406,7 @@
   .perf-col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; min-width:0; }
   .perf-bar { width:70%; max-width:36px; min-height:2px; background:linear-gradient(180deg,#2a8a87,var(--primary,#1a5252)); border-radius:6px 6px 0 0; transition:height .2s ease; }
   .perf-col:hover .perf-bar { filter:brightness(1.1); }
-  .perf-x { font-size:10px; color:var(--md-on-surface-variant,#6b7280); margin-top:5px; white-space:nowrap; }
+  .perf-x { font-size:12px; color:var(--md-on-surface-variant,#6b7280); margin-top:5px; white-space:nowrap; }
 
   /* ── Reports: comparison menu ─────────────────────────────────────────── */
   .cmp-opt { display:block; width:100%; text-align:left; padding:11px 16px; font-size:14px; font-weight:600; color:var(--md-on-surface,#1c1b1f); background:transparent; border:none; cursor:pointer; }
