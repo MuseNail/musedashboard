@@ -248,6 +248,9 @@ export function showEditCustomer(squareId) {
   document.getElementById('edit-cust-phone').value     = c.phone;
   document.getElementById('edit-cust-email').value     = c.email;
   document.getElementById('edit-cust-notes').value     = customerNote(c.squareId);   // app-owned manual note (not Square's auto stamp)
+  // Local visit history (derived from transaction records) — kept in reports.js to avoid
+  // a circular import; safe no-op if reports hasn't loaded.
+  window.renderCustomerHistory?.(c.phone, [c.firstName, c.lastName].filter(Boolean).join(' '));
   const m = document.getElementById('edit-customer-modal');
   m.classList.remove('hidden'); m.style.display = 'flex';
 }

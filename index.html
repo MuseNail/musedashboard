@@ -1930,7 +1930,7 @@ tailwind.config = {
      EDIT CUSTOMER MODAL
 ═══════════════════════════════════════════════ -->
 <div id="edit-customer-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-md shadow-2xl fade-up mx-4">
+  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-lg shadow-2xl fade-up mx-4 max-h-[92vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-5">
       <h2 class="text-xl font-headline font-bold text-on-surface">Edit Customer</h2>
       <button onclick="closeEditCustomer()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
@@ -1957,6 +1957,10 @@ tailwind.config = {
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Notes</label>
         <textarea id="edit-cust-notes" rows="2" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-body focus:border-primary outline-none resize-none"></textarea>
+      </div>
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Visit History</label>
+        <div id="edit-cust-history" class="max-h-56 overflow-y-auto"></div>
       </div>
     </div>
     <div class="flex gap-2 mt-5">

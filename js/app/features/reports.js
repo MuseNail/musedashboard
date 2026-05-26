@@ -44,7 +44,7 @@ export function buildCombinedRecords() {
   records().filter(r => r.status === 'deleted').forEach(r => deletedIds.add(String(r.id)));
   const liveSnaps = queue().filter(e => isPaidStatus(e.status) && !deletedIds.has(String(e.id))).map(e => ({
     id: String(e.id), name: e.name, phone: e.phone || '', services: e.services, assignments: e.assignments || [],
-    items: e.items || [], fees: e.fees || [], discount: e.discount || 0, discountNote: e.discountNote || '',
+    items: e.items || [], fees: e.fees || [], discount: e.discount || 0, discountNote: e.discountNote || '', txnNote: e.txnNote || '',
     totalCost: e.totalCost || 0, checkinTime: e.checkinTime, completedAt: e.completedAt || null,
     status: e.status, isAppointment: e.isAppointment || false,
     groupId: e.groupId || '', groupColor: e.groupColor || '', groupLabel: e.groupLabel || '',
@@ -60,6 +60,37 @@ export function buildCombinedRecords() {
     const t = ticketTotal(r);
     return t === (r.totalCost || 0) ? r : { ...r, totalCost: t };
   });
+}
+
+// Per-customer visit history, derived from transaction records (local — no Square sync).
+// Matched by phone (last-10-digits), falling back to an exact name match when there's no
+// phone. Rendered into the Edit Customer modal. Called from showEditCustomer via window.
+const _digits10 = s => (s || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+export function renderCustomerHistory(phone, name) {
+  const el = document.getElementById('edit-cust-history'); if (!el) return;
+  const ph = _digits10(phone), nm = (name || '').trim().toLowerCase();
+  const recs = buildCombinedRecords().filter(r => {
+    if (r.status === 'deleted' || !(isPaidStatus(r.status) || r.status === 'refund')) return false;
+    const rp = _digits10(r.phone);
+    if (ph && rp) return rp.endsWith(ph) || ph.endsWith(rp);
+    return !!nm && (r.name || '').trim().toLowerCase() === nm;
+  }).sort((a, b) => new Date(b.checkinTime) - new Date(a.checkinTime));
+  if (!recs.length) { el.innerHTML = '<p class="text-xs font-body text-on-surface-variant italic py-1">No visits recorded yet.</p>'; return; }
+  const visits = recs.filter(r => r.status !== 'refund').length;
+  const net = recs.reduce((s, r) => s + (r.status === 'refund' ? -Math.abs(r.totalCost || 0) : (r.totalCost || 0)), 0);
+  el.innerHTML = `<div class="text-[11px] font-body text-on-surface-variant mb-2">${visits} visit${visits !== 1 ? 's' : ''} · $${net.toFixed(2)} total spent</div>` + recs.map(r => {
+    const dt = new Date(r.checkinTime), isRefund = r.status === 'refund';
+    const dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const svcs = (r.services || []).map(sid => svc(sid)?.label || sid).join(', ') || '—';
+    const techs = [...new Set((r.assignments || []).filter(a => a.techId).map(a => staffById(a.techId)?.name).filter(Boolean))].join(', ');
+    const note = (r.txnNote || r.discountNote || '').trim();
+    const amt = isRefund ? `-$${Math.abs(r.totalCost || 0).toFixed(2)}` : `$${(r.totalCost || 0).toFixed(2)}`;
+    return `<div class="rounded-xl border border-surface-container-high px-3 py-2 mb-1.5 ${isRefund ? 'bg-error/5' : 'bg-surface-container-low'}">
+      <div class="flex items-center justify-between gap-2"><span class="text-xs font-headline font-semibold text-on-surface">${dateStr}${isRefund ? ' · refund' : ''}</span><span class="text-sm font-headline font-bold ${isRefund ? 'text-error' : 'text-primary'}">${amt}</span></div>
+      <div class="text-[11px] font-body text-on-surface-variant">${svcs}${techs ? ' · ' + techs : ''}</div>
+      ${note ? `<div class="text-[11px] font-body text-on-surface italic mt-0.5">“${note}”</div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 // ── Report range + date picker + comparison ───────
