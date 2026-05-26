@@ -67,12 +67,29 @@ export function getTechAllAssignments(techId) {
   return result;
 }
 
+// Manual "skip a turn": records a phantom full turn for a tech (no customer) so the
+// rotation advances past them. Stored per-day in config.turns_skips, counted like a full
+// turn, and shown as a removable greyed slot in the grid.
+export const todaySkips = techId => (cfg().turns_skips || []).filter(s => s.techId === techId && localDateStr(new Date(s.at)) === todayStr());
+export function skipTurnForTech(techId) {
+  if (!techId) return;
+  const kept = (cfg().turns_skips || []).filter(s => localDateStr(new Date(s.at)) === todayStr());   // prune older days
+  dispatch('config.set', { key: 'turns_skips', value: [...kept, { id: 'skip-' + Date.now(), techId, at: new Date().toISOString() }] });
+  renderTurns(); showToast('Turn skipped');
+}
+export function skipTurnFromModal() { const id = turnsAssignTarget?.techId; closeTurnsAssignModal(); skipTurnForTech(id); }
+export function removeTurnSkip(skipId) {
+  dispatch('config.set', { key: 'turns_skips', value: (cfg().turns_skips || []).filter(s => s.id !== skipId) });
+  renderTurns();
+}
+
 export function getTechTurns(techId) {
   let full = 0, half = 0, bonus = 0;
   getTechAllAssignments(techId).forEach(({ assignment: a }) => {
     const t = classifyTurn(a.cost || 0, a.serviceId || '');
     if (t === 'full') full++; else if (t === 'half') half += 0.5; else if (t === 'bonus') bonus++;
   });
+  full += todaySkips(techId).length;   // each manual skip counts as a full turn
   return { full, half, bonus, total: full + half };
 }
 
@@ -195,10 +212,26 @@ export function renderTurnsTechGrid() {
       <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
 
     const MIN_SLOTS = 5;
-    const totalSlots = Math.max(MIN_SLOTS, allAssign.length + 1);
+    // Merge real assignments with any manual "skipped turns" for this tech, ordered by time.
+    const filled = [
+      ...allAssign.map(it => ({ kind: 'a', ...it, _t: it.assignment.assignedAt || new Date(it.entry.checkinTime).getTime() })),
+      ...todaySkips(staffId).map(sk => ({ kind: 'skip', skip: sk, _t: new Date(sk.at).getTime() })),
+    ].sort((x, y) => x._t - y._t);
+    const totalSlots = Math.max(MIN_SLOTS, filled.length + 1);
     let turnCounter = 0;
     const slotHtml = Array.from({ length: totalSlots }, (_, slotIdx) => {
-      const item = allAssign[slotIdx];
+      const item = filled[slotIdx];
+      if (item && item.kind === 'skip') {
+        turnCounter += 1;
+        const ts = new Date(item.skip.at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+        const tl = Number.isInteger(turnCounter) ? turnCounter : turnCounter.toFixed(1);
+        return `<div class="flex-shrink-0 w-[150px] px-1"><div class="w-full rounded-xl px-2 py-1.5 text-left text-xs font-body relative" style="background:#e6e6e6;color:#777;min-height:66px;border:1px dashed #b5b5b5">
+          <button onclick="event.stopPropagation();removeTurnSkip('${item.skip.id}')" title="Remove skipped turn" style="position:absolute;top:2px;right:3px;color:#999;line-height:1" class="hover:opacity-70"><span class="material-symbols-outlined" style="font-size:15px">close</span></button>
+          <div class="flex items-center gap-1 pr-4"><span class="material-symbols-outlined" style="font-size:14px">skip_next</span><span class="font-semibold text-[11px]">Skipped</span><span class="text-[11px] font-headline font-bold ml-auto" style="opacity:.75">${tl}</span></div>
+          <div class="text-[10px] opacity-90 leading-tight mt-1">Turn passed · no customer</div>
+          <div class="text-[9px] opacity-60 mt-1">${ts}</div>
+        </div></div>`;
+      }
       if (item) {
         const { entry: e, assignment: a } = item;
         const cost = a.cost || 0;

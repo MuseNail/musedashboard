@@ -278,6 +278,14 @@ function _closeNumpadModal() {
   const m = document.getElementById('numpad-modal');
   m.classList.add('hidden'); m.style.display = '';
   _numpadTarget = null; _numpadRaw = '';
+  // A numpad key fires on pointerdown and closes the pad synchronously, so the trailing
+  // tap (pointerup → click) lands on whatever is now revealed at that spot — e.g. the
+  // Assign & Price modal's "Save All" button at the same bottom-center position — and
+  // fires it, auto-saving/closing the host. Swallow that one ghost click in a short window
+  // so confirming a price just confirms the price.
+  function _swallowGhostClick(e) { e.stopPropagation(); e.preventDefault(); document.removeEventListener('click', _swallowGhostClick, true); }
+  document.addEventListener('click', _swallowGhostClick, true);
+  setTimeout(() => document.removeEventListener('click', _swallowGhostClick, true), 300);
 }
 
 // ── Toast ────────────────────────────────────────
