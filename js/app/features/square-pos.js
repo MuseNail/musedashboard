@@ -45,12 +45,12 @@ export function openSquarePOS(entryId) {
   const party = entry.groupId ? queue().filter(e => e.groupId === entry.groupId) : [entry];
   const cents = Math.round(party.reduce((s, e) => s + entryTotal(e), 0) * 100);
   if (cents <= 0) { showToast('No total — assign a price first.'); return; }
-  // Persist each ticket to the server BEFORE charging. Fees/prices entered in the
-  // Assign & Price modal are only in memory until this point (the modal defers the
-  // sync to its Save button, which the Pay-in-Square flow skips). Without this, the
-  // app re-hydrates from the server on return from Square and loses the un-synced fee
-  // — so the saved record was short the fee while Square charged the full amount.
-  party.forEach(e => dispatch('queue.upsert', { entry: e }));
+  // Persist each ticket to the server BEFORE charging, and recompute its total from
+  // its parts (services + items + fees − discount) as we save — so the stored total
+  // can never be short the fee that's charged. Fees/prices entered in the Assign &
+  // Price modal are only in memory until this point (the modal defers the sync to its
+  // Save button, which the Pay-in-Square flow skips).
+  party.forEach(e => { e.totalCost = entryTotal(e); dispatch('queue.upsert', { entry: e }); });
   const body = document.getElementById('square-confirm-body');
   if (body) body.innerHTML = party.map(payCustomerBlock).join('');
   const totalEl = document.getElementById('square-confirm-total');

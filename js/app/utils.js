@@ -2,6 +2,18 @@
 // Ported from the original utils.js. No global mutable app state lives here.
 // Functions used by inline HTML handlers are exported and attached to window in main.js.
 
+// ── Ticket total (single source of truth) ────────
+// A ticket's true total = its parts: services + retail items + fees − discount.
+// Used at pay-time, in reports, and by the heal — so a stale cached `totalCost`
+// can never disagree with what was actually rung up. (Refunds have no parts; their
+// stored negative total is authoritative — callers must skip refunds.)
+export function ticketTotal(r) {
+  const svc   = (r.assignments || []).reduce((s, a) => s + (a.cost || 0), 0);
+  const items = (r.items || []).reduce((s, i) => s + ((i.price || 0) * (i.qty || 0)), 0);
+  const fees  = (r.fees || []).reduce((s, f) => s + (f.amount || 0), 0);
+  return Math.max(0, svc + items + fees - (r.discount || 0));
+}
+
 // ── Clock ────────────────────────────────────────
 export function startClock() {
   function tick() {

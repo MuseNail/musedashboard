@@ -3,7 +3,7 @@
 //   record.save (complete/historical/refund), record.delete (soft delete).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, todayStr, partyLetterMap } from '../utils.js';
+import { showToast, localDateStr, todayStr, partyLetterMap, ticketTotal } from '../utils.js';
 import { canDo, getActiveUser } from '../session.js';
 import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
@@ -49,7 +49,16 @@ export function buildCombinedRecords() {
     groupId: e.groupId || '', groupColor: e.groupColor || '', groupLabel: e.groupLabel || '',
   }));
   const liveIds = new Set(liveSnaps.map(r => String(r.id)));
-  return [...liveSnaps, ...records().filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted' && !deletedIds.has(String(r.id)))];
+  const combined = [...liveSnaps, ...records().filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted' && !deletedIds.has(String(r.id)))];
+  // Bulletproofing: derive each ticket's total from its parts so a stale cached
+  // totalCost (e.g. a fee added after the total was last saved) can never skew a
+  // report. Refunds keep their stored negative amount (no parts); a record with no
+  // reconstructable parts keeps its stored total (don't zero legacy/odd rows).
+  return combined.map(r => {
+    if (r.status === 'refund' || !((r.assignments && r.assignments.length) || (r.items && r.items.length) || (r.fees && r.fees.length))) return r;
+    const t = ticketTotal(r);
+    return t === (r.totalCost || 0) ? r : { ...r, totalCost: t };
+  });
 }
 
 // ── Report range + date picker + comparison ───────
@@ -1080,6 +1089,31 @@ export function initiateRefund(recordId) {
   setTimeout(() => document.getElementById('refund-reason')?.focus(), 100);
 }
 export function closeRefundModal() { const m = document.getElementById('refund-modal'); m.classList.add('hidden'); m.style.display = ''; _refundTxnId = null; _refundTxnRecord = null; }
+
+// ── Heal: recompute stored record totals from their parts (one-time fix) ────────
+// Corrects any saved record whose cached totalCost drifted from its services+items+
+// fees−discount (e.g. a fee added after the total was last saved). Skips refunds and
+// records with no reconstructable parts. Confirms + reports the net change.
+export function healRecordTotals() {
+  const fixes = [];
+  records().forEach(r => {
+    if (r.status === 'deleted' || r.status === 'refund') return;
+    if (!((r.assignments && r.assignments.length) || (r.items && r.items.length) || (r.fees && r.fees.length))) return;
+    const t = ticketTotal(r), was = r.totalCost || 0;
+    if (Math.abs(t - was) >= 0.005) fixes.push({ r, was, now: t });
+  });
+  if (!fixes.length) { showToast('All transaction totals already match their parts — nothing to fix.'); return; }
+  const delta = fixes.reduce((s, f) => s + (f.now - f.was), 0);
+  const msg = `${fixes.length} transaction${fixes.length > 1 ? 's' : ''} have a saved total that doesn't match their services + items + fees − discount. This corrects them (net change ${delta >= 0 ? '+' : '-'}$${Math.abs(delta).toFixed(2)}). Make sure you've exported a backup first.`;
+  const apply = () => {
+    fixes.forEach(f => dispatch('record.save', { record: { ...f.r, totalCost: f.now } }));
+    showToast(`Recalculated ${fixes.length} total${fixes.length > 1 ? 's' : ''} (${delta >= 0 ? '+' : '-'}$${Math.abs(delta).toFixed(2)}) ✓`);
+    if (document.getElementById('panel-reports')?.classList.contains('active')) runReport();
+    renderTransactions();
+  };
+  if (window.showWarnModal) window.showWarnModal('Recalculate transaction totals?', msg, apply);
+  else if (window.confirm(msg)) apply();
+}
 export function confirmRefund() {
   const reason = document.getElementById('refund-reason').value.trim();
   const amount = parseFloat(document.getElementById('refund-amount').value) || 0;

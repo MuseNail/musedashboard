@@ -929,6 +929,14 @@ tailwind.config = {
               <div class="text-xs font-body font-semibold text-on-surface mb-1">Last backup</div>
               <div class="text-xs font-body text-on-surface-variant" id="last-backup-label">Never</div>
             </div>
+            <!-- Recalculate totals — heals any stored total that doesn't match its parts -->
+            <div class="mt-4 pt-4 border-t border-surface-container-high">
+              <button onclick="healRecordTotals()"
+                class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary/5 transition-all">
+                <span class="material-symbols-outlined" style="font-size:18px">calculate</span> Recalculate Transaction Totals
+              </button>
+              <p class="text-[11px] font-body text-on-surface-variant mt-2 text-center">Fixes any saved total that doesn't match its services + items + fees − discount (e.g. a fee added after the total was saved). Export a backup first.</p>
+            </div>
             <!-- Clear all records — admin only, pre-launch use -->
             <div class="mt-4 pt-4 border-t border-surface-container-high">
               <button onclick="confirmClearAllRecords()"
