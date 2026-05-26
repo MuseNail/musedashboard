@@ -33,6 +33,21 @@ const CAL_SYNC_INTERVAL = 60000;
 // Exposed for square-pos.squarePushBooking (via window.calEventsFor in main.js).
 export function getCalEvents(calId) { return _calEvents[calId] || []; }
 
+// For the appointment-reminder engine: today's TIMED appointment bookings (grouped like the
+// Today's-Appointments panel), as { id, name, startMs }. Only events that have a start time.
+export function apptsForReminders() {
+  const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description || '') || ext.museLines !== undefined || cfg().services.some(s => (ev.summary || '').toLowerCase().includes((s.label || '').toLowerCase())); };
+  const groups = new Map();
+  Object.entries(_calEvents).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(ev); }));
+  const out = [];
+  groups.forEach((evs) => {
+    const primary = evs.find(e => e.extendedProperties?.private?.musePrimary === '1') || evs[0];
+    const ppriv = primary.extendedProperties?.private || {};
+    out.push({ id: primary.id, name: ppriv.musePrimaryName || ppriv.museName || (primary.summary || '').split(' — ')[0] || 'Guest', startMs: new Date(primary.start.dateTime).getTime() });
+  });
+  return out;
+}
+
 // ── Unassigned-appointments calendar ──────────────
 // A designated calendar holds every appointment/service with no assigned tech.
 // Default = the Google primary calendar (info@musenailandspa.com); overridable
