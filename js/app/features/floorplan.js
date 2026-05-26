@@ -131,7 +131,10 @@ function renderFloorStaffRow() {
   const bubbles = ids.map(id => {
     const st = staffById(id); if (!st) return '';
     const c = getTechStatusColor(id);
-    return `<div class="flex flex-col items-center gap-1" style="width:64px">
+    // Live view: each tech is draggable onto a station to assign them to a service there that
+    // has a seat but no tech yet (handled by the pointer-drag system below). Not in edit mode.
+    const drag = floorEditMode ? '' : 'floor-tech';
+    return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:64px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Drag onto a station to assign this tech"'}>
       <div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:${c.bg};color:${c.text};font-family:var(--font-headline);font-weight:700;font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,.18)">${(st.name||'?').charAt(0).toUpperCase()}</div>
       <span style="font-size:11px;font-weight:600;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px">${st.name.split(' ')[0]}</span>
       <span style="font-size:9px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
@@ -276,6 +279,32 @@ function seatCustomer(entryId, stationId) {
   showToast(`Seated ${e.name.split(' ')[0]} at ${stationId}`);
 }
 
+// ── Assign a tech by dropping them on a station ───
+// Stations that have a customer with a service seated here but no tech yet — the valid drop
+// targets when dragging a tech from the staff row.
+function validTechStations() {
+  const { byStation } = collectFloor();
+  const set = new Set();
+  Object.entries(byStation).forEach(([sid, e]) => {
+    if (activeAssignments(e).some(a => a.station === sid && !a.techId)) set.add(sid);
+  });
+  return set;
+}
+function assignTechToStation(techId, stationId) {
+  const e = collectFloor().byStation[stationId];
+  if (!e) { showToast(`No customer at ${stationLabel(stationId)}`); return; }
+  // Assign to the first service seated here that still needs a tech (pedicures can need several;
+  // drag again for the next). Don't reassign a service that already has a tech.
+  const a = activeAssignments(e).find(x => x.station === stationId && !x.techId);
+  if (!a) { showToast(`No service awaiting a tech at ${stationLabel(stationId)}`); return; }
+  a.techId = techId;
+  dispatch('queue.upsert', { entry: e });
+  renderFloorPlan();
+  window.renderQueue?.(); window.renderTurns?.();
+  const t = staffById(techId);
+  showToast(`${t ? t.name.split(' ')[0] : 'Tech'} → ${stationLabel(stationId)}`);
+}
+
 // ── Alignment snapping (snap a dragged station's edges/centers to others) ─────
 function snapMove(primaryId, base, rawDx, rawDy, selectedSet) {
   const L = layoutFor(primaryId);
@@ -314,7 +343,7 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
 (function initFloorDrag() {
   const THRESH = 6;
   let startX = 0, startY = 0, pending = null, dragging = false, clone = null;
-  let mode = null, dragEntryId = null, dragStation = null, moveStart = null, moveDelta = null;
+  let mode = null, dragEntryId = null, dragStation = null, dragTechId = null, moveStart = null, moveDelta = null;
   const closest = (el, sel) => { while (el && el !== document.body) { if (el.matches && el.matches(sel)) return el; el = el.parentElement; } return null; };
   function stationAt(x, y) { if (clone) clone.style.display = 'none'; const el = document.elementFromPoint(x, y); if (clone) clone.style.display = ''; return closest(el, '.floor-station'); }
 
@@ -325,8 +354,12 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
       const st = closest(e.target, '.floor-station'); if (!st) return;
       mode = 'station'; dragStation = st.dataset.station; pending = st;
     } else {
-      const b = closest(e.target, '.floor-bubble'); if (!b) return;
-      mode = 'bubble'; dragEntryId = b.dataset.entryId; pending = b;
+      const techEl = closest(e.target, '.floor-tech');
+      if (techEl) { mode = 'tech'; dragTechId = techEl.dataset.techId; pending = techEl; }
+      else {
+        const b = closest(e.target, '.floor-bubble'); if (!b) return;
+        mode = 'bubble'; dragEntryId = b.dataset.entryId; pending = b;
+      }
     }
     startX = e.clientX; startY = e.clientY;
     document.addEventListener('pointermove', onMove);
@@ -343,6 +376,8 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
       Object.assign(clone.style, { position: 'fixed', zIndex: '9999', pointerEvents: 'none', width: rect.width + 'px', left: rect.left + 'px', top: rect.top + 'px', opacity: '0.9', transform: 'scale(1.03)', boxShadow: '0 6px 20px rgba(0,0,0,.25)' });
       document.body.appendChild(clone);
       pending.style.opacity = '0.4';
+      // Dragging a tech: highlight the stations that have a service awaiting a tech.
+      if (mode === 'tech') { const valid = validTechStations(); document.querySelectorAll('.floor-station').forEach(s => { if (valid.has(s.dataset.station)) s.style.outline = '3px dashed #1a5252'; }); }
     }
   }
   function onMove(e) {
@@ -365,8 +400,8 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
     document.removeEventListener('pointerup', onUp);
     const wasDragging = dragging; dragging = false;
     if (clone) { clone.remove(); clone = null; }
-    if (pending && mode === 'bubble') pending.style.opacity = '';
-    document.querySelectorAll('.floor-station').forEach(s => { s.style.boxShadow = ''; });
+    if (pending && (mode === 'bubble' || mode === 'tech')) pending.style.opacity = '';
+    document.querySelectorAll('.floor-station').forEach(s => { s.style.boxShadow = ''; s.style.outline = ''; });
     const dx = e.clientX - startX, dy = e.clientY - startY;
     if (!wasDragging) {
       if (mode === 'bubble' && dragEntryId) window.showGroupAssignModal?.(dragEntryId);
@@ -379,6 +414,8 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
       }
     } else if (mode === 'bubble') {
       const tgt = stationAt(e.clientX, e.clientY); if (tgt) seatCustomer(dragEntryId, tgt.dataset.station); else renderFloorPlan();
+    } else if (mode === 'tech') {
+      const tgt = stationAt(e.clientX, e.clientY); if (tgt) assignTechToStation(dragTechId, tgt.dataset.station); else renderFloorPlan();
     } else if (mode === 'station' && moveStart) {
       const d = moveDelta || { dx, dy };
       const next = { ...layout() };
@@ -386,7 +423,7 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
       saveLayout(next); renderFloorPlan();
     }
     clearGuides();
-    pending = null; mode = null; dragEntryId = dragStation = null; moveStart = null; moveDelta = null;
+    pending = null; mode = null; dragEntryId = dragStation = dragTechId = null; moveStart = null; moveDelta = null;
   }
   document.addEventListener('pointerdown', onDown);
 })();
