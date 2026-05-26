@@ -44,6 +44,14 @@ export function showPinModal() {
   setTimeout(() => { const kb = document.getElementById('pin-keyboard-input'); if (kb) { kb.value = ''; kb.focus(); } }, 100);
 }
 
+// Log out the current front-desk user: confirm, clear the session, return to the welcome
+// screen, then prompt for a PIN. (showPinModal also clears activeUser + opens the keypad.)
+export function logout() {
+  const doLogout = () => { setActiveUser(null); window.goTo?.('screen-welcome'); showPinModal(); };
+  if (window.showWarnModal) window.showWarnModal('Log out?', 'You will need to re-enter your PIN.', doLogout);
+  else doLogout();
+}
+
 export function pinCancel() {
   const m = document.getElementById('pin-modal');
   m.classList.add('hidden'); m.style.display = '';
