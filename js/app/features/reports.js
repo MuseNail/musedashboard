@@ -925,16 +925,18 @@ export function renderTransactions() {
   if (!list) return;
   syncRangeButtons();
   const dates = getReportDates();   // shared Reports window (Today / Week / Month / Custom)
-  const banner = document.getElementById('txn-history-banner');
-  if (banner) {
-    const notToday = reportRange.type !== 'today';
-    banner.classList.toggle('hidden', !notToday);
-    const bt = document.getElementById('txn-history-banner-text');
-    if (notToday && bt) bt.textContent = `Showing: ${rangeLabel()}`;
-  }
   let combined = buildCombinedRecords();
   if (dates) combined = combined.filter(r => { const d = new Date(r.checkinTime); return d >= dates.from && d <= dates.to; });
   combined = combined.filter(r => isPaidStatus(r.status) || r.status === 'refund').sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime));
+  // Day/range total bar (always shown): net = paid tickets minus refunds (refunds store a
+  // negative totalCost). Count is transactions as shown — a party counts once, not per guest.
+  const net = combined.reduce((s,r)=>s+(r.totalCost||0),0);
+  const seenParties = new Set(); let txnCount = 0;
+  combined.forEach(r => { if (r.groupId && r.status !== 'refund') { if (!seenParties.has(r.groupId)) { seenParties.add(r.groupId); txnCount++; } } else txnCount++; });
+  const rngEl = document.getElementById('txn-total-range'); if (rngEl) rngEl.textContent = rangeLabel();
+  const cntEl = document.getElementById('txn-total-count'); if (cntEl) cntEl.textContent = txnCount;
+  const cntS = document.getElementById('txn-total-count-s'); if (cntS) cntS.style.display = txnCount === 1 ? 'none' : '';
+  const netEl = document.getElementById('txn-total-net'); if (netEl) netEl.textContent = (net < 0 ? '-$' : '$') + Math.abs(net).toFixed(2);
   if (combined.length === 0) { list.innerHTML = ''; empty?.classList.remove('hidden'); return; }
   empty?.classList.add('hidden');
   const letters = partyLetterMap(combined);

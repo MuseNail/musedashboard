@@ -532,7 +532,16 @@ tailwind.config = {
             <button onclick="shiftReportRange(1)" title="Next period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>
           </div>
         </div>
-        <div id="txn-history-banner" class="hidden mb-3 px-4 py-2.5 rounded-xl bg-secondary-container/50 border border-secondary text-sm font-body font-bold text-on-surface flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:18px">history</span><span id="txn-history-banner-text"></span></div>
+        <div id="txn-total-bar" class="mb-3 flex items-center justify-between gap-3 px-5 py-3 rounded-xl bg-primary/10 border border-primary/30">
+          <div class="flex items-center gap-2 text-sm font-body text-on-surface min-w-0">
+            <span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:18px">receipt_long</span>
+            <span class="truncate">Showing <strong id="txn-total-range">Today</strong> · <span id="txn-total-count">0</span> ticket<span id="txn-total-count-s">s</span></span>
+          </div>
+          <div class="text-right flex-shrink-0">
+            <div class="font-headline font-extrabold text-primary text-xl leading-none" id="txn-total-net">$0.00</div>
+            <div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest mt-0.5">Net Total</div>
+          </div>
+        </div>
         <div id="txn-list" class="space-y-2"></div>
         <div id="txn-empty" class="hidden text-center py-16 text-on-surface-variant text-sm font-body">
           <span class="material-symbols-outlined text-4xl block mb-3 opacity-40">receipt_long</span>
