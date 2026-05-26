@@ -880,10 +880,13 @@ export function renderTransactions() {
         <div class="flex items-center gap-2 flex-wrap mb-1"><span class="font-headline font-bold text-on-surface">${r.name}</span><span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badgeClass}">${isRefund?'refund':r.status}</span>${!isRefund&&r.isAppointment?'<span class="badge-appointment text-[11px] px-2 py-0.5 rounded-full font-body font-semibold">Appt</span>':''}</div>
         <div class="text-xs font-body text-on-surface-variant mb-1">${serviceLabels}</div>${assignRows||''}${refundNote}
         <div class="text-[11px] font-body text-outline mt-1">${dateStr} · ${timeStr}${r.phone?' · '+r.phone:''}</div></div>
-        <div class="text-right ml-4 flex-shrink-0 flex flex-col items-end gap-2">${totalDisplay}
-          ${!isRefund&&canDo('historicalEntry')&&isPast?`<button onclick="showHistoricalEntryModal('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"><span class="material-symbols-outlined" style="font-size:14px">edit</span> Edit</button>`:''}
-          ${!isRefund&&canDo('refund')?`<button onclick="initiateRefund('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-secondary transition-colors px-2 py-1 rounded-lg hover:bg-secondary/10"><span class="material-symbols-outlined" style="font-size:14px">undo</span> Refund</button>`:''}
-          ${canDo('deleteTransaction')?`<button onclick="initiateDeleteTransaction('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-error transition-colors px-2 py-1 rounded-lg hover:bg-error/10"><span class="material-symbols-outlined" style="font-size:14px">delete</span> Delete</button>`:''}
+        <div class="ml-4 flex-shrink-0 flex items-center gap-2">
+          <div class="flex items-center gap-1">
+            ${!isRefund&&canDo('historicalEntry')&&isPast?`<button onclick="showHistoricalEntryModal('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"><span class="material-symbols-outlined" style="font-size:14px">edit</span> Edit</button>`:''}
+            ${!isRefund&&canDo('refund')?`<button onclick="initiateRefund('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-secondary transition-colors px-2 py-1 rounded-lg hover:bg-secondary/10"><span class="material-symbols-outlined" style="font-size:14px">undo</span> Refund</button>`:''}
+            ${canDo('deleteTransaction')?`<button onclick="initiateDeleteTransaction('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-error transition-colors px-2 py-1 rounded-lg hover:bg-error/10"><span class="material-symbols-outlined" style="font-size:14px">delete</span> Delete</button>`:''}
+          </div>
+          ${totalDisplay}
         </div></div></div>`;
   };
   // Bracket a party (paid records sharing a groupId) under a header with a combined total,
