@@ -329,16 +329,21 @@
   /* Reusable Excel-style data table — for reports, payroll, and any future grid.
      Dedicated columns, sticky first column (row labels) + sticky header, right-aligned
      numeric cells, subtle striping. Theme-aware via the --md-* vars. */
-  .data-table { border-collapse: separate; border-spacing: 0; font-family: var(--font-body); font-size: 13px; color: var(--md-on-surface); width: max-content; min-width: 100%; }
-  .data-table th, .data-table td { padding: 5px 9px; border-bottom: 1px solid var(--md-outline-variant); white-space: nowrap; text-align: left; }
+  /* NOTE: the --md-* vars were removed with the old theme system, so they resolve to
+     nothing — backgrounds fell back to transparent, which let scrolled data show through
+     the sticky label column. Use the app's real --surface vars with concrete fallbacks so
+     the sticky column (and section band) are OPAQUE and mask cells scrolling under them. */
+  .data-table { border-collapse: separate; border-spacing: 0; font-family: var(--font-body); font-size: 13px; color: var(--on-surface, #1c1b1f); width: max-content; min-width: 100%; }
+  .data-table th, .data-table td { padding: 5px 9px; border-bottom: 1px solid var(--outline-variant, #c8cfd2); white-space: nowrap; text-align: left; }
   .data-table thead th { position: sticky; top: 0; z-index: 2; background: #1a5252; color: #fff; font-weight: 700; font-size: 12px; }
-  .data-table tbody tr:nth-child(even) td { background: var(--md-surface-container-low); }
+  .data-table tbody tr:nth-child(even) td { background: var(--surface, #e8ecee); }
+  .data-table tbody tr:nth-child(odd) td { background: #eef1f3; }
   .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .data-table .num.last { color: var(--md-on-surface-variant); font-size: 12px; }
-  .data-table .sticky-col { position: sticky; left: 0; z-index: 1; background: var(--md-surface-container); font-weight: 600; border-right: 2px solid var(--md-outline-variant); }
-  .data-table tbody tr:nth-child(even) .sticky-col { background: var(--md-surface-container); }
+  .data-table .num.last { color: var(--on-surface-variant, #5a6b70); font-size: 12px; }
+  .data-table .sticky-col { position: sticky; left: 0; z-index: 1; background: var(--surface-container, #d0d6da); font-weight: 600; border-right: 2px solid #b9c1c4; }
+  .data-table tbody tr:nth-child(even) .sticky-col, .data-table tbody tr:nth-child(odd) .sticky-col { background: var(--surface-container, #d0d6da); }
   .data-table thead .sticky-col { z-index: 3; background: #1a5252; }
-  .data-table .section-row td { background: var(--md-surface-container); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--md-on-surface-variant); }
+  .data-table .section-row td { background: var(--surface-container, #d0d6da); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--on-surface-variant, #46555a); }
   .data-table .sticky-col { width: 88px; max-width: 88px; padding-left: 8px; padding-right: 8px; font-size: 12px; }
   /* Solid divider between column-groups (e.g. each staff on the Payroll table). */
   /* Thick solid divider between staff column-groups; thin dashed divider between This and
