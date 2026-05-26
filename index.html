@@ -867,6 +867,7 @@ tailwind.config = {
         <!-- Leaf: Commission & Refunds -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="settings-commission-section" class="hidden px-5 py-4"></div>
+          <div id="settings-numpad-section" class="hidden px-5 py-4"></div>
         </div>
 
         <!-- Leaf: Appearance -->
@@ -2307,9 +2308,14 @@ tailwind.config = {
 <div id="numpad-modal" class="fixed inset-0 z-[90] hidden items-end justify-center bg-on-surface/40" onclick="closeNumpad(event)">
   <div class="bg-surface-container-lowest w-full max-w-sm rounded-t-2xl shadow-2xl pb-safe" onclick="event.stopPropagation()">
     <!-- Display -->
-    <div class="px-6 pt-5 pb-3 border-b border-surface-container-high">
-      <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1" id="numpad-label">Cost</div>
-      <div class="text-4xl font-headline font-bold text-on-surface tracking-tight" id="numpad-display">$0.00</div>
+    <div class="px-6 pt-5 pb-3 border-b border-surface-container-high flex items-end justify-between gap-3">
+      <div class="min-w-0">
+        <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1" id="numpad-label">Cost</div>
+        <div class="text-4xl font-headline font-bold text-on-surface tracking-tight" id="numpad-display">$0.00</div>
+      </div>
+      <button onpointerdown="event.preventDefault();numpadClear()" title="Clear" class="flex items-center gap-1 px-5 py-3 rounded-2xl border border-surface-container-high bg-surface-container text-on-surface-variant font-headline font-bold text-lg active:scale-95 transition-all flex-shrink-0">
+        <span class="material-symbols-outlined" style="font-size:20px">backspace</span> AC
+      </button>
     </div>
     <!-- Keys -->
     <div class="grid grid-cols-4 gap-px bg-surface-container-high" style="padding:1px">

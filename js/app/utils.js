@@ -1,6 +1,11 @@
 // ── Utilities (pure-ish helpers + clock/toast/numpad) ───────────────────────
 // Ported from the original utils.js. No global mutable app state lives here.
 // Functions used by inline HTML handlers are exported and attached to window in main.js.
+import { getState } from './store.js';
+
+// Numpad price entry mode: whole dollars (digits build $, dot adds optional cents) vs the
+// default cents accumulator. Read from synced config; store.js has no imports so no cycle.
+const _wholeDollars = () => !!getState().config?.numpad_whole_dollars;
 
 // ── Ticket total (single source of truth) ────────
 // A ticket's true total = its parts: services + retail items + fees − discount.
@@ -146,6 +151,10 @@ export function openNumpad(inputEl, label, mode) {
     // A percent is a plain whole/decimal value (20 → 20%), NOT a cents accumulator.
     _numpadRaw = existing && !isNaN(parseFloat(existing)) ? String(parseFloat(existing)) : '';
     document.getElementById('numpad-plus-key').textContent = '';
+  } else if (_wholeDollars()) {
+    // Whole-dollar mode: keep the entered value as a plain decimal string ("45", "45.5").
+    _numpadRaw = existing && !isNaN(parseFloat(existing)) ? String(parseFloat(existing)) : '';
+    document.getElementById('numpad-plus-key').textContent = '+';
   } else {
     _numpadRaw = existing && !isNaN(parseFloat(existing)) ? Math.round(parseFloat(existing) * 100).toString() : '';
     document.getElementById('numpad-plus-key').textContent = '+';
@@ -209,6 +218,8 @@ function _numpadUpdateDisplay() {
     el.textContent = f || '—';
   } else if (_numpadMode === 'percent') {
     el.textContent = (_numpadRaw || '0') + '%';
+  } else if (_wholeDollars()) {
+    el.textContent = '$' + (parseFloat(_numpadRaw || '0') || 0).toFixed(2);
   } else {
     const cents = parseInt(_numpadRaw || '0', 10);
     el.textContent = '$' + (cents / 100).toFixed(2);
@@ -236,12 +247,29 @@ export function numpadKey(key) {
     _numpadRaw = raw; _numpadUpdateDisplay();
     return;
   }
-  if (key === '.' || key === '+') return;
+  if (key === '+') return;
+  if (_wholeDollars()) {
+    // Digits build whole dollars; the dot adds optional cents (max 2 places).
+    let raw = _numpadRaw;
+    if (key === '.') { if (raw.includes('.')) return; raw = (raw === '' ? '0' : raw) + '.'; }
+    else if (key === '00') {
+      if (raw.includes('.')) { const dec = raw.split('.')[1] || ''; if (dec.length === 0) raw += '00'; else if (dec.length === 1) raw += '0'; }
+      else if (raw !== '' && raw !== '0') raw += '00';
+    } else {
+      if (raw.includes('.')) { const [i, d = ''] = raw.split('.'); if (d.length >= 2) return; raw = i + '.' + d + key; }
+      else raw = raw === '0' ? key : raw + key;
+    }
+    if (raw.split('.')[0].length > 6) return;
+    _numpadRaw = raw; _numpadUpdateDisplay();
+    return;
+  }
+  if (key === '.') return;
   if (key === '00') { if (_numpadRaw === '' || _numpadRaw === '0') return; _numpadRaw += '00'; }
   else { if (_numpadRaw === '0') _numpadRaw = key; else _numpadRaw += key; }
   if (_numpadRaw.length > 6) _numpadRaw = _numpadRaw.slice(0, 6);
   _numpadUpdateDisplay();
 }
+export function numpadClear() { _numpadRaw = ''; _numpadUpdateDisplay(); if (_numpadMode === 'phone') _numpadSyncPhone(); }
 
 export function numpadBackspace() { _numpadRaw = _numpadRaw.slice(0, -1); _numpadUpdateDisplay(); if (_numpadMode === 'phone') _numpadSyncPhone(); }
 
@@ -256,6 +284,9 @@ export function numpadConfirm() {
     } else if (_numpadMode === 'percent') {
       const v = parseFloat(_numpadRaw);
       _numpadTarget.value = !isNaN(v) && v > 0 ? String(v) : '';
+    } else if (_wholeDollars()) {
+      const v = parseFloat(_numpadRaw || '0') || 0;
+      _numpadTarget.value = v > 0 ? String(v) : '';
     } else {
       const cents = parseInt(_numpadRaw || '0', 10);
       _numpadTarget.value = cents > 0 ? (cents / 100).toString() : '';

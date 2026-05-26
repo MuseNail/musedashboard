@@ -265,6 +265,26 @@ export function setCommissionIncludesRefunds(checked) {
   showToast(checked ? 'Refunds will reduce commission' : 'Refunds no longer affect commission');
 }
 
+// ── Numpad entry mode (config.numpad_whole_dollars) ─────────────────────────────
+export function renderNumpadSettings() {
+  const el = document.getElementById('settings-numpad-section'); if (!el) return;
+  const whole = !!cfg().numpad_whole_dollars;
+  const opt = (on, title, desc, val) => `<label class="flex items-center justify-between gap-4 cursor-pointer bg-surface-container-low rounded-xl px-4 py-3 border ${on ? 'border-primary' : 'border-surface-container-high'}">
+      <span class="min-w-0"><span class="text-sm font-body font-semibold text-on-surface">${title}</span><span class="block text-[11px] font-body text-on-surface-variant">${desc}</span></span>
+      <input type="radio" name="numpad-mode" ${on ? 'checked' : ''} onchange="setNumpadWholeDollars(${val})" class="w-5 h-5 accent-primary cursor-pointer flex-shrink-0"></label>`;
+  el.innerHTML = `
+    <p class="text-xs font-body text-on-surface-variant mb-4">How the on-screen number pad enters prices (services, items, fees).</p>
+    <div class="space-y-2">
+      ${opt(!whole, 'Cents', 'Every digit is a cent — type 4 5 0 0 for $45.00.', false)}
+      ${opt(whole, 'Whole dollars', 'Digits build whole dollars — type 4 5 for $45.00. Use the dot for cents (e.g. $45.50).', true)}
+    </div>`;
+}
+export function setNumpadWholeDollars(val) {
+  dispatch('config.set', { key: 'numpad_whole_dollars', value: !!val });
+  renderNumpadSettings();
+  showToast(val ? 'Numpad: whole dollars' : 'Numpad: cents');
+}
+
 // ── Orchestrator ──────────────────────────────────
 // ── Settings drill-down navigation ────────────────────────────────────────────
 // Groups existing setting sections into 6 categories. Content is already rendered
@@ -285,6 +305,7 @@ const SETTINGS_NAV = [
     { label:'Stations', sub:'Add, rename & delete pedicure / manicure seats', content:'settings-stations-section', render:'renderStationsSettings' },
     { label:'Pay Period', sub:'Weekly / bi-weekly / bi-monthly for the quick button', content:'settings-payperiod-section', render:'renderPayPeriodSettings', adminOnly:true },
     { label:'Commission & Refunds', sub:'Whether refunds reduce tech commission', content:'settings-commission-section', render:'renderCommissionSettings', adminOnly:true },
+    { label:'Numpad Entry', sub:'Cents or whole dollars', content:'settings-numpad-section', render:'renderNumpadSettings' },
     { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section' },
   ]},
   { id:'integrations', title:'Integrations', desc:'Square & Google', items:[
