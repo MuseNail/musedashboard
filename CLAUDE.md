@@ -71,29 +71,25 @@ The app is in active operational use. These rules are non-negotiable and take pr
 
 ## Architecture Rules
 
+> **Updated for v3 (2026-05).** The app was re-architected from an 18-file single-global-scope monolith into native ES modules + a stateful Cloudflare Durable Object. The rules below describe the **current** system.
+
 ### No frontend build step
-There is no npm, no bundler, no transpiler, and no intention to add one. Do not suggest or introduce any. All JS is plain ES2020+ that runs directly in the browser.
+There is no npm, bundler, or transpiler for the client, and no intention to add one. All JS is plain ES2020+ that runs directly in the browser as native **ES modules** — no compile/bundle step. GitHub Pages serves the files as-is.
 
 ### No frameworks
 Vanilla JS only. No React, Vue, Svelte, Alpine, or any other component framework. Tailwind CDN is already present for layout utilities — do not add more libraries.
 
-### No ES modules
-All 18 JS files share a single global scope via ordered `<script src>` tags. Do not add `type="module"` to any script tag, do not use `import`/`export`. Variables defined in one file are available in all files loaded after it.
+### ES modules (v3)
+The app is **native ES modules** under `js/app/`. `index.html` loads a single entry point — `<script type="module" src="js/app/main.js">`; the Muse Staff app loads `js/app/staff.js`. Modules `import`/`export` from each other — there is no shared global scope via ordered `<script src>` tags anymore.
 
-### Load order is a hard constraint
-The `<script>` tag order in `index.html` is:
+**`window` glue:** so the existing inline `onclick=`/`oninput=` markup keeps working, `main.js` attaches every feature module's exports to `window` (`Object.assign(window, ns)` across all modules). Any function referenced by inline HTML must therefore be an `export` of one of those modules (or explicitly set on `window` in `main.js`). `store.js`, `sync.js`, `session.js`, and `config.js` are NOT auto-attached (except `window.dispatch` and `window.calEventsFor`).
 
-```
-utils.js → config.js → sync.js → photos.js → auth.js → catalog.js →
-square-customers.js → square-catalog.js → square-pos.js →
-staff.js → checkin.js → queue.js → turns.js → reports.js →
-giftcards.js → calendar.js → settings.js → app.js
-```
-
-If you add a variable or function that must be available at parse time (not just inside a function body), it must be in a file that loads before the file that uses it. The only current parse-time dependency is `dedupByLabel` (utils.js) called in config.js.
+### Module layout
+- **Core:** `js/app/main.js` (bootstrap, window glue, navigation, version check), `store.js` (in-memory state + `applyChange` op reducer), `sync.js` (WebSocket/HTTP sync + `dispatch` + offline outbox), `session.js`, `config.js` (`APP_VERSION`, constants), `utils.js`.
+- **Features:** `js/app/features/*.js` — auth, photos, catalog, square-customers, square-catalog, square-pos, staff, checkin, status, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime.
 
 ### GitHub Pages only
-No server-side logic, no dynamic routes, no build artifacts. All output must be static files that GitHub Pages can serve directly.
+No server-side logic in the front end, no dynamic routes, no build artifacts — all client output is static files GitHub Pages serves directly. Backend logic lives in the Cloudflare Worker / Durable Object (`cloudflare/worker.js`).
 
 ---
 
@@ -101,69 +97,71 @@ No server-side logic, no dynamic routes, no build artifacts. All output must be 
 
 | Change type | File(s) to edit |
 |---|---|
-| App version bump | `js/config.js` (APP_VERSION) + `version.json` + `sw.js` (CACHE_NAME) |
-| Global constants | `js/config.js` |
-| Global state vars | `js/config.js` |
-| Utility functions | `js/utils.js` |
-| Sheets sync / config push-pull | `js/sync.js` |
-| Photos / logo | `js/photos.js` |
-| Auth / PIN | `js/auth.js` |
-| Services, Items, Fees CRUD | `js/catalog.js` |
-| Square customers, directory, upsert | `js/square-customers.js` |
-| Square config modal, catalog pull/push | `js/square-catalog.js` |
-| Square POS deep link, orders, appointments, bookings | `js/square-pos.js` |
-| Staff management | `js/staff.js` |
-| Check-in kiosk | `js/checkin.js` |
-| Queue and queue modals | `js/queue.js` |
-| Turns / rotation | `js/turns.js` |
-| Reports | `js/reports.js` |
-| Gift cards | `js/giftcards.js` |
-| Google Calendar / appointments | `js/calendar.js` |
-| Settings panel | `js/settings.js` |
-| App init, navigation, version check | `js/app.js` |
+| App version bump | `js/app/config.js` (APP_VERSION) + `version.json` + `sw.js` (CACHE_NAME) — all three together |
+| Global constants / `APP_VERSION` | `js/app/config.js` |
+| In-memory app state + `applyChange` (op reducer) | `js/app/store.js` |
+| Sync, WebSocket, `dispatch`, offline outbox | `js/app/sync.js` |
+| Session / active user | `js/app/session.js` |
+| Utility fns, numpad, toast, `ticketTotal` | `js/app/utils.js` |
+| App init, navigation, version check, window glue | `js/app/main.js` |
+| Photos / logo | `js/app/features/photos.js` |
+| Auth / PIN | `js/app/features/auth.js` |
+| Services, Items, Fees CRUD | `js/app/features/catalog.js` |
+| Square customers, directory, autocomplete, upsert | `js/app/features/square-customers.js` |
+| Square config modal, catalog pull/push | `js/app/features/square-catalog.js` |
+| Square POS deep link, orders, appointments, bookings | `js/app/features/square-pos.js` |
+| Staff management | `js/app/features/staff.js` |
+| Check-in kiosk | `js/app/features/checkin.js` |
+| Status flow | `js/app/features/status.js` |
+| Queue + Assign & Price modal | `js/app/features/queue.js` |
+| Turns / rotation | `js/app/features/turns.js` |
+| Reports, transactions, payroll, refunds, historical edit | `js/app/features/reports.js` |
+| Gift cards | `js/app/features/giftcards.js` |
+| Google Calendar / appointments | `js/app/features/calendar.js` |
+| Floor plan | `js/app/features/floorplan.js` |
+| Settings panel | `js/app/features/settings.js` |
+| Muse Staff tech app | `js/app/staff.js` + `staff.html` |
 | Styles | `css/styles.css` |
-| HTML structure | `index.html` |
-| Cloudflare Worker (proxy, R2, DO, KV, Cron) | `cloudflare/worker.js` |
+| HTML structure (dashboard / staff) | `index.html` / `staff.html` |
+| Cloudflare Worker + Durable Object (proxy, R2, DO, KV, Cron, Push) | `cloudflare/worker.js` |
 
-**Do not edit inline JS or CSS in `index.html`.** The `<style>` block and `<script>` block no longer exist in index.html — CSS is in `css/styles.css` and JS is in `js/*.js`.
+**Do not edit inline JS or CSS in `index.html`** beyond the existing Tailwind config `<script>` block — CSS lives in `css/styles.css`, all app logic in `js/app/**`.
 
 ---
 
-## localStorage — Permanent Keys (Never Remove)
+## localStorage — Durable Keys (Never Remove without a migration plan)
 
-These keys are the durable data layer. They persist across reloads and are backed up to Sheets. Never delete, rename, or stop reading these keys without a migration plan and explicit approval.
+The durable source of truth is the **Cloudflare Durable Object** (`MuseSalonDO`). The client mirrors DO state to `localStorage` for instant offline reload and queues writes in an outbox. Never delete/rename these without a migration plan and explicit approval.
 
+**v3 sync layer:**
 | Key | Purpose |
 |---|---|
-| `muse_device_id` | Unique ID per browser/device for sync conflict resolution |
-| `muse_live_queue` | Today's customer queue (offline resilience) |
-| `muse_live_queue_date` | Date stamp for the live queue |
-| `muse_queue_archive` | Daily queue snapshots, 90-day rolling window |
-| `muse_turns_history` | Historical turns/rotation archives, 90-day rolling window |
-| `muse_records` | All transaction records (source of truth for Reports) |
-| `muse_deletion_log` | Deleted record IDs for cross-device delete sync |
-| `muse_customers` | Customer directory |
-| `muse_sq_config` | Square API location ID |
-| `muse_last_backup` | Timestamp of last manual backup |
-| `muse_cal_hours` | Calendar display hours preference (device-local, not synced) |
-| `gcal_token` | Google Calendar OAuth token |
-| `gcal_hidden` | Hidden calendar columns preference |
-| `gcal_order` | Calendar column order preference |
+| `muse_state_cache` | Mirror of the last DO snapshot — restores state instantly on reload before the WebSocket reconnects |
+| `muse_outbox` | Offline outbox of pending `dispatch` ops; replayed on reconnect (durable across reloads) |
+| `muse_device_id` | Unique ID per browser/device for sync echo-suppression / conflict resolution |
 
-Do not add new `localStorage.setItem` calls for config or settings — use the in-memory variable and call `pushConfigToSheets()` to persist.
+**Still device-local in localStorage (read + written directly):**
+| Key | Purpose |
+|---|---|
+| `muse_turns_history` | Historical turns/rotation archives, 90-day rolling window |
+| `muse_customers` | Customer directory cache |
+| `muse_deletion_log` | Device-local audit trail of deleted record IDs (the cross-device delete itself rides the DO `record.delete` op + `deletion:` markers) |
+| `muse_last_backup` | Timestamp of last manual backup |
+| `muse_cal_hours` | Calendar display hours (device-local, not synced) |
+| `gcal_token` / `gcal_hidden` / `gcal_order` | Google Calendar OAuth token + column prefs |
+
+**Migrated OUT of localStorage into the Durable Object (v3) — do NOT reintroduce as localStorage keys:** `muse_live_queue`, `muse_live_queue_date`, `muse_queue_archive`, `muse_records`, `muse_sq_config`.
 
 ---
 
-## Config Sync — How It Works
+## Config & State Sync — How It Works (v3)
 
-All mutable settings (staff, services, items, fees, photos, etc.) live in JS memory for the session and are backed up to Google Sheets App Config row 2. **Do not use localStorage for config or settings.**
+All mutable state (queue, records, gift cards, and config: staff/services/items/fees/photos/turns order/etc.) lives in memory in `store.js` and syncs through the Durable Object. **Do not use localStorage for config or settings.**
 
-- `pushConfigToSheets()` — reads the current in-memory vars (`STAFF`, `SERVICES`, `ITEMS`, `FEES`, `_logoData`, `turnsTechOrder`, etc.) and POSTs them to Sheets. Sets `_configWriteTime = Date.now()` as a lock so the next poll doesn't immediately overwrite a just-saved value.
-- `loadConfigFromSheets()` — fetches config from Sheets and writes directly into the in-memory vars. Skips overwriting if `DEVICE_ID` matches the writer or if `_configWriteTime` is within 10 seconds (slow-write safety net). Returns `{ changed, recordsUpdatedAt, _raw }`.
-- `_configWriteTime` — declared in `utils.js`, used in `sync.js`. Do not move it.
-- `DEVICE_ID` — declared in `sync.js`. Used only inside function bodies (not at parse time).
-
-**Save pattern for any config var:** mutate the in-memory var, set `_configWriteTime = Date.now()`, then `setTimeout(() => pushConfigToSheets(), N)`. Do not write to localStorage.
+- **`dispatch(op, payload)`** (`sync.js`) is the single write path: it applies the change optimistically via `applyChange` (`store.js`), saves the cache, enqueues to the outbox, and sends to the DO over WebSocket (HTTP `/state` fallback). Ops: `config.set`, `queue.upsert`, `queue.remove`, `record.save`, `record.delete`, `giftcard.save`, `giftcard.delete`.
+- **Save pattern for a config value:** `dispatch('config.set', { key, value })` — e.g. turns order = `dispatch('config.set', { key: 'turns_order', value: order })`. Mutate state only through `dispatch`/`applyChange`, never by writing localStorage.
+- **Inbound:** the DO broadcasts changes; `sync.js` ignores echoes of this device's own ops (by `device` id) and applies the rest. A full snapshot hydrates `store.js` and replays the outbox.
+- The Worker also persists each record/queue entry as its own DO key and runs the Square proxy, R2 photos, the daily Sheets backup cron, and Web Push.
 
 ---
 
@@ -171,12 +169,13 @@ All mutable settings (staff, services, items, fees, photos, etc.) live in JS mem
 
 Treat these with extra care — bugs here affect real financial data or break the app for all users:
 
-- **`pushConfigToSheets` / `loadConfigFromSheets`** (`sync.js`) — any bug can corrupt settings across all devices
-- **`allRecords` sync** (`sync.js`) — transaction records are financial data; never truncate or overwrite without merge logic
-- **`muse_deletion_log`** — cross-device delete sync; if broken, deleted records can reappear
-- **Queue persistence** (`queue.js`) — losing the queue during business hours is a critical failure
-- **`checkAppVersion`** (`app.js`) — on version mismatch: unregisters the SW (so next load fetches all files fresh), then calls `window.location.replace()`. A `sessionStorage` guard (`_pendingVersion`) prevents infinite loops if the unregister fails. If the `↻` badge appears after the auto-reload, hard refresh (`Ctrl+Shift+R`) is the reliable fallback.
-- **Version bump** — always bump `js/config.js` (APP_VERSION), `version.json`, and `sw.js` (CACHE_NAME) together; a mismatch between config.js and version.json causes reload loops; a stale CACHE_NAME means the old SW cache is never purged
+- **`dispatch` / `applyChange` / DO sync** (`sync.js`, `store.js`, `cloudflare/worker.js`) — the write path for all state; a bug can corrupt settings or drop writes across every device
+- **Records merge** (`store.js` `upsertById`, DO per-record keys) — transaction records are financial data; never truncate or blind-replace the array (always merge by id)
+- **`muse_deletion_log` + DO `deletion:` markers** — cross-device delete sync; if broken, deleted records can reappear
+- **Queue persistence** (`queue.js` + DO + `muse_state_cache`) — losing the queue during business hours is a critical failure
+- **`ticketTotal`** (`utils.js`) — single source of truth for a ticket's money (services + items×qty + fees − discount); reports, pay-time, and payroll all derive from it (never trust a cached `totalCost`)
+- **`checkAppVersion`** (`main.js`) — on version mismatch unregisters the SW (so the next load fetches fresh) and reloads once; a `sessionStorage` guard prevents reload loops. If the `↻` badge persists, hard refresh (`Ctrl+Shift+R`)
+- **Version bump** — always bump `js/app/config.js` (APP_VERSION), `version.json`, and `sw.js` (CACHE_NAME) together; a config.js/version.json mismatch causes reload loops; a stale CACHE_NAME means the old SW cache is never purged
 
 ---
 

@@ -267,3 +267,58 @@ The `MuseSalonDO` WebSocket hub is stateless — it holds no queue or config dat
 
 **Risk:** Very low frequency; only affects the ~5 seconds between DO restart and next poll.
 **Recommendation:** Leave as-is. The DO was intentionally designed stateless; Sheets is the source of truth.
+
+> **Note (2026-05-26):** Sections above this line describe the *pre-v3* architecture (Sheets as source of truth, single global scope, polling). As of the v3 rewrite the app is **ES modules + a stateful Durable Object source of truth**; this historical roadmap has not been rewritten. See memory `[[v3-cycle-state]]` for the current architecture.
+
+---
+
+## Commercialization & SaaS Productization (Lens 2 — strategic plan, 2026-05-26)
+
+Forward-looking plan for turning the app from "our shop's tool" into a paid monthly product. Captured from the Lens-2 strategy review. (Mirrored in memory `[[business-productization-plan]]`.)
+
+### Readiness
+- **~55–65%** to a sellable **single-tenant** product; **~30–40%** to true **multi-tenant SaaS**. The application is mature and battle-tested; the gap is the productization shell around it (accounts, billing, tenancy, legal).
+
+### The decision that forks the roadmap
+**Sell multi-tenant SaaS to many salons, or license single-tenant instances to a few?**
+- **Multi-tenant SaaS** — one codebase, many salons, self-serve signup, we operate it. Bigger market, more new build. **Recommended.**
+- **Single-tenant licenses** — clone-per-customer, we set each up. Lower lift, doesn't scale past ~dozens.
+- **Architectural tailwind:** the Cloudflare Durable Object model is naturally multi-tenant — one DO instance per salon (keyed by tenant id) gives built-in data isolation, the hardest part of most SaaS. We are closer than a typical solo app.
+
+### Engineering gaps to commercial-ready (priority order)
+1. **Real auth + accounts** — biggest gap (PIN-only today, origin-gate OFF). Email/OAuth login, tenant membership, roles, session tokens. *HIGH*
+2. **Multi-tenancy + provisioning** — signup spins up a salon's DO + config; zero cross-tenant leakage. *HIGH (DO helps)*
+3. **Subscription billing** — Stripe: plans, trials, dunning, lock-on-decline. *MED*
+4. **Onboarding / admin console** — self-serve setup of staff/services/hours; an operator-side tenant admin. *MED*
+5. **Backups / DR + SLA** — per-tenant export + point-in-time restore + status page. *MED*
+6. **Observability + support** — error tracking, audit logs, a support channel. *MED*
+7. **Accessibility (WCAG/ADA)** — touch-first and largely keyboard-free; needs an audit (commercial software draws ADA demand letters). *MED*
+
+### Legal (engage counsel to paper these — not legal advice)
+- **PCI: strong posture** — card data never touches the app (Square takes the charge), keeping us at the lightest PCI scope. Document it (compliance + sales point). Holds under Square Path B / Terminal API.
+- **⚠️ Gift-card law = the real exposure** — federal CARD Act (≥5-yr expiration floor, dormancy-fee limits) + state unclaimed-property/escheatment rules + small-balance cash-out (e.g. CA <$10). Our model tracks issue date + redemptions and does **not** force expiry — good foundation. **Do not add auto-expiry;** add a balance/liability report. The compliance duty is the salon's, but the app must not make them non-compliant.
+- **Data privacy** — we store PII (names/phones/visit history) and staff wage/commission data. Need Terms of Service, Privacy Policy, and a Data Processing Agreement (we = processor, salon = controller). CCPA/CPRA at CA thresholds; GDPR only with EU customers. Add retention + delete-on-request (extend the existing deletion log).
+- **Square Developer Agreement** — reselling an app built on Square APIs is allowed but governed; review before launch (possible app registration).
+- **Corporate** — LLC, E&O / cyber-liability insurance, SaaS sales-tax (taxable in some states).
+
+### Market fit & positioning
+- **Buyer:** independent and small-chain **nail salons & spas** — underserved by heavyweight Mindbody/Zenoti and frustrated by generic Square (no turn rotation, clumsy parties).
+- **Wedge / moat:** the **turns/rotation engine** + walk-in/party flow + derived totals. Win the walk-in/rotation segment the big players ignore; do not try to out-feature Boulevard on CRM.
+- **Price anchors (per month):** Square Appointments $0–69/seat · Fresha free + commission · Vagaro ~$24–85 · GlossGenius ~$24–148 · Boulevard ~$175+ · Mangomint ~$165+ · Mindbody $$$.
+
+### Pricing model (recommended)
+Payments are offloaded to Square, so there is **no processing margin** — the product must be **subscription-only**, priced **per location** (not per seat; per-seat punishes the multi-tech rotation feature that is the core value).
+
+| Tier | ~Price / location / mo | Includes |
+|---|---|---|
+| Starter | $39–49 | queue, turns, check-in, basic reports |
+| Pro | $79–99 | + gift cards, payroll/commission, customer history, Square POS |
+| Multi-location | $149+ / custom | chains, cross-location reporting |
+
+Annual ≈ 2 months free. 14–30 day free trial. Lands below Boulevard/Mangomint, above bare Square.
+
+### Staged go-to-market
+1. **Validate (now)** — 2–3 pilot salons on managed single-tenant instances; charge a small real fee to prove willingness to pay before building SaaS plumbing.
+2. **Productize** — auth → multi-tenancy/provisioning → Stripe billing → onboarding.
+3. **Paper it** — ToS / Privacy / DPA + gift-card and PCI documentation before public signups.
+4. **Launch niche-first** — nail-salon-focused; lead with turns + walk-in flow.
