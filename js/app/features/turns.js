@@ -519,9 +519,15 @@ export function clearTurnsHistory() {
 // Past-day grid: built from the synced transaction records for the date (the same
 // source Reports uses, so the two always agree), grouped per technician like the
 // live grid. The device-local muse_turns_history snapshot is used only as a
-// fallback for the tech ordering. Filled bubbles open the historical edit modal.
-function histAssignmentsByTech(dateStr) {
-  const recs = (window.buildCombinedRecords?.() || []).filter(r => isPaidStatus(r.status) && localDateStr(new Date(r.checkinTime)) === dateStr);
+// fallback for the tech ordering. Renders IDENTICALLY to the live grid — party
+// dots (multiple guests on one ticket), split-tech link chips (one guest under
+// 2+ techs), and group outlines — but greyed + read-only so a past day can't be
+// changed by accident. Filled bubbles still open the historical edit modal for
+// managers (intentional edit), so the look matches the live "paid" bubble exactly.
+function histDayRecords(dateStr) {
+  return (window.buildCombinedRecords?.() || []).filter(r => isPaidStatus(r.status) && localDateStr(new Date(r.checkinTime)) === dateStr);
+}
+function histAssignmentsByTech(recs) {
   const byTech = {};
   recs.forEach(r => (r.assignments || []).forEach(a => {
     const tid = a.techId || '__unassigned__';
@@ -536,8 +542,19 @@ function renderTurnsHistoryView() {
   const grid = document.getElementById('turns-tech-grid');
   if (!grid) return;
   const dateStr = turnsViewingHistory;
-  const byTech = histAssignmentsByTech(dateStr);
+  const dayRecs = histDayRecords(dateStr);
+  const byTech = histAssignmentsByTech(dayRecs);
   const snap = turnsHistory[dateStr];
+
+  // Same markers the live grid computes — fed from the day's records instead of q().
+  // Party letters tie multiple guests on one ticket together; split tags flag a
+  // single guest whose services landed under 2+ techs (so the two rows link up).
+  const partyLetters = partyLetterMap(dayRecs);
+  const splitTags = new Map(); let _splitN = 0;
+  dayRecs.forEach(r => {
+    const techs = new Set((r.assignments || []).filter(a => a.techId).map(a => a.techId));
+    if (techs.size >= 2) { splitTags.set(String(r.id), GROUP_COLORS[_splitN % GROUP_COLORS.length]); _splitN++; }
+  });
 
   let order = (snap?.order || []).filter(id => id && staffById(id));
   if (order.length === 0) order = getActiveTurnsOrder();
@@ -594,10 +611,15 @@ function renderTurnsHistoryView() {
       const svcLabel = s ? s.label : (e.services || []).map(sid => svc(sid)?.label || '?').join(', ');
       const costStr = cost ? '$' + Number(cost).toFixed(0) : '';
       const timeStr = new Date(e.checkinTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      // Same group outline + party dot + split-tech link chip as the live grid.
+      const outline = e.groupId ? `;outline:2px solid ${e.groupColor||'#e8a230'};outline-offset:-1px` : '';
+      const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0;margin-right:2px">${partyLetters.get(e.groupId)||'•'}</span>` : '';
+      const splitColor = splitTags.get(String(e.id));
+      const splitTag = splitColor ? `<span title="Same customer — also has a service with another tech" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;background:${splitColor};color:#fff;flex-shrink:0;margin-right:2px"><span class="material-symbols-outlined" style="font-size:11px;font-variation-settings:'FILL' 1">link</span></span>` : '';
       const tap = canAdd ? `onclick="showHistoricalEntryModal('${e.id}')"` : '';
       return `<div class="flex-shrink-0 w-[150px] px-1">
-        <button ${tap} class="w-full rounded-xl px-2 py-1.5 text-left ${canAdd ? 'active:scale-95 cursor-pointer' : 'cursor-default'} transition-all text-xs font-body" style="background:#dde2e5;color:#555;min-height:66px">
-          <div class="flex items-center justify-between gap-0.5 mb-0.5"><span class="font-semibold text-[11px] truncate">${e.name}</span>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="opacity:0.75">${turnLabel}</span>` : ''}</div>
+        <button ${tap} class="w-full rounded-xl px-2 py-1.5 text-left ${canAdd ? 'active:scale-95 cursor-pointer' : 'cursor-default'} transition-all text-xs font-body" style="background:#dde2e5;color:#555;min-height:66px${outline}">
+          <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="opacity:0.75">${turnLabel}</span>` : ''}</div>
           <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
           <div class="text-[9px] opacity-60">${timeStr}</div>
         </button></div>`;
