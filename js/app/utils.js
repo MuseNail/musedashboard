@@ -266,6 +266,13 @@ export function numpadConfirm() {
   _closeNumpadModal();
 }
 export function closeNumpad() { numpadConfirm(); }
+// Commit an OPEN numpad's typed value into its field. Called before saving/paying so a
+// fee/cost typed as the "last step" isn't lost (the numpad otherwise only writes the
+// value on its ✓, and closing the host modal discards it). No-op if nothing's open.
+export function commitNumpad() {
+  const m = document.getElementById('numpad-modal');
+  if (m && !m.classList.contains('hidden')) numpadConfirm();
+}
 function _closeNumpadModal() {
   if (_numpadHostObs) { _numpadHostObs.disconnect(); _numpadHostObs = null; }
   const m = document.getElementById('numpad-modal');

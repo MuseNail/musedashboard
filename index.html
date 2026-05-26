@@ -936,6 +936,11 @@ tailwind.config = {
                 <span class="material-symbols-outlined" style="font-size:18px">calculate</span> Recalculate Transaction Totals
               </button>
               <p class="text-[11px] font-body text-on-surface-variant mt-2 text-center">Fixes any saved total that doesn't match its services + items + fees − discount (e.g. a fee added after the total was saved). Export a backup first.</p>
+              <button onclick="listFeelessTickets()"
+                class="w-full mt-3 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-outline-variant text-on-surface-variant font-body font-semibold text-sm hover:bg-surface-container transition-all">
+                <span class="material-symbols-outlined" style="font-size:18px">search</span> Find Tickets With No Fee (30 days)
+              </button>
+              <p class="text-[11px] font-body text-on-surface-variant mt-2 text-center">Read-only list to help spot tickets that should've had a fee, so you can re-add it.</p>
             </div>
             <!-- Clear all records — admin only, pre-launch use -->
             <div class="mt-4 pt-4 border-t border-surface-container-high">

@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, partyLetterMap } from '../utils.js';
+import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus } from './status.js';
@@ -627,6 +627,7 @@ export function acceptAssignSuggestion(serviceId, techId) {
 export function saveCurrentGroupTabInputs() {
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
   if (!entry) return;
+  commitNumpad();   // flush a still-open numpad (a fee/cost typed but not ✓'d) into its field first
   // Per-customer first/last/phone are editable inline in the modal — capture them so
   // EVERY checked-in customer (not just the primary) can be edited here. If name or
   // phone actually changed, flag the entry to sync back to Square on Save.
@@ -840,6 +841,12 @@ export function updateGroupTotal() {
 }
 
 export function closeGroupAssignModal() {
+  // Commit whatever's typed (incl. an open numpad) and persist before closing, so a
+  // fee/cost/discount added as the "last step" isn't dropped by closing without Save.
+  if (groupAssignEntries.length && document.getElementById('group-assign-content')?.children.length) {
+    saveCurrentGroupTabInputs();
+    groupAssignEntries.forEach(id => { const e = q().find(x => String(x.id) === id); if (e) upsert(e); });
+  }
   const m = document.getElementById('group-assign-modal'); m.classList.add('hidden'); m.style.display = '';
   groupAssignEntries = []; _custEditedIds.clear();
 }

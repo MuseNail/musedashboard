@@ -1,7 +1,7 @@
 // ── Square POS deep link, orders, appointments, bookings ────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast } from '../utils.js';
+import { showToast, commitNumpad } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
 import { customerDirectory } from './square-customers.js';
 
@@ -38,6 +38,7 @@ function payCustomerBlock(e) {
 }
 
 export function openSquarePOS(entryId) {
+  commitNumpad();   // flush a still-open numpad (a fee/cost typed but not ✓'d) before charging
   const entry = queue().find(e => String(e.id) === String(entryId));
   if (!entry) return;
   // Group check-in → the whole party is on one ticket. To pay separately, split the

@@ -1114,6 +1114,21 @@ export function healRecordTotals() {
   if (window.showWarnModal) window.showWarnModal('Recalculate transaction totals?', msg, apply);
   else if (window.confirm(msg)) apply();
 }
+
+// Read-only list of paid tickets with NO fee in the last 30 days — to help spot any
+// that should have had one (a dropped fee leaves no trace, so this just narrows the
+// candidates). Opens in a new tab; nothing is changed.
+export function listFeelessTickets() {
+  const since = new Date(); since.setDate(since.getDate() - 30);
+  const rows = buildCombinedRecords()
+    .filter(r => isPaidStatus(r.status) && new Date(r.checkinTime) >= since && !((r.fees || []).some(f => (f.amount || 0) > 0)))
+    .sort((a, b) => new Date(b.checkinTime) - new Date(a.checkinTime));
+  if (!rows.length) { showToast('No fee-less paid tickets in the last 30 days.'); return; }
+  const esc = s => String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const body = rows.map(r => { const d = new Date(r.checkinTime); const svcs = (r.services || []).map(sid => svc(sid)?.label || sid).join(', '); return `<tr><td>${d.toLocaleDateString()}</td><td>${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td><td>${esc(r.name)}</td><td>${esc(svcs)}</td><td style="text-align:right">$${(r.totalCost || 0).toFixed(2)}</td></tr>`; }).join('');
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Tickets with no fee — last 30 days</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#222}h1{font-size:16px;color:#1a5252;margin:0 0 4px}p{color:#555;font-size:13px;margin:0}table{border-collapse:collapse;width:100%;font-size:13px;margin-top:14px}th,td{padding:6px 10px;border-bottom:1px solid #e0e0e0;text-align:left}th{background:#1a5252;color:#fff}</style></head><body><h1>Tickets with no fee — last 30 days (${rows.length})</h1><p>Scan for any that should have had a fee, then re-add it on that ticket (open → add fee → Save). Read-only — nothing here is changed.</p><table><thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Services</th><th style="text-align:right">Total</th></tr></thead><tbody>${body}</tbody></table></body></html>`;
+  const u = URL.createObjectURL(new Blob([html], { type: 'text/html' })); const w = window.open(u, '_blank'); if (!w) showToast('Allow pop-ups to view the list'); setTimeout(() => URL.revokeObjectURL(u), 5000);
+}
 export function confirmRefund() {
   const reason = document.getElementById('refund-reason').value.trim();
   const amount = parseFloat(document.getElementById('refund-amount').value) || 0;
