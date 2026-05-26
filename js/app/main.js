@@ -26,9 +26,10 @@ import * as calendar from './features/calendar.js';
 import * as floorplan from './features/floorplan.js';
 import * as appearance from './features/appearance.js';
 import * as servicetime from './features/servicetime.js';
+import * as chat from './features/chat.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -199,7 +200,7 @@ function onStateChange(state, changed) {
   if (changed === 'connection') return;
   if (changed === 'hydrate') applySquarePaidFlag();   // apply any pending Square auto-paid once the queue loads
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
-    photos.setLogo(); auth.updateLoggedInDisplay();
+    photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync();
     // T2.17: once Square is configured, auto-load the customer directory so
     // check-in autofill works on every device without a manual Settings→Square
     // sync. Once per session; non-blocking; no-ops offline (cache pre-populates).
@@ -296,6 +297,8 @@ function wireKeyboard() {
     }
     if (e.key === 'Escape') {
       for (const [id, fn] of MODAL_CLOSERS) { const el = document.getElementById(id); if (el && !el.classList.contains('hidden')) { fn(); return; } }
+      const chatP = document.getElementById('chat-panel');
+      if (chatP && !chatP.classList.contains('hidden')) { chat.closeChat(); return; }
       const calDD = document.getElementById('cal-selector-dropdown');
       if (calDD && !calDD.classList.contains('hidden')) { calendar.calSelectorCancel(); return; }
       const checkinScreen = document.getElementById('screen-checkin');
@@ -354,6 +357,7 @@ function boot() {
   photos.setLogo();
   queue.renderQueue();
   auth.updateLoggedInDisplay();
+  chat.onChatSync();   // baseline the chat unread badge from cache on load
   updateSyncIndicator(store.getState());
 
   // Confirm screen: tap anywhere to return to welcome

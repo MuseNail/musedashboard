@@ -1,7 +1,7 @@
 // ── Service Worker (v2.72 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'muse-v3.39';
+const CACHE_NAME = 'muse-v3.40';
 
 const PRECACHE_URLS = [
   '/musedashboard/',
@@ -37,6 +37,7 @@ const PRECACHE_URLS = [
   '/musedashboard/js/app/features/floorplan.js',
   '/musedashboard/js/app/features/appearance.js',
   '/musedashboard/js/app/features/servicetime.js',
+  '/musedashboard/js/app/features/chat.js',
 ];
 
 self.addEventListener('install', event => {

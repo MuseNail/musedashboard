@@ -17,6 +17,7 @@ function emptyConfig() {
     logo: null, turns_order: [], turns_break: [], turns_off: [],
     role_permissions: {}, photos: {}, square_config: null, station_layout: {}, stations: [], station_categories: [], customer_notes: {},
     unassigned_cal_id: '', pay_period: { type: 'weekly', startDate: '' }, payroll_checks: {},
+    chat_log: [],   // staff chat messages [{id,uid,name,text,ts}] (capped); rides config sync
   };
 }
 
