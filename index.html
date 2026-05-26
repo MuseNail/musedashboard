@@ -1200,8 +1200,7 @@ tailwind.config = {
           <div style="width:110px" class="px-2">To</div>
           <div style="width:110px" class="px-2">Phone</div>
           <div class="flex-grow px-2">Notes</div>
-          <div style="width:90px" class="px-3">Balance</div>
-          <div style="width:76px" class="px-2">Actions</div>
+          <div style="width:96px" class="px-4 text-right">Balance</div>
         </div>
         <!-- Card list -->
         <div id="gc-list" class="space-y-1.5"></div>
@@ -1237,7 +1236,7 @@ tailwind.config = {
       </div>
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Purchase Amount ($)</label>
-        <input type="text" inputmode="decimal" id="gc-amount" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none" onfocus="openNumpad(this,'Amount')">
+        <input type="text" inputmode="decimal" id="gc-amount" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none" onfocus="openNumpad(this,'Amount')" oninput="updateGcTotals()">
       </div>
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
@@ -1247,17 +1246,21 @@ tailwind.config = {
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">From (Purchaser)</label>
         <input type="text" id="gc-from" placeholder="Name of buyer" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none">
       </div>
-      <div>
+      <div class="relative">
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">To (Recipient)</label>
-        <input type="text" id="gc-to" placeholder="Name of recipient" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none">
+        <input type="text" id="gc-to" placeholder="Name of recipient" autocomplete="off" oninput="autoCapitalize(this);gcRecipientSearch(this)" onblur="gcHideRecipientAc()" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none">
+        <div id="gc-to-ac" class="hidden absolute left-0 right-0 top-full mt-1 z-20 bg-surface-container-lowest border border-surface-container-high rounded-xl shadow-lg max-h-48 overflow-y-auto"></div>
       </div>
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Date Used</label>
-        <input type="date" id="gc-date-used" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none">
-      </div>
-      <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Amount Used ($)</label>
-        <input type="text" inputmode="decimal" id="gc-amount-used" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none" onfocus="openNumpad(this,'Amount Used')">
+      <div class="col-span-2">
+        <div class="flex items-center justify-between mb-1">
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest">Redemptions (uses)</label>
+          <button type="button" onclick="gcAddRedemption()" class="flex items-center gap-1 text-xs font-body font-semibold text-primary hover:underline"><span class="material-symbols-outlined" style="font-size:16px">add</span> Add redemption</button>
+        </div>
+        <div id="gc-redemptions"></div>
+        <div class="flex items-center justify-end gap-5 mt-1 text-sm font-body">
+          <span class="text-on-surface-variant">Total used <strong id="gc-used-modal" class="text-on-surface">$0.00</strong></span>
+          <span class="text-on-surface-variant">Balance <strong id="gc-balance-modal" class="text-primary">$0.00</strong></span>
+        </div>
       </div>
       <div class="col-span-2">
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Notes</label>
@@ -1265,6 +1268,7 @@ tailwind.config = {
       </div>
     </div>
     <div class="flex gap-2 mt-5">
+      <button id="gc-delete-btn" onclick="deleteGiftCardFromModal()" class="hidden flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl border border-error/40 text-error font-headline font-semibold hover:bg-error/10 transition-all active:scale-95"><span class="material-symbols-outlined" style="font-size:18px">delete</span> Delete</button>
       <button onclick="closeGcModal()" class="flex-1 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-semibold">Cancel</button>
       <button onclick="saveGiftCard()" class="flex-1 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold hover:bg-primary-dim transition-all active:scale-95">Save Gift Card</button>
     </div>

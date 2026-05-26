@@ -10,6 +10,7 @@ import { isPaidStatus } from './status.js';
 import { squareUpsertCustomer } from './square-customers.js';
 import { avgServiceTime, fmtDur } from './servicetime.js';
 import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS } from '../config.js';
+import { gcRedemptions } from './giftcards.js';
 
 const cfg = () => getState().config;
 const records = () => getState().records;
@@ -434,7 +435,7 @@ export function runReport() {
   const inPeriod = ds => ds && ds >= localDateStr(from) && ds <= localDateStr(to);
   const gcSold = giftCards().filter(g => inPeriod(g.datePurchased));
   const gcSoldValue = gcSold.reduce((s,g)=>s+(g.amount||0),0);
-  const gcRedeemed = giftCards().filter(g => inPeriod(g.dateUsed)).reduce((s,g)=>s+(g.amountUsed||0),0);
+  const gcRedeemed = giftCards().reduce((s,g)=> s + gcRedemptions(g).reduce((a,r)=> a + (inPeriod(r.date) ? (r.amount||0) : 0), 0), 0);
   const gcOutstanding = giftCards().reduce((s,g)=>s+((g.amount||0)-(g.amountUsed||0)),0);
   set('rpt-gc-sold', `$${gcSoldValue.toFixed(2)}`);
   set('rpt-gc-redeemed', `$${gcRedeemed.toFixed(2)}`);
@@ -522,7 +523,7 @@ function computeMetrics(from, to) {
   const commission = Object.entries(staffInc).reduce((s,[id,inc])=>{ const t = staffById(id); return t?.commission != null ? s + inc*t.commission/100 : s; }, 0);
   const inPeriod = ds => ds && ds >= localDateStr(from) && ds <= localDateStr(to);
   const gcSold = giftCards().filter(g => inPeriod(g.datePurchased)).reduce((s,g)=>s+(g.amount||0),0);
-  const gcRedeemed = giftCards().filter(g => inPeriod(g.dateUsed)).reduce((s,g)=>s+(g.amountUsed||0),0);
+  const gcRedeemed = giftCards().reduce((s,g)=> s + gcRedemptions(g).reduce((a,r)=> a + (inPeriod(r.date) ? (r.amount||0) : 0), 0), 0);
   return { totalIncome, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold, gcRedeemed };
 }
 const _DELTA_CARDS = [
@@ -650,19 +651,33 @@ export function drillDownFee(feeId) {
 export function drillDownGiftcards(kind) {
   const d = window._currentReportData; if (!d) return;
   const inPeriod = ds => ds && ds >= localDateStr(d.from) && ds <= localDateStr(d.to);
-  const redeemed = kind === 'redeemed';
-  const cards = giftCards().filter(g => inPeriod(redeemed ? g.dateUsed : g.datePurchased));
-  const amtOf = g => redeemed ? (g.amountUsed||0) : (g.amount||0);
-  const dateOf = g => redeemed ? g.dateUsed : g.datePurchased;
-  const total = cards.reduce((s,g)=>s+amtOf(g),0);
+  const fmt = ds => ds ? new Date(ds + 'T12:00:00').toLocaleDateString() : '—';
+  if (kind === 'redeemed') {
+    // One row per redemption (a card used on several dates appears several times).
+    const list = [];
+    giftCards().forEach(g => gcRedemptions(g).forEach(r => { if (inPeriod(r.date)) list.push({ date: r.date, serial: g.serial, to: g.to, amount: r.amount || 0 }); }));
+    const total = list.reduce((s, x) => s + x.amount, 0);
+    _drill = {
+      title: 'Gift Cards Redeemed — Detail',
+      columns: ['Date','Serial','To','Amount'],
+      rows: list.map(x => [x.date || '', x.serial || '', x.to || '', '$' + x.amount.toFixed(2)]),
+      summary: [['Redemptions', String(list.length)], ['Redeemed', '$' + total.toFixed(2)]],
+    };
+    showDrillPanel(_drill.title, list.length
+      ? list.map(x => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${x.serial ? '#' + x.serial : '(no serial)'}${x.to ? ' · ' + x.to : ''}</div><div class="text-[11px] font-body text-outline">${fmt(x.date)}</div></div><div class="font-headline font-bold text-on-surface">$${x.amount.toFixed(2)}</div></div>`).join('')
+      : '');
+    return;
+  }
+  const cards = giftCards().filter(g => inPeriod(g.datePurchased));
+  const total = cards.reduce((s, g) => s + (g.amount || 0), 0);
   _drill = {
-    title: redeemed ? 'Gift Cards Redeemed — Detail' : 'Gift Cards Sold — Detail',
+    title: 'Gift Cards Sold — Detail',
     columns: ['Date','Serial','From','To','Amount'],
-    rows: cards.map(g => [dateOf(g)||'', g.serial||'', g.from||'', g.to||'', '$'+amtOf(g).toFixed(2)]),
-    summary: [['Cards', String(cards.length)], [redeemed ? 'Redeemed' : 'Sold', '$'+total.toFixed(2)]],
+    rows: cards.map(g => [g.datePurchased || '', g.serial || '', g.from || '', g.to || '', '$' + (g.amount || 0).toFixed(2)]),
+    summary: [['Cards', String(cards.length)], ['Sold', '$' + total.toFixed(2)]],
   };
   showDrillPanel(_drill.title, cards.length
-    ? cards.map(g => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${g.serial||'(no serial)'}${g.to?` · to ${g.to}`:''}</div><div class="text-[11px] font-body text-outline">${(dateOf(g)? new Date(dateOf(g)+'T12:00:00').toLocaleDateString():'—')}${g.from?' · from '+g.from:''}</div></div><div class="font-headline font-bold text-on-surface">$${amtOf(g).toFixed(2)}</div></div>`).join('')
+    ? cards.map(g => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${g.serial ? '#' + g.serial : '(no serial)'}${g.to ? ' · to ' + g.to : ''}</div><div class="text-[11px] font-body text-outline">${fmt(g.datePurchased)}${g.from ? ' · from ' + g.from : ''}</div></div><div class="font-headline font-bold text-on-surface">$${(g.amount || 0).toFixed(2)}</div></div>`).join('')
     : '');
 }
 function showDrillPanel(title, html) {
