@@ -341,9 +341,14 @@
   .data-table .section-row td { background: var(--md-surface-container); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--md-on-surface-variant); }
   .data-table .sticky-col { width: 88px; max-width: 88px; padding-left: 8px; padding-right: 8px; font-size: 12px; }
   /* Solid divider between column-groups (e.g. each staff on the Payroll table). */
-  /* Strong divider between staff column-groups; lighter divider between This and Last. */
-  .data-table .staff-sep { border-left: 2px solid var(--md-on-surface-variant); }
-  .data-table .thislast-sep { border-left: 1px solid var(--md-outline-variant); }
+  /* Thick solid divider between staff column-groups; thin dashed divider between This and
+     Last. Both run up through the header — but the header is teal, so use a light border
+     there and a dark one in the body. */
+  .data-table .staff-sep { border-left: 3px solid #5b6e6e; }
+  .data-table thead .staff-sep { border-left-color: rgba(255,255,255,.7); }
+  .data-table .thislast-sep { border-left: 1px dashed #9aa6a6; }
+  .data-table thead .thislast-sep { border-left-color: rgba(255,255,255,.55); }
+  .data-table .arrow-col { text-align: center; padding-left: 4px; padding-right: 4px; white-space: nowrap; }
 
   /* Lift the item being dragged (turns ghost is already styled; match the others) */
   .tech-order-item.dragging, .floor-bubble.dragging {

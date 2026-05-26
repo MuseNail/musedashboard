@@ -824,25 +824,26 @@ export function renderPayrollPage() {
     const cChk = techCheckAmount(tech, cComm, curKey), pChk = techCheckAmount(tech, pComm, prevKey);
     return { tech, c, p, cChk, pChk, cCash: Math.max(0, cComm - cChk), pCash: Math.max(0, pComm - pChk), isVar: (tech.checkType || 'variable') === 'variable' };
   });
-  // Each tech spans 4 columns: This-Billed | This-Commission | Last-Billed | Last-Commission.
-  // The ▲/▼% change (vs the prior period) sits on the "This" cells. Compact whole dollars
-  // in the dense day grid; cents on the summary rows.
+  // Each tech spans 5 columns: This-Billed | This-Comm | Δ | Last-Billed | Last-Comm.
+  // The Δ column holds a single ▲/▼% — green up / red down — based on the BILLED change vs
+  // the prior period (one arrow, not one per number). Compact whole dollars in the dense
+  // day grid; cents on the summary rows.
   const m0 = n => '$' + Math.round(n || 0);
   const quad = (cb, cc, pb, pc) =>
-      `<td class="num staff-sep">${_m2(cb)} ${_pcmp(cb, pb)}</td><td class="num">${_m2(cc)} ${_pcmp(cc, pc)}</td>`
+      `<td class="num staff-sep">${_m2(cb)}</td><td class="num">${_m2(cc)}</td><td class="arrow-col">${_pcmp(cb, pb)}</td>`
     + `<td class="num last thislast-sep">${_m2(pb)}</td><td class="num last">${_m2(pc)}</td>`;
   const dquad = (cd, pd) =>
-      `<td class="num staff-sep">${m0(cd.billed)} ${_pcmp(cd.billed, pd.billed)}</td><td class="num">${m0(cd.commission)} ${_pcmp(cd.commission, pd.commission)}</td>`
+      `<td class="num staff-sep">${m0(cd.billed)}</td><td class="num">${m0(cd.commission)}</td><td class="arrow-col">${_pcmp(cd.billed, pd.billed)}</td>`
     + `<td class="num last thislast-sep">${m0(pd.billed)}</td><td class="num last">${m0(pd.commission)}</td>`;
-  // Check / Cash are single payouts per period (no billed/comm split) → span the 2 "This"
-  // and the 2 "Last" columns.
-  const span2 = (cVal, pVal) => `<td class="num staff-sep" colspan="2">${cVal}</td><td class="num last thislast-sep" colspan="2">${_m2(pVal)}</td>`;
+  // Check / Cash are single payouts per period (no billed/comm split) → span the "This" side
+  // (billed + comm + Δ) and the "Last" side (billed + comm).
+  const span2 = (cVal, pVal) => `<td class="num staff-sep" colspan="3">${cVal}</td><td class="num last thislast-sep" colspan="2">${_m2(pVal)}</td>`;
   const checkCell = x => x.isVar
-    ? `<td class="num staff-sep" colspan="2"><input type="number" min="0" step="1" value="${x.cChk || ''}" placeholder="0" onchange="payrollSetCheck('${x.tech.id}',this.value)" style="width:62px" class="bg-surface-container border border-surface-container-high rounded px-1 py-0.5 text-sm font-headline text-right text-on-surface focus:outline-none focus:border-primary"></td><td class="num last thislast-sep" colspan="2">${_m2(x.pChk)}</td>`
+    ? `<td class="num staff-sep" colspan="3"><input type="number" min="0" step="1" value="${x.cChk || ''}" placeholder="0" onchange="payrollSetCheck('${x.tech.id}',this.value)" style="width:62px" class="bg-surface-container border border-surface-container-high rounded px-1 py-0.5 text-sm font-headline text-right text-on-surface focus:outline-none focus:border-primary"></td><td class="num last thislast-sep" colspan="2">${_m2(x.pChk)}</td>`
     : span2(_m2(x.cChk), x.pChk);
-  const refCells = (c, p) => { const r = (v, red) => `<td class="num ${red} " style="color:#dc2626">${v ? '-$' + Math.abs(v).toFixed(0) : '—'}</td>`;
-    return `<td class="num staff-sep" style="color:#dc2626">${c.refund ? '-$' + Math.abs(c.refund).toFixed(0) : '—'}${_refNote(c.refundNotes)}</td><td class="num" style="color:#dc2626">${c.refundComm ? '-$' + Math.abs(c.refundComm).toFixed(0) : '—'}</td><td class="num last thislast-sep" style="color:#dc2626">${p.refund ? '-$' + Math.abs(p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${p.refundComm ? '-$' + Math.abs(p.refundComm).toFixed(0) : '—'}</td>`; };
-  const info = `<span onclick="showToast('Day cells show billed and commission for this period vs last; the arrow + % is the change vs the same weekday in the previous pay period.')" title="Day cells = billed and commission, this period vs last. Arrow + % = change vs the same weekday in the previous pay period." class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;cursor:help;color:var(--md-on-surface-variant)">info</span>`;
+  const refCells = (c, p) =>
+    `<td class="num staff-sep" style="color:#dc2626">${c.refund ? '-$' + Math.abs(c.refund).toFixed(0) : '—'}${_refNote(c.refundNotes)}</td><td class="num" style="color:#dc2626">${c.refundComm ? '-$' + Math.abs(c.refundComm).toFixed(0) : '—'}</td><td class="arrow-col"></td><td class="num last thislast-sep" style="color:#dc2626">${p.refund ? '-$' + Math.abs(p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${p.refundComm ? '-$' + Math.abs(p.refundComm).toFixed(0) : '—'}</td>`;
+  const info = `<span onclick="showToast('Day cells show billed and commission, this period vs last. The Δ column is the change in billed vs the same weekday in the previous pay period.')" title="Day cells = billed and commission, this period vs last. Δ = change in billed vs the same weekday in the previous pay period." class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;cursor:help;color:var(--md-on-surface-variant)">info</span>`;
   const rows = [
     `<tr><td class="sticky-col">Total</td>${T.map(x => quad(x.c.billed, x.c.commission, x.p.billed, x.p.commission)).join('')}</tr>`,
     ...(T.some(x => x.c.refund || x.p.refund) ? [
@@ -850,15 +851,15 @@ export function renderPayrollPage() {
     ] : []),
     `<tr><td class="sticky-col">Check</td>${T.map(checkCell).join('')}</tr>`,
     `<tr><td class="sticky-col">Cash</td>${T.map(x => span2(_m2(x.cCash), x.pCash)).join('')}</tr>`,
-    `<tr class="section-row"><td class="sticky-col">By day ${info}</td><td colspan="${T.length * 4}"></td></tr>`,
+    `<tr class="section-row"><td class="sticky-col">By day ${info}</td><td colspan="${T.length * 5}"></td></tr>`,
     ...curDays.map((day, i) => {
       const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
       return `<tr><td class="sticky-col" style="font-weight:500">${dl}</td>${T.map(x => dquad(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`;
     }),
   ];
-  const head1 = T.map(x => `<th colspan="4" class="staff-sep" style="text-align:center">${x.tech.name}${x.tech.commission != null ? ` <span style="opacity:.85;font-weight:500">${x.tech.commission}%</span>` : ''}</th>`).join('');
-  const head2 = T.map(() => `<th colspan="2" class="staff-sep" style="text-align:center;font-weight:600">This</th><th colspan="2" class="thislast-sep" style="text-align:center;font-weight:600">Last</th>`).join('');
-  const head3 = T.map(() => `<th class="num staff-sep">Billed</th><th class="num">Comm</th><th class="num thislast-sep">Billed</th><th class="num">Comm</th>`).join('');
+  const head1 = T.map(x => `<th colspan="5" class="staff-sep" style="text-align:center"><span style="text-decoration:underline">${x.tech.name}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</span></th>`).join('');
+  const head2 = T.map(() => `<th colspan="2" class="staff-sep" style="text-align:center;font-weight:600">This</th><th class="arrow-col"></th><th colspan="2" class="thislast-sep" style="text-align:center;font-weight:600">Last</th>`).join('');
+  const head3 = T.map(() => `<th class="num staff-sep">Billed</th><th class="num">Comm</th><th class="arrow-col"></th><th class="num thislast-sep">Billed</th><th class="num">Comm</th>`).join('');
   wrap.innerHTML = `<table class="data-table"><thead>
       <tr><th class="sticky-col" rowspan="3"></th>${head1}</tr>
       <tr>${head2}</tr>
