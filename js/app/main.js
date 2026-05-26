@@ -33,6 +33,41 @@ import * as servicetime from './features/servicetime.js';
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
 
+// ── Modal registry ────────────────────────────────
+// Single source of truth for every dismissible modal/overlay + its close fn. Drives BOTH the
+// Escape key (close the first open one) AND closeAllModals() on navigation (so a screen change
+// never leaves an orphaned modal floating over the new screen / silently eating nav taps).
+// `setup-wizard` is intentionally excluded (forced first-run setup); `pin-modal` is handled
+// separately in the Esc handler.
+const MODAL_CLOSERS = [
+  ['tech-status-menu', turns.closeTechStatusMenu], ['group-assign-modal', queue.closeGroupAssignModal],
+  ['manual-modal', queue.closeManualAdd], ['warn-modal', queue.closeWarnModal],
+  ['turns-assign-modal', turns.closeTurnsAssignModal], ['turns-tech-modal', turns.closeTurnsTechModal],
+  ['split-merge-modal', queue.closeSplitMergeModal], ['edit-services-modal', queue.closeEditServicesModal],
+  ['service-modal', catalog.closeServiceModal], ['staff-modal', staff.closeStaffModal],
+  ['staff-photo-modal', photos.closeStaffPhotoModal], ['schedule-picker', staff.closeSchedulePicker],
+  ['edit-checkin-modal', queue.closeEditCheckin], ['customer-dir-modal', sqCust.closeCustomerDir],
+  ['edit-customer-modal', sqCust.closeEditCustomer], ['photo-crop-modal', photos.closePhotoCrop],
+  ['delete-txn-modal', reports.closeDeleteTxnModal], ['refund-modal', reports.closeRefundModal],
+  ['gc-modal', giftcards.closeGcModal], ['fduser-modal', auth.closeFdUserModal],
+  ['appt-modal', calendar.closeApptModal], ['historical-modal', reports.closeHistoricalModal],
+  ['square-confirm-modal', sqPos.closeSquareConfirm], ['admin-code-modal', auth.closeAdminCode],
+  ['date-picker-modal', reports.closeDatePicker], ['compare-menu', reports.closeCompareMenu],
+  ['day-picker-modal', reports.closeDayPicker], ['txn-merge-modal', reports.closeTxnMergeModal],
+  ['rpt-drill-modal', reports.closeDrillDown],
+  ['square-modal', () => { const m = document.getElementById('square-modal'); m.classList.add('hidden'); m.style.display = ''; }],
+  ['numpad-modal', utils.numpadConfirm],
+];
+// Generic force-hide on navigation (does NOT invoke each modal's close fn, so a programmatic/
+// back nav isn't gated). User-initiated closes (Esc, backdrop tap, the X button) still run the
+// per-modal logic, including the Edit Customer unsaved-changes guard.
+function closeAllModals() {
+  for (const [id] of MODAL_CLOSERS) {
+    const el = document.getElementById(id);
+    if (el && !el.classList.contains('hidden')) { el.classList.add('hidden'); el.style.display = ''; }
+  }
+}
+
 // ── Navigation ────────────────────────────────────
 // In-app back handling: the OS/browser back gesture used to reload the PWA
 // (losing state). Instead we track screen history and return to the previous
@@ -48,6 +83,7 @@ function setupBackHandler() {
   });
 }
 function goTo(screenId, param) {
+  closeAllModals();   // a screen change never leaves a modal orphaned over the new screen
   const prevScreen = document.querySelector('.screen.active')?.id;
   if (prevScreen && prevScreen !== screenId && !_navBack) {
     _screenStack.push(prevScreen);
@@ -67,6 +103,7 @@ function goTo(screenId, param) {
   if (screenId === 'screen-desk') { utils.updateDeskDate(); settings.initCalHoursSelectors(); }
 }
 function showDashPanel(panel) {
+  closeAllModals();
   ['queue','reports','transactions','payroll','turns','settings','giftcards','calendar','floorplan'].forEach(p => {
     document.getElementById(`panel-${p}`)?.classList.remove('active');
     document.getElementById(`nav-${p}`)?.classList.remove('active');
@@ -250,21 +287,6 @@ window.promptPwaInstall = () => { if (!_pwaInstallEvent) return; _pwaInstallEven
 
 // ── Keyboard shortcuts ────────────────────────────
 function wireKeyboard() {
-  const closers = [
-    ['tech-status-menu', turns.closeTechStatusMenu], ['group-assign-modal', queue.closeGroupAssignModal],
-    ['manual-modal', queue.closeManualAdd], ['warn-modal', queue.closeWarnModal],
-    ['turns-assign-modal', turns.closeTurnsAssignModal], ['turns-tech-modal', turns.closeTurnsTechModal],
-    ['split-merge-modal', queue.closeSplitMergeModal], ['edit-services-modal', queue.closeEditServicesModal],
-    ['service-modal', catalog.closeServiceModal], ['staff-modal', staff.closeStaffModal],
-    ['staff-photo-modal', photos.closeStaffPhotoModal], ['schedule-picker', staff.closeSchedulePicker],
-    ['edit-checkin-modal', queue.closeEditCheckin], ['customer-dir-modal', sqCust.closeCustomerDir],
-    ['edit-customer-modal', sqCust.closeEditCustomer], ['photo-crop-modal', photos.closePhotoCrop],
-    ['delete-txn-modal', reports.closeDeleteTxnModal], ['refund-modal', reports.closeRefundModal],
-    ['gc-modal', giftcards.closeGcModal], ['fduser-modal', auth.closeFdUserModal],
-    ['appt-modal', calendar.closeApptModal], ['historical-modal', reports.closeHistoricalModal],
-    ['square-modal', () => { const m = document.getElementById('square-modal'); m.classList.add('hidden'); m.style.display = ''; }],
-    ['numpad-modal', utils.numpadConfirm],
-  ];
   document.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       const gm = document.getElementById('group-assign-modal');
@@ -273,7 +295,7 @@ function wireKeyboard() {
       if (mm && !mm.classList.contains('hidden')) { const tag = document.activeElement?.tagName; if (tag !== 'SELECT' && tag !== 'TEXTAREA') { e.preventDefault(); queue.submitManualAdd(); return; } }
     }
     if (e.key === 'Escape') {
-      for (const [id, fn] of closers) { const el = document.getElementById(id); if (el && !el.classList.contains('hidden')) { fn(); return; } }
+      for (const [id, fn] of MODAL_CLOSERS) { const el = document.getElementById(id); if (el && !el.classList.contains('hidden')) { fn(); return; } }
       const calDD = document.getElementById('cal-selector-dropdown');
       if (calDD && !calDD.classList.contains('hidden')) { calendar.calSelectorCancel(); return; }
       const checkinScreen = document.getElementById('screen-checkin');

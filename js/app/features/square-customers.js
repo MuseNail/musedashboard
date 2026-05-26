@@ -16,6 +16,11 @@ const customerNote = id => ((cfg().customer_notes || {})[id] || '').trim();
 export let squareCustomers   = [];
 export let customerDirectory = [];
 
+// Unsaved-changes guard for the Edit Customer modal (3b): snapshot the fields when it opens,
+// warn before discarding if they changed.
+let _editCustSnapshot = '';
+const _editCustSig = () => ['edit-cust-first','edit-cust-last','edit-cust-phone','edit-cust-email','edit-cust-notes'].map(id => (document.getElementById(id)?.value || '').trim()).join('');
+
 // Pre-populate from the local cache on load (works offline + before Square sync).
 (function initFromCache() {
   try {
@@ -264,10 +269,18 @@ export function showEditCustomer(squareId) {
   // Local visit history (derived from transaction records) — kept in reports.js to avoid
   // a circular import; safe no-op if reports hasn't loaded.
   window.renderCustomerHistory?.(c.phone, [c.firstName, c.lastName].filter(Boolean).join(' '));
+  _editCustSnapshot = _editCustSig();   // baseline for the unsaved-changes guard
   const m = document.getElementById('edit-customer-modal');
   m.classList.remove('hidden'); m.style.display = 'flex';
 }
-export function closeEditCustomer() {
+export function closeEditCustomer(force) {
+  // Warn before discarding unsaved edits (incl. the note). `force === true` skips it — used by
+  // Save (already persisted). Esc / backdrop tap / the X button all route through here.
+  if (force !== true && _editCustSig() !== _editCustSnapshot) {
+    window.showWarnModal?.('Discard unsaved changes?', "Your edits to this customer (including the note) haven't been saved. Discard them?", () => closeEditCustomer(true));
+    return;
+  }
+  _editCustSnapshot = '';
   const m = document.getElementById('edit-customer-modal');
   m.classList.add('hidden'); m.style.display = '';
 }
@@ -310,7 +323,7 @@ export async function saveEditCustomer() {
     } catch (e) { showToast('Saved locally (Square update failed)'); }
   } else { showToast('Customer updated locally ✓'); }
 
-  closeEditCustomer();
+  closeEditCustomer(true);   // already saved — skip the unsaved-changes guard
   renderCustomerDir(document.getElementById('customer-dir-search')?.value || '');
 }
 

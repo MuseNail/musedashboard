@@ -1935,7 +1935,7 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      EDIT CUSTOMER MODAL
 ═══════════════════════════════════════════════ -->
-<div id="edit-customer-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-on-surface/40">
+<div id="edit-customer-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-on-surface/40" onclick="if(event.target===this)closeEditCustomer()">
   <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-lg shadow-2xl fade-up mx-4 max-h-[92vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-5">
       <h2 class="text-xl font-headline font-bold text-on-surface">Edit Customer</h2>
