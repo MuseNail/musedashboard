@@ -16,7 +16,16 @@ const cfg = () => getState().config;
 const CHAT_CAP = 100;
 const SEEN_KEY = 'muse_chat_seen';   // device-local last-seen timestamp (ms)
 
-const messages = () => (Array.isArray(cfg().chat_log) ? cfg().chat_log : []);
+// Auto-clear daily: the 4 AM reset wipes config.chat_log; this filter also hides anything
+// before the salon day start (4 AM) so a device that was closed at 4 AM still shows a fresh
+// chat. The stored array self-prunes to today's on the next send.
+const DAY_START_HOUR = 4;
+function dayStartTs() {
+  const d = new Date(), c = new Date(d.getFullYear(), d.getMonth(), d.getDate(), DAY_START_HOUR, 0, 0, 0);
+  if (d.getTime() < c.getTime()) c.setDate(c.getDate() - 1);   // before 4 AM → still "yesterday"
+  return c.getTime();
+}
+const messages = () => (Array.isArray(cfg().chat_log) ? cfg().chat_log : []).filter(m => (m.ts || 0) >= dayStartTs());
 const _esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const seenTs = () => Number(localStorage.getItem(SEEN_KEY) || 0);
 function markSeen() { try { localStorage.setItem(SEEN_KEY, String(Date.now())); } catch (e) {} }
@@ -27,6 +36,7 @@ export function toggleChat() { _chatOpen ? closeChat() : openChat(); }
 export function openChat() {
   _chatOpen = true;
   const p = document.getElementById('chat-panel'); if (p) { p.classList.remove('hidden'); p.style.display = 'flex'; }
+  document.getElementById('chat-clear-btn')?.classList.toggle('hidden', getActiveUser()?.role !== 'admin');   // manager-only clear
   renderChat(); markSeen(); updateChatBadge();
   setTimeout(() => { document.getElementById('chat-input')?.focus(); const m = document.getElementById('chat-messages'); if (m) m.scrollTop = m.scrollHeight; }, 40);
 }
@@ -46,6 +56,14 @@ export function sendChatMessage() {
   renderChat(); updateChatBadge();
 }
 export function chatInputKey(ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); sendChatMessage(); } }
+
+// Manager-only: wipe the chat for everyone (in addition to the automatic 4 AM clear).
+export function clearChat() {
+  if (getActiveUser()?.role !== 'admin') { showToast('Only a manager can clear the chat.'); return; }
+  const doClear = () => { dispatch('config.set', { key: 'chat_log', value: [] }); markSeen(); renderChat(); updateChatBadge(); showToast('Chat cleared'); };
+  if (window.showWarnModal) window.showWarnModal('Clear chat for everyone?', 'This permanently removes the chat history on all devices.', doClear);
+  else doClear();
+}
 
 export function renderChat() {
   const box = document.getElementById('chat-messages'); if (!box) return;

@@ -274,7 +274,8 @@ function scheduleMidnightReset() {
     turns.archiveTurnsForToday();                              // snapshots + clears turns_order
     store.getState().queue.slice().forEach(e => sync.dispatch('queue.remove', { id: e.id }));
     sync.dispatch('config.set', { key: 'turns_break', value: [] });
-    queue.renderQueue(); queue.updateStats(); turns.renderTurns();
+    sync.dispatch('config.set', { key: 'chat_log', value: [] });   // staff chat starts fresh each day
+    queue.renderQueue(); queue.updateStats(); turns.renderTurns(); chat.renderChat(); chat.updateChatBadge();
     utils.showToast("New day — yesterday's history saved");
     scheduleMidnightReset();
   }, reset - now);
