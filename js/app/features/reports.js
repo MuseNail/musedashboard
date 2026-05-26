@@ -416,7 +416,7 @@ export function runReport() {
   if (feesBreakdown) {
     const entries = Object.entries(feeMap).sort((a,b)=>b[1].total-a[1].total);
     feesBreakdown.innerHTML = entries.length === 0 ? '<p class="text-sm font-body text-on-surface-variant py-2">No fees charged in this period.</p>'
-      : entries.map(([feeId,data])=>{ const fee = cfg().fees.find(f=>f.id===feeId); return `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(26,82,82,0.10)"><span class="material-symbols-outlined" style="font-size:16px;color:#1a5252">receipt</span></div><div><div class="font-headline font-semibold text-on-surface text-sm">${fee?.label||feeId}</div><div class="text-xs font-body text-on-surface-variant">${data.count} time${data.count!==1?'s':''} charged</div></div></div><div class="font-headline font-bold text-on-surface">$${data.total.toFixed(2)}</div></div>`; }).join('');
+      : entries.map(([feeId,data])=>{ const fee = cfg().fees.find(f=>f.id===feeId); return `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between cursor-pointer hover:bg-surface-container transition-colors" onclick="drillDownFee('${feeId}')"><div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:rgba(26,82,82,0.10)"><span class="material-symbols-outlined" style="font-size:16px;color:#1a5252">receipt</span></div><div><div class="font-headline font-semibold text-on-surface text-sm">${fee?.label||feeId}</div><div class="text-xs font-body text-on-surface-variant">${data.count} time${data.count!==1?'s':''} charged · tap for details</div></div></div><div class="flex items-center gap-3"><div class="font-headline font-bold text-on-surface">$${data.total.toFixed(2)}</div><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">chevron_right</span></div></div>`; }).join('');
   }
   const itemMap = {};
   filtered.forEach(r => (r.items||[]).forEach(x => { if (!x.itemId || !x.qty || x.qty <= 0) return; if (!itemMap[x.itemId]) itemMap[x.itemId] = { revenue:0, qty:0 }; itemMap[x.itemId].revenue += (x.price||0)*(x.qty||0); itemMap[x.itemId].qty += x.qty||0; }));
@@ -440,10 +440,10 @@ export function runReport() {
   set('rpt-gc-redeemed', `$${gcRedeemed.toFixed(2)}`);
   const gcBreakdown = document.getElementById('rpt-giftcards-breakdown');
   if (gcBreakdown) {
-    const row = (label, value, sub) => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div><div class="font-headline font-semibold text-on-surface text-sm">${label}</div><div class="text-xs font-body text-on-surface-variant">${sub}</div></div><div class="font-headline font-bold text-on-surface">${value}</div></div>`;
+    const row = (label, value, sub, onclick) => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between${onclick?' cursor-pointer hover:bg-surface-container transition-colors':''}"${onclick?` onclick="${onclick}"`:''}><div><div class="font-headline font-semibold text-on-surface text-sm">${label}</div><div class="text-xs font-body text-on-surface-variant">${sub}</div></div><div class="flex items-center gap-3"><div class="font-headline font-bold text-on-surface">${value}</div>${onclick?'<span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">chevron_right</span>':''}</div></div>`;
     gcBreakdown.innerHTML =
-      row('Gift Cards Sold', `$${gcSoldValue.toFixed(2)}`, `${gcSold.length} card${gcSold.length!==1?'s':''} sold this period`) +
-      row('Redeemed', `$${gcRedeemed.toFixed(2)}`, 'Used this period (not counted as service income)') +
+      row('Gift Cards Sold', `$${gcSoldValue.toFixed(2)}`, `${gcSold.length} card${gcSold.length!==1?'s':''} sold this period · tap for details`, "drillDownGiftcards('sold')") +
+      row('Redeemed', `$${gcRedeemed.toFixed(2)}`, 'Used this period · tap for details', "drillDownGiftcards('redeemed')") +
       row('Outstanding Balance', `$${gcOutstanding.toFixed(2)}`, 'Unredeemed value across all gift cards');
   }
 
@@ -572,7 +572,10 @@ function renderPerformance(filtered) {
   const busiestDow = dowWithData.reduce((a, b) => b.rev > a.rev ? b : a, dowWithData[0]);
   const slowestDow = dowWithData.length > 1 ? dowWithData.reduce((a, b) => b.rev < a.rev ? b : a) : null;
   const card = (label, val) => `<div class="bg-surface-container-lowest rounded-xl px-4 py-2.5 border border-surface-container-high"><div class="text-[10px] font-body uppercase tracking-widest text-on-surface-variant">${label}</div><div class="text-sm font-headline font-bold text-on-surface mt-0.5">${val}</div></div>`;
-  wrap.innerHTML = `<div class="perf-chart">${bars}</div>
+  // Vertical (revenue) axis: max at top → $0 at the bar baseline.
+  const yLab = v => v >= 1000 ? '$' + (v/1000).toFixed(1) + 'k' : '$' + Math.round(v);
+  const yAxis = `<div class="perf-yaxis"><span>${yLab(maxRev)}</span><span>${yLab(maxRev/2)}</span><span>$0</span></div>`;
+  wrap.innerHTML = `<div class="perf-plot">${yAxis}<div class="perf-chart">${bars}</div></div>
     <div class="grid grid-cols-3 gap-2 mt-4">
       ${card('Busiest time', `${_fmtHour(busiestHour.i)}–${_fmtHour((busiestHour.i + 1) % 24)}`)}
       ${busiestDow ? card('Busiest day', _DOW[busiestDow.i]) : ''}
@@ -627,6 +630,40 @@ export function drillDownService(sid) {
     summary: [['Services', String(rows.length)], ['Total', '$'+rows.reduce((acc,r)=>acc+r.cost,0).toFixed(2)]],
   };
   showDrillPanel(_drill.title, rows.map(row => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div><div class="font-headline font-semibold text-on-surface text-sm">${row.customer}</div><div class="text-xs font-body text-on-surface-variant">Tech: ${row.tech}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div></div>`).join(''));
+}
+export function drillDownFee(feeId) {
+  const d = window._currentReportData; if (!d) return;
+  const fee = cfg().fees.find(f => f.id === feeId);
+  const rows = [];
+  d.filtered.forEach(r => (r.fees||[]).forEach(f => { if (f.feeId !== feeId) return; rows.push({ customer: r.name||'(no name)', time: new Date(r.checkinTime), amount: f.amount||0 }); }));
+  const total = rows.reduce((s,r)=>s+r.amount,0);
+  _drill = {
+    title: `${fee?.label||'Fee'} — Detail`,
+    columns: ['Date','Time','Customer','Amount'],
+    rows: rows.map(r => [r.time.toLocaleDateString(), r.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.customer, '$'+r.amount.toFixed(2)]),
+    summary: [['Times charged', String(rows.length)], ['Total', '$'+total.toFixed(2)]],
+  };
+  showDrillPanel(_drill.title, rows.length
+    ? rows.map(r => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div><div class="font-headline font-semibold text-on-surface text-sm">${r.customer}</div><div class="text-[11px] font-body text-outline">${r.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${r.time.toLocaleDateString()}</div></div><div class="font-headline font-bold text-on-surface">$${r.amount.toFixed(2)}</div></div>`).join('')
+    : '');
+}
+export function drillDownGiftcards(kind) {
+  const d = window._currentReportData; if (!d) return;
+  const inPeriod = ds => ds && ds >= localDateStr(d.from) && ds <= localDateStr(d.to);
+  const redeemed = kind === 'redeemed';
+  const cards = giftCards().filter(g => inPeriod(redeemed ? g.dateUsed : g.datePurchased));
+  const amtOf = g => redeemed ? (g.amountUsed||0) : (g.amount||0);
+  const dateOf = g => redeemed ? g.dateUsed : g.datePurchased;
+  const total = cards.reduce((s,g)=>s+amtOf(g),0);
+  _drill = {
+    title: redeemed ? 'Gift Cards Redeemed — Detail' : 'Gift Cards Sold — Detail',
+    columns: ['Date','Serial','From','To','Amount'],
+    rows: cards.map(g => [dateOf(g)||'', g.serial||'', g.from||'', g.to||'', '$'+amtOf(g).toFixed(2)]),
+    summary: [['Cards', String(cards.length)], [redeemed ? 'Redeemed' : 'Sold', '$'+total.toFixed(2)]],
+  };
+  showDrillPanel(_drill.title, cards.length
+    ? cards.map(g => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${g.serial||'(no serial)'}${g.to?` · to ${g.to}`:''}</div><div class="text-[11px] font-body text-outline">${(dateOf(g)? new Date(dateOf(g)+'T12:00:00').toLocaleDateString():'—')}${g.from?' · from '+g.from:''}</div></div><div class="font-headline font-bold text-on-surface">$${amtOf(g).toFixed(2)}</div></div>`).join('')
+    : '');
 }
 function showDrillPanel(title, html) {
   document.getElementById('rpt-drill-title').textContent = title;

@@ -391,6 +391,8 @@
   /* Summary cards: keep the delta badge on the same line as the dollar amount (shorter
      cards). The amount is a block <div>; making it inline-block lets the delta sit beside
      it, and the label <div> still drops to its own line below. */
+  /* Shorter summary cards: trim the p-4 down so the amount + label sit in a compact box. */
+  #panel-reports .rounded-xl.text-center { padding: 0.6rem 0.75rem; }
   #panel-reports .rounded-xl.text-center > .font-headline { display:inline-block; vertical-align:middle; }
   #panel-reports .rounded-xl.text-center > .rpt-delta { margin-top:0; margin-left:6px; vertical-align:middle; }
   .rpt-delta.up   { color:#15803d; background:rgba(22,163,74,.12); }
@@ -413,6 +415,11 @@
   .dp-day.sel { background:var(--primary,#1a5252); color:#fff; }
 
   /* ── Reports: performance-by-hour chart ───────────────────────────────── */
+  .perf-plot { display:flex; gap:8px; align-items:stretch; }
+  /* Vertical revenue axis: labels span the bar plotting area (chart height minus the
+     x-label row), so the bottom "$0" lines up with the bar baseline. */
+  .perf-yaxis { display:flex; flex-direction:column; justify-content:space-between; height:150px; box-sizing:border-box; padding:4px 0 20px; flex-shrink:0; text-align:right; font-size:9px; font-weight:600; line-height:1; color:var(--md-on-surface-variant,#6b7280); }
+  .perf-plot .perf-chart { flex:1; min-width:0; border-left:1.5px solid var(--md-surface-container-high,#d0d6da); padding-left:6px; }
   .perf-chart { display:flex; align-items:flex-end; gap:6px; height:150px; padding-top:6px; }
   .perf-col { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; min-width:0; }
   .perf-bar { width:70%; max-width:36px; min-height:2px; background:linear-gradient(180deg,#2a8a87,var(--primary,#1a5252)); border-radius:6px 6px 0 0; transition:height .2s ease; }

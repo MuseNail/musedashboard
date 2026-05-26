@@ -334,7 +334,7 @@ tailwind.config = {
         </div>
 
         <!-- Date range selector (Square-style: Date button + comparison) -->
-        <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5">
+        <div class="bg-surface-container-lowest rounded-xl px-4 py-2.5 border border-surface-container-high mb-3">
           <div class="flex gap-2 flex-wrap items-center">
             <button onclick="shiftReportRange(-1)" title="Previous period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
             <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
@@ -348,7 +348,7 @@ tailwind.config = {
               <span class="text-sm font-headline font-bold text-on-surface compare-btn-label">Prior period</span>
             </button>
           </div>
-          <p class="text-xs font-body text-on-surface-variant mt-2" id="report-range-label">Showing: Today</p>
+          <p class="text-xs font-body text-on-surface-variant mt-1.5" id="report-range-label">Showing: Today</p>
         </div>
 
         <!-- Summary cards -->
