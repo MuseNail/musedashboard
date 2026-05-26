@@ -327,7 +327,7 @@
      Dedicated columns, sticky first column (row labels) + sticky header, right-aligned
      numeric cells, subtle striping. Theme-aware via the --md-* vars. */
   .data-table { border-collapse: separate; border-spacing: 0; font-family: var(--font-body); font-size: 13px; color: var(--md-on-surface); width: max-content; min-width: 100%; }
-  .data-table th, .data-table td { padding: 6px 12px; border-bottom: 1px solid var(--md-outline-variant); white-space: nowrap; text-align: left; }
+  .data-table th, .data-table td { padding: 5px 9px; border-bottom: 1px solid var(--md-outline-variant); white-space: nowrap; text-align: left; }
   .data-table thead th { position: sticky; top: 0; z-index: 2; background: #1a5252; color: #fff; font-weight: 700; font-size: 12px; }
   .data-table tbody tr:nth-child(even) td { background: var(--md-surface-container-low); }
   .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -336,9 +336,11 @@
   .data-table tbody tr:nth-child(even) .sticky-col { background: var(--md-surface-container); }
   .data-table thead .sticky-col { z-index: 3; background: #1a5252; }
   .data-table .section-row td { background: var(--md-surface-container); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--md-on-surface-variant); }
-  .data-table .sticky-col { max-width: 130px; }
+  .data-table .sticky-col { width: 88px; max-width: 88px; padding-left: 8px; padding-right: 8px; font-size: 12px; }
   /* Solid divider between column-groups (e.g. each staff on the Payroll table). */
+  /* Strong divider between staff column-groups; lighter divider between This and Last. */
   .data-table .staff-sep { border-left: 2px solid var(--md-on-surface-variant); }
+  .data-table .thislast-sep { border-left: 1px solid var(--md-outline-variant); }
 
   /* Lift the item being dragged (turns ghost is already styled; match the others) */
   .tech-order-item.dragging, .floor-bubble.dragging {

@@ -824,31 +824,45 @@ export function renderPayrollPage() {
     const cChk = techCheckAmount(tech, cComm, curKey), pChk = techCheckAmount(tech, pComm, prevKey);
     return { tech, c, p, cChk, pChk, cCash: Math.max(0, cComm - cChk), pCash: Math.max(0, pComm - pChk), isVar: (tech.checkType || 'variable') === 'variable' };
   });
-  const pair = (cv, pv) => `<td class="num staff-sep">${_m2(cv)} ${_pcmp(cv, pv)}</td><td class="num last">${_m2(pv)}</td>`;
-  const dpair = (cd, pd) => `<td class="num staff-sep">$${cd.billed.toFixed(0)}/$${cd.commission.toFixed(0)} ${_pcmp(cd.commission, pd.commission)}</td><td class="num last">$${pd.billed.toFixed(0)}/$${pd.commission.toFixed(0)}</td>`;
+  // Each tech spans 4 columns: This-Billed | This-Commission | Last-Billed | Last-Commission.
+  // The ▲/▼% change (vs the prior period) sits on the "This" cells. Compact whole dollars
+  // in the dense day grid; cents on the summary rows.
+  const m0 = n => '$' + Math.round(n || 0);
+  const quad = (cb, cc, pb, pc) =>
+      `<td class="num staff-sep">${_m2(cb)} ${_pcmp(cb, pb)}</td><td class="num">${_m2(cc)} ${_pcmp(cc, pc)}</td>`
+    + `<td class="num last thislast-sep">${_m2(pb)}</td><td class="num last">${_m2(pc)}</td>`;
+  const dquad = (cd, pd) =>
+      `<td class="num staff-sep">${m0(cd.billed)} ${_pcmp(cd.billed, pd.billed)}</td><td class="num">${m0(cd.commission)} ${_pcmp(cd.commission, pd.commission)}</td>`
+    + `<td class="num last thislast-sep">${m0(pd.billed)}</td><td class="num last">${m0(pd.commission)}</td>`;
+  // Check / Cash are single payouts per period (no billed/comm split) → span the 2 "This"
+  // and the 2 "Last" columns.
+  const span2 = (cVal, pVal) => `<td class="num staff-sep" colspan="2">${cVal}</td><td class="num last thislast-sep" colspan="2">${_m2(pVal)}</td>`;
   const checkCell = x => x.isVar
-    ? `<td class="num staff-sep"><input type="number" min="0" step="1" value="${x.cChk || ''}" placeholder="0" onchange="payrollSetCheck('${x.tech.id}',this.value)" style="width:62px" class="bg-surface-container border border-surface-container-high rounded px-1 py-0.5 text-sm font-headline text-right text-on-surface focus:outline-none focus:border-primary"></td><td class="num last">${_m2(x.pChk)}</td>`
-    : pair(x.cChk, x.pChk);
-  const info = `<span onclick="showToast('Day cells show billed / commission. The arrow + % is the change vs the same weekday in the previous pay period.')" title="Day cells = billed / commission. Arrow + % = change vs the same weekday in the previous pay period." class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;cursor:help;color:var(--md-on-surface-variant)">info</span>`;
+    ? `<td class="num staff-sep" colspan="2"><input type="number" min="0" step="1" value="${x.cChk || ''}" placeholder="0" onchange="payrollSetCheck('${x.tech.id}',this.value)" style="width:62px" class="bg-surface-container border border-surface-container-high rounded px-1 py-0.5 text-sm font-headline text-right text-on-surface focus:outline-none focus:border-primary"></td><td class="num last thislast-sep" colspan="2">${_m2(x.pChk)}</td>`
+    : span2(_m2(x.cChk), x.pChk);
+  const refCells = (c, p) => { const r = (v, red) => `<td class="num ${red} " style="color:#dc2626">${v ? '-$' + Math.abs(v).toFixed(0) : '—'}</td>`;
+    return `<td class="num staff-sep" style="color:#dc2626">${c.refund ? '-$' + Math.abs(c.refund).toFixed(0) : '—'}${_refNote(c.refundNotes)}</td><td class="num" style="color:#dc2626">${c.refundComm ? '-$' + Math.abs(c.refundComm).toFixed(0) : '—'}</td><td class="num last thislast-sep" style="color:#dc2626">${p.refund ? '-$' + Math.abs(p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${p.refundComm ? '-$' + Math.abs(p.refundComm).toFixed(0) : '—'}</td>`; };
+  const info = `<span onclick="showToast('Day cells show billed and commission for this period vs last; the arrow + % is the change vs the same weekday in the previous pay period.')" title="Day cells = billed and commission, this period vs last. Arrow + % = change vs the same weekday in the previous pay period." class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;cursor:help;color:var(--md-on-surface-variant)">info</span>`;
   const rows = [
-    `<tr><td class="sticky-col">Billed</td>${T.map(x => pair(x.c.billed, x.p.billed)).join('')}</tr>`,
-    `<tr><td class="sticky-col">Commission</td>${T.map(x => pair(x.c.commission, x.p.commission)).join('')}</tr>`,
+    `<tr><td class="sticky-col">Total</td>${T.map(x => quad(x.c.billed, x.c.commission, x.p.billed, x.p.commission)).join('')}</tr>`,
     ...(T.some(x => x.c.refund || x.p.refund) ? [
-      `<tr><td class="sticky-col">Refunds</td>${T.map(x => _refCells(x.c, x.p)).join('')}</tr>`,
+      `<tr><td class="sticky-col">Refunds</td>${T.map(x => refCells(x.c, x.p)).join('')}</tr>`,
     ] : []),
     `<tr><td class="sticky-col">Check</td>${T.map(checkCell).join('')}</tr>`,
-    `<tr><td class="sticky-col">Cash</td>${T.map(x => pair(x.cCash, x.pCash)).join('')}</tr>`,
-    `<tr class="section-row"><td class="sticky-col">By day ${info}</td><td colspan="${T.length * 2}"></td></tr>`,
+    `<tr><td class="sticky-col">Cash</td>${T.map(x => span2(_m2(x.cCash), x.pCash)).join('')}</tr>`,
+    `<tr class="section-row"><td class="sticky-col">By day ${info}</td><td colspan="${T.length * 4}"></td></tr>`,
     ...curDays.map((day, i) => {
       const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
-      return `<tr><td class="sticky-col" style="font-weight:500">${dl}</td>${T.map(x => dpair(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`;
+      return `<tr><td class="sticky-col" style="font-weight:500">${dl}</td>${T.map(x => dquad(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`;
     }),
   ];
-  const techHead = T.map(x => `<th colspan="2" class="staff-sep" style="text-align:center">${x.tech.name}${x.tech.commission != null ? ` <span style="opacity:.85;font-weight:500">${x.tech.commission}%</span>` : ''}</th>`).join('');
-  const subHead = T.map(() => `<th class="num staff-sep">This</th><th class="num">Last</th>`).join('');
+  const head1 = T.map(x => `<th colspan="4" class="staff-sep" style="text-align:center">${x.tech.name}${x.tech.commission != null ? ` <span style="opacity:.85;font-weight:500">${x.tech.commission}%</span>` : ''}</th>`).join('');
+  const head2 = T.map(() => `<th colspan="2" class="staff-sep" style="text-align:center;font-weight:600">This</th><th colspan="2" class="thislast-sep" style="text-align:center;font-weight:600">Last</th>`).join('');
+  const head3 = T.map(() => `<th class="num staff-sep">Billed</th><th class="num">Comm</th><th class="num thislast-sep">Billed</th><th class="num">Comm</th>`).join('');
   wrap.innerHTML = `<table class="data-table"><thead>
-      <tr><th class="sticky-col" rowspan="2"></th>${techHead}</tr>
-      <tr>${subHead}</tr></thead>
+      <tr><th class="sticky-col" rowspan="3"></th>${head1}</tr>
+      <tr>${head2}</tr>
+      <tr>${head3}</tr></thead>
     <tbody>${rows.join('')}</tbody></table>`;
 }
 function payrollExportRows() {
@@ -894,65 +908,74 @@ export function payrollExportPDF() {
   const { cur, T, curDays, prevDays } = payrollGrid();
   if (!T.length) { showToast('No technicians.'); return; }
   const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const period = `${fmt(cur.from)} – ${fmt(cur.to)}`, logo = cfg().logo || LOGO_PATH;
+  const period = `${fmt(cur.from)} – ${fmt(cur.to)}`;
   const pc = (cv, pv) => { if (!pv && !cv) return ''; if (!pv) return ' <b style="color:#16a34a">▲</b>'; const up = cv >= pv; return ` <b style="color:${up ? '#16a34a' : '#dc2626'};font-size:8px">${up ? '▲' : '▼'}${Math.abs((cv - pv) / pv * 100).toFixed(0)}%</b>`; };
-  const pair = (cv, pv) => `<td class="num sep">${_m2(cv)}${pc(cv, pv)}</td><td class="num last">${_m2(pv)}</td>`;
-  const dp = (cd, pd) => `<td class="num sep">$${cd.billed.toFixed(0)}/$${cd.commission.toFixed(0)}${pc(cd.commission, pd.commission)}</td><td class="num last">$${pd.billed.toFixed(0)}/$${pd.commission.toFixed(0)}</td>`;
+  const m0 = n => '$' + Math.round(n || 0);
+  const quad = (cb, cc, pb, pc2) => `<td class="num sep">${_m2(cb)}${pc(cb, pb)}</td><td class="num">${_m2(cc)}${pc(cc, pc2)}</td><td class="num last lsep">${_m2(pb)}</td><td class="num last">${_m2(pc2)}</td>`;
+  const dquad = (cd, pd) => `<td class="num sep">${m0(cd.billed)}${pc(cd.billed, pd.billed)}</td><td class="num">${m0(cd.commission)}${pc(cd.commission, pd.commission)}</td><td class="num last lsep">${m0(pd.billed)}</td><td class="num last">${m0(pd.commission)}</td>`;
+  const span2 = (cVal, pVal) => `<td class="num sep" colspan="2">${cVal}</td><td class="num last lsep" colspan="2">${_m2(pVal)}</td>`;
   const rows = [
-    `<tr><td class="rl">Billed</td>${T.map(x => pair(x.c.billed, x.p.billed)).join('')}</tr>`,
-    `<tr><td class="rl">Commission</td>${T.map(x => pair(x.c.commission, x.p.commission)).join('')}</tr>`,
+    `<tr><td class="rl">Total</td>${T.map(x => quad(x.c.billed, x.c.commission, x.p.billed, x.p.commission)).join('')}</tr>`,
     ...(T.some(x => x.c.refund || x.p.refund) ? [
-      `<tr><td class="rl">Refunds</td>${T.map(x => `<td class="num sep" style="color:#dc2626">${x.c.refund ? '-$' + Math.abs(x.c.refund).toFixed(2) : '—'}</td><td class="num last" style="color:#dc2626">${x.p.refund ? '-$' + Math.abs(x.p.refund).toFixed(2) : '—'}</td>`).join('')}</tr>`,
+      `<tr><td class="rl">Refunds</td>${T.map(x => `<td class="num sep" style="color:#dc2626">${x.c.refund ? '-$' + Math.abs(x.c.refund).toFixed(0) : '—'}</td><td class="num" style="color:#dc2626">${x.c.refundComm ? '-$' + Math.abs(x.c.refundComm).toFixed(0) : '—'}</td><td class="num last lsep" style="color:#dc2626">${x.p.refund ? '-$' + Math.abs(x.p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${x.p.refundComm ? '-$' + Math.abs(x.p.refundComm).toFixed(0) : '—'}</td>`).join('')}</tr>`,
     ] : []),
-    `<tr><td class="rl">Check</td>${T.map(x => pair(x.cChk, x.pChk)).join('')}</tr>`,
-    `<tr><td class="rl">Cash</td>${T.map(x => pair(x.cCash, x.pCash)).join('')}</tr>`,
-    `<tr class="sec"><td class="rl">By day · billed/comm</td><td colspan="${T.length * 2}"></td></tr>`,
-    ...curDays.map((day, i) => { const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }); return `<tr><td class="rl">${dl}</td>${T.map(x => dp(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`; }),
+    `<tr><td class="rl">Check</td>${T.map(x => span2(_m2(x.cChk), x.pChk)).join('')}</tr>`,
+    `<tr><td class="rl">Cash</td>${T.map(x => span2(_m2(x.cCash), x.pCash)).join('')}</tr>`,
+    `<tr class="sec"><td class="rl">By day · billed / commission</td><td colspan="${T.length * 4}"></td></tr>`,
+    ...curDays.map((day, i) => { const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }); return `<tr><td class="rl">${dl}</td>${T.map(x => dquad(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`; }),
   ].join('');
-  const th1 = T.map(x => `<th colspan="2" class="sep" style="text-align:center">${_eTxn(x.tech.name)}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</th>`).join('');
-  const th2 = T.map(() => `<th class="num sep">This</th><th class="num">Last</th>`).join('');
+  const th1 = T.map(x => `<th colspan="4" class="sep" style="text-align:center">${_eTxn(x.tech.name)}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</th>`).join('');
+  const th2 = T.map(() => `<th colspan="2" class="sep" style="text-align:center">This</th><th colspan="2" class="lsep" style="text-align:center">Last</th>`).join('');
+  const th3 = T.map(() => `<th class="num sep">Billed</th><th class="num">Comm</th><th class="num lsep">Billed</th><th class="num">Comm</th>`).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Payroll — ${_eTxn(period)}</title><style>
-    @page{size:8.5in 11in landscape;margin:.4in} body{font-family:Arial,sans-serif;margin:0;color:#222}
-    h1{color:#1a5252;font-size:15px;margin:0 0 8px} table{border-collapse:collapse;width:100%;font-size:9px}
+    @page{size:11in 8.5in;margin:.4in} body{font-family:Arial,sans-serif;margin:0;color:#222}
+    h1{color:#1a5252;font-size:15px;margin:0 0 8px} table{border-collapse:collapse;width:auto;font-size:9px}
     th,td{padding:3px 6px;border-bottom:1px solid #ddd;white-space:nowrap;text-align:left}
     thead th{background:#1a5252;color:#fff} thead{display:table-header-group} tr{page-break-inside:avoid}
-    .num{text-align:right} .last{color:#888} .rl{font-weight:700;background:#f0f3f3} .sep{border-left:2px solid #1a5252} .sec td{background:#e8eded;font-weight:700;text-transform:uppercase;font-size:8px}
+    .num{text-align:right} .last{color:#888} .rl{font-weight:700;background:#f0f3f3} .sep{border-left:2px solid #1a5252} .lsep{border-left:1px solid #cfd8d8} .sec td{background:#e8eded;font-weight:700;text-transform:uppercase;font-size:8px}
   </style></head><body>
     <h1>Muse Nails &amp; Spa — Payroll · ${_eTxn(period)}</h1>
-    <table><thead><tr><th class="rl"></th>${th1}</tr><tr><th class="rl"></th>${th2}</tr></thead><tbody>${rows}</tbody></table>
+    <table><thead><tr><th class="rl"></th>${th1}</tr><tr><th class="rl"></th>${th2}</tr><tr><th class="rl"></th>${th3}</tr></thead><tbody>${rows}</tbody></table>
   </body></html>`;
   const u = URL.createObjectURL(new Blob([html], { type: 'text/html' })); const w = window.open(u, '_blank'); if (w) setTimeout(() => w.print(), 600); URL.revokeObjectURL(u);
   showToast('Payroll PDF opened — Print → Save as PDF (landscape)');
 }
-// Staff PDF: one page per tech — billed total + billed by day ONLY (no commission,
-// check/cash, %, or last period). For printing & handing to each tech.
+// Staff PDF: a landscape GRID of compact per-tech cards (4 across) — billed total +
+// billed-by-day only (no commission/check/cash/%). Many techs per page so a printed
+// sheet can be cut into individual handouts.
 export function payrollExportStaffPDF() {
   const { cur, T, curDays } = payrollGrid();
   const techs = T.filter(x => x.c.billed || x.c.refund);
   if (!techs.length) { showToast('No billing this period.'); return; }
   const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const period = `${fmt(cur.from)} – ${fmt(cur.to)}`, logo = cfg().logo || LOGO_PATH;
-  const sections = techs.map((x, idx) => {
-    const trs = curDays.map(day => { const b = (x.c.daily[day] || { billed: 0 }).billed; const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' }); return `<tr><td>${dl}</td><td class="num">$${b.toFixed(2)}</td></tr>`; }).join('');
-    const refundBlock = x.c.refund ? `<div class="rf"><div class="rl2">Refunds this period: <b>-$${Math.abs(x.c.refund).toFixed(2)}</b> &nbsp;·&nbsp; Net billed: <b>$${(x.c.billed + x.c.refund).toFixed(2)}</b></div>${(x.c.refundNotes && x.c.refundNotes.length) ? `<div class="rn">Reason${x.c.refundNotes.length > 1 ? 's' : ''}: ${x.c.refundNotes.map(_eTxn).join('; ')}</div>` : ''}</div>` : '';
-    return `<section style="${idx > 0 ? 'page-break-before:always;' : ''}">
-      <div class="h">${logo ? `<img src="${logo}" class="logo" onerror="this.style.display='none'">` : ''}<div><h1>${_eTxn(x.tech.name)}</h1><p class="sub">Billed · pay period ${_eTxn(period)}</p></div></div>
-      <div class="tot"><div class="v">$${x.c.billed.toFixed(2)}</div><div class="l">Total billed this period</div></div>
-      <table><thead><tr><th>Day</th><th class="num">Billed</th></tr></thead><tbody>${trs}</tbody>
-      <tfoot><tr><td>Total</td><td class="num">$${x.c.billed.toFixed(2)}</td></tr></tfoot></table>
-      ${refundBlock}
-    </section>`;
+  const period = `${fmt(cur.from)} – ${fmt(cur.to)}`;
+  const cards = techs.map(x => {
+    const trs = curDays.map(day => { const b = (x.c.daily[day] || { billed: 0 }).billed; const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }); return `<tr><td>${dl}</td><td class="n">$${b.toFixed(0)}</td></tr>`; }).join('');
+    const net = x.c.billed + (x.c.refund || 0);
+    const rf = x.c.refund ? `<div class="crf">Refunds -$${Math.abs(x.c.refund).toFixed(2)} · Net $${net.toFixed(2)}</div>` : '';
+    return `<div class="card">
+      <div class="cname">${_eTxn(x.tech.name)}</div>
+      <div class="ctot">$${x.c.billed.toFixed(2)} <span class="ctl">billed</span></div>
+      <table class="cdays"><tbody>${trs}</tbody><tfoot><tr><td>Total</td><td class="n">$${x.c.billed.toFixed(2)}</td></tr></tfoot></table>
+      ${rf}
+    </div>`;
   }).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Staff Billing — ${_eTxn(period)}</title><style>
-    @page{size:8.5in 11in landscape;margin:.5in} body{font-family:Arial,sans-serif;margin:0;color:#222}
-    .h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{max-width:140px;max-height:54px;object-fit:contain;border-radius:8px}
-    h1{color:#1a5252;font-size:22px;margin:0}.sub{color:#666;margin:0;font-size:13px}
-    .tot{background:#1a5252;color:#fff;border-radius:10px;padding:12px 18px;display:inline-block;margin:14px 0 16px}.tot .v{font-size:26px;font-weight:800;line-height:1}.tot .l{font-size:11px;text-transform:uppercase;letter-spacing:.5px;opacity:.85}
-    table{border-collapse:collapse;width:60%;font-size:13px}th{background:#1a5252;color:#fff;padding:7px 10px;text-align:left}td{padding:7px 10px;border-bottom:1px solid #e0e0e0}.num{text-align:right}tr:nth-child(even) td{background:#fafafa}tfoot td{font-weight:800;border-top:2px solid #1a5252;background:#fff}
-    .rf{margin-top:14px;padding:10px 14px;background:#fdecec;border:1px solid #f3c0c0;border-radius:8px;color:#a01818;font-size:13px;width:60%;box-sizing:border-box}.rl2{font-weight:600}.rn{margin-top:4px;font-size:11px;color:#8a3a3a}
-  </style></head><body>${sections}</body></html>`;
+    @page{size:11in 8.5in;margin:.4in} body{font-family:Arial,sans-serif;margin:0;color:#222}
+    .hd{font-size:12px;color:#666;margin:0 0 8px}.hd b{color:#1a5252;font-size:15px}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    .card{border:1px dashed #9aa;border-radius:8px;padding:8px 10px;break-inside:avoid;page-break-inside:avoid}
+    .cname{font-size:14px;font-weight:800;color:#1a5252;line-height:1.1}
+    .ctot{font-size:17px;font-weight:800;color:#1a5252;margin:2px 0 6px}.ctl{font-size:9px;font-weight:600;color:#888;text-transform:uppercase}
+    .cdays{width:100%;border-collapse:collapse;font-size:9px}.cdays td{padding:1px 2px;border-bottom:1px solid #eee}.cdays td.n{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+    .cdays tfoot td{border-top:1.5px solid #1a5252;border-bottom:none;font-weight:800;padding-top:3px}
+    .crf{margin-top:5px;font-size:9px;color:#a01818;font-weight:600}
+  </style></head><body>
+    <div class="hd"><b>Muse Nails &amp; Spa</b> — Staff Billing · ${_eTxn(period)}</div>
+    <div class="grid">${cards}</div>
+  </body></html>`;
   const u = URL.createObjectURL(new Blob([html], { type: 'text/html' })); const w = window.open(u, '_blank'); if (w) setTimeout(() => w.print(), 600); URL.revokeObjectURL(u);
-  showToast('Staff PDF opened — one page per tech');
+  showToast('Staff PDF opened — grid of cards (cut to hand out)');
 }
 
 // ── Transactions list ─────────────────────────────
