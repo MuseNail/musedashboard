@@ -112,6 +112,8 @@ export function showCustomerNote(squareId, name, note) {
   if (nameEl) nameEl.textContent = name || '';
   editEl.value = note || '';
   panel.classList.remove('hidden');
+  const phone = squareId ? (customerDirectory.find(x => x.squareId === squareId)?.phone || '') : '';
+  window.renderCustomerHistory?.(phone, name, 'ci-history');
 }
 function _persistCustomerNote() {
   if (!_noteCustomerId) return;

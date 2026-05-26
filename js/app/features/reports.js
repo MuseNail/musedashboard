@@ -66,8 +66,8 @@ export function buildCombinedRecords() {
 // Matched by phone (last-10-digits), falling back to an exact name match when there's no
 // phone. Rendered into the Edit Customer modal. Called from showEditCustomer via window.
 const _digits10 = s => (s || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
-export function renderCustomerHistory(phone, name) {
-  const el = document.getElementById('edit-cust-history'); if (!el) return;
+export function renderCustomerHistory(phone, name, targetId = 'edit-cust-history') {
+  const el = document.getElementById(targetId); if (!el) return;
   const ph = _digits10(phone), nm = (name || '').trim().toLowerCase();
   const recs = buildCombinedRecords().filter(r => {
     if (r.status === 'deleted' || !(isPaidStatus(r.status) || r.status === 'refund')) return false;
