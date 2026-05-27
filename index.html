@@ -1155,6 +1155,17 @@ tailwind.config = {
           </div>
         </div>
 
+        <!-- Leaf: Data Recovery -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="settings-recovery-section" class="hidden px-5 py-4">
+            <p class="text-sm font-body text-on-surface-variant mb-3">Find check-ins that may not have saved (a customer that "disappeared") and put them back. Pending writes sync automatically; failed and probable-lost ones can be restored here.</p>
+            <button onclick="renderRecoveryReport()" class="mb-3 flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body font-semibold text-sm transition-colors">
+              <span class="material-symbols-outlined" style="font-size:16px">refresh</span> Refresh
+            </button>
+            <div id="recovery-content" class="max-h-[28rem] overflow-y-auto"></div>
+          </div>
+        </div>
+
         <!-- Leaf: App Info -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="appinfo-section" class="hidden px-5 py-4">

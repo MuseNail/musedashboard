@@ -319,6 +319,7 @@ const SETTINGS_NAV = [
   { id:'data', title:'Data & System', desc:'Backup, logs & info', items:[
     { label:'Backup & Restore', sub:'Export / import data', content:'backup-section' },
     { label:'Audit Log', sub:'Deletions & refunds (all devices)', content:'settings-audit-section', render:'loadAuditLog' },
+    { label:'Data Recovery', sub:'Find & restore lost check-ins', content:'settings-recovery-section', render:'renderRecoveryReport', adminOnly:true },
     { label:'App Info', sub:'Version & connection status', content:'appinfo-section', render:'renderAppInfo' },
   ]},
 ];

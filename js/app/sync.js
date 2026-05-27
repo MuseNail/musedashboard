@@ -49,6 +49,12 @@ function deadLetter(id, error) {
 }
 export function failedOps() { try { return JSON.parse(localStorage.getItem(FAILED_KEY) || '[]'); } catch { return []; } }
 export function outboxPending() { return _outbox.slice(); }
+export function clearFailedOp(mutationId) {
+  try {
+    const log = JSON.parse(localStorage.getItem(FAILED_KEY) || '[]').filter(x => x.mutationId !== mutationId);
+    localStorage.setItem(FAILED_KEY, JSON.stringify(log));
+  } catch {}
+}
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 export function start() {

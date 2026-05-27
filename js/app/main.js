@@ -28,9 +28,10 @@ import * as appearance from './features/appearance.js';
 import * as servicetime from './features/servicetime.js';
 import * as chat from './features/chat.js';
 import * as apptReminders from './features/appt-reminders.js';
+import * as recovery from './features/recovery.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
