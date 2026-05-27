@@ -27,13 +27,21 @@ Full idea (parked): collapse the two near-duplicate check-in paths (kiosk + Manu
 
 ---
 
-## Saved for later (2026-05-26)
+## Green-lit — customer directory & notes (build next chat; Fix 3 at migration) — 2026-05-26
 
-### Harden directory Square-sync against partial-pull data loss
-`loadSquareCustomers` (square-customers.js) paginates and, on a non-OK page response, does `break` but **still overwrites `customerDirectory` + the `muse_customers` cache with the partial result** — so a rate-limit/500 mid-pagination silently truncates the directory. Manual customer notes live separately in `config.customer_notes` (keyed by Square ID, synced via the DO) and are NOT deleted, but dropped customers take their notes' *visibility* with them; an ID change (Square duplicates/recreated records) also orphans a note under the old ID. **Fix:** only replace the directory on a fully successful pull (all pages OK, cursor exhausted); on any page error, keep the existing directory + cache and toast "sync incomplete." Optionally refuse to replace if the new set is suspiciously smaller than the cached one.
+The owner reviewed the customer-directory/notes design and **green-lit Fixes 1–3** (Fix 4 recorded as very low priority). No code written yet.
 
-### Orphaned-notes recovery check (optional)
-A small read-only diagnostic: count `config.customer_notes` entries whose key (Square ID) no longer matches any current directory customer — surfaces notes orphaned by an ID change so they can be re-mapped. Note text also survives in the nightly Sheets backup + DO config.
+### Fix 1 — atomic Square refresh (GREEN ✅, urgent, migration-independent)
+`loadSquareCustomers` (square-customers.js) paginates and, on a non-OK page, does `break` but **still overwrites `customerDirectory` + `squareCustomers` + the `muse_customers` cache with the partial/empty result** — so a rate-limit/500 (or a failed first page) silently truncates or **blanks** the directory; dropped customers take their notes' visibility with them. **Fix:** replace the dir/cache ONLY on a fully successful pull (all pages OK + cursor exhausted); on any page error keep the existing dir/cache + toast "sync incomplete"; optionally refuse to replace if the new set is suspiciously smaller. Also let a failed auto-load retry (today main.js `_custAutoLoaded` is set true even on failure). Day-to-day: invisible on success; on failure you keep your last-good list (no waiting, never blocked).
+
+### Fix 2 — stop clobbering Square's note field (GREEN ✅)
+`squareUpsertCustomer` writes `note:"Last check-in: <date> | Services:…"` into the Square payload every check-in, overwriting Square's note box so it can never hold a real note. **Fix:** remove the auto-stamp from the payload (owner doesn't want it; the app already tracks visit history). ⚠️ The Stage-2 recovery "possible lost check-ins" detector parses that stamp — dropping it removes that signal going forward (outbox + failed-ops detectors still work); acceptable per owner. **Deferred (later):** also mirror the app-side note into Square's note box.
+
+### Fix 3 — re-key notes by phone + orphan finder (GREEN ✅, do AT the migration)
+`config.customer_notes` is keyed by Square customer ID, so a Square ID change (merge/recreate) orphans the note. **Fix:** key notes by phone (digits) instead of/alongside the Square ID — touches `customerNote`, `showCustomerNote`, `saveEditCustomer`, `fillFromCustomer` + a one-time migration re-keying existing notes (ID→phone via directory lookup). Add a read-only orphan-note diagnostic (count notes whose key matches no current customer). Data-shape change → do during the data migration.
+
+### Fix 4 — leaner refresh (recorded, VERY LOW priority — likely skip)
+Full customer pull every app load (once/session, not a timer). Could go incremental. Once Fix 1 lands, this barely matters.
 
 ### Explicit calendar ↔ staff mapping (owner is considering)
 Today the day-off greying (v3.42) maps a Google calendar to a staff member by **exact name** (case-insensitive, trimmed) — so "John" (calendar) vs "Jon" (staff name, e.g. from Square) won't match and the column won't grey. More robust: a small picker in Settings to explicitly link each calendar to a staff member (and feed any other calendar↔staff features), removing the name-spelling dependency. Owner is thinking about whether it's worth it.
