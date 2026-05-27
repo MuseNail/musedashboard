@@ -112,6 +112,15 @@ export function formatElapsed(checkinTime) {
   return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
 }
 
+// Second token on a queue/turns card's time line: while waiting/in-service/complete
+// it's a LIVE elapsed timer (data-checkin-ts is ticked by updateElapsedTimes); once
+// PAID, the time stops mattering — show the checkout time (when it was marked paid)
+// instead of an ever-growing elapsed.
+export function statusTimeHtml(sinceMs, isPaid) {
+  if (isPaid) return `<span style="white-space:nowrap">✓ ${new Date(sinceMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>`;
+  return `<span data-checkin-ts="${sinceMs}">${formatElapsed(sinceMs)}</span>`;
+}
+
 // ── Phone Formatting ─────────────────────────────
 export function formatPhone(input) {
   let digits = input.value.replace(/\D/g, '');

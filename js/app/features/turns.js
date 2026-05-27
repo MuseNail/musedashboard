@@ -1,7 +1,7 @@
 // ── Turns: rotation grid, drag-drop, tech status, turn classification ───────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap } from '../utils.js';
+import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap, statusTimeHtml } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { canDo } from '../session.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus } from './status.js';
@@ -333,7 +333,7 @@ export function renderTurnsTechGrid() {
             <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="opacity:0.75">${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
             ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
-            <div class="text-[9px] opacity-60">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></div>
+            <div class="text-[9px] opacity-60">${timeStr} · ${statusTimeHtml(entryStatusSince(e), isPaidStatus(ss))}</div>
           </button></div>`;
       }
       return `<div class="flex-shrink-0 w-[150px] px-1 turns-drop-zone" data-tech-id="${staffId}" data-slot="${slotIdx}">
