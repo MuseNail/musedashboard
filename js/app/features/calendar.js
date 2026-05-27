@@ -223,12 +223,12 @@ export function renderTodaysAppointments() {
     const stat = r.noShow ? ['#dc2626','No Show'] : qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af','Unconfirmed']);
     const svcLines = [];
     r.persons.forEach((lines, pnm) => { const fn = (pnm.split(' ')[0]||pnm).trim(); lines.forEach(l => { const s = cfg().services.find(x=>x.id===l.svcId); const tech = l.calId ? (calDisplayName(l.calId)||'') : 'Unassigned'; svcLines.push(`${escHtml(s?.label||l.svcId||'service')} · ${escHtml(fn)}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
-    const svcHtml = svcLines.slice(0,8).map(t => `<div style="font-size:10px;color:var(--md-on-surface-variant);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`).join('');
-    return `<div onclick="calEventClick(event,'${_e(r.primaryCalId)}','${_e(r.primaryEv.id)}','${_e(r.name)}','',true)" class="rounded-lg border border-surface-container-high hover:bg-surface-container cursor-pointer px-2.5 py-2 transition-colors" style="background:var(--md-surface-container-lowest)">
+    const svcHtml = svcLines.slice(0,8).map(t => `<div style="font-size:10px;color:var(--on-surface-variant, #41484d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`).join('');
+    return `<div onclick="calEventClick(event,'${_e(r.primaryCalId)}','${_e(r.primaryEv.id)}','${_e(r.name)}','',true)" class="rounded-lg border border-surface-container-high hover:bg-surface-container cursor-pointer px-2.5 py-2 transition-colors" style="background:var(--surface-container-lowest, #f5f7f8)">
       <div class="flex items-center gap-1.5" style="line-height:1.2">
         <span style="font-size:11px;font-weight:700;color:#1a5252;flex-shrink:0">${timeStr}</span>
         ${r.confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;font-size:11px;flex-shrink:0">✓</span>':''}
-        <span style="font-size:12px;font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(r.name)}</span>
+        <span style="font-size:12px;font-weight:700;color:var(--on-surface, #0e1a1a);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(r.name)}</span>
         ${stat[1]?`<span style="font-size:9px;font-weight:700;color:${stat[0]};flex-shrink:0">${stat[1]}</span>`:''}
       </div>
       ${svcHtml}
@@ -373,12 +373,12 @@ export function calRenderGrid() {
   const now = new Date(), isToday = now.toDateString() === _calDate.toDateString(), nowMin = now.getHours()*60 + now.getMinutes();
   // #3: grey a tech's column on their day off — see module-level calColumnOff().
 
-  let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;position:sticky;top:0;z-index:4;border-bottom:2px solid var(--md-outline-variant);background:var(--md-surface-container-lowest)"><div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;position:sticky;left:0;z-index:5;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)"></div>`;
-  visible.forEach((cal,i) => { const isLast = i === visible.length-1; const off = calColumnOff(cal); const dot = off ? '#9ca3af' : cal.color; hdr += `<div style="width:${COL_W}px;flex-shrink:0;height:${HEADER_H}px;background:${off ? '#e5e7eb' : cal.color + '18'};border-bottom:3px solid ${dot};border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'};display:flex;align-items:center;justify-content:center;gap:5px;padding:0 8px"><div style="width:10px;height:10px;border-radius:50%;background:${dot};flex-shrink:0"></div><span style="font-size:13px;font-family:var(--font-headline);font-weight:700;color:${off ? '#9ca3af' : 'var(--md-on-surface)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${calDisplayName(cal)}${off ? ' · off' : ''}</span></div>`; });
+  let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;position:sticky;top:0;z-index:4;border-bottom:2px solid var(--outline-variant, #7a858a);background:var(--surface-container-lowest, #f5f7f8)"><div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;position:sticky;left:0;z-index:5;background:var(--surface-container-lowest, #f5f7f8);border-right:2px solid var(--outline-variant, #7a858a)"></div>`;
+  visible.forEach((cal,i) => { const isLast = i === visible.length-1; const off = calColumnOff(cal); const dot = off ? '#9ca3af' : cal.color; hdr += `<div style="width:${COL_W}px;flex-shrink:0;height:${HEADER_H}px;background:${off ? '#e5e7eb' : cal.color + '18'};border-bottom:3px solid ${dot};border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'};display:flex;align-items:center;justify-content:center;gap:5px;padding:0 8px"><div style="width:10px;height:10px;border-radius:50%;background:${dot};flex-shrink:0"></div><span style="font-size:13px;font-family:var(--font-headline);font-weight:700;color:${off ? '#9ca3af' : 'var(--on-surface, #0e1a1a)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${calDisplayName(cal)}${off ? ' · off' : ''}</span></div>`; });
   hdr += `</div>`;
 
-  let body = `<div id="cal-grid-body" style="display:flex;min-width:${TIME_W + COL_W*visible.length}px"><div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)">`;
-  for (let s = 0; s < SLOTS; s++) { const h = Math.floor((START_HOUR*60 + s*SLOT_MINS)/60), m = (START_HOUR*60 + s*SLOT_MINS)%60, isHour = m === 0; const label = isHour ? `${h>12?h-12:(h===0?12:h)} ${h>=12?'PM':'AM'}` : (SLOT_MINS<=15&&m===30?`${h>12?h-12:(h===0?12:h)}:30`:''); body += `<div style="height:${SLOT_H}px;display:flex;align-items:flex-start;padding:${isHour?'3px':'1px'} 8px 0">${label?`<span style="font-size:10px;font-family:var(--font-body);font-weight:${isHour?'600':'400'};color:var(--md-on-surface-variant);white-space:nowrap;margin-top:-6px">${label}</span>`:''}</div>`; }
+  let body = `<div id="cal-grid-body" style="display:flex;min-width:${TIME_W + COL_W*visible.length}px"><div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--surface-container-lowest, #f5f7f8);border-right:2px solid var(--outline-variant, #7a858a)">`;
+  for (let s = 0; s < SLOTS; s++) { const h = Math.floor((START_HOUR*60 + s*SLOT_MINS)/60), m = (START_HOUR*60 + s*SLOT_MINS)%60, isHour = m === 0; const label = isHour ? `${h>12?h-12:(h===0?12:h)} ${h>=12?'PM':'AM'}` : (SLOT_MINS<=15&&m===30?`${h>12?h-12:(h===0?12:h)}:30`:''); body += `<div style="height:${SLOT_H}px;display:flex;align-items:flex-start;padding:${isHour?'3px':'1px'} 8px 0">${label?`<span style="font-size:10px;font-family:var(--font-body);font-weight:${isHour?'600':'400'};color:var(--on-surface-variant, #41484d);white-space:nowrap;margin-top:-6px">${label}</span>`:''}</div>`; }
   body += '</div>';
 
   const SVC_GROUPS = [{ids:['fullset','fill','dip'],color:'#7b1fa2'},{ids:['pedicure','kidpedicure'],color:'#0277bd'},{ids:['manicure','polishchange','kidmani'],color:'#00695c'},{ids:['wax'],color:'#e65100'}];
@@ -537,7 +537,7 @@ export function toggleUnassignedOnly() {
 }
 function updateUnassignedToggleBtn() {
   const btn = document.getElementById('cal-unassigned-toggle'); if (!btn) return;
-  btn.style.background = _unassignedOnly ? 'var(--md-primary,#1a5252)' : '';
+  btn.style.background = _unassignedOnly ? 'var(--primary, #1a5252)' : '';
   btn.style.color = _unassignedOnly ? '#fff' : '';
   btn.classList.toggle('bg-surface-container', !_unassignedOnly);
   btn.title = _unassignedOnly ? 'Showing unassigned only — tap to show all calendars' : 'Show only unassigned appointments';
