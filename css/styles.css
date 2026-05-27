@@ -250,6 +250,10 @@
 
   /* iPad optimized touch targets */
   button { min-height: 44px; }
+  /* …but the Tasks panel rows must stay compact: the 44px tap-target above was
+     forcing every task row (its checkbox + delete buttons) to ~54px even for a
+     single line of text. Scope it back to content height inside the task list. */
+  #tasks-list button { min-height: 0; }
 
   /* Subtle noise texture on surface */
   body::before {
