@@ -676,8 +676,13 @@ export function drillDownStaff(techId) {
     const { avgMs, n } = avgServiceTime(techId, sid);
     return { label: svc(sid)?.label || sid, avgMs, n };
   });
+  const resetTs = (cfg().svc_time_reset || {})[techId] || 0;
+  const sinceNote = resetTs ? `<span class="text-[10px] font-body text-outline normal-case tracking-normal ml-1">since ${new Date(resetTs).toLocaleDateString()}</span>` : '';
   const avgBlock = avgBySvc.length ? `<div class="mb-4">
-    <div class="text-[11px] font-body text-on-surface-variant uppercase tracking-widest mb-1.5">Avg Service Time</div>
+    <div class="flex items-center justify-between mb-1.5">
+      <div class="text-[11px] font-body text-on-surface-variant uppercase tracking-widest">Avg Service Time${sinceNote}</div>
+      <button onclick="resetServiceTime('${techId}')" title="Reset this technician's service-time averages (starts fresh from today; does not touch any records)" class="flex items-center gap-1 text-[11px] font-body font-semibold text-error hover:opacity-80 transition-opacity"><span class="material-symbols-outlined" style="font-size:14px">restart_alt</span>Reset</button>
+    </div>
     <div class="flex flex-wrap gap-1.5">${avgBySvc.map(x => `<span class="text-xs font-body bg-surface-container-lowest border border-surface-container-high rounded-lg px-2.5 py-1"><span class="text-on-surface font-semibold">${x.label}</span> · <span class="${x.avgMs!=null?'text-primary font-bold':'text-outline'}">${x.avgMs!=null?'~'+fmtDur(x.avgMs):'—'}</span>${x.avgMs!=null?`<span class="text-outline"> (${x.n})</span>`:''}</span>`).join('')}</div></div>` : '';
   const rowsHtml = rows.map(row => { const badge = row.turnType==='full'?'1t':row.turnType==='half'?'½t':'B'; const color = row.turnType==='bonus'?'#f5c870':'#1a5252'; return `<div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="flex items-center gap-2"><span class="font-headline font-semibold text-on-surface text-sm">${row.customer}</span><span class="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style="background:${color}20;color:${color}">${badge}</span>${row.durMs?`<span class="text-[10px] font-body text-on-surface-variant">${fmtDur(row.durMs)}</span>`:''}</div><div class="text-xs font-body text-on-surface-variant">${row.service}${row.station?' · '+row.station:''}</div><div class="text-[11px] font-body text-outline">${row.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${row.time.toLocaleDateString()}</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold text-on-surface">$${row.cost.toFixed(2)}</div>${row.comm!=null?`<div class="text-xs font-body text-primary">comm $${row.comm.toFixed(2)}</div>`:''}</div></div>`; }).join('');
   const turnTxt = t => t==='full'?'1 turn':t==='half'?'½ turn':'Bonus';
@@ -688,6 +693,17 @@ export function drillDownStaff(techId) {
     summary: [['Total Billed','$'+totalBilled.toFixed(2)], ...(totalComm!=null?[[`Commission (${commPct}%)`,'$'+totalComm.toFixed(2)],['Salon Keeps','$'+(totalBilled-totalComm).toFixed(2)]]:[]), ['Turns', String(totalTurns)]],
   };
   showDrillPanel(_drill.title, summary + avgBlock + rowsHtml);
+}
+// Per-tech service-time reset: non-destructive — stamps a cutoff so avgServiceTime
+// ignores visits before now; the benchmark rebuilds from new visits. No records change.
+export function resetServiceTime(techId) {
+  const name = staffById(techId)?.name || 'this technician';
+  if (!confirm(`Reset ${name}'s service-time averages? They'll rebuild from new visits going forward. No transactions or records are deleted.`)) return;
+  const map = { ...(cfg().svc_time_reset || {}) };
+  map[techId] = Date.now();
+  dispatch('config.set', { key: 'svc_time_reset', value: map });
+  showToast('Service-time averages reset');
+  drillDownStaff(techId);   // refresh the open drill-down
 }
 export function drillDownService(sid) {
   const d = window._currentReportData; if (!d) return;

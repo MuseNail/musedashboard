@@ -32,10 +32,16 @@ function median(sorted) {
 // Returns { avgMs:null, n } when there isn't enough clean data to be meaningful.
 export function avgServiceTime(techId, serviceId) {
   if (!techId || !serviceId) return { avgMs: null, n: 0 };
+  // Per-tech reset: ignore visits before this tech's benchmark cutoff (non-destructive —
+  // records are untouched; the average just rebuilds from visits on/after the reset).
+  const resetTs = getState().config?.svc_time_reset?.[techId] || 0;
   const samples = [];
-  (getState().records || []).forEach(r => (r.assignments || []).forEach(a => {
-    if (a.techId === techId && a.serviceId === serviceId && a.serviceMs > 0) samples.push(a.serviceMs);
-  }));
+  (getState().records || []).forEach(r => {
+    if (resetTs && new Date(r.checkinTime).getTime() < resetTs) return;
+    (r.assignments || []).forEach(a => {
+      if (a.techId === techId && a.serviceId === serviceId && a.serviceMs > 0) samples.push(a.serviceMs);
+    });
+  });
   if (samples.length < MIN_SAMPLES) return { avgMs: null, n: samples.length };
   const med = median([...samples].sort((x, y) => x - y));
   const kept = samples.filter(s => s >= med * OUTLIER_LO && s <= med * OUTLIER_HI);
