@@ -98,7 +98,9 @@ export function onChatSync() {
   if (!_chatInit) { _chatInit = true; _lastNotifiedTs = newest ? newest.ts : Date.now(); }   // baseline on load — don't toast history
   else if (newest && newest.ts > _lastNotifiedTs) {
     _lastNotifiedTs = newest.ts;
-    if (newest.uid !== myId && !_chatOpen) showToast(`💬 ${newest.name}: ${newest.text.slice(0, 40)}`);
+    // Only surface chat toasts on the dashboard — never on the customer-facing check-in screen.
+    const onDashboard = document.getElementById('screen-desk')?.classList.contains('active');
+    if (newest.uid !== myId && !_chatOpen && onDashboard) showToast(`💬 ${newest.name}: ${newest.text.slice(0, 40)}`);
   }
   if (_chatOpen) { renderChat(); markSeen(); }
   updateChatBadge();

@@ -457,14 +457,17 @@ export function toggleManualSameContact(idx) {
   const contactFields = document.getElementById(`manual-contact-fields-${idx}`);
   const firstOnlyFields = document.getElementById(`manual-firstonly-fields-${idx}`);
   cb.checked = !cb.checked;
+  const fn = document.getElementById(`manual-first-${idx}`), fo = document.getElementById(`manual-firstonly-${idx}`);
   if (cb.checked) {
     if (box) { box.style.background = '#1a5252'; box.style.borderColor = '#1a5252'; }
     checkIcon?.classList.remove('hidden');
     contactFields?.classList.add('hidden'); firstOnlyFields?.classList.remove('hidden');
+    if (fn && fo && fn.value.trim()) fo.value = fn.value.trim();   // carry the typed first name forward
   } else {
     if (box) { box.style.background = 'transparent'; box.style.borderColor = '#7a858a'; }
     checkIcon?.classList.add('hidden');
     contactFields?.classList.remove('hidden'); firstOnlyFields?.classList.add('hidden');
+    if (fn && fo && fo.value.trim()) fn.value = fo.value.trim();   // carry it back
   }
 }
 
@@ -673,6 +676,19 @@ export function cycleServiceStatus(entryId, serviceId, newStatus) {
   renderGroupAssignContent();
 }
 
+// Move a service's status BACK to correct a mistake (e.g. accidentally In Service →
+// Waiting). Warns first. Not offered from Paid (use the whole-ticket Reopen instead).
+export function revertServiceStatus(entryId, serviceId, prevStatus) {
+  if (document.getElementById('group-assign-modal')?.style.display === 'flex') saveCurrentGroupTabInputs();
+  const label = { waiting:'Waiting', inservice:'In Service', complete:'Complete' }[prevStatus] || prevStatus;
+  showWarnModal('Move status back?', `This moves ${svc(serviceId)?.label || 'this service'} back to "${label}". Use this only to correct a mistake.`, () => {
+    const e = q().find(x => String(x.id) === String(entryId)); if (!e) return;
+    setAssignmentStatus(e, serviceId, prevStatus);
+    renderGroupAssignContent();
+    renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
+  }, 'Move back');
+}
+
 // Accept an in-modal tech suggestion: set that service row's tech dropdown.
 export function acceptAssignSuggestion(serviceId, techId) {
   const row = document.querySelector(`#group-assign-content [data-service-id="${serviceId}"]`);
@@ -805,11 +821,17 @@ export function renderGroupAssignContent() {
     const statusBtnStyle = { waiting:'background:#ffe0b2;color:#6d3200', inservice:'background:#c8e6c5;color:#1b5e20', complete:'background:#cfe3ef;color:#0a3a52', paid:'background:#dde2e5;color:#555', done:'background:#dde2e5;color:#555' }[st] || 'background:#ffe0b2;color:#6d3200';
     const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[st] || 'Waiting';
     const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', paid:'waiting', done:'waiting' }[st];
+    // Correct an accidental status change (e.g. marked In Service by mistake). Not offered
+    // from Paid — un-doing a finalized sale goes through the whole-ticket Reopen flow.
+    const prevStatus = { inservice:'waiting', complete:'inservice' }[st];
     return `
       <div class="bg-surface-container-low rounded-xl p-4 border border-surface-container-high mb-3" data-service-id="${sid}">
         <div class="flex items-center justify-between mb-3">
           <div class="font-headline font-semibold text-on-surface flex items-center gap-2 flex-wrap">${s.label}${sug ? `<button onclick="acceptAssignSuggestion('${sid}','${sug.techId}')" title="Assign ${sug.techName}" class="text-[10px] px-2 py-0.5 rounded-full font-body font-semibold hover:opacity-80" style="background:#1a525218;color:#1a5252">→ ${sug.techName} ✓</button>` : ''}</div>
-          <button onclick="cycleServiceStatus('${entry.id}','${sid}','${nextStatus}')" class="text-[11px] px-3 py-1 rounded-full font-body font-semibold transition-all hover:opacity-80" style="${statusBtnStyle}">${statusLabel} ›</button>
+          <div class="flex items-center gap-1.5 flex-shrink-0">
+            ${prevStatus ? `<button onclick="revertServiceStatus('${entry.id}','${sid}','${prevStatus}')" title="Move status back (fix a mistake)" class="w-7 h-7 rounded-full font-body font-semibold transition-all hover:opacity-80 flex items-center justify-center" style="background:#f3f4f6;color:#6b7280"><span class="material-symbols-outlined" style="font-size:16px">undo</span></button>` : ''}
+            <button onclick="cycleServiceStatus('${entry.id}','${sid}','${nextStatus}')" class="text-[11px] px-3 py-1 rounded-full font-body font-semibold transition-all hover:opacity-80" style="${statusBtnStyle}">${statusLabel} ›</button>
+          </div>
         </div>
         <div class="grid grid-cols-3 gap-3">
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Technician</label>

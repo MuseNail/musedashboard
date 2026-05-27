@@ -134,8 +134,11 @@ function renderFloorStaffRow() {
     // Live view: each tech is draggable onto a station to assign them to a service there that
     // has a seat but no tech yet (handled by the pointer-drag system below). Not in edit mode.
     const drag = floorEditMode ? '' : 'floor-tech';
+    const avatar = st.photo
+      ? `<img src="${st.photo}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ${c.bg};box-shadow:0 1px 3px rgba(0,0,0,.18)">`
+      : `<div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:${c.bg};color:${c.text};font-family:var(--font-headline);font-weight:700;font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,.18)">${(st.name||'?').charAt(0).toUpperCase()}</div>`;
     return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:64px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Drag onto a station to assign this tech"'}>
-      <div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:${c.bg};color:${c.text};font-family:var(--font-headline);font-weight:700;font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,.18)">${(st.name||'?').charAt(0).toUpperCase()}</div>
+      ${avatar}
       <span style="font-size:11px;font-weight:600;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px">${st.name.split(' ')[0]}</span>
       <span style="font-size:9px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
     </div>`;

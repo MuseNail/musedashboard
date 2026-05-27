@@ -1795,9 +1795,12 @@ tailwind.config = {
      TECH STATUS MENU (click on tech photo)
 ═══════════════════════════════════════════════ -->
 <div id="tech-status-menu" class="fixed z-[60] hidden bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container-high p-4 w-72" style="min-width:240px">
-  <div class="flex items-center justify-between mb-3">
-    <h3 class="font-headline font-bold text-on-surface" id="tech-status-menu-name">Tech Name</h3>
-    <button onclick="closeTechStatusMenu()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined" style="font-size:18px">close</span></button>
+  <div class="flex items-center justify-between mb-3 gap-2">
+    <div class="flex items-center gap-3 min-w-0">
+      <div id="tech-status-menu-photo" class="flex-shrink-0"></div>
+      <h3 class="font-headline font-bold text-on-surface truncate" id="tech-status-menu-name">Tech Name</h3>
+    </div>
+    <button onclick="closeTechStatusMenu()" class="text-on-surface-variant hover:text-on-surface flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">close</span></button>
   </div>
   <div class="flex gap-2 mb-3">
     <button onclick="setTechBreak(false)" id="tsm-available" class="flex-1 py-2 rounded-xl text-xs font-body font-semibold transition-all" style="background:#2a7a4f;color:#fff">Available</button>

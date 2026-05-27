@@ -489,6 +489,13 @@ export function showTechStatusMenu(event, staffId) {
   const st = staffById(staffId);
   if (!menu || !st) return;
   document.getElementById('tech-status-menu-name').textContent = st.name;
+  const photoEl = document.getElementById('tech-status-menu-photo');
+  if (photoEl) {
+    const sc = getTechStatusColor(staffId);
+    photoEl.innerHTML = st.photo
+      ? `<img src="${st.photo}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid ${sc.bg}">`
+      : `<div style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${sc.bg}20;border:3px solid ${sc.bg};color:${sc.bg};font-family:var(--font-headline);font-weight:700;font-size:26px">${(st.name||'?').charAt(0).toUpperCase()}</div>`;
+  }
   const isBreak = cfg().turns_break.includes(staffId);
   document.getElementById('tsm-available').style.opacity = isBreak ? '0.4' : '1';
   document.getElementById('tsm-break').style.opacity = isBreak ? '1' : '0.4';
