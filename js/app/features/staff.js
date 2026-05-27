@@ -201,16 +201,19 @@ export function renderSchedule() {
   const today = new Date(); today.setHours(0,0,0,0);
   const isToday = d => d.toDateString() === today.toDateString();
 
+  // Sticky header row (top) + sticky name column (left) need opaque backgrounds so
+  // rows/columns don't bleed through when scrolling. --surface-container-lowest fallback.
+  const stickyBg = 'background:var(--surface-container-lowest, #f5f7f8)';
   const headerCols = dates.map((d, i) => `
-    <div class="text-center px-2 py-2 min-w-[90px]">
+    <div class="text-center px-2 py-1.5 min-w-[88px]${isToday(d) ? ' bg-primary/5' : ''}">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant uppercase tracking-widest">${days[i]}</div>
       <div class="text-sm font-headline font-bold ${isToday(d) ? 'text-primary' : 'text-on-surface'}">${d.getDate()}</div>
     </div>`).join('');
 
   const staffRows = [...cfg().staff].sort(byName).map(st => {
     const photoHtml = st.photo
-      ? `<img src="${st.photo}" class="w-9 h-9 rounded-full object-cover border border-surface-container-high flex-shrink-0">`
-      : `<div class="w-9 h-9 rounded-full bg-surface-container-high flex items-center justify-center flex-shrink-0"><span class="text-xs font-headline font-bold text-on-surface">${st.name.charAt(0).toUpperCase()}</span></div>`;
+      ? `<img src="${st.photo}" class="w-8 h-8 rounded-full object-cover border border-surface-container-high flex-shrink-0">`
+      : `<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center flex-shrink-0"><span class="text-xs font-headline font-bold text-on-surface">${st.name.charAt(0).toUpperCase()}</span></div>`;
     const cells = dates.map(d => {
       const key = localDateStr(d);
       const status = getScheduleStatus(key, st.id);
@@ -219,25 +222,28 @@ export function renderSchedule() {
       const cellStyle = sColor ? `background:${sColor.bg};color:${sColor.text};` : '';
       const isPast = d < today && !isToday(d);
       return `
-        <div class="min-w-[90px] px-1 py-1">
+        <div class="min-w-[88px] px-1 py-0.5">
           <button onclick="openSchedulePicker('${key}','${st.id}')"
-            class="w-full h-10 rounded-lg text-xs font-body font-semibold transition-all hover:opacity-80 border relative ${sColor ? 'border-transparent' : 'border-dashed border-outline-variant/50 hover:bg-surface-container'} ${isPast ? 'opacity-50' : ''}"
+            class="w-full h-9 rounded-lg text-xs font-body font-semibold transition-all hover:opacity-80 border relative ${sColor ? 'border-transparent' : 'border-dashed border-outline-variant/50 hover:bg-surface-container'} ${isPast ? 'opacity-50' : ''}"
             style="${cellStyle}">${sColor ? sColor.label : ''}
-            ${isRepeat ? '<span style="position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.7)"></span>' : ''}
+            ${isRepeat ? '<span style="position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:#15514f;box-shadow:0 0 0 1px rgba(255,255,255,0.7)"></span>' : ''}
           </button>
         </div>`;
     }).join('');
     return `
       <div class="flex items-center border-b border-surface-container-high last:border-0">
-        <div class="flex items-center gap-2 w-[160px] pr-3 py-2 flex-shrink-0">${photoHtml}
-          <span class="text-sm font-body font-semibold text-on-surface truncate min-w-0">${st.name}</span></div>
+        <div class="flex items-center gap-2 w-[160px] pr-2 py-1 flex-shrink-0 sticky left-0 z-10" style="${stickyBg}">
+          <button onclick="openWeekFill('${st.id}')" title="Fill ${st.name.replace(/'/g,'')}'s week" class="flex-shrink-0 hover:opacity-70 transition-opacity">${photoHtml}</button>
+          <span class="text-sm font-body font-semibold text-on-surface truncate min-w-0 flex-grow">${st.name}</span>
+          <button onclick="openWeekFill('${st.id}')" title="Fill ${st.name.replace(/'/g,'')}'s week" class="flex-shrink-0 w-6 h-6 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">edit_calendar</span></button>
+        </div>
         ${cells}
       </div>`;
   }).join('');
 
   grid.innerHTML = `
-    <div class="flex items-center border-b-2 border-surface-container-high">
-      <div class="w-[160px] flex-shrink-0"></div>${headerCols}
+    <div class="flex items-center border-b-2 border-surface-container-high sticky top-0 z-20" style="${stickyBg}">
+      <div class="w-[160px] flex-shrink-0 sticky left-0 z-30" style="${stickyBg}"></div>${headerCols}
     </div>
     ${staffRows || '<div class="text-sm font-body text-on-surface-variant py-8 text-center">No staff added yet. Add staff in the Staff tab.</div>'}`;
 }
@@ -291,4 +297,91 @@ export function setScheduleStatus(status) {
   dispatch('config.set', { key: 'schedule', value: sched });
   closeSchedulePicker();
   renderSchedule();
+}
+
+// ── Fill week (per-staff quick entry) ─────────────
+// One modal to set a staff's whole week at once: tap days to cycle Working/Off/blank,
+// "All working"/"All off" shortcuts, and an optional "Repeat every week" that also
+// writes the recurring default. Cuts the per-day tap-through-a-popup for a full week.
+let _weekFillTarget = null, _weekFillDays = [], _weekFillRepeat = false;
+const _WF_LABEL = { working: 'Work', off: 'Off', sick: 'Sick', vacation: 'Vac' };
+export function openWeekFill(staffId) {
+  _weekFillTarget = staffId; _weekFillRepeat = false;
+  const st = cfg().staff.find(s => s.id === staffId);
+  _weekFillDays = [];
+  for (let i = 0; i < 7; i++) { const d = new Date(scheduleWeekStart); d.setDate(d.getDate() + i); _weekFillDays.push(getScheduleStatus(localDateStr(d), staffId)); }
+  const lbl = document.getElementById('week-fill-label'); if (lbl) lbl.textContent = `${st?.name || ''} — fill week`;
+  const box = document.getElementById('week-fill-repeat-box'), chk = document.getElementById('week-fill-repeat-check');
+  if (box) { box.style.background = 'transparent'; box.style.borderColor = ''; }
+  if (chk) chk.classList.add('hidden');
+  renderWeekFillDays();
+  const m = document.getElementById('week-fill-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
+}
+export function closeWeekFill() {
+  const m = document.getElementById('week-fill-modal'); m.classList.add('hidden'); m.style.display = '';
+  _weekFillTarget = null;
+}
+function renderWeekFillDays() {
+  const host = document.getElementById('week-fill-days'); if (!host) return;
+  const dn = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  host.innerHTML = _weekFillDays.map((status, i) => {
+    const sc = status ? SCHEDULE_COLORS[status] : null;
+    const d = new Date(scheduleWeekStart); d.setDate(d.getDate() + i);
+    return `<button onclick="weekFillCycle(${i})" class="rounded-lg py-1.5 text-center border ${sc ? 'border-transparent' : 'border-dashed border-outline-variant/50'}" style="${sc ? `background:${sc.bg};color:${sc.text}` : ''}">
+      <div class="text-[9px] font-body font-semibold uppercase tracking-wider opacity-80">${dn[i]}</div>
+      <div class="text-[10px] font-headline font-bold leading-tight">${d.getDate()}</div>
+      <div class="text-[9px] leading-tight">${sc ? _WF_LABEL[status] : '—'}</div>
+    </button>`;
+  }).join('');
+}
+export function weekFillCycle(i) {
+  const cur = _weekFillDays[i];
+  _weekFillDays[i] = cur === 'working' ? 'off' : cur === 'off' ? null : 'working';
+  renderWeekFillDays();
+}
+export function weekFillAll(status) { _weekFillDays = Array(7).fill(status); renderWeekFillDays(); }
+export function weekFillToggleRepeat() {
+  _weekFillRepeat = !_weekFillRepeat;
+  const box = document.getElementById('week-fill-repeat-box'), chk = document.getElementById('week-fill-repeat-check');
+  if (_weekFillRepeat) { box.style.background = '#1a5252'; box.style.borderColor = '#1a5252'; chk.classList.remove('hidden'); }
+  else { box.style.background = 'transparent'; box.style.borderColor = ''; chk.classList.add('hidden'); }
+}
+export function saveWeekFill() {
+  if (!_weekFillTarget) return;
+  const staffId = _weekFillTarget, repeat = _weekFillRepeat;
+  const sched = JSON.parse(JSON.stringify(cfg().schedule || {}));
+  if (repeat) { if (!sched._repeats) sched._repeats = {}; if (!sched._repeats[staffId]) sched._repeats[staffId] = {}; }
+  for (let i = 0; i < 7; i++) {
+    const status = _weekFillDays[i];
+    const d = new Date(scheduleWeekStart); d.setDate(d.getDate() + i);
+    const key = localDateStr(d), dow = d.getDay();
+    if (status) { if (!sched[key]) sched[key] = {}; sched[key][staffId] = status; }
+    else if (sched[key]?.[staffId]) { delete sched[key][staffId]; if (!Object.keys(sched[key]).length) delete sched[key]; }
+    if (repeat) { if (status) sched._repeats[staffId][dow] = status; else if (sched._repeats[staffId]?.[dow]) delete sched._repeats[staffId][dow]; }
+  }
+  dispatch('config.set', { key: 'schedule', value: sched });
+  closeWeekFill();
+  renderSchedule();
+  showToast(repeat ? 'Week saved + set to repeat weekly' : 'Week saved');
+}
+
+// ── Copy last week → this week ────────────────────
+export function copyLastWeekSchedule() {
+  const sched = JSON.parse(JSON.stringify(cfg().schedule || {}));
+  const prevStart = new Date(scheduleWeekStart); prevStart.setDate(prevStart.getDate() - 7);
+  let found = 0;
+  const plan = [];
+  for (let i = 0; i < 7; i++) {
+    const src = new Date(prevStart); src.setDate(src.getDate() + i);
+    const dst = new Date(scheduleWeekStart); dst.setDate(dst.getDate() + i);
+    const srcDay = sched[localDateStr(src)];
+    plan.push({ dstKey: localDateStr(dst), srcDay: srcDay && Object.keys(srcDay).length ? { ...srcDay } : null });
+    if (srcDay && Object.keys(srcDay).length) found++;
+  }
+  if (!found) { showToast('Last week has no schedule to copy.'); return; }
+  if (!confirm("Copy last week's schedule into this week? This overwrites this week's entries.")) return;
+  plan.forEach(({ dstKey, srcDay }) => { if (srcDay) sched[dstKey] = srcDay; else delete sched[dstKey]; });
+  dispatch('config.set', { key: 'schedule', value: sched });
+  renderSchedule();
+  showToast("Copied last week's schedule");
 }

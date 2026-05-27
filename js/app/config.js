@@ -1,5 +1,5 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
-export const APP_VERSION = 'v3.52';
+export const APP_VERSION = 'v3.53';
 export const APP_NAME    = 'musedashboard';
 export const STAFF_PIN   = '1234'; // fallback when no front desk users are configured
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
@@ -27,7 +27,9 @@ export const GROUP_COLORS = [
 ];
 
 export const SCHEDULE_COLORS = {
-  working:  { bg: '#1a5252', text: '#ffffff', label: 'Working'  },
+  // Working is the common case → a soft light fill so the exceptions (Off/Sick/
+  // Vacation) stand out when scanning the grid.
+  working:  { bg: '#dcebea', text: '#15514f', label: 'Working'  },
   off:      { bg: '#f5c870', text: '#3a2800', label: 'Off'      },
   sick:     { bg: '#fa746f', text: '#ffffff', label: 'Sick'     },
   vacation: { bg: '#adb3b5', text: '#000000', label: 'Vacation' },

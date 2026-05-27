@@ -1067,16 +1067,17 @@ tailwind.config = {
                     <span class="material-symbols-outlined" style="font-size:20px">chevron_right</span>
                   </button>
                   <button onclick="scheduleWeekOffset(0, true)" class="px-3 py-1.5 rounded-full text-xs font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
+                  <button onclick="copyLastWeekSchedule()" title="Copy the previous week's schedule into this week" class="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-body font-semibold border border-surface-container-high text-on-surface-variant hover:bg-surface-container transition-all"><span class="material-symbols-outlined" style="font-size:15px">content_copy</span>Copy last week</button>
                 </div>
                 <div class="flex gap-3 flex-wrap">
-                  <div class="flex items-center gap-1.5 text-xs font-body text-on-surface-variant"><div class="w-3 h-3 rounded-full bg-primary"></div>Working</div>
+                  <div class="flex items-center gap-1.5 text-xs font-body text-on-surface-variant"><div class="w-3 h-3 rounded-full" style="background:#dcebea;border:1px solid #b6d2d0"></div>Working</div>
                   <div class="flex items-center gap-1.5 text-xs font-body text-on-surface-variant"><div class="w-3 h-3 rounded-full" style="background:#f5c870"></div>Off</div>
                   <div class="flex items-center gap-1.5 text-xs font-body text-on-surface-variant"><div class="w-3 h-3 rounded-full" style="background:#fa746f"></div>Sick</div>
                   <div class="flex items-center gap-1.5 text-xs font-body text-on-surface-variant"><div class="w-3 h-3 rounded-full" style="background:#adb3b5"></div>Vacation</div>
-                  <div class="flex items-center gap-1.5 text-xs font-body text-on-surface-variant"><div class="w-3 h-3 rounded-md bg-primary relative flex-shrink-0"><span style="position:absolute;top:-1px;right:-1px;width:5px;height:5px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,0.1)"></span></div>Repeats weekly</div>
+                  <div class="flex items-center gap-1.5 text-xs font-body text-on-surface-variant"><div class="w-3 h-3 rounded-md relative flex-shrink-0" style="background:#dcebea;border:1px solid #b6d2d0"><span style="position:absolute;top:-2px;right:-2px;width:5px;height:5px;border-radius:50%;background:#15514f;box-shadow:0 0 0 1px #fff"></span></div>Repeats weekly</div>
                 </div>
               </div>
-              <div class="overflow-x-auto no-scroll">
+              <div class="overflow-auto no-scroll rounded-xl border border-surface-container-high" style="max-height:calc(100vh - 320px)">
                 <div id="schedule-grid" class="min-w-max"></div>
               </div>
             </div>
@@ -1903,6 +1904,36 @@ tailwind.config = {
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Fill-week modal (per-staff quick entry) -->
+<div id="week-fill-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40" onclick="if(event.target===this)closeWeekFill()">
+  <div class="bg-surface-container-lowest rounded-2xl p-5 w-80 shadow-2xl fade-up mx-4">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-base font-headline font-bold text-on-surface" id="week-fill-label">Fill week</h2>
+      <button onclick="closeWeekFill()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined" style="font-size:20px">close</span></button>
+    </div>
+    <div class="flex gap-2 mb-3">
+      <button onclick="weekFillAll('working')" class="flex-1 py-2 rounded-xl text-xs font-body font-semibold border border-surface-container-high hover:bg-surface-container transition-colors">All working</button>
+      <button onclick="weekFillAll('off')" class="flex-1 py-2 rounded-xl text-xs font-body font-semibold border border-surface-container-high hover:bg-surface-container transition-colors">All off</button>
+      <button onclick="weekFillAll(null)" class="flex-1 py-2 rounded-xl text-xs font-body font-semibold border border-surface-container-high hover:bg-surface-container transition-colors">Clear</button>
+    </div>
+    <div id="week-fill-days" class="grid grid-cols-7 gap-1 mb-2"></div>
+    <p class="text-[11px] font-body text-on-surface-variant mb-3">Tap a day to cycle Working → Off → blank. For Sick/Vacation, tap a day tile on the grid.</p>
+    <div id="week-fill-repeat" onclick="weekFillToggleRepeat()" class="flex items-center gap-3 p-2 rounded-xl cursor-pointer hover:bg-surface-container select-none mb-4">
+      <div id="week-fill-repeat-box" class="w-6 h-6 rounded border-2 border-outline-variant flex items-center justify-center flex-shrink-0 transition-all" style="background:transparent">
+        <span class="material-symbols-outlined hidden" id="week-fill-repeat-check" style="font-size:14px;color:#ffffff;font-variation-settings:'FILL' 1,'wght' 700">check</span>
+      </div>
+      <div>
+        <div class="font-body font-semibold text-on-surface text-sm">Repeat every week</div>
+        <div class="text-[11px] font-body text-on-surface-variant">Also set this as the recurring weekly default</div>
+      </div>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="closeWeekFill()" class="flex-1 py-2.5 rounded-xl border border-surface-container-high font-body font-semibold text-sm text-on-surface-variant hover:bg-surface-container transition-colors">Cancel</button>
+      <button onclick="saveWeekFill()" class="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm hover:bg-primary-dim transition-colors">Save</button>
     </div>
   </div>
 </div>
