@@ -207,7 +207,12 @@ function onStateChange(state, changed) {
     // T2.17: once Square is configured, auto-load the customer directory so
     // check-in autofill works on every device without a manual Settings→Square
     // sync. Once per session; non-blocking; no-ops offline (cache pre-populates).
-    if (!_custAutoLoaded && state.config.square_config?.locationId) { _custAutoLoaded = true; sqCust.loadSquareCustomers(); }
+    // Guard set true synchronously to block parallel re-entry while the pull is in
+    // flight; reset on failure so a later config change retries this session.
+    if (!_custAutoLoaded && state.config.square_config?.locationId) {
+      _custAutoLoaded = true;
+      sqCust.loadSquareCustomers().then(ok => { if (!ok) _custAutoLoaded = false; });
+    }
   }
   const desk = document.getElementById('screen-desk');
   if (!desk || !desk.classList.contains('active')) return;

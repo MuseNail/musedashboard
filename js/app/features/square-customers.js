@@ -9,8 +9,8 @@ import { SQUARE_PROXY } from '../config.js';
 
 const cfg = () => getState().config;
 // Manual customer notes are app-owned + synced (config.customer_notes, keyed by
-// Square id) — kept SEPARATE from Square's `note` field, which the app uses for
-// the auto "last check-in" stamp. This is what the check-in popup shows.
+// Square id) — kept SEPARATE from Square's own `note` field, which the app does
+// NOT write. This app-owned note is what the check-in popup shows.
 const customerNote = id => ((cfg().customer_notes || {})[id] || '').trim();
 
 export let squareCustomers   = [];
@@ -35,36 +35,56 @@ const _editCustSig = () => ['edit-cust-first','edit-cust-last','edit-cust-phone'
   } catch (e) {}
 })();
 
+// ATOMIC refresh: the directory + cache (and therefore the phone/id anchors that
+// notes hang off) are replaced ONLY on a fully successful pull — every page OK and
+// the cursor exhausted. Any page error, a network throw, or a fully-"successful"
+// empty pull while we already hold data keeps the last-good list untouched and
+// returns false, so a single failed page can never blank the directory.
 export async function loadSquareCustomers() {
+  let all = [], cursor = null;
   try {
-    let all = [], cursor = null;
     do {
       const url = `${SQUARE_PROXY}/v2/customers?limit=100&sort_field=CREATED_AT&sort_order=DESC${cursor ? '&cursor=' + cursor : ''}`;
       const res = await fetch(url);
-      if (!res.ok) break;
+      if (!res.ok) {
+        console.warn(`Square customers: page failed (HTTP ${res.status}) — keeping last-good directory`);
+        showToast('Customer sync incomplete — kept last list');
+        return false;
+      }
       const data = await res.json();
       all = all.concat(data.customers || []);
       cursor = data.cursor || null;
     } while (cursor);
-
-    squareCustomers = all
-      .filter(c => c.given_name && c.given_name.trim() !== '-' && c.given_name.trim() !== '')
-      .map(c => ({
-        id: c.id,
-        given_name:  c.given_name?.trim() || '',
-        family_name: (c.family_name || '').trim().replace(/^-$/, ''),
-        phone:       c.phone_number || '',
-        display:     [c.given_name?.trim(), (c.family_name||'').trim().replace(/^-$/,'')].filter(Boolean).join(' '),
-      }));
-    customerDirectory = all.map(c => ({
-      squareId: c.id, firstName: c.given_name?.trim() || '', lastName: (c.family_name || '').trim().replace(/^-$/, ''),
-      phone: c.phone_number || '', email: c.email_address || '', note: c.note || '',
-    }));
-    localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
-    console.log(`Loaded ${squareCustomers.length} customers from Square`);
   } catch (e) {
     console.warn('Could not load Square customers:', e);
+    showToast('Customer sync incomplete — kept last list');
+    return false;
   }
+
+  // Suspicious-shrink guard: a fully "successful" empty pull while the cache is
+  // populated is almost always a transient Square/proxy glitch, not a real wipe.
+  if (all.length === 0 && customerDirectory.length > 0) {
+    console.warn('Square returned 0 customers but cache has data — keeping last-good directory');
+    showToast('Customer sync incomplete — kept last list');
+    return false;
+  }
+
+  squareCustomers = all
+    .filter(c => c.given_name && c.given_name.trim() !== '-' && c.given_name.trim() !== '')
+    .map(c => ({
+      id: c.id,
+      given_name:  c.given_name?.trim() || '',
+      family_name: (c.family_name || '').trim().replace(/^-$/, ''),
+      phone:       c.phone_number || '',
+      display:     [c.given_name?.trim(), (c.family_name||'').trim().replace(/^-$/,'')].filter(Boolean).join(' '),
+    }));
+  customerDirectory = all.map(c => ({
+    squareId: c.id, firstName: c.given_name?.trim() || '', lastName: (c.family_name || '').trim().replace(/^-$/, ''),
+    phone: c.phone_number || '', email: c.email_address || '', note: c.note || '',
+  }));
+  localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
+  console.log(`Loaded ${squareCustomers.length} customers from Square`);
+  return true;
 }
 
 export function filterCustomers(query, field) {
@@ -214,8 +234,8 @@ export function closeCustomerDir() {
 export async function syncSquareCustomers() {
   if (!cfg().square_config) { showToast('Square not configured.'); return; }
   showToast('Syncing customers…');
-  await loadSquareCustomers();
-  showToast(`${customerDirectory.length} customers synced ✓`);
+  const ok = await loadSquareCustomers();   // false → loadSquareCustomers already toasted "sync incomplete"
+  if (ok) showToast(`${customerDirectory.length} customers synced ✓`);
   renderCustomerDir(document.getElementById('customer-dir-search')?.value || '');
 }
 export function filterCustomerDir(query) { renderCustomerDir(query); }
@@ -317,7 +337,7 @@ export async function saveEditCustomer() {
     try {
       await fetch(`${SQUARE_PROXY}/v2/customers/${squareId}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ given_name: first, family_name: last, phone_number: phone, email_address: email }),   // note stays app-owned (Square note = auto last-checkin stamp)
+        body: JSON.stringify({ given_name: first, family_name: last, phone_number: phone, email_address: email }),   // note stays app-owned — the app never writes Square's own note field
       });
       showToast('Customer updated in Square ✓');
     } catch (e) { showToast('Saved locally (Square update failed)'); }
@@ -383,8 +403,9 @@ export async function squareUpsertCustomer(entry) {
         if (sr.ok) existingId = (await sr.json())?.customers?.[0]?.id || null;
       } catch (e) {}
     }
-    const svcLabels = (entry.services || []).map(sid => cfg().services.find(s => s.id === sid)?.label || sid).join(', ');
-    const payload = { given_name: firstName, family_name: lastName, note: `Last check-in: ${new Date().toLocaleDateString()}${svcLabels ? ' | Services: ' + svcLabels : ''}` };
+    // The app no longer writes Square's own `note` field — it kept overwriting the
+    // salon's manual note box every check-in. Visit history is tracked app-side.
+    const payload = { given_name: firstName, family_name: lastName };
     if (rawPhone) payload.phone_number = entry.phone;
 
     if (existingId) {
