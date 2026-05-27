@@ -159,7 +159,74 @@ function acceptBtnHtml(entryId, serviceId, techName) {
 }
 
 // ── Render ────────────────────────────────────────
-export function renderTurns() { renderTurnsTechGrid(); renderTurnsQueue(); }
+export function renderTurns() { renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
+
+// ── Upcoming appointments (Google Calendar) on the Turns sheet ────────────────
+// Strip = the "Next up" row (toggled by the Appointments button, device-local).
+// In-grid note = an always-on amber card in a tech's next-turn slot when their next
+// upcoming appt is ≤30 min away. Data comes from window.apptsForTurns() (calendar.js),
+// which already filters to upcoming-only (not passed / no-show / checked-in).
+let _turnsApptTimer = null;
+let _turnsApptShow = localStorage.getItem('muse_turns_appts_show') === '1';
+const _tEsc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function turnsUpcomingAppts() { try { return window.apptsForTurns?.() || []; } catch { return []; } }
+
+export function toggleTurnsApptStrip() {
+  _turnsApptShow = !_turnsApptShow;
+  localStorage.setItem('muse_turns_appts_show', _turnsApptShow ? '1' : '0');
+  applyTurnsApptStripVisibility();
+}
+function applyTurnsApptStripVisibility() {
+  const strip = document.getElementById('turns-appts-strip'), btn = document.getElementById('turns-appts-toggle');
+  const hide = !_turnsApptShow || !!turnsViewingHistory;
+  if (strip) strip.classList.toggle('hidden', hide);
+  if (btn) {
+    btn.classList.toggle('bg-primary', _turnsApptShow);
+    btn.classList.toggle('text-on-primary', _turnsApptShow);
+    btn.classList.toggle('border-primary', _turnsApptShow);
+    btn.classList.toggle('text-on-surface-variant', !_turnsApptShow);
+    btn.classList.toggle('border-surface-container-high', !_turnsApptShow);
+  }
+  if (!hide) renderTurnsApptStrip();
+}
+export function renderTurnsApptStrip() {
+  const host = document.getElementById('turns-appts-cards'); if (!host) return;
+  const sub = document.getElementById('turns-appts-sub');
+  // Collapse the per-tech entries back to one card per booking for the strip.
+  const seen = new Map();
+  turnsUpcomingAppts().forEach(a => { const k = a.startMs + '|' + a.name; if (!seen.has(k)) seen.set(k, { startMs: a.startMs, name: a.name, svc: a.svc, techs: new Set() }); if (a.techName) seen.get(k).techs.add(a.techName); });
+  const cards = [...seen.values()];
+  if (sub) sub.textContent = cards.length ? `· ${cards.length} upcoming` : '· nothing upcoming';
+  if (!cards.length) { host.innerHTML = `<div class="text-xs text-on-surface-variant py-3 px-1 opacity-70">No upcoming appointments today.</div>`; return; }
+  const now = Date.now();
+  host.innerHTML = cards.map(a => {
+    const time = new Date(a.startMs).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+    const mins = Math.round((a.startMs - now)/60000), soon = mins <= 30;
+    const techLbl = [...a.techs].join(', ') || 'Unassigned';
+    return `<div class="flex-shrink-0 rounded-xl px-3 py-2" style="width:172px;background:#fff;border:1px solid ${soon?'#f5a623':'#e6def5'}">
+      <div class="flex items-center gap-1.5 mb-1"><span class="material-symbols-outlined" style="font-size:14px;color:${soon?'#c77700':'#7b1fa2'}">${soon?'notifications_active':'schedule'}</span><span class="font-bold text-[13px]" style="color:${soon?'#8a5a00':'#5a3a8a'}">${time}</span>${soon?`<span class="text-[9px] font-bold" style="color:#c77700">in ${mins}m</span>`:''}<span class="ml-auto text-[10px] text-on-surface-variant truncate" style="max-width:64px" title="${_tEsc(techLbl)}">${_tEsc(techLbl)}</span></div>
+      <div class="font-semibold text-[12px] truncate text-on-surface">${_tEsc(a.name)}</div>
+      <div class="text-[10px] text-on-surface-variant truncate">${_tEsc(a.svc)}</div>
+    </div>`;
+  }).join('');
+}
+function turnsDueNoteCard(a, mins) {
+  const time = new Date(a.startMs).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+  return `<div class="flex-shrink-0 w-[150px] px-1"><div class="w-full rounded-xl px-2 py-1.5 text-left text-xs font-body" style="background:#fff7e6;border:2px solid #f5a623;min-height:66px">
+    <div class="flex items-center justify-between gap-0.5" style="margin-bottom:2px"><div class="flex items-center gap-1 min-w-0"><span class="material-symbols-outlined" style="font-size:13px;color:#c77700">notifications_active</span><span class="text-[9px] font-bold uppercase tracking-wide" style="color:#c77700">Next appt</span></div><span class="font-bold text-[11px]" style="color:#8a5a00">in ${mins}m</span></div>
+    <div class="font-semibold text-[11px] truncate" style="color:#5a3a00">${_tEsc(time)} · ${_tEsc(a.name)}</div>
+    <div class="text-[10px] leading-tight truncate" style="color:#7a5a10">${_tEsc(a.svc)}</div>
+  </div></div>`;
+}
+function startTurnsApptRefresh() {
+  if (_turnsApptTimer) return;
+  _turnsApptTimer = setInterval(() => {
+    const p = document.getElementById('panel-turns');
+    if (!p || !p.classList.contains('active')) return;
+    if (_turnsApptShow && !turnsViewingHistory) renderTurnsApptStrip();
+    renderTurnsTechGrid();   // refresh the 30-min in-grid notes + countdowns
+  }, 60000);
+}
 
 export function renderTurnsTechGrid() {
   const grid = document.getElementById('turns-tech-grid');
@@ -187,6 +254,10 @@ export function renderTurnsTechGrid() {
     const el = document.getElementById('turns-active-count'); if (el) el.textContent = '0';
     return;
   }
+  // Next upcoming appt per tech (for the 30-min in-grid note). Empty if Google
+  // Calendar isn't connected/synced on this device.
+  const _nowMs = Date.now(), _upcoming = turnsUpcomingAppts();
+  const nextApptFor = id => _upcoming.filter(a => a.techStaffId === id).sort((a,b) => a.startMs - b.startMs)[0] || null;
 
   const rows = order.map(staffId => {
     const st = staffById(staffId);
@@ -219,7 +290,7 @@ export function renderTurnsTechGrid() {
     ].sort((x, y) => x._t - y._t);
     const totalSlots = Math.max(MIN_SLOTS, filled.length + 1);
     let turnCounter = 0;
-    const slotHtml = Array.from({ length: totalSlots }, (_, slotIdx) => {
+    const slotArr = Array.from({ length: totalSlots }, (_, slotIdx) => {
       const item = filled[slotIdx];
       if (item && item.kind === 'skip') {
         turnCounter += 1;
@@ -260,7 +331,12 @@ export function renderTurnsTechGrid() {
       }
       return `<div class="flex-shrink-0 w-[150px] px-1 turns-drop-zone" data-tech-id="${staffId}" data-slot="${slotIdx}">
         <div class="turns-empty-slot w-full rounded-xl border-2 border-dashed border-outline-variant/40 flex items-center justify-center text-outline-variant cursor-pointer hover:border-primary hover:bg-primary/5 hover:text-primary transition-all" style="min-height:66px" onclick="openTurnsAssign('${staffId}',${slotIdx})"><span class="material-symbols-outlined" style="font-size:20px">add</span></div></div>`;
-    }).join('');
+    });
+    // 30-min note: drop an amber "next appt" card into this tech's next-turn position
+    // (right after their filled slots) when their soonest upcoming appt is ≤30 min out.
+    const nextAppt = nextApptFor(staffId);
+    if (nextAppt) { const mins = Math.round((nextAppt.startMs - _nowMs) / 60000); if (mins >= 0 && mins <= 30) slotArr.splice(filled.length, 0, turnsDueNoteCard(nextAppt, mins)); }
+    const slotHtml = slotArr.join('');
 
     return `<div class="flex items-center border-b border-surface-container-high py-2 gap-2">${techCol}
       <div class="turns-slot-row flex gap-1.5 overflow-x-auto pb-0.5" style="min-width:0;flex:1;scrollbar-width:thin">${slotHtml}</div></div>`;

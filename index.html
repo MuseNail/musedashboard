@@ -605,11 +605,25 @@ tailwind.config = {
             <button onclick="showTurnsTechSelector()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary hover:text-on-primary transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">people</span> Technicians
             </button>
+            <!-- Show/hide the upcoming-appointments strip -->
+            <button onclick="toggleTurnsApptStrip()" id="turns-appts-toggle" title="Show/hide upcoming appointments" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-container-high text-on-surface-variant font-body font-semibold text-sm hover:bg-surface-container transition-colors">
+              <span class="material-symbols-outlined" style="font-size:16px">event_upcoming</span> Appointments
+            </button>
             <!-- Sync Appts hidden — Square Appointments integration pending -->
             <button onclick="showManualAdd()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-all">
               <span class="material-symbols-outlined" style="font-size:16px">person_add</span> New Entry
             </button>
           </div>
+        </div>
+
+        <!-- Upcoming appointments strip (Google Calendar). Toggle in header; hidden by default. -->
+        <div id="turns-appts-strip" class="rounded-xl border border-surface-container-high overflow-hidden mb-3 hidden" style="background:#faf8ff">
+          <div class="flex items-center gap-2 px-3 py-2 border-b border-surface-container-high" style="background:#f3effa">
+            <span class="material-symbols-outlined" style="font-size:18px;color:#7b1fa2">event_upcoming</span>
+            <span class="font-headline font-bold text-sm text-on-surface">Next up</span>
+            <span class="text-[11px] text-on-surface-variant" id="turns-appts-sub">· today's upcoming appointments</span>
+          </div>
+          <div id="turns-appts-cards" class="flex gap-2 p-2 overflow-x-auto" style="scrollbar-width:thin"></div>
         </div>
 
         <!-- Two column layout — left scrolls, right sticks -->

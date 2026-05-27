@@ -95,6 +95,42 @@ export function apptsForReminders() {
   return out;
 }
 
+// For the Turns sheet: today's UPCOMING timed appointments, one entry per
+// (booking × assigned tech). Excludes anything not still upcoming — passed start
+// time, no-show, or already in the queue (checked in / in service / complete / paid).
+// Cancelled events are deleted upstream so they never appear. Lines with no tech (or
+// on the unassigned calendar) come back as techStaffId:'' / techName:'Unassigned'.
+export function apptsForTurns() {
+  const now = Date.now();
+  const uCal = unassignedCalId();
+  const staff = cfg().staff || [];
+  const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description || '') || ext.museLines !== undefined || cfg().services.some(s => (ev.summary || '').toLowerCase().includes((s.label || '').toLowerCase())); };
+  const staffForCal = calId => { if (!calId || calId === uCal) return null; const nm = _calCalendars.find(c => c.id === calId)?.name; if (!nm) return null; return staff.find(s => (s.name || '').trim().toLowerCase() === nm.trim().toLowerCase()) || null; };
+  const groups = new Map();
+  Object.entries(_calEvents).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
+  const out = [];
+  groups.forEach(items => {
+    const primary = items.find(it => it.ev.extendedProperties?.private?.musePrimary === '1') || items[0];
+    const pev = primary.ev, ppriv = pev.extendedProperties?.private || {};
+    const startMs = new Date(pev.start.dateTime).getTime();
+    if (startMs < now) return;                                                   // passed
+    if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;   // no-show
+    let qm = null;                                                               // already in the queue → checked in
+    items.forEach(({ ev }) => { if (qm) return; const ph = _apptPhone(ev).replace(/\D/g, ''); qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || (ph ? queue().find(x => (x.phone || '').replace(/\D/g, '') === ph) : null); });
+    if (qm) return;
+    const name = ppriv.musePrimaryName || ppriv.museName || (pev.summary || '').split(' — ')[0] || 'Guest';
+    const lines = [];
+    items.forEach(({ ev, calId }) => _parseApptLines(ev, calId).forEach(l => lines.push({ ...l, calId: l.calId || calId })));
+    const svc = [...new Set(lines.map(l => cfg().services.find(s => s.id === l.svcId)?.label).filter(Boolean))].join(', ') || (pev.summary || '').split(' — ')[0] || 'Appointment';
+    const techs = new Map();   // staffId -> name, distinct assigned techs
+    lines.forEach(l => { const st = staffForCal(l.calId); if (st) techs.set(st.id, st.name); });
+    if (techs.size === 0) out.push({ startMs, name, svc, techStaffId: '', techName: 'Unassigned' });
+    else techs.forEach((tn, id) => out.push({ startMs, name, svc, techStaffId: id, techName: tn }));
+  });
+  out.sort((a, b) => a.startMs - b.startMs);
+  return out;
+}
+
 // ── Unassigned-appointments calendar ──────────────
 // A designated calendar holds every appointment/service with no assigned tech.
 // Default = the Google primary calendar (info@musenailandspa.com); overridable
@@ -104,6 +140,15 @@ export function unassignedCalId() {
   if (set && _calCalendars.some(c => c.id === set)) return set;
   if (_calPrimaryId && _calCalendars.some(c => c.id === _calPrimaryId)) return _calPrimaryId;
   return _calCalendars[0]?.id || '';
+}
+// The designated unassigned calendar (default = the info@ primary) is shown as
+// "Unassigned" everywhere, never under its raw Google name — appointments parked
+// there have no tech yet. Display-only; storage/sync are unchanged.
+function calDisplayName(idOrCal) {
+  const id = (idOrCal && typeof idOrCal === 'object') ? idOrCal.id : idOrCal;
+  if (id && id === unassignedCalId()) return 'Unassigned';
+  if (idOrCal && typeof idOrCal === 'object') return idOrCal.name;
+  return _calCalendars.find(c => c.id === id)?.name || '';
 }
 export function setUnassignedCal(calId) {
   dispatch('config.set', { key: 'unassigned_cal_id', value: calId || '' });
@@ -177,7 +222,7 @@ export function renderTodaysAppointments() {
     const qs = r.qm?.status;
     const stat = r.noShow ? ['#dc2626','No Show'] : qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af','Unconfirmed']);
     const svcLines = [];
-    r.persons.forEach((lines, pnm) => { const fn = (pnm.split(' ')[0]||pnm).trim(); lines.forEach(l => { const s = cfg().services.find(x=>x.id===l.svcId); const tech = l.calId ? (_calCalendars.find(c=>c.id===l.calId)?.name||'') : 'Unassigned'; svcLines.push(`${escHtml(s?.label||l.svcId||'service')} · ${escHtml(fn)}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
+    r.persons.forEach((lines, pnm) => { const fn = (pnm.split(' ')[0]||pnm).trim(); lines.forEach(l => { const s = cfg().services.find(x=>x.id===l.svcId); const tech = l.calId ? (calDisplayName(l.calId)||'') : 'Unassigned'; svcLines.push(`${escHtml(s?.label||l.svcId||'service')} · ${escHtml(fn)}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
     const svcHtml = svcLines.slice(0,8).map(t => `<div style="font-size:10px;color:var(--md-on-surface-variant);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`).join('');
     return `<div onclick="calEventClick(event,'${_e(r.primaryCalId)}','${_e(r.primaryEv.id)}','${_e(r.name)}','',true)" class="rounded-lg border border-surface-container-high hover:bg-surface-container cursor-pointer px-2.5 py-2 transition-colors" style="background:var(--md-surface-container-lowest)">
       <div class="flex items-center gap-1.5" style="line-height:1.2">
@@ -329,7 +374,7 @@ export function calRenderGrid() {
   // #3: grey a tech's column on their day off — see module-level calColumnOff().
 
   let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;position:sticky;top:0;z-index:4;border-bottom:2px solid var(--md-outline-variant);background:var(--md-surface-container-lowest)"><div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;position:sticky;left:0;z-index:5;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)"></div>`;
-  visible.forEach((cal,i) => { const isLast = i === visible.length-1; const off = calColumnOff(cal); const dot = off ? '#9ca3af' : cal.color; hdr += `<div style="width:${COL_W}px;flex-shrink:0;height:${HEADER_H}px;background:${off ? '#e5e7eb' : cal.color + '18'};border-bottom:3px solid ${dot};border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'};display:flex;align-items:center;justify-content:center;gap:5px;padding:0 8px"><div style="width:10px;height:10px;border-radius:50%;background:${dot};flex-shrink:0"></div><span style="font-size:13px;font-family:var(--font-headline);font-weight:700;color:${off ? '#9ca3af' : 'var(--md-on-surface)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${cal.name}${off ? ' · off' : ''}</span></div>`; });
+  visible.forEach((cal,i) => { const isLast = i === visible.length-1; const off = calColumnOff(cal); const dot = off ? '#9ca3af' : cal.color; hdr += `<div style="width:${COL_W}px;flex-shrink:0;height:${HEADER_H}px;background:${off ? '#e5e7eb' : cal.color + '18'};border-bottom:3px solid ${dot};border-right:${isLast?'none':'2px solid rgba(0,0,0,0.12)'};display:flex;align-items:center;justify-content:center;gap:5px;padding:0 8px"><div style="width:10px;height:10px;border-radius:50%;background:${dot};flex-shrink:0"></div><span style="font-size:13px;font-family:var(--font-headline);font-weight:700;color:${off ? '#9ca3af' : 'var(--md-on-surface)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${calDisplayName(cal)}${off ? ' · off' : ''}</span></div>`; });
   hdr += `</div>`;
 
   let body = `<div id="cal-grid-body" style="display:flex;min-width:${TIME_W + COL_W*visible.length}px"><div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--md-surface-container-lowest);border-right:2px solid var(--md-outline-variant)">`;
@@ -341,7 +386,7 @@ export function calRenderGrid() {
   // on another calendar" link indicator (e.g. assigned tech + unassigned).
   const groupCals = {};
   Object.entries(_calEvents).forEach(([cid, list]) => (list||[]).forEach(e => { const g = e.extendedProperties?.private?.museGroupId; if (g) (groupCals[g] = groupCals[g] || new Set()).add(cid); }));
-  const calName = cid => _calCalendars.find(c => c.id === cid)?.name || (cid === uCal ? 'Unassigned' : cid);
+  const calName = cid => calDisplayName(cid) || (cid === uCal ? 'Unassigned' : cid);
   visible.forEach((cal,colIdx) => {
     const events = _calEvents[cal.id] || [], isLast = colIdx === visible.length-1, isFirst = colIdx === 0;
     const off = calColumnOff(cal);   // #3: grey the column for a tech who's off this day
@@ -523,7 +568,7 @@ export function renderCalSelectorList() {
   if (!list || _calCalendars.length === 0) return;
   if (!_calSelectorDraft) _calSelectorDraft = { order: _calCalendars.map(c => c.id), hidden: calEffectiveHiddenSet() };
   const draftCals = _calSelectorDraft.order.map(id => _calCalendars.find(c => c.id === id)).filter(Boolean);
-  list.innerHTML = draftCals.map((c,i) => { const isHidden = _calSelectorDraft.hidden.has(c.id); const offTag = (calAutoHideOn() && calColumnOff(c)) ? ` <span style="font-size:10px;color:#9ca3af;font-weight:600">· off today</span>` : ''; return `<div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none" data-cal-idx="${i}"><span onpointerdown="calReorderStart(event,${i})" class="material-symbols-outlined" style="font-size:14px;flex-shrink:0;color:#6b7280;cursor:grab;touch-action:none">drag_indicator</span><div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div><span class="flex-grow text-sm font-body text-on-surface" onclick="calDraftToggle('${c.id}')">${c.name}${offTag}</span><div onclick="calDraftToggle('${c.id}')" style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;border:2.5px solid ${isHidden?'#9ca3af':'#1a5252'};background:${isHidden?'#fff':'#1a5252'}">${!isHidden?'<span class="material-symbols-outlined" style="font-size:13px;color:#fff;font-variation-settings:\'FILL\' 1;line-height:1">check</span>':''}</div></div>`; }).join('');
+  list.innerHTML = draftCals.map((c,i) => { const isHidden = _calSelectorDraft.hidden.has(c.id); const offTag = (calAutoHideOn() && calColumnOff(c)) ? ` <span style="font-size:10px;color:#9ca3af;font-weight:600">· off today</span>` : ''; return `<div class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer select-none" data-cal-idx="${i}"><span onpointerdown="calReorderStart(event,${i})" class="material-symbols-outlined" style="font-size:14px;flex-shrink:0;color:#6b7280;cursor:grab;touch-action:none">drag_indicator</span><div style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></div><span class="flex-grow text-sm font-body text-on-surface" onclick="calDraftToggle('${c.id}')">${calDisplayName(c)}${offTag}</span><div onclick="calDraftToggle('${c.id}')" style="width:20px;height:20px;border-radius:5px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;border:2.5px solid ${isHidden?'#9ca3af':'#1a5252'};background:${isHidden?'#fff':'#1a5252'}">${!isHidden?'<span class="material-symbols-outlined" style="font-size:13px;color:#fff;font-variation-settings:\'FILL\' 1;line-height:1">check</span>':''}</div></div>`; }).join('');
   const visCount = draftCals.filter(c => !_calSelectorDraft.hidden.has(c.id)).length;
   const lbl = document.getElementById('cal-selector-label'); if (lbl) lbl.textContent = visCount === _calCalendars.length ? 'Calendars' : `${visCount}/${_calCalendars.length}`;
 }
@@ -832,7 +877,14 @@ export function apptExtraAcFill(idx, name, phone) {
   if (f) f.value = parts[0] || ''; if (l) l.value = parts.slice(1).join(' ') || ''; if (p) { p.value = phone; formatPhone(p); }
   [`appt-extra-ac-phone-${idx}`,`appt-extra-ac-first-${idx}`].forEach(id => { const el = document.getElementById(id); if (el) { el.classList.add('hidden'); el.innerHTML = ''; } });
 }
-function _buildTechOptions(sel) { return '<option value="">— Tech —</option>' + [..._calCalendars].sort(byName).map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${c.name}</option>`).join(''); }
+function _buildTechOptions(sel) {
+  const uCal = unassignedCalId();
+  // "" and the unassigned calendar both route to the unassigned bucket → one "Unassigned"
+  // option (the default), and the unassigned calendar itself is omitted from the tech list.
+  const isU = !sel || sel === uCal;
+  return `<option value="" ${isU ? 'selected' : ''}>Unassigned</option>`
+    + [..._calCalendars].filter(c => c.id !== uCal).sort(byName).map(c => `<option value="${c.id}" ${c.id === sel ? 'selected' : ''}>${c.name}</option>`).join('');
+}
 function _buildSvcOptions(sel) { return '<option value="">— Service —</option>' + cfg().services.filter(s => !cfg().hidden_dash_services.includes(s.id)).map(s => `<option value="${s.id}" ${s.id === sel ? 'selected' : ''}>${s.label}</option>`).join(''); }
 
 // ── Appointment metadata (structured in extendedProperties; description = notes) ─
@@ -901,7 +953,11 @@ export function showNewApptModal(calId, hour, minute, techName) {
   document.getElementById('appt-date').value = localDateStr(new Date(_calDate));
   setApptTimeFields(hour ?? 9, minute ?? 0);
   const matchedCal = _calCalendars.find(c => c.name === techName);
-  addApptServiceLine('', matchedCal?.id || calId || '');
+  // Default the line to a real tech only when started from that tech's column; the
+  // unassigned/info@ column (and the generic New button) default to Unassigned ("").
+  let startCal = matchedCal?.id || calId || '';
+  if (startCal === unassignedCalId()) startCal = '';
+  addApptServiceLine('', startCal);
   const m = document.getElementById('appt-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   setTimeout(() => document.getElementById('appt-phone').focus(), 100);
 }
