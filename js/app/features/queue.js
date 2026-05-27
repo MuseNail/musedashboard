@@ -4,8 +4,8 @@
 // commits with a dispatch on save (matching the original "edit then save" UX).
 
 import { getState } from '../store.js';
-import { dispatch } from '../sync.js';
-import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap } from '../utils.js';
+import { dispatch, DEVICE_ID } from '../sync.js';
+import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus } from './status.js';
@@ -511,7 +511,7 @@ export function submitManualAdd() {
     else { phone = document.getElementById(`manual-phone-${i}`)?.value.trim() || ''; first = document.getElementById(`manual-first-${i}`)?.value.trim() || ''; last = document.getElementById(`manual-last-${i}`)?.value.trim() || ''; }
     if (!first) { showToast('Please enter a first name for each guest.'); return; }
     const services = Array.from(card.querySelectorAll('.service-btn.selected')).map(b => b.dataset.service);
-    const entry = { id: Date.now() * 1000 + Math.floor(Math.random() * 1000), name: first + (last ? ' ' + last : ''), phone, services, status: 'waiting', checkinTime: new Date().toISOString(), isNew: false, skipSquare: sameContact, isAppointment };
+    const entry = { id: newEntryId(), name: first + (last ? ' ' + last : ''), phone, services, status: 'waiting', checkinTime: new Date().toISOString(), isNew: false, skipSquare: sameContact, isAppointment };
     // Appointment + chosen tech → pre-assign that tech to each service (remembered on
     // the check-in). Blank tech leaves it unassigned (no assignments created here).
     if (apptTechId && services.length) entry.assignments = services.map(sid => ({ serviceId: sid, techId: apptTechId, station: '', status: 'waiting', cost: 0, assignedAt: Date.now() }));
@@ -530,11 +530,12 @@ export function submitManualAdd() {
 }
 
 // ── Edit Check-In ─────────────────────────────────
-let _editCheckinId = null;
+let _editCheckinId = null, _editCheckinOpenedAt = 0;
 export function showEditCheckin(entryId) {
   const entry = q().find(e => String(e.id) === String(entryId));
   if (!entry) return;
   _editCheckinId = entryId;
+  _editCheckinOpenedAt = entry.updatedAt || 0;
   const parts = (entry.name || '').trim().split(' ');
   const firstName = parts[0] || '', lastName = parts.slice(1).join(' ') || '';
   document.getElementById('edit-checkin-content').innerHTML = `
@@ -560,9 +561,12 @@ export function closeEditCheckin() {
   const m = document.getElementById('edit-checkin-modal'); m.classList.add('hidden'); m.style.display = '';
   _editCheckinId = null;
 }
-export function saveEditCheckin() {
+export function saveEditCheckin(force) {
   const entry = q().find(e => String(e.id) === String(_editCheckinId));
   if (!entry) return;
+  if (force !== true && (entry.updatedAt || 0) > (_editCheckinOpenedAt || 0) && entry.updatedBy && entry.updatedBy !== DEVICE_ID) {
+    showWarnModal('Changed on another device', `${(entry.name || 'This check-in').split(' ')[0]} was updated on another device since you opened it. Saving now overwrites that change. Save anyway?`, () => saveEditCheckin(true), 'Save anyway'); return;
+  }
   const first = document.getElementById('eci-first')?.value.trim();
   const last  = document.getElementById('eci-last')?.value.trim();
   const phone = document.getElementById('eci-phone')?.value.trim();
@@ -584,7 +588,21 @@ export function saveEditCheckin() {
 // ── Group Assign / Price modal ────────────────────
 let groupAssignEntries = [];
 let activeGroupTab = 0;
+let _assignOpenedAt = {};           // entryId → updatedAt at open (stale-write guard)
 const _custEditedIds = new Set();   // entries whose name/phone were edited here → sync to Square on Save
+
+// Stale-write guard: which entries in `capturedMap` (id → updatedAt captured when a modal
+// opened) has ANOTHER device changed since? Saving those now would silently overwrite the
+// other device's change — so we warn first. This device's own intra-modal writes are
+// excluded (updatedBy === DEVICE_ID), so it never false-warns on your own edits.
+function _staleNames(capturedMap) {
+  const out = [];
+  Object.keys(capturedMap).forEach(id => {
+    const e = q().find(x => String(x.id) === id);
+    if (e && (e.updatedAt || 0) > (capturedMap[id] || 0) && e.updatedBy && e.updatedBy !== DEVICE_ID) out.push((e.name || 'a guest').split(' ')[0]);
+  });
+  return out;
+}
 export function activeGroupEntryId() { return groupAssignEntries[activeGroupTab]; }
 
 export function showGroupAssignModal(entryId) {
@@ -593,6 +611,8 @@ export function showGroupAssignModal(entryId) {
   groupAssignEntries = entry.groupId ? q().filter(e => e.groupId === entry.groupId).map(e => String(e.id)) : [String(entry.id)];
   const clicked = groupAssignEntries.indexOf(String(entryId));
   activeGroupTab = clicked >= 0 ? clicked : 0;
+  _assignOpenedAt = {};
+  groupAssignEntries.forEach(id => { const e = q().find(x => String(x.id) === id); _assignOpenedAt[id] = e?.updatedAt || 0; });
   renderGroupAssignTabs();
   renderGroupAssignContent();
   const m = document.getElementById('group-assign-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
@@ -954,7 +974,11 @@ export function splitFromAssignModal() {
 function collectGroupAssignments() { saveCurrentGroupTabInputs(); return groupAssignEntries.map(id => q().find(e => String(e.id) === id)).filter(Boolean); }
 function validateGroupAssignments(entries) { return entries.filter(e => !e.assignments || e.assignments.length === 0 || e.assignments.some(a => !a.techId || a.cost <= 0)); }
 
-export function saveGroupAssignments() {
+export function saveGroupAssignments(force) {
+  if (force !== true) {
+    const stale = _staleNames(_assignOpenedAt);
+    if (stale.length) { showWarnModal('Changed on another device', `${stale.join(', ')} was updated on another device since you opened this ticket. Saving now overwrites that change. Save anyway?`, () => saveGroupAssignments(true), 'Save anyway'); return; }
+  }
   const entries = collectGroupAssignments();
   entries.forEach(e => { applyEntryStatus(e); upsert(e); });
   // Sync customers whose name/phone were edited here back to Square. squareUpsertCustomer
@@ -1076,10 +1100,12 @@ export function executeMerge(entryId) {
 }
 
 // ── Warn modal + reopen ───────────────────────────
-export function showWarnModal(title, body, onConfirm) {
+export function showWarnModal(title, body, onConfirm, confirmLabel) {
   document.getElementById('warn-title').textContent = title;
   document.getElementById('warn-body').textContent = body;
-  document.getElementById('warn-confirm-btn').onclick = () => { closeWarnModal(); onConfirm(); };
+  const btn = document.getElementById('warn-confirm-btn');
+  btn.textContent = confirmLabel || 'Confirm';
+  btn.onclick = () => { closeWarnModal(); onConfirm(); };
   const m = document.getElementById('warn-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
 export function closeWarnModal() {

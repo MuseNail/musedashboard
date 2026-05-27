@@ -1,7 +1,7 @@
 // ── Check-in kiosk: guest card builder + submission ─────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast } from '../utils.js';
+import { showToast, newEntryId } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
 import { squareUpsertCustomer } from './square-customers.js';
@@ -187,7 +187,7 @@ export function submitCheckin() {
     if (!first) { showToast('Please enter a first name for each guest.'); return; }
     const services = Array.from(card.querySelectorAll('.service-btn.selected')).map(b => b.dataset.service);
     newEntries.push({
-      id: Date.now() * 1000 + Math.floor(Math.random() * 1000),
+      id: newEntryId(),
       name: first + (last ? ' ' + last : ''), phone, services,
       status: 'waiting', checkinTime: new Date().toISOString(), isNew: true,
       skipSquare: sameContact, isAppointment: ui.currentCheckinType === 'appointment',

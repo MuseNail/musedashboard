@@ -1,7 +1,7 @@
 // ── Google Calendar + Tasks ─────────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, formatPhone, byName } from '../utils.js';
+import { showToast, localDateStr, formatPhone, byName, newEntryId } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer } from './square-customers.js';
 import { squarePushBooking } from './square-pos.js';
 
@@ -725,7 +725,7 @@ function _buildCheckinEntry(ev, fallbackCalId, queueGroupId) {
   // Preserve EVERY booked service + its assigned tech (was: only svcs[0] with the event-calendar tech).
   let assignments = lines.filter(l => l.svcId).map(l => { const t = techForCal(l.calId || fallbackCalId); return { serviceId: l.svcId, techId: t?.id || '', station: '', status: 'waiting', cost: 0, assignedAt: now }; });
   if (assignments.length === 0 && svcs.length) { const t = techForCal(fallbackCalId); assignments = svcs.map(sid => ({ serviceId: sid, techId: t?.id || '', station: '', status: 'waiting', cost: 0, assignedAt: now })); }
-  return { id: Date.now()*1000 + Math.floor(Math.random()*1000), name: title, phone, services: svcs.length > 0 ? svcs : (cfg().services.length > 0 ? [cfg().services[0].id] : []), status: 'waiting', checkinTime: new Date().toISOString(), isAppointment: true, isNew: true, skipSquare: false, groupId: queueGroupId, calEventId: ev.id, assignments };
+  return { id: newEntryId(), name: title, phone, services: svcs.length > 0 ? svcs : (cfg().services.length > 0 ? [cfg().services[0].id] : []), status: 'waiting', checkinTime: new Date().toISOString(), isAppointment: true, isNew: true, skipSquare: false, groupId: queueGroupId, calEventId: ev.id, assignments };
 }
 // Gather the whole party for an appointment: every event sharing the booking id
 // (across calendars), deduped to one per person; a solo event is just itself.

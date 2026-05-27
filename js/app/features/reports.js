@@ -3,7 +3,7 @@
 //   record.save (complete/historical/refund), record.delete (soft delete).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, todayStr, partyLetterMap, ticketTotal } from '../utils.js';
+import { showToast, localDateStr, todayStr, partyLetterMap, ticketTotal, newEntryId } from '../utils.js';
 import { canDo, getActiveUser } from '../session.js';
 import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
@@ -1480,7 +1480,7 @@ export function confirmRefund() {
   const refundTechBilled = (o.assignments || [])
     .filter(a => a.techId)
     .map(a => ({ techId: a.techId, billed: -((a.cost || 0) * ratio) }));
-  const record = { id: String(Date.now()*1000 + Math.floor(Math.random()*1000)), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -amount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: _refundTxnId, refundTechBilled, loggedBy: getActiveUser()?.name || '' };
+  const record = { id: newEntryId(), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -amount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: _refundTxnId, refundTechBilled, loggedBy: getActiveUser()?.name || '' };
   dispatch('record.save', { record });
   closeRefundModal();
   renderTransactions();
@@ -1634,7 +1634,7 @@ export function saveHistoricalTransaction() {
     dispatch('record.save', { record: { ...existing, ...base, id: String(_histEditId), completedAt: existing?.completedAt || checkinTime.toISOString() } });
     showToast('Transaction updated ✓');
   } else {
-    dispatch('record.save', { record: { ...base, id: String(Date.now()*1000 + Math.floor(Math.random()*1000)), completedAt: checkinTime.toISOString() } });
+    dispatch('record.save', { record: { ...base, id: newEntryId(), completedAt: checkinTime.toISOString() } });
     showToast('Historical transaction saved ✓');
   }
   if (phone) squareUpsertCustomer({ name, phone, services: _histSelectedSvcs });   // sync customer to directory + Square

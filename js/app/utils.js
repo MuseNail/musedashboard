@@ -112,6 +112,19 @@ export function formatElapsed(checkinTime) {
   return Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm';
 }
 
+// Collision-proof id for queue entries + records. The old `Date.now()*1000 + random(0-999)`
+// could collide: a whole party is created in the same millisecond, so two guests had only a
+// 1-in-1000 random to tell them apart (and two devices at the same instant could clash too) —
+// a collision silently overwrote one entry (store is keyed by id). Device id + time + a
+// per-session counter makes every id unique within a party AND across devices.
+let _idCounter = 0;
+export function newEntryId() {
+  let dev = '';
+  try { dev = localStorage.getItem('muse_device_id') || ''; } catch {}
+  if (!dev) dev = 'd' + Math.random().toString(36).slice(2, 6);
+  return `${dev}-${Date.now()}-${(++_idCounter).toString(36)}`;
+}
+
 // Second token on a queue/turns card's time line: while waiting/in-service/complete
 // it's a LIVE elapsed timer (data-checkin-ts is ticked by updateElapsedTimes); once
 // PAID, the time stops mattering — show the checkout time (when it was marked paid)

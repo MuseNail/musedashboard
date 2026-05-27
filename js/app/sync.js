@@ -16,6 +16,7 @@ const ORIGIN = (typeof location !== 'undefined' && /^(localhost|127\.0\.0\.1)$/.
 const WS_URL     = ORIGIN.replace(/^http/, 'ws') + '/ws';
 const STATE      = ORIGIN + '/state';
 const OUTBOX_KEY = 'muse_outbox';
+const FAILED_KEY = 'muse_failed_ops';   // dead-letter: writes the server rejected (never silently dropped)
 
 export const DEVICE_ID = (() => {
   let id = localStorage.getItem('muse_device_id');
@@ -33,6 +34,21 @@ function saveOutbox() {
 }
 function enqueue(msg)        { _outbox.push(msg); saveOutbox(); }
 function ackOutbox(id)       { const i = _outbox.findIndex(m => m.mutationId === id); if (i >= 0) { _outbox.splice(i, 1); saveOutbox(); } }
+// A server-REJECTED write must never just vanish (the old code acked it like a success,
+// silently dropping the data) and must not retry forever. Move it to a dead-letter log so
+// it's recoverable + surfaced in the glitch report, then clear it from the outbox.
+function deadLetter(id, error) {
+  const i = _outbox.findIndex(m => m.mutationId === id);
+  const msg = i >= 0 ? _outbox[i] : null;
+  try {
+    const log = JSON.parse(localStorage.getItem(FAILED_KEY) || '[]');
+    log.push({ at: new Date().toISOString(), error: String(error || 'rejected'), op: msg?.op, payload: msg?.payload, mutationId: id, device: DEVICE_ID });
+    localStorage.setItem(FAILED_KEY, JSON.stringify(log.slice(-200)));   // keep the last 200
+  } catch {}
+  if (i >= 0) { _outbox.splice(i, 1); saveOutbox(); }
+}
+export function failedOps() { try { return JSON.parse(localStorage.getItem(FAILED_KEY) || '[]'); } catch { return []; } }
+export function outboxPending() { return _outbox.slice(); }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 export function start() {
@@ -72,9 +88,9 @@ function send(obj) {
 
 function handle(msg) {
   if (msg.type === 'pong') return;
-  if (msg.type === 'snapshot') { hydrate({ state: msg.state, seq: msg.seq }); replayOutbox(); return; }
+  if (msg.type === 'snapshot') { hydrate({ state: msg.state, seq: msg.seq }); reapplyOutbox(); replayOutbox(); return; }
   if (msg.type === 'applied') {
-    if (msg.error) console.warn('[sync] mutation rejected:', msg.error, msg.mutationId);
+    if (msg.error) { console.warn('[sync] mutation rejected:', msg.error, msg.mutationId); deadLetter(msg.mutationId, msg.error); return; }
     ackOutbox(msg.mutationId);
     return;
   }
@@ -86,12 +102,20 @@ function handle(msg) {
 }
 
 function replayOutbox() { for (const msg of _outbox) send(msg); } // DO dedupes by mutationId
+// A fresh snapshot REPLACES local state — which would drop any optimistic write that the
+// server hasn't confirmed yet (e.g. a just-now check-in), making it look like the customer
+// vanished. Re-apply the still-pending outbox ops on top of the snapshot so in-flight writes
+// survive; the server will dedupe them by mutationId when replayOutbox re-sends.
+function reapplyOutbox() { for (const msg of _outbox) { try { applyChange(msg.op, msg.payload); } catch {} } }
 
 // ── Public: dispatch a mutation (optimistic local apply + queued send) ──────────
 // op: 'config.set' | 'turns.order' | 'queue.upsert' | 'queue.remove'
 //   | 'record.save' | 'record.delete' | 'giftcard.save' | 'giftcard.delete'
 export function dispatch(op, payload) {
   const mutationId = DEVICE_ID + '-' + Date.now() + '-' + (++_mutCounter);
+  // Stamp queue writes so the stale-write guard can tell when a ticket was changed on
+  // another device since a modal opened (warn instead of silently clobbering).
+  if (op === 'queue.upsert' && payload && payload.entry) { payload.entry.updatedAt = Date.now(); payload.entry.updatedBy = DEVICE_ID; }
   applyChange(op, payload);                                  // optimistic
   const msg = { type: 'mutate', op, payload, mutationId, device: DEVICE_ID };
   enqueue(msg);
@@ -104,6 +128,7 @@ async function httpSnapshot() {
     const res = await fetch(STATE + '/snapshot', { cache: 'no-store' });
     if (!res.ok) return;
     hydrate(await res.json());
+    reapplyOutbox();
     replayOutbox();
   } catch (e) { /* offline — the localStorage cache already rendered */ }
 }
