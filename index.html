@@ -1487,6 +1487,22 @@ tailwind.config = {
         <p class="text-[11px] font-body text-on-surface-variant mt-1">The portion paid by check. Cash = commission − check.</p>
       </div>
       <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cash deduction</label>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-[10px] font-body text-on-surface-variant block mb-1">Deduction %</label>
+            <input id="staff-cashdeduct-pct" type="number" min="0" max="100" step="1" placeholder="0"
+              class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+          </div>
+          <div>
+            <label class="text-[10px] font-body text-on-surface-variant block mb-1">Exempt threshold ($)</label>
+            <input id="staff-cashdeduct-threshold" type="number" min="0" step="1" placeholder="0"
+              class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+          </div>
+        </div>
+        <p class="text-[11px] font-body text-on-surface-variant mt-1">Deducts this % from the cash portion above the exempt threshold each pay period. Blank/0 = no deduction.</p>
+      </div>
+      <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Staff App PIN</label>
         <input id="staff-pin-input" type="text" inputmode="numeric" autocomplete="off" placeholder="e.g. 1234"
           class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">

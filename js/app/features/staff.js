@@ -81,6 +81,7 @@ export function showAddStaff() {
   const pinEl = document.getElementById('staff-pin-input'); if (pinEl) pinEl.value = '';
   document.getElementById('staff-edit-id').value = '';
   _setStaffCheckFields('variable', '');
+  _setStaffDeductFields('', '');
   renderStaffServicesPicker([]);
   const m = document.getElementById('staff-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   setTimeout(() => document.getElementById('staff-name-input').focus(), 100);
@@ -95,6 +96,7 @@ export function showEditStaff(id) {
   const pinEl = document.getElementById('staff-pin-input'); if (pinEl) pinEl.value = st.pin || '';
   document.getElementById('staff-edit-id').value = id;
   _setStaffCheckFields(st.checkType || 'variable', st.checkValue != null ? st.checkValue : '');
+  _setStaffDeductFields(st.cashDeductPct != null ? st.cashDeductPct : '', st.cashDeductThreshold != null ? st.cashDeductThreshold : '');
   renderStaffServicesPicker(st.services || []);
   const m = document.getElementById('staff-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
@@ -115,6 +117,11 @@ export function staffCheckTypeChanged() {
   if (wrap) wrap.classList.toggle('hidden', type === 'variable');
   if (lbl) lbl.textContent = type === 'percent' ? '% of commission' : 'Check amount ($)';
 }
+// Cash-deduction config — % taken from the cash portion above an exempt threshold.
+function _setStaffDeductFields(pct, threshold) {
+  const p = document.getElementById('staff-cashdeduct-pct'); if (p) p.value = pct;
+  const t = document.getElementById('staff-cashdeduct-threshold'); if (t) t.value = threshold;
+}
 
 export function saveStaff() {
   const name = document.getElementById('staff-name-input').value.trim();
@@ -123,18 +130,24 @@ export function saveStaff() {
   const pin = (document.getElementById('staff-pin-input')?.value || '').trim();
   const checkType = document.getElementById('staff-check-type')?.value || 'variable';
   const checkValue = checkType === 'variable' ? null : (parseFloat(document.getElementById('staff-check-value')?.value) || 0);
+  const dedPctRaw = (document.getElementById('staff-cashdeduct-pct')?.value || '').trim();
+  const dedThrRaw = (document.getElementById('staff-cashdeduct-threshold')?.value || '').trim();
+  const cashDeductPct = dedPctRaw !== '' ? parseFloat(dedPctRaw) : null;
+  const cashDeductThreshold = dedThrRaw !== '' ? parseFloat(dedThrRaw) : null;
   const editId = document.getElementById('staff-edit-id').value;
   const selectedSvcs = [...document.querySelectorAll('#staff-services-picker .service-btn.selected')].map(b => b.dataset.service);
   if (!name) { showToast('Please enter a name.'); return; }
   if (commission !== null && (isNaN(commission) || commission < 0 || commission > 100)) { showToast('Commission must be 0–100.'); return; }
+  if (cashDeductPct !== null && (isNaN(cashDeductPct) || cashDeductPct < 0 || cashDeductPct > 100)) { showToast('Cash deduction % must be 0–100.'); return; }
+  if (cashDeductThreshold !== null && (isNaN(cashDeductThreshold) || cashDeductThreshold < 0)) { showToast('Exempt threshold must be 0 or more.'); return; }
   // Soft-warn (don't block) if this Staff-App PIN collides with another tech's — same PIN logs in as whoever matches first.
   if (pin && cfg().staff.some(s => s.id !== editId && s.pin === pin)) showToast('Heads up: another tech already uses that PIN.');
   const staff = [...cfg().staff];
   if (editId) {
     const i = staff.findIndex(s => s.id === editId);
-    if (i >= 0) staff[i] = { ...staff[i], name, commission, services: selectedSvcs, pin, checkType, checkValue };
+    if (i >= 0) staff[i] = { ...staff[i], name, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold };
   } else {
-    staff.push({ id: `staff-${Date.now()}`, name, commission, services: selectedSvcs, pin, checkType, checkValue });
+    staff.push({ id: `staff-${Date.now()}`, name, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold });
   }
   setStaff(staff);
   closeStaffModal();

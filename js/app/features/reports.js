@@ -863,6 +863,13 @@ function techCheckAmount(tech, commission, perKey) {
   const m = (cfg().payroll_checks || {})[tech.id + ':' + perKey];
   return m != null ? m : 0;
 }
+// Cash deduction: a % taken from the cash portion (commission − check) ABOVE an
+// exempt threshold. e.g. cash $1150, threshold $700, 20% → deduct 20% of $450 = $90.
+function techCashDeduction(tech, cashGross) {
+  const pct = tech?.cashDeductPct || 0, thr = tech?.cashDeductThreshold || 0;
+  if (pct <= 0) return 0;
+  return Math.max(0, cashGross - thr) * pct / 100;
+}
 export function payrollSetCheck(techId, val) {
   const perKey = localDateStr(payrollPeriodAt(_payrollOffset).from);
   const checks = { ...(cfg().payroll_checks || {}) };
@@ -906,7 +913,10 @@ export function renderPayrollPage() {
     const p = prevData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] };
     const cComm = _netComm(c), pComm = _netComm(p);
     const cChk = techCheckAmount(tech, cComm, curKey), pChk = techCheckAmount(tech, pComm, prevKey);
-    return { tech, c, p, cChk, pChk, cCash: Math.max(0, cComm - cChk), pCash: Math.max(0, pComm - pChk), isVar: (tech.checkType || 'variable') === 'variable' };
+    const cCashGross = Math.max(0, cComm - cChk), pCashGross = Math.max(0, pComm - pChk);
+    const cDed = techCashDeduction(tech, cCashGross), pDed = techCashDeduction(tech, pCashGross);
+    const cCash = Math.max(0, cCashGross - cDed), pCash = Math.max(0, pCashGross - pDed);
+    return { tech, c, p, cChk, pChk, cDed, pDed, cCash, pCash, cTotal: cChk + cCash, pTotal: pChk + pCash, isVar: (tech.checkType || 'variable') === 'variable' };
   });
   // Each tech spans 5 columns: This-Billed | This-Comm | Δ | Last-Billed | Last-Comm.
   // The Δ column holds a single ▲/▼% — green up / red down — based on the BILLED change vs
@@ -934,7 +944,11 @@ export function renderPayrollPage() {
       `<tr><td class="sticky-col">Refunds</td>${T.map(x => refCells(x.c, x.p)).join('')}</tr>`,
     ] : []),
     `<tr><td class="sticky-col">Check</td>${T.map(checkCell).join('')}</tr>`,
+    ...(T.some(x => x.cDed || x.pDed) ? [
+      `<tr><td class="sticky-col">Cash deduction</td>${T.map(x => `<td class="num staff-sep" colspan="3" style="color:#dc2626">${x.cDed ? '-' + _m2(x.cDed) : '—'}</td><td class="num last thislast-sep" colspan="2" style="color:#dc2626">${x.pDed ? '-' + _m2(x.pDed) : '—'}</td>`).join('')}</tr>`,
+    ] : []),
     `<tr><td class="sticky-col">Cash</td>${T.map(x => span2(_m2(x.cCash), x.pCash)).join('')}</tr>`,
+    `<tr style="font-weight:700"><td class="sticky-col">Total paid</td>${T.map(x => span2(_m2(x.cTotal), x.pTotal)).join('')}</tr>`,
     `<tr class="section-row"><td class="sticky-col">By day ${info}</td><td colspan="${T.length * 5}"></td></tr>`,
     ...curDays.map((day, i) => {
       const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
@@ -957,7 +971,7 @@ function payrollExportRows() {
     cur,
     rows: (cfg().staff || []).filter(s => !cfg().inactive_staff.includes(s.id))
       .sort((a, b) => { const ra = order.indexOf(a.id), rb = order.indexOf(b.id); return (ra === -1 ? 1e9 : ra) - (rb === -1 ? 1e9 : rb); })
-      .map(t => { const c = data[t.id] || { billed: 0, commission: 0, refund: 0, refundComm: 0 }; const net = _netComm(c); const chk = techCheckAmount(t, net, perKey); return { name: t.name, billed: c.billed, commission: c.commission, refund: c.refund || 0, check: chk, cash: Math.max(0, net - chk) }; })
+      .map(t => { const c = data[t.id] || { billed: 0, commission: 0, refund: 0, refundComm: 0 }; const net = _netComm(c); const chk = techCheckAmount(t, net, perKey); const cashGross = Math.max(0, net - chk); const ded = techCashDeduction(t, cashGross); const cash = Math.max(0, cashGross - ded); return { name: t.name, billed: c.billed, commission: c.commission, refund: c.refund || 0, check: chk, deduction: ded, cash, total: chk + cash }; })
       .filter(r => r.billed || r.commission || r.check || r.refund),
   };
 }
@@ -968,9 +982,9 @@ export function payrollExportCSV() {
   const t = k => rows.reduce((s, r) => s + r[k], 0);
   const matrix = [
     ['Muse Nails & Spa — Payroll'], [`Pay period: ${fmt(cur.from)} – ${fmt(cur.to)}`], [],
-    ['Technician', 'Billed', 'Commission', 'Refunds', 'Check', 'Cash'],
-    ...rows.map(r => [r.name, `$${r.billed.toFixed(2)}`, `$${r.commission.toFixed(2)}`, r.refund ? `-$${Math.abs(r.refund).toFixed(2)}` : '$0.00', `$${r.check.toFixed(2)}`, `$${r.cash.toFixed(2)}`]),
-    [], ['Totals', `$${t('billed').toFixed(2)}`, `$${t('commission').toFixed(2)}`, t('refund') ? `-$${Math.abs(t('refund')).toFixed(2)}` : '$0.00', `$${t('check').toFixed(2)}`, `$${t('cash').toFixed(2)}`],
+    ['Technician', 'Billed', 'Commission', 'Refunds', 'Check', 'Cash deduction', 'Cash', 'Total paid'],
+    ...rows.map(r => [r.name, `$${r.billed.toFixed(2)}`, `$${r.commission.toFixed(2)}`, r.refund ? `-$${Math.abs(r.refund).toFixed(2)}` : '$0.00', `$${r.check.toFixed(2)}`, r.deduction ? `-$${r.deduction.toFixed(2)}` : '$0.00', `$${r.cash.toFixed(2)}`, `$${r.total.toFixed(2)}`]),
+    [], ['Totals', `$${t('billed').toFixed(2)}`, `$${t('commission').toFixed(2)}`, t('refund') ? `-$${Math.abs(t('refund')).toFixed(2)}` : '$0.00', `$${t('check').toFixed(2)}`, t('deduction') ? `-$${t('deduction').toFixed(2)}` : '$0.00', `$${t('cash').toFixed(2)}`, `$${t('total').toFixed(2)}`],
   ];
   const csv = matrix.map(line => line.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
   const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
@@ -985,7 +999,7 @@ function payrollGrid() {
   const order = cfg().turns_order || [];
   const techs = (cfg().staff || []).filter(s => !cfg().inactive_staff.includes(s.id))
     .sort((a, b) => { const ra = order.indexOf(a.id), rb = order.indexOf(b.id); return (ra === -1 ? 1e9 : ra) - (rb === -1 ? 1e9 : rb); });
-  const T = techs.map(tech => { const c = curData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] }, p = prevData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] }; const cComm = _netComm(c), pComm = _netComm(p); const cChk = techCheckAmount(tech, cComm, curKey), pChk = techCheckAmount(tech, pComm, prevKey); return { tech, c, p, cChk, pChk, cCash: Math.max(0, cComm - cChk), pCash: Math.max(0, pComm - pChk) }; });
+  const T = techs.map(tech => { const c = curData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] }, p = prevData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] }; const cComm = _netComm(c), pComm = _netComm(p); const cChk = techCheckAmount(tech, cComm, curKey), pChk = techCheckAmount(tech, pComm, prevKey); const cCashGross = Math.max(0, cComm - cChk), pCashGross = Math.max(0, pComm - pChk); const cDed = techCashDeduction(tech, cCashGross), pDed = techCashDeduction(tech, pCashGross); const cCash = Math.max(0, cCashGross - cDed), pCash = Math.max(0, pCashGross - pDed); return { tech, c, p, cChk, pChk, cDed, pDed, cCash, pCash, cTotal: cChk + cCash, pTotal: pChk + pCash }; });
   return { cur, T, curDays, prevDays };
 }
 // Manager PDF: the full grid, landscape, with repeating header + per-row page breaks.
@@ -1005,7 +1019,11 @@ export function payrollExportPDF() {
       `<tr><td class="rl">Refunds</td>${T.map(x => `<td class="num sep" style="color:#dc2626">${x.c.refund ? '-$' + Math.abs(x.c.refund).toFixed(0) : '—'}</td><td class="num" style="color:#dc2626">${x.c.refundComm ? '-$' + Math.abs(x.c.refundComm).toFixed(0) : '—'}</td><td class="num last lsep" style="color:#dc2626">${x.p.refund ? '-$' + Math.abs(x.p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${x.p.refundComm ? '-$' + Math.abs(x.p.refundComm).toFixed(0) : '—'}</td>`).join('')}</tr>`,
     ] : []),
     `<tr><td class="rl">Check</td>${T.map(x => span2(_m2(x.cChk), x.pChk)).join('')}</tr>`,
+    ...(T.some(x => x.cDed || x.pDed) ? [
+      `<tr><td class="rl">Cash deduction</td>${T.map(x => `<td class="num sep" colspan="2" style="color:#dc2626">${x.cDed ? '-' + _m2(x.cDed) : '—'}</td><td class="num last lsep" colspan="2" style="color:#dc2626">${x.pDed ? '-' + _m2(x.pDed) : '—'}</td>`).join('')}</tr>`,
+    ] : []),
     `<tr><td class="rl">Cash</td>${T.map(x => span2(_m2(x.cCash), x.pCash)).join('')}</tr>`,
+    `<tr><td class="rl" style="font-weight:700">Total paid</td>${T.map(x => span2(_m2(x.cTotal), x.pTotal)).join('')}</tr>`,
     `<tr class="sec"><td class="rl">By day · billed / commission</td><td colspan="${T.length * 4}"></td></tr>`,
     ...curDays.map((day, i) => { const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }); return `<tr><td class="rl">${dl}</td>${T.map(x => dquad(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`; }),
   ].join('');
