@@ -229,15 +229,15 @@ export function renderSchedule() {
     }).join('');
     return `
       <div class="flex items-center border-b border-surface-container-high last:border-0">
-        <div class="flex items-center gap-2 min-w-[130px] pr-3 py-2 flex-shrink-0">${photoHtml}
-          <span class="text-sm font-body font-semibold text-on-surface truncate">${st.name}</span></div>
+        <div class="flex items-center gap-2 w-[160px] pr-3 py-2 flex-shrink-0">${photoHtml}
+          <span class="text-sm font-body font-semibold text-on-surface truncate min-w-0">${st.name}</span></div>
         ${cells}
       </div>`;
   }).join('');
 
   grid.innerHTML = `
     <div class="flex items-center border-b-2 border-surface-container-high">
-      <div class="min-w-[130px] flex-shrink-0"></div>${headerCols}
+      <div class="w-[160px] flex-shrink-0"></div>${headerCols}
     </div>
     ${staffRows || '<div class="text-sm font-body text-on-surface-variant py-8 text-center">No staff added yet. Add staff in the Staff tab.</div>'}`;
 }
