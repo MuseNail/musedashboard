@@ -1892,7 +1892,7 @@ tailwind.config = {
       </button>
       <!-- Repeat toggle -->
       <div class="border-t border-surface-container-high pt-2 mt-1">
-        <label class="flex items-center gap-3 p-3 cursor-pointer" onclick="toggleRepeatSchedule()">
+        <div class="flex items-center gap-3 p-3 cursor-pointer select-none" onclick="toggleRepeatSchedule()">
           <div id="repeat-toggle-box" class="w-6 h-6 rounded border-2 border-outline-variant flex items-center justify-center flex-shrink-0 transition-all" style="background:transparent">
             <span class="material-symbols-outlined hidden" id="repeat-toggle-check" style="font-size:14px;color:#ffffff;font-variation-settings:'FILL' 1,'wght' 700">check</span>
           </div>
@@ -1901,7 +1901,7 @@ tailwind.config = {
             <div class="font-body font-semibold text-on-surface text-sm">Repeat weekly</div>
             <div class="text-[11px] font-body text-on-surface-variant">Apply this status every week on this day until turned off</div>
           </div>
-        </label>
+        </div>
       </div>
     </div>
   </div>
