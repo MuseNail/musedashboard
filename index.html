@@ -618,26 +618,26 @@ tailwind.config = {
 
         <!-- Upcoming appointments strip (Google Calendar). Toggle in header; hidden by default. -->
         <div id="turns-appts-strip" class="rounded-xl border border-surface-container-high overflow-hidden mb-3 hidden" style="background:#faf8ff">
-          <div class="flex items-center gap-2 px-3 py-2 border-b border-surface-container-high" style="background:#f3effa">
-            <span class="material-symbols-outlined" style="font-size:18px;color:#7b1fa2">event_upcoming</span>
-            <span class="font-headline font-bold text-sm text-on-surface">Next up</span>
+          <div class="flex items-center gap-2 px-3 py-1 border-b border-surface-container-high" style="background:#f3effa">
+            <span class="material-symbols-outlined" style="font-size:16px;color:#7b1fa2">event_upcoming</span>
+            <span class="font-headline font-bold text-[13px] text-on-surface">Next up</span>
             <span class="text-[11px] text-on-surface-variant" id="turns-appts-sub">· today's upcoming appointments</span>
           </div>
-          <div id="turns-appts-cards" class="flex gap-2 p-2 overflow-x-auto" style="scrollbar-width:thin"></div>
+          <div id="turns-appts-cards" class="flex gap-1.5 p-1.5 overflow-x-auto" style="scrollbar-width:thin"></div>
         </div>
 
         <!-- Two column layout — left scrolls, right sticks -->
         <div class="flex gap-3" style="align-items:flex-start;min-height:400px">
           <!-- Left: grid -->
-          <div class="flex-grow overflow-y-auto overflow-x-hidden" style="scrollbar-width:thin;max-height:calc(100vh - 210px)" id="turns-tech-grid"></div>
+          <div class="flex-grow overflow-y-auto overflow-x-hidden" style="scrollbar-width:thin;max-height:calc(100vh - var(--turns-offset, 210px))" id="turns-tech-grid"></div>
           <!-- Drag to resize the waiting/active panel (width persists per device) -->
           <div id="turns-split-handle" title="Drag to resize" class="flex-shrink-0 self-stretch flex items-center justify-center cursor-col-resize group" style="width:14px;touch-action:none;-webkit-user-select:none;user-select:none">
             <div class="rounded-full bg-surface-container-high group-hover:bg-primary transition-colors" style="width:4px;height:52px"></div>
           </div>
           <!-- Right: waiting + active side by side, sticky, narrower -->
-          <div id="turns-side-panel" class="flex-shrink-0 flex gap-2" style="position:sticky;top:0;width:380px;max-height:calc(100vh - 210px)">
+          <div id="turns-side-panel" class="flex-shrink-0 flex gap-2" style="position:sticky;top:0;width:380px;max-height:calc(100vh - var(--turns-offset, 210px))">
             <!-- Waiting -->
-            <div class="flex flex-col overflow-hidden rounded-xl border" style="flex:1;border-left:3px solid #d4860a;max-height:calc(100vh - 210px)">
+            <div class="flex flex-col overflow-hidden rounded-xl border" style="flex:1;border-left:3px solid #d4860a;max-height:calc(100vh - var(--turns-offset, 210px))">
               <div class="px-2 py-1.5 border-b border-surface-container-high flex items-center justify-between flex-shrink-0" style="background:rgba(255,224,178,0.3)">
                 <span class="text-[11px] font-headline font-bold uppercase tracking-widest" style="color:#a05000">Waiting</span>
                 <span class="text-[10px] font-body text-on-surface-variant" id="turns-waiting-label">0</span>
@@ -645,7 +645,7 @@ tailwind.config = {
               <div id="turns-waiting-list" class="overflow-y-auto bg-surface-container-lowest" style="scrollbar-width:auto;flex:1"></div>
             </div>
             <!-- Active -->
-            <div class="flex flex-col overflow-hidden rounded-xl border" style="flex:1;border-left:3px solid #2a7a4f;max-height:calc(100vh - 210px)">
+            <div class="flex flex-col overflow-hidden rounded-xl border" style="flex:1;border-left:3px solid #2a7a4f;max-height:calc(100vh - var(--turns-offset, 210px))">
               <div class="px-2 py-1.5 border-b border-surface-container-high flex items-center justify-between flex-shrink-0" style="background:rgba(200,230,197,0.3)">
                 <span class="text-[11px] font-headline font-bold uppercase tracking-widest" style="color:#1b5e20">Active</span>
                 <span class="text-[10px] font-body text-on-surface-variant" id="turns-active-label">0</span>

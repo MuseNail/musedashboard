@@ -178,6 +178,7 @@ export function toggleTurnsApptStrip() {
 }
 function applyTurnsApptStripVisibility() {
   const strip = document.getElementById('turns-appts-strip'), btn = document.getElementById('turns-appts-toggle');
+  const panel = document.getElementById('panel-turns');
   const hide = !_turnsApptShow || !!turnsViewingHistory;
   if (strip) strip.classList.toggle('hidden', hide);
   if (btn) {
@@ -188,6 +189,10 @@ function applyTurnsApptStripVisibility() {
     btn.classList.toggle('border-surface-container-high', !_turnsApptShow);
   }
   if (!hide) renderTurnsApptStrip();
+  // Keep the strip anchored under the header (no page scroll) by shrinking the
+  // grid + side-panel scroll height to absorb the strip's height; only the grid
+  // scrolls. 210px is the header budget; +12 is the strip's bottom margin (mb-3).
+  if (panel) { const extra = (!hide && strip) ? strip.offsetHeight + 12 : 0; panel.style.setProperty('--turns-offset', (210 + extra) + 'px'); }
 }
 export function renderTurnsApptStrip() {
   const host = document.getElementById('turns-appts-cards'); if (!host) return;
@@ -199,15 +204,17 @@ export function renderTurnsApptStrip() {
   if (sub) sub.textContent = cards.length ? `· ${cards.length} upcoming` : '· nothing upcoming';
   if (!cards.length) { host.innerHTML = `<div class="text-xs text-on-surface-variant py-3 px-1 opacity-70">No upcoming appointments today.</div>`; return; }
   const now = Date.now();
+  // Compact bubble matching a turn-grid slot: w-[150px], rounded-xl, soft fill
+  // (lavender = appointment, amber = ≤30 min). Two lines so the strip stays short.
   host.innerHTML = cards.map(a => {
     const time = new Date(a.startMs).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
     const mins = Math.round((a.startMs - now)/60000), soon = mins <= 30;
     const techLbl = [...a.techs].join(', ') || 'Unassigned';
-    return `<div class="flex-shrink-0 rounded-xl px-3 py-2" style="width:172px;background:#fff;border:1px solid ${soon?'#f5a623':'#e6def5'}">
-      <div class="flex items-center gap-1.5 mb-1"><span class="material-symbols-outlined" style="font-size:14px;color:${soon?'#c77700':'#7b1fa2'}">${soon?'notifications_active':'schedule'}</span><span class="font-bold text-[13px]" style="color:${soon?'#8a5a00':'#5a3a8a'}">${time}</span>${soon?`<span class="text-[9px] font-bold" style="color:#c77700">in ${mins}m</span>`:''}<span class="ml-auto text-[10px] text-on-surface-variant truncate" style="max-width:64px" title="${_tEsc(techLbl)}">${_tEsc(techLbl)}</span></div>
-      <div class="font-semibold text-[12px] truncate text-on-surface">${_tEsc(a.name)}</div>
-      <div class="text-[10px] text-on-surface-variant truncate">${_tEsc(a.svc)}</div>
-    </div>`;
+    const bg = soon ? '#ffe0b2' : '#ede7f6', fg = soon ? '#6d3200' : '#42306b';
+    return `<div class="flex-shrink-0 w-[150px] px-0.5"><div class="w-full rounded-xl px-2 py-1 text-left text-xs font-body" style="background:${bg};color:${fg}">
+      <div class="flex items-center gap-1"><span class="font-bold text-[11px] flex-shrink-0">${time}</span><span class="font-semibold text-[11px] truncate" style="flex:1;min-width:0">${_tEsc(a.name)}</span>${soon?`<span class="text-[9px] font-bold flex-shrink-0" style="color:#9a4a00">${mins}m</span>`:''}</div>
+      <div class="text-[10px] leading-tight truncate" style="opacity:.8">${_tEsc(a.svc)} · ${_tEsc(techLbl)}</div>
+    </div></div>`;
   }).join('');
 }
 function turnsDueNoteCard(a, mins) {
