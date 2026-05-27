@@ -1147,9 +1147,9 @@ tailwind.config = {
         <!-- Leaf: Audit Log -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="settings-audit-section" class="hidden px-5 py-4">
-            <p class="text-sm font-body text-on-surface-variant mb-3">Deleted and refunded transactions across all devices — who, when, amount, and reason.</p>
-            <button onclick="loadAuditLog()" class="mb-3 flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body font-semibold text-sm transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">refresh</span> Load Audit Log
+            <p class="text-sm font-body text-on-surface-variant mb-3">Every key action across all devices and users — check-ins, payments, voids, deletes, refunds, edits, and logins — with who, when, and the device.</p>
+            <button onclick="renderActivityLog()" class="mb-3 flex items-center gap-2 px-4 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body font-semibold text-sm transition-colors">
+              <span class="material-symbols-outlined" style="font-size:16px">refresh</span> Refresh
             </button>
             <div id="audit-log-content" class="space-y-2 max-h-80 overflow-y-auto"></div>
           </div>

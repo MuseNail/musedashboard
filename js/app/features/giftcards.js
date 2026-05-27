@@ -253,8 +253,10 @@ export function confirmClearAllRecords() {
   // Require an admin code first (destructive + irreversible), then the usual confirm.
   window.requireAdminCode?.(() => {
     window.showWarnModal?.('Clear All Records?', 'This permanently removes every transaction record. Export a backup first if you need this data.', () => {
+      const _n = getState().records.filter(r => r.status !== 'deleted').length;
       getState().records.forEach(r => { if (r.status !== 'deleted') dispatch('record.delete', { id: r.id, reason: 'bulk clear', by: 'admin' }); });
       localStorage.removeItem('muse_deletion_log');
+      window.logAudit?.('Clear records', `Cleared all transaction records (${_n})`);
       window.renderTransactions?.(); window.runReport?.();
       showToast('All records cleared ✓');
     });

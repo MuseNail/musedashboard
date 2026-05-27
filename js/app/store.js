@@ -30,6 +30,7 @@ const state = {
   records:   [],
   giftcards: [],
   deletions: [],   // array of deleted record ids (strings)
+  audit:     [],   // universal activity log (newest first, capped) — synced via the DO
   seq:       0,
   // connection / sync status (set by sync.js, observed by the UI indicator)
   connected:    false,
@@ -75,6 +76,7 @@ export function hydrate(snap) {
   state.records   = Array.isArray(incoming.records)   ? incoming.records   : [];
   state.giftcards = Array.isArray(incoming.giftcards) ? incoming.giftcards : [];
   state.deletions = Array.isArray(incoming.deletions) ? incoming.deletions.map(d => String(d.id ?? d)) : [];
+  state.audit     = Array.isArray(incoming.audit) ? incoming.audit : [];
   state.seq       = snap && snap.seq ? snap.seq : 0;
   saveCache();
   notify('hydrate');
@@ -97,6 +99,7 @@ export function applyChange(op, payload, seq) {
     }
     case 'giftcard.save':   upsertById(state.giftcards, payload.card); break;
     case 'giftcard.delete': removeById(state.giftcards, payload.id); break;
+    case 'audit.log':       if (payload && payload.event) { state.audit.unshift(payload.event); if (state.audit.length > 500) state.audit.length = 500; } break;
     default: console.warn('[store] unknown op', op); return;
   }
   if (typeof seq === 'number' && seq > state.seq) state.seq = seq;

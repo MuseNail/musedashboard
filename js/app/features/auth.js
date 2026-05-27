@@ -92,6 +92,7 @@ function checkPin() {
   if (user || isFallback) {
     setTimeout(() => {
       setActiveUser(user || { id: 'fallback', name: 'Manager', pin: STAFF_PIN, role: 'admin' });
+      window.logAudit?.('Login', `${getActiveUser().name} signed in`);
       pinCancel();
       updateLoggedInDisplay();
       window.goTo?.('screen-desk');

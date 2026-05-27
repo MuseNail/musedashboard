@@ -601,6 +601,18 @@ export class MuseSalonDO {
         case 'giftcard.delete':
           await this.state.storage.delete('giftcard:' + payload.id);
           break;
+        case 'audit.log': {
+          // Append-only activity log (who/when/device/action). Each event is its own key
+          // so concurrent writes never clobber. Probabilistically prune to the last ~1000.
+          if (payload && payload.event && payload.event.id) {
+            await this.state.storage.put('audit:' + payload.event.id, payload.event);
+            if (Math.random() < 0.1) {
+              const keys = [...(await this.state.storage.list({ prefix: 'audit:' })).keys()].sort();
+              if (keys.length > 1000) for (const k of keys.slice(0, keys.length - 1000)) await this.state.storage.delete(k);
+            }
+          }
+          break;
+        }
         default:
           console.warn('[mutate] unknown op:', op);
           return { error: 'unknown op: ' + op };
@@ -627,7 +639,7 @@ export class MuseSalonDO {
 
   // Assemble the full state from storage (prefix scans skip mut:/meta: keys).
   async buildSnapshot() {
-    const state = { config: {}, queue: [], records: [], giftcards: [], deletions: [] };
+    const state = { config: {}, queue: [], records: [], giftcards: [], deletions: [], audit: [] };
     const cfg = await this.state.storage.list({ prefix: 'config:' });
     for (const [k, v] of cfg) state.config[k.slice('config:'.length)] = v;
     const q = await this.state.storage.list({ prefix: 'queue:' });
@@ -638,6 +650,11 @@ export class MuseSalonDO {
     for (const [, v] of g) state.giftcards.push(v);
     const d = await this.state.storage.list({ prefix: 'deletion:' });
     for (const [, v] of d) state.deletions.push(v);
+    const al = await this.state.storage.list({ prefix: 'audit:' });
+    for (const [, v] of al) state.audit.push(v);
+    // Newest first, capped so the snapshot payload stays lean (full history lives in the DO).
+    state.audit.sort((x, y) => (x.at < y.at ? 1 : x.at > y.at ? -1 : 0));
+    state.audit = state.audit.slice(0, 500);
     const seq = (await this.state.storage.get('meta:seq')) || 0;
     return { state, seq, schemaVersion: this.SCHEMA_VERSION };
   }

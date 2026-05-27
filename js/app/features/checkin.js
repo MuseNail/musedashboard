@@ -204,6 +204,7 @@ export function submitCheckin() {
 
   newEntries.forEach(e => dispatch('queue.upsert', { entry: e }));
   newEntries.forEach(e => { if (!e.skipSquare) squareUpsertCustomer(e); });
+  window.logAudit?.('Check-in', `${newEntries.map(e => e.name).join(' & ')} checked in`);
 
   document.getElementById('confirm-name').textContent = newEntries.map(e => e.name).join(' & ');
   window.goTo?.('screen-confirm');

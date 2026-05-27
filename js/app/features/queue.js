@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
-import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId } from '../utils.js';
+import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus } from './status.js';
@@ -333,6 +333,7 @@ function buildQueueRow(e) {
 export function updateStatus(id, status) {
   const entry = q().find(e => String(e.id) === String(id));
   if (!entry) return;
+  const wasPaid = isPaidStatus(entry.status);
   if (entry.assignments && entry.assignments.length > 0) {
     if (status === 'inservice') entry.assignments.forEach(a => { if (a.techId && (getAssignmentStatus(entry, a) === 'waiting' || getAssignmentStatus(entry, a) === 'complete')) applyAssignmentStatus(a, 'inservice'); });
     else if (status === 'waiting') entry.assignments.forEach(a => { if (getAssignmentStatus(entry, a) === 'inservice') applyAssignmentStatus(a, 'waiting'); });
@@ -341,6 +342,7 @@ export function updateStatus(id, status) {
     applyEntryStatus(entry);
   } else { if (entry.status !== status) entry.statusSince = Date.now(); entry.status = status; }
   if (entry.status === 'paid') window.saveRecord?.(entry);
+  if (entry.status === 'paid' && !wasPaid) window.logAudit?.('Payment', `${entry.name || '—'} · $${ticketTotal(entry).toFixed(2)}`);
   // R6: when a ticket is paid, commit any recorded gift-card use (log the redemption + draw down
   // the app balance, tied to this ticket). Idempotent. The Square charge is unaffected.
   if (entry.status === 'paid' && entry.giftcardRedemptions && entry.giftcardRedemptions.length) window.gcSyncTicket?.(String(entry.id), entry.giftcardRedemptions);
@@ -524,6 +526,7 @@ export function submitManualAdd() {
   }
   newEntries.forEach(e => upsert(e));
   newEntries.forEach(e => { if (!e.skipSquare) squareUpsertCustomer(e); });
+  window.logAudit?.('Check-in', `${newEntries.map(e => e.name).join(' & ')} added (manual)`);
   renderQueue(); updateStats(); window.renderTurns?.();
   closeManualAdd();
   showToast(`${newEntries.map(e => e.name).join(' & ')} added to queue`);
@@ -1123,6 +1126,7 @@ export function confirmReopen(entryId) {
     // R6: reopening a paid ticket must restore the gift-card balances it drew down.
     if (entry.giftcardRedemptions && entry.giftcardRedemptions.length) { window.gcReverseTicket?.(String(entry.id)); entry.giftcardRedemptions = []; }
     upsert(entry);
+    window.logAudit?.('Reopen', `${entry.name || '—'} reopened (was paid)`);
     renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
     showToast(`${entry.name}'s ticket reopened`);
   });

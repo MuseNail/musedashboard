@@ -323,6 +323,7 @@ export async function saveEditCustomer() {
     } catch (e) { showToast('Saved locally (Square update failed)'); }
   } else { showToast('Customer updated locally ✓'); }
 
+  window.logAudit?.('Customer edit', `${fullName || '—'}${phone ? ' · ' + phone : ''}`);
   closeEditCustomer(true);   // already saved — skip the unsaved-changes guard
   renderCustomerDir(document.getElementById('customer-dir-search')?.value || '');
 }

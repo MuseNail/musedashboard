@@ -1482,6 +1482,7 @@ export function confirmRefund() {
     .map(a => ({ techId: a.techId, billed: -((a.cost || 0) * ratio) }));
   const record = { id: newEntryId(), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -amount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: _refundTxnId, refundTechBilled, loggedBy: getActiveUser()?.name || '' };
   dispatch('record.save', { record });
+  window.logAudit?.('Refund', `${o.name || '—'} · $${amount.toFixed(2)}${reason ? ' · ' + reason : ''}`);
   closeRefundModal();
   renderTransactions();
   if (document.getElementById('panel-reports')?.classList.contains('active')) runReport();
@@ -1511,6 +1512,7 @@ export function confirmDeleteTransaction() {
   if (!reason) { showToast('Please enter a reason for deletion.'); return; }
   if (!_deleteTxnId) return;
   dispatch('record.delete', { id: _deleteTxnId, reason, by: getActiveUser()?.name || 'Unknown' });
+  window.logAudit?.('Delete', `${_deleteTxnRecord?.name || '—'} · $${Math.abs(_deleteTxnRecord?.totalCost || 0).toFixed(2)} · ${reason}`);
   if (queue().find(e => String(e.id) === _deleteTxnId)) dispatch('queue.remove', { id: _deleteTxnId });
   // Device-local audit trail
   const log = JSON.parse(localStorage.getItem('muse_deletion_log') || '[]');
@@ -1632,9 +1634,11 @@ export function saveHistoricalTransaction() {
   if (_histMode === 'edit') {
     const existing = records().find(r => String(r.id) === String(_histEditId));
     dispatch('record.save', { record: { ...existing, ...base, id: String(_histEditId), completedAt: existing?.completedAt || checkinTime.toISOString() } });
+    window.logAudit?.('Edit', `Edited transaction · ${name || '—'} · $${total.toFixed(2)}`);
     showToast('Transaction updated ✓');
   } else {
     dispatch('record.save', { record: { ...base, id: newEntryId(), completedAt: checkinTime.toISOString() } });
+    window.logAudit?.('Historical entry', `${name || '—'} · $${total.toFixed(2)}`);
     showToast('Historical transaction saved ✓');
   }
   if (phone) squareUpsertCustomer({ name, phone, services: _histSelectedSvcs });   // sync customer to directory + Square
