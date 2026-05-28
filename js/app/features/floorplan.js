@@ -20,8 +20,21 @@ const svc = id => cfg().services.find(s => s.id === id);
 const staffById = id => cfg().staff.find(s => s.id === id);
 
 let floorEditMode = false;
+let _fpZoom = 1;               // edit-mode VIEW zoom (visual scale only — never changes the saved layout)
 const _selected = new Set();   // station ids selected in edit mode
 let _fpLetters = new Map();    // groupId → A/B/C party tag (matches queue/turns)
+
+// Logical (pre-zoom) canvas coords from a pointer event — divides out the view scale
+// so marquee/drag math stays accurate at any zoom.
+function canvasPoint(ev) {
+  const c = document.getElementById('floorplan-canvas'); if (!c) return { x: 0, y: 0 };
+  const r = c.getBoundingClientRect();
+  return { x: (ev.clientX - r.left) / _fpZoom, y: (ev.clientY - r.top) / _fpZoom };
+}
+// Stations whose tile rect intersects the given (logical) rectangle — marquee hit test.
+function stationsInRect(x1, y1, x2, y2) {
+  return getStations().filter(id => { const L = layoutFor(id); return L.x < x2 && L.x + L.w > x1 && L.y < y2 && L.y + L.h > y1; });
+}
 
 const GAP = 10;
 // Per-category default tile size + accent color now live in config.station_categories
@@ -160,6 +173,8 @@ export function renderFloorPlan() {
     ? '<span class="material-symbols-outlined" style="font-size:16px">check</span> Done'
     : '<span class="material-symbols-outlined" style="font-size:16px">edit</span> Edit layout';
   document.getElementById('floorplan-reset-btn')?.classList.toggle('hidden', !floorEditMode);
+  document.getElementById('floorplan-edit-tools')?.classList.toggle('hidden', !floorEditMode);
+  const zl = document.getElementById('floorplan-zoom-label'); if (zl) zl.textContent = Math.round(_fpZoom * 100) + '%';
   renderFloorProps();
 
   const tray = document.getElementById('floorplan-tray');
@@ -185,8 +200,12 @@ export function renderFloorPlan() {
     // it scrolls INTERNALLY — otherwise a station placed far down/right can't be reached.
     grid.style.overflow = 'auto';
     const availH = Math.max(280, window.innerHeight - grid.getBoundingClientRect().top - 16);
-    grid.style.height = Math.min(ch, availH) + 'px';
-    grid.innerHTML = `<div id="floorplan-canvas" style="position:relative;width:${cw}px;height:${ch}px">${stationsHtml}</div>`;
+    grid.style.height = Math.min(ch * _fpZoom, availH) + 'px';
+    // View zoom: scale the canvas VISUALLY only (every station's saved x/y/w/h is
+    // untouched). A sizer wrapper carries the SCALED dimensions so the scroll area
+    // matches what's shown (transform alone doesn't change layout size).
+    grid.innerHTML = `<div style="position:relative;width:${cw * _fpZoom}px;height:${ch * _fpZoom}px">
+      <div id="floorplan-canvas" style="position:absolute;top:0;left:0;width:${cw}px;height:${ch}px;transform-origin:top left;transform:scale(${_fpZoom})">${stationsHtml}</div></div>`;
   } else {
     // Live view: scale the whole canvas to fit the screen — no horizontal scroll —
     // and center it horizontally (transform-origin is top-left, so shift by the
@@ -261,8 +280,27 @@ export function fpMatchSize() {
 export function fpTextSize(delta) { applyToSelected(L => ({ font: Math.min(1.8, Math.max(0.7, Math.round(((L.font || 1) + delta) * 100) / 100)) })); }
 export function fpSetFont(val) { const n = parseFloat(val); if (!Number.isFinite(n)) return; applyToSelected(() => ({ font: Math.min(1.8, Math.max(0.7, Math.round(n * 100) / 100)) })); }
 export function fpClearSelection() { _selected.clear(); renderFloorPlan(); }
+export function fpSelectAll() { getStations().forEach(id => _selected.add(id)); renderFloorPlan(); }
 
-export function toggleFloorEdit() { floorEditMode = !floorEditMode; _selected.clear(); renderFloorPlan(); }
+// ── View zoom (edit mode) — visual only, never saved ──────────────────────────
+const FP_ZMIN = 0.3, FP_ZMAX = 1.6;
+export function fpZoom(dir) {
+  _fpZoom = Math.min(FP_ZMAX, Math.max(FP_ZMIN, Math.round(_fpZoom * (dir > 0 ? 1.25 : 0.8) * 100) / 100));
+  renderFloorPlan();
+}
+// Fit the whole layout into the visible area — one tap to recover a tile pushed far out.
+export function fpZoomFit() {
+  const grid = document.getElementById('floorplan-grid'); if (!grid) return;
+  let maxR = 0, maxB = 0;
+  getStations().forEach(id => { const L = layoutFor(id); maxR = Math.max(maxR, L.x + L.w); maxB = Math.max(maxB, L.y + L.h); });
+  const cw = maxR + GAP, ch = maxB + GAP;
+  const availW = grid.clientWidth || 720;
+  const availH = Math.max(280, window.innerHeight - grid.getBoundingClientRect().top - 16);
+  _fpZoom = Math.round(Math.max(FP_ZMIN, Math.min(FP_ZMAX, Math.min(availW / cw, availH / ch))) * 100) / 100;
+  renderFloorPlan();
+}
+
+export function toggleFloorEdit() { floorEditMode = !floorEditMode; _selected.clear(); _fpZoom = 1; renderFloorPlan(); }
 export function resetFloorLayout() {
   const doReset = () => { _selected.clear(); saveLayout({}); renderFloorPlan(); showToast('Floor layout reset'); };
   if (window.showWarnModal) window.showWarnModal('Reset layout?', 'Restore the default station arrangement, sizes, and colors?', doReset);
@@ -347,15 +385,20 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
   const THRESH = 6;
   let startX = 0, startY = 0, pending = null, dragging = false, clone = null;
   let mode = null, dragEntryId = null, dragStation = null, dragTechId = null, moveStart = null, moveDelta = null;
+  let isTouch = false, marqueeEl = null, marqueeStart = null;
   const closest = (el, sel) => { while (el && el !== document.body) { if (el.matches && el.matches(sel)) return el; el = el.parentElement; } return null; };
   function stationAt(x, y) { if (clone) clone.style.display = 'none'; const el = document.elementFromPoint(x, y); if (clone) clone.style.display = ''; return closest(el, '.floor-station'); }
 
   function onDown(e) {
     const panel = document.getElementById('panel-floorplan');
     if (!panel || !panel.classList.contains('active') || e.button) return;
+    isTouch = e.pointerType === 'touch';
     if (floorEditMode) {
-      const st = closest(e.target, '.floor-station'); if (!st) return;
-      mode = 'station'; dragStation = st.dataset.station; pending = st;
+      const st = closest(e.target, '.floor-station');
+      if (st) { mode = 'station'; dragStation = st.dataset.station; pending = st; }
+      // Empty canvas: desktop draws a marquee; touch lets the gesture scroll natively
+      // (and a touch with no movement is treated as a tap-to-clear in onUp).
+      else { mode = 'marquee'; marqueeStart = canvasPoint(e); }
     } else {
       const techEl = closest(e.target, '.floor-tech');
       if (techEl) { mode = 'tech'; dragTechId = techEl.dataset.techId; pending = techEl; }
@@ -367,6 +410,7 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
     startX = e.clientX; startY = e.clientY;
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onCancel);
   }
   function startDrag() {
     dragging = true;
@@ -384,13 +428,19 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
     }
   }
   function onMove(e) {
+    if (mode === 'marquee') {
+      if (isTouch) return;   // touch: don't hijack the gesture — let the canvas scroll
+      if (!marqueeEl) { if (Math.hypot(e.clientX - startX, e.clientY - startY) <= THRESH) return; startMarquee(); }
+      e.preventDefault(); updateMarquee(e);
+      return;
+    }
     if (!dragging) { if (Math.hypot(e.clientX - startX, e.clientY - startY) > THRESH) startDrag(); else return; }
     e.preventDefault();
-    const dx = e.clientX - startX, dy = e.clientY - startY;
     if (mode === 'station') {
+      const dx = (e.clientX - startX) / _fpZoom, dy = (e.clientY - startY) / _fpZoom;   // undo view zoom → canvas units
       const snap = snapMove(dragStation, moveStart[dragStation], dx, dy, _selected);
       moveDelta = { dx: snap.dx, dy: snap.dy };
-      _selected.forEach(id => { const el = document.querySelector(`.floor-station[data-station="${id}"]`); if (el && moveStart[id]) { el.style.left = (moveStart[id].x + snap.dx) + 'px'; el.style.top = Math.max(0, moveStart[id].y + snap.dy) + 'px'; } });
+      _selected.forEach(id => { const el = document.querySelector(`.floor-station[data-station="${id}"]`); if (el && moveStart[id]) { el.style.left = Math.max(0, moveStart[id].x + snap.dx) + 'px'; el.style.top = Math.max(0, moveStart[id].y + snap.dy) + 'px'; } });
       fpGuide('v', snap.guideX); fpGuide('h', snap.guideY);
     } else if (clone) {
       clone.style.left = (e.clientX - clone.offsetWidth / 2) + 'px'; clone.style.top = (e.clientY - clone.offsetHeight / 2) + 'px';
@@ -401,20 +451,26 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
   function onUp(e) {
     document.removeEventListener('pointermove', onMove);
     document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onCancel);
     const wasDragging = dragging; dragging = false;
     if (clone) { clone.remove(); clone = null; }
     if (pending && (mode === 'bubble' || mode === 'tech')) pending.style.opacity = '';
     document.querySelectorAll('.floor-station').forEach(s => { s.style.boxShadow = ''; s.style.outline = ''; });
     const dx = e.clientX - startX, dy = e.clientY - startY;
+    if (mode === 'marquee') {
+      if (marqueeEl) { commitMarquee(e.shiftKey); removeMarquee(); }                       // desktop box → select
+      else if (Math.hypot(dx, dy) <= THRESH && _selected.size) { _selected.clear(); renderFloorPlan(); }   // tap empty → clear
+      resetState(); return;
+    }
     if (!wasDragging) {
       if (mode === 'bubble' && dragEntryId) window.showGroupAssignModal?.(dragEntryId);
       // Tapping a tech (no drag) opens the exact same tech-status menu as the turns grid.
       // showTechStatusMenu reads event.currentTarget for positioning, so hand it the tech el.
       else if (mode === 'tech' && dragTechId) window.showTechStatusMenu?.({ stopPropagation() {}, currentTarget: pending, clientX: e.clientX, clientY: e.clientY }, dragTechId);
-      // Single click selects only this station (clears the rest); Shift+click adds/removes
-      // it from a multi-selection. (Touch has no Shift — multi-select by gesture is TODO.)
+      // Build a multi-selection: Shift-click (desktop) OR a plain tap (iPad has no Shift)
+      // toggles this station; a plain mouse click selects only this one.
       else if (mode === 'station' && dragStation) {
-        if (e.shiftKey) { if (_selected.has(dragStation)) _selected.delete(dragStation); else _selected.add(dragStation); }
+        if (e.shiftKey || isTouch) { if (_selected.has(dragStation)) _selected.delete(dragStation); else _selected.add(dragStation); }
         else { _selected.clear(); _selected.add(dragStation); }
         renderFloorPlan();
       }
@@ -423,13 +479,60 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
     } else if (mode === 'tech') {
       const tgt = stationAt(e.clientX, e.clientY); if (tgt) assignTechToStation(dragTechId, tgt.dataset.station); else renderFloorPlan();
     } else if (mode === 'station' && moveStart) {
-      const d = moveDelta || { dx, dy };
+      const d = moveDelta || { dx: dx / _fpZoom, dy: dy / _fpZoom };
       const next = { ...layout() };
-      _selected.forEach(id => { const s = moveStart[id]; if (s) next[id] = { ...layoutFor(id), x: s.x + d.dx, y: Math.max(0, s.y + d.dy) }; });
+      // Clamp BOTH x and y to ≥ 0 so a tile can't be dragged off the left/top edge and lost.
+      _selected.forEach(id => { const s = moveStart[id]; if (s) next[id] = { ...layoutFor(id), x: Math.max(0, s.x + d.dx), y: Math.max(0, s.y + d.dy) }; });
       saveLayout(next); renderFloorPlan();
     }
     clearGuides();
-    pending = null; mode = null; dragEntryId = dragStation = dragTechId = null; moveStart = null; moveDelta = null;
+    resetState();
   }
+  function onCancel() {
+    document.removeEventListener('pointermove', onMove);
+    document.removeEventListener('pointerup', onUp);
+    document.removeEventListener('pointercancel', onCancel);
+    if (clone) { clone.remove(); clone = null; }
+    removeMarquee();
+    document.querySelectorAll('.floor-station').forEach(s => { s.style.boxShadow = ''; s.style.outline = ''; });
+    clearGuides();
+    dragging = false; resetState();
+  }
+  function resetState() { pending = null; mode = null; dragEntryId = dragStation = dragTechId = null; moveStart = null; moveDelta = null; marqueeStart = null; }
+
+  // ── Marquee (rubber-band) select — desktop only; coords are logical (pre-zoom) ──
+  function startMarquee() {
+    const c = document.getElementById('floorplan-canvas'); if (!c) return;
+    marqueeEl = document.createElement('div');
+    marqueeEl.style.cssText = 'position:absolute;border:1.5px dashed #1a5252;background:rgba(26,82,82,0.12);z-index:60;pointer-events:none';
+    c.appendChild(marqueeEl);
+  }
+  function updateMarquee(e) {
+    if (!marqueeEl || !marqueeStart) return;
+    const p = canvasPoint(e), s = marqueeStart;
+    const x1 = Math.min(s.x, p.x), y1 = Math.min(s.y, p.y), x2 = Math.max(s.x, p.x), y2 = Math.max(s.y, p.y);
+    marqueeEl.style.left = x1 + 'px'; marqueeEl.style.top = y1 + 'px'; marqueeEl.style.width = (x2 - x1) + 'px'; marqueeEl.style.height = (y2 - y1) + 'px';
+    const hit = new Set(stationsInRect(x1, y1, x2, y2));   // live highlight without re-rendering (keeps it snappy)
+    document.querySelectorAll('.floor-station').forEach(el => {
+      const on = hit.has(el.dataset.station) || _selected.has(el.dataset.station);
+      el.style.outline = on ? '3px solid #1a5252' : ''; el.style.outlineOffset = on ? '2px' : '';
+    });
+  }
+  function commitMarquee(additive) {
+    const x1 = parseFloat(marqueeEl.style.left) || 0, y1 = parseFloat(marqueeEl.style.top) || 0;
+    const x2 = x1 + (parseFloat(marqueeEl.style.width) || 0), y2 = y1 + (parseFloat(marqueeEl.style.height) || 0);
+    const hit = stationsInRect(x1, y1, x2, y2);
+    if (!additive) _selected.clear();
+    hit.forEach(id => _selected.add(id));
+    renderFloorPlan();
+  }
+  function removeMarquee() { if (marqueeEl) { marqueeEl.remove(); marqueeEl = null; } }
+
   document.addEventListener('pointerdown', onDown);
+  // Esc clears the selection while editing (desktop convenience; ignored elsewhere).
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || !floorEditMode || !_selected.size) return;
+    if (!document.getElementById('panel-floorplan')?.classList.contains('active')) return;
+    _selected.clear(); renderFloorPlan();
+  });
 })();

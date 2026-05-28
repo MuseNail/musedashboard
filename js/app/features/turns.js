@@ -764,6 +764,92 @@ function renderTurnsHistoryView() {
   grid.innerHTML = banner + order.map(rowFor).filter(Boolean).join('') + rowFor('__unassigned__');
 }
 
+// ── Export (CSV + PDF) — the currently-viewed day (today or a history date) ────
+const _statusWord = ss => isPaidStatus(ss) ? 'Paid' : ss === 'complete' ? 'Complete' : ss === 'inservice' ? 'In service' : 'Waiting';
+// Roll an assignment list (+ today's skips) into a per-tech summary + per-turn detail.
+function _turnRowsFromItems(items, skips, isHistory) {
+  const merged = [
+    ...items.map(it => ({ kind: 'a', it, t: it.assignment.assignedAt || new Date(it.entry.checkinTime).getTime() })),
+    ...(skips || []).map(sk => ({ kind: 'skip', sk, t: new Date(sk.at).getTime() })),
+  ].sort((a, b) => a.t - b.t);
+  let counter = 0, full = 0, half = 0, bonus = 0, billed = 0;
+  const detail = [];
+  merged.forEach(m => {
+    if (m.kind === 'skip') {
+      counter += 1; full += 1;
+      detail.push({ turn: counter, customer: '(skipped turn)', service: 'Turn passed · no customer', station: '', cost: 0, status: 'Skipped', time: new Date(m.sk.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+      return;
+    }
+    const { entry: e, assignment: a } = m.it;
+    const tt = classifyTurn(a.cost || 0, a.serviceId || '');
+    if (tt === 'full') { counter += 1; full += 1; } else if (tt === 'half') { counter += 0.5; half += 0.5; } else if (tt === 'bonus') bonus += 1;
+    const ss = getAssignmentStatus(e, a);
+    if (isHistory || ss === 'complete' || isPaidStatus(ss)) billed += a.cost || 0;   // earned once the work is done
+    const s = svc(a.serviceId);
+    detail.push({
+      turn: tt === 'bonus' ? 'Bonus' : (a.cost ? (Number.isInteger(counter) ? counter : counter.toFixed(1)) : '?'),
+      customer: e.name, service: s ? s.label : (e.services || []).map(sid => svc(sid)?.label || '?').join(', '),
+      station: a.station || '', cost: a.cost || 0, status: _statusWord(ss),
+      time: new Date(e.checkinTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    });
+  });
+  return { turnsTotal: full + half, bonus, billed, detail };
+}
+function turnsExportData() {
+  const dateStr = turnsViewingHistory || todayStr();
+  const isHistory = !!turnsViewingHistory;
+  const rows = [];
+  if (isHistory) {
+    const byTech = histAssignmentsByTech(histDayRecords(dateStr));
+    const snap = turnsHistory[dateStr];
+    let order = (snap?.order || []).filter(id => id && staffById(id));
+    if (order.length === 0) order = getActiveTurnsOrder();
+    Object.keys(byTech).forEach(tid => { if (tid !== '__unassigned__' && !order.includes(tid)) order.push(tid); });
+    if (byTech['__unassigned__']) order.push('__unassigned__');
+    order.forEach(tid => {
+      const items = byTech[tid] || []; if (!items.length) return;
+      const name = tid === '__unassigned__' ? 'Unassigned' : staffById(tid)?.name; if (!name) return;
+      rows.push({ name, status: '—', ..._turnRowsFromItems(items, [], true) });
+    });
+  } else {
+    getActiveTurnsOrder().forEach(staffId => {
+      const st = staffById(staffId); if (!st) return;
+      rows.push({ name: st.name, status: getTechStatusColor(staffId).label, ..._turnRowsFromItems(getTechAllAssignments(staffId), todaySkips(staffId), false) });
+    });
+  }
+  return { dateStr, isHistory, rows };
+}
+export function exportTurnsCSV() {
+  const { dateStr, rows } = turnsExportData();
+  const m = [];
+  m.push(['Technician Turns', new Date(dateStr + 'T12:00:00').toLocaleDateString()]);
+  m.push([]); m.push(['SUMMARY']); m.push(['Technician', 'Status', 'Turns', 'Bonus', 'Billed']);
+  rows.forEach(r => m.push([r.name, r.status, r.turnsTotal, r.bonus, '$' + r.billed.toFixed(2)]));
+  m.push([]); m.push(['DETAIL']); m.push(['Technician', 'Turn', 'Customer', 'Service', 'Station', 'Cost', 'Status', 'Time']);
+  rows.forEach(r => r.detail.forEach(d => m.push([r.name, d.turn, d.customer, d.service, d.station, d.cost ? '$' + Number(d.cost).toFixed(2) : '', d.status, d.time])));
+  const csv = m.map(line => line.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = document.createElement('a'); a.href = url; a.download = `muse-turns-${dateStr}.csv`; a.click(); URL.revokeObjectURL(url);
+  showToast('Turns exported as CSV (opens in Excel)');
+}
+export function exportTurnsPDF() {
+  const { dateStr, rows } = turnsExportData();
+  const dt = new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const totalTurns = rows.reduce((s, r) => s + r.turnsTotal, 0), totalBilled = rows.reduce((s, r) => s + r.billed, 0);
+  const sumRows = rows.map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.status)}</td><td style="text-align:center">${r.turnsTotal}</td><td style="text-align:center">${r.bonus}</td><td style="text-align:right">$${r.billed.toFixed(2)}</td></tr>`).join('');
+  const detRows = rows.flatMap(r => r.detail.map(d => `<tr><td>${esc(r.name)}</td><td style="text-align:center">${esc(d.turn)}</td><td>${esc(d.customer)}</td><td>${esc(d.service)}</td><td>${esc(d.station)}</td><td style="text-align:right">${d.cost ? '$' + Number(d.cost).toFixed(2) : ''}</td><td>${esc(d.status)}</td><td>${esc(d.time)}</td></tr>`)).join('');
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Muse Turns — ${esc(dt)}</title>
+    <style>@page{size:8.5in 11in;margin:0.5in}body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a}h1{font-size:18px;margin:0 0 2px}h2{font-size:13px;margin:18px 0 6px;border-bottom:2px solid #1a5252;padding-bottom:2px}.sub{color:#666;font-size:12px;margin-bottom:8px}table{width:100%;border-collapse:collapse;font-size:11px}th,td{border:1px solid #ccc;padding:4px 6px;text-align:left}th{background:#f0f4f4}</style></head>
+    <body><h1>Technician Turns</h1><div class="sub">${esc(dt)} · ${rows.length} technician${rows.length !== 1 ? 's' : ''} · ${totalTurns} turns · $${totalBilled.toFixed(2)} billed</div>
+    <h2>Summary</h2><table><thead><tr><th>Technician</th><th>Status</th><th style="text-align:center">Turns</th><th style="text-align:center">Bonus</th><th style="text-align:right">Billed</th></tr></thead><tbody>${sumRows || '<tr><td colspan="5">No turns this day.</td></tr>'}</tbody></table>
+    <h2>Detail</h2><table><thead><tr><th>Technician</th><th style="text-align:center">Turn</th><th>Customer</th><th>Service</th><th>Station</th><th style="text-align:right">Cost</th><th>Status</th><th>Time</th></tr></thead><tbody>${detRows || '<tr><td colspan="8">No turns this day.</td></tr>'}</tbody></table>
+    </body></html>`;
+  const u = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+  const w = window.open(u, '_blank'); if (w) setTimeout(() => w.print(), 600); else showToast('Allow pop-ups to print');
+  setTimeout(() => URL.revokeObjectURL(u), 5000);
+}
+
 // ── Drag & drop (event delegation) ────────────────
 (function initTurnsDrag() {
   let dragEntryId = null, dragTechId = null, dragClone = null, isDragging = false;

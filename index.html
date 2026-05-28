@@ -270,7 +270,16 @@ tailwind.config = {
         <div class="flex items-center gap-2 mb-3 flex-wrap">
           <h2 class="text-lg font-headline font-bold text-on-surface">Floor Plan</h2>
           <span id="floorplan-mode-label" class="text-xs font-body text-on-surface-variant px-2 py-0.5 rounded-full bg-surface-container">Live</span>
-          <div class="ml-auto flex gap-2">
+          <div class="ml-auto flex gap-2 items-center">
+            <div id="floorplan-edit-tools" class="hidden flex items-center gap-1">
+              <button onclick="fpSelectAll()" title="Select all stations" class="border border-outline-variant text-on-surface-variant hover:bg-surface-container px-2.5 py-1.5 rounded-lg text-xs font-body transition-all">Select all</button>
+              <div class="flex items-center gap-0.5 border border-outline-variant rounded-lg px-1 py-0.5">
+                <button onclick="fpZoom(-1)" title="Zoom out" class="w-7 h-7 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container text-lg leading-none">−</button>
+                <span id="floorplan-zoom-label" class="text-[11px] font-body text-on-surface-variant w-9 text-center">100%</span>
+                <button onclick="fpZoom(1)" title="Zoom in" class="w-7 h-7 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container text-lg leading-none">+</button>
+                <button onclick="fpZoomFit()" title="Fit layout to screen" class="px-2 h-7 rounded text-on-surface-variant hover:bg-surface-container text-xs font-body">Fit</button>
+              </div>
+            </div>
             <button id="floorplan-reset-btn" onclick="resetFloorLayout()" class="hidden border border-outline-variant text-on-surface-variant hover:bg-surface-container px-3 py-1.5 rounded-lg text-xs font-body transition-all">Reset layout</button>
             <button id="floorplan-edit-btn" onclick="toggleFloorEdit()" class="flex items-center gap-1 border border-primary text-primary hover:bg-primary hover:text-on-primary px-3 py-1.5 rounded-lg text-xs font-headline font-bold transition-all"><span class="material-symbols-outlined" style="font-size:16px">edit</span> Edit layout</button>
           </div>
@@ -596,6 +605,8 @@ tailwind.config = {
               <span class="text-sm font-headline font-bold text-on-surface" id="turns-date-btn-val">Today</span>
             </button>
             <button onclick="shiftTurnsDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+            <button onclick="exportTurnsCSV()" title="Export this day as CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-xs font-body font-semibold text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+            <button onclick="exportTurnsPDF()" title="Print / save this day as PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-xs font-body font-semibold text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
           </div>
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant">
