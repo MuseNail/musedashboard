@@ -137,7 +137,7 @@ function renderFloorStaffRow() {
     const avatar = st.photo
       ? `<img src="${st.photo}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ${c.bg};box-shadow:0 1px 3px rgba(0,0,0,.18)">`
       : `<div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:${c.bg};color:${c.text};font-family:var(--font-headline);font-weight:700;font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,.18)">${(st.name||'?').charAt(0).toUpperCase()}</div>`;
-    return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:64px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Drag onto a station to assign this tech"'}>
+    return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:64px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Tap for status · drag onto a station to assign"'}>
       ${avatar}
       <span style="font-size:11px;font-weight:600;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px">${st.name.split(' ')[0]}</span>
       <span style="font-size:9px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
@@ -408,6 +408,9 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
     const dx = e.clientX - startX, dy = e.clientY - startY;
     if (!wasDragging) {
       if (mode === 'bubble' && dragEntryId) window.showGroupAssignModal?.(dragEntryId);
+      // Tapping a tech (no drag) opens the exact same tech-status menu as the turns grid.
+      // showTechStatusMenu reads event.currentTarget for positioning, so hand it the tech el.
+      else if (mode === 'tech' && dragTechId) window.showTechStatusMenu?.({ stopPropagation() {}, currentTarget: pending, clientX: e.clientX, clientY: e.clientY }, dragTechId);
       // Single click selects only this station (clears the rest); Shift+click adds/removes
       // it from a multi-selection. (Touch has no Shift — multi-select by gesture is TODO.)
       else if (mode === 'station' && dragStation) {

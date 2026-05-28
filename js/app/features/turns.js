@@ -493,8 +493,8 @@ export function showTechStatusMenu(event, staffId) {
   if (photoEl) {
     const sc = getTechStatusColor(staffId);
     photoEl.innerHTML = st.photo
-      ? `<img src="${st.photo}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;border:3px solid ${sc.bg}">`
-      : `<div style="width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${sc.bg}20;border:3px solid ${sc.bg};color:${sc.bg};font-family:var(--font-headline);font-weight:700;font-size:26px">${(st.name||'?').charAt(0).toUpperCase()}</div>`;
+      ? `<img src="${st.photo}" style="width:128px;height:128px;border-radius:50%;object-fit:cover;border:6px solid ${sc.bg}">`
+      : `<div style="width:128px;height:128px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${sc.bg}20;border:6px solid ${sc.bg};color:${sc.bg};font-family:var(--font-headline);font-weight:700;font-size:52px">${(st.name||'?').charAt(0).toUpperCase()}</div>`;
   }
   const isBreak = cfg().turns_break.includes(staffId);
   document.getElementById('tsm-available').style.opacity = isBreak ? '0.4' : '1';
