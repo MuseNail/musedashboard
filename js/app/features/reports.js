@@ -506,6 +506,11 @@ export function runReport() {
   const gcSoldValue = gcSold.reduce((s,g)=>s+(g.amount||0),0);
   const gcRedeemed = giftCards().reduce((s,g)=> s + gcRedemptions(g).reduce((a,r)=> a + (inPeriod(r.date) ? (r.amount||0) : 0), 0), 0);
   const gcOutstanding = giftCards().reduce((s,g)=>s+((g.amount||0)-(g.amountUsed||0)),0);
+  // Gross income = true new cash collected: billed work + new gift-card cash, minus
+  // redemptions (those tickets are already in totalBilled but were paid from cards
+  // sold earlier, so the redeemed portion isn't new cash this period).
+  const grossIncome = totalIncome + gcSoldValue - gcRedeemed;
+  set('rpt-gross-income', `$${grossIncome.toFixed(2)}`);
   set('rpt-gc-sold', `$${gcSoldValue.toFixed(2)}`);
   set('rpt-gc-redeemed', `$${gcRedeemed.toFixed(2)}`);
   const gcBreakdown = document.getElementById('rpt-giftcards-breakdown');
@@ -517,7 +522,7 @@ export function runReport() {
       row('Outstanding Balance', `$${gcOutstanding.toFixed(2)}`, 'Unredeemed value across all gift cards');
   }
 
-  renderDeltas({ totalIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold: gcSoldValue, gcRedeemed });
+  renderDeltas({ totalIncome, grossIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold: gcSoldValue, gcRedeemed });
   renderPerformance(filtered);
   updateDateButtons();
   window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding };
@@ -593,10 +598,10 @@ function computeMetrics(from, to) {
   const inPeriod = ds => ds && ds >= localDateStr(from) && ds <= localDateStr(to);
   const gcSold = giftCards().filter(g => inPeriod(g.datePurchased)).reduce((s,g)=>s+(g.amount||0),0);
   const gcRedeemed = giftCards().reduce((s,g)=> s + gcRedemptions(g).reduce((a,r)=> a + (inPeriod(r.date) ? (r.amount||0) : 0), 0), 0);
-  return { totalIncome, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold, gcRedeemed };
+  return { totalIncome, grossIncome: totalIncome + gcSold - gcRedeemed, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold, gcRedeemed };
 }
 const _DELTA_CARDS = [
-  ['rpt-total-income-delta','totalIncome'], ['rpt-total-guests-delta','guestCount'], ['rpt-avg-ticket-delta','avgTicket'],
+  ['rpt-gross-income-delta','grossIncome'], ['rpt-total-income-delta','totalIncome'], ['rpt-total-guests-delta','guestCount'], ['rpt-avg-ticket-delta','avgTicket'],
   ['rpt-shop-keeps-delta','shopKeeps'], ['rpt-total-commission-delta','commission'],
   ['rpt-svc-total-delta','svcTotal'], ['rpt-items-total-delta','itemsTotal'], ['rpt-fees-total-delta','feesTotal'],
   ['rpt-discount-total-delta','discountTotal'], ['rpt-gc-sold-delta','gcSold'], ['rpt-gc-redeemed-delta','gcRedeemed'],
