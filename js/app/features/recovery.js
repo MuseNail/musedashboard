@@ -7,7 +7,7 @@
 //      has no matching record/queue entry → a PROBABLE lost check-in (heuristic).
 import { getState } from '../store.js';
 import { dispatch, failedOps, outboxPending, clearFailedOp, DEVICE_ID } from '../sync.js';
-import { customerDirectory } from './square-customers.js';
+import { customerDirectory, rekeyNotesByPhone, findOrphanNotes } from './square-customers.js';
 import { showToast, newEntryId } from '../utils.js';
 
 const cfg = () => getState().config;
@@ -80,6 +80,18 @@ export function recoveryReaddCheckin(squareId) {
   renderRecoveryReport();
 }
 
+// Operator-triggered one-time migration of customer notes from Square-ID keys to
+// phone keys. Previews the effect, confirms, then commits (idempotent + backed up).
+export function migrateNotesByPhone() {
+  if (!(customerDirectory || []).length) { showToast('Load the customer directory first (Customers → Sync Square).'); return; }
+  const p = rekeyNotesByPhone(true);
+  if (p.total === 0) { showToast('No customer notes to re-key.'); return; }
+  window.showWarnModal?.('Re-key customer notes by phone?',
+    `${p.rekeyed} note(s) move from Square-ID to phone keys · ${p.merged} merged · ${p.orphans} left orphaned (no matching customer). A backup is kept so this can be undone. Proceed?`,
+    () => { const r = rekeyNotesByPhone(false); showToast(`Notes re-keyed: ${r.rekeyed} moved · ${r.merged} merged · ${r.orphans} orphan`); renderRecoveryReport(); },
+    'Re-key notes');
+}
+
 // ── Render ────────────────────────────────────────
 export function renderRecoveryReport() {
   const el = document.getElementById('recovery-content');
@@ -124,8 +136,19 @@ export function renderRecoveryReport() {
       <button onclick="recoveryReaddCheckin('${_esc(l.squareId)}')" class="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-body font-semibold">Re-add to queue</button>
     </div>`).join('') : none('None found in the last 7 days. (Square says a customer checked in, but we have no record — these are usually customers who left without paying.)');
 
+  // D — customer notes: one-time re-key by phone + orphaned-note list
+  const orphans = findOrphanNotes();
+  const notesBtn = `<button onclick="migrateNotesByPhone()" class="mb-2 flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm">
+      <span class="material-symbols-outlined" style="font-size:16px">sync_alt</span> Re-key customer notes by phone
+    </button>`;
+  const orphanHtml = orphans.length ? orphans.map(o => `<div class="bg-surface-container rounded-xl px-4 py-2.5 mb-1.5 border border-surface-container-high">
+      <div class="flex items-center justify-between gap-2 mb-1"><span class="text-[11px] font-body text-on-surface-variant truncate">key: ${_esc(o.key)}</span><span class="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0" style="background:#e7d9b0;color:#3a2800">${o.type === 'square-id' ? 'old Square ID' : 'no customer'}</span></div>
+      <div class="text-sm font-body text-on-surface whitespace-pre-wrap">${_esc(o.text)}</div>
+    </div>`).join('') : none('No orphaned notes — every note maps to a current customer.');
+
   el.innerHTML =
     section('Waiting to sync', 'Writes from this device not yet confirmed by the server. These send automatically on reconnect.', pendingHtml) +
     section('Failed writes', 'Writes the server rejected. Restore re-adds the customer/transaction to the queue.', failedHtml) +
-    section('Possible lost check-ins (last 7 days)', 'Square recorded a check-in but the app has no matching record. Re-add puts them back in the queue.', lostHtml);
+    section('Possible lost check-ins (last 7 days)', 'Square recorded a check-in but the app has no matching record. Re-add puts them back in the queue.', lostHtml) +
+    section('Customer notes', 'Notes are keyed by phone so a Square ID change can\'t orphan them. Run this once to migrate legacy notes — it\'s safe to re-run. Any note with no matching customer is listed below.', notesBtn + orphanHtml);
 }

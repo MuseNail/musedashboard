@@ -8,10 +8,14 @@ import { showToast, formatPhone, autoCapitalize, dismissNumpad } from '../utils.
 import { SQUARE_PROXY } from '../config.js';
 
 const cfg = () => getState().config;
-// Manual customer notes are app-owned + synced (config.customer_notes, keyed by
-// Square id) — kept SEPARATE from Square's own `note` field, which the app does
-// NOT write. This app-owned note is what the check-in popup shows.
-const customerNote = id => ((cfg().customer_notes || {})[id] || '').trim();
+// Manual customer notes are app-owned + synced (config.customer_notes) — kept
+// SEPARATE from Square's own `note` field, which the app does NOT write. This
+// app-owned note is what the check-in popup shows. Notes are keyed by PHONE
+// (normalized digits) so a Square customer-ID change (merge/recreate) can't
+// orphan them; notePhoneKey() is the single canonical normalization.
+const notePhoneKey = phone => (phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+const isPhoneKey   = key => /^\d{7,15}$/.test(key);
+const customerNote = phone => ((cfg().customer_notes || {})[notePhoneKey(phone)] || '').trim();
 
 export let squareCustomers   = [];
 export let customerDirectory = [];
@@ -119,33 +123,32 @@ export function fillFromCustomer(customer, guestIdx, prefix, phoneId, firstId, l
   // customer-facing check-in screen — open the note editor for a returning
   // customer chosen from autofill, so the front desk can read AND add/update a
   // note in the moment (pre-filled with any existing note).
-  if (/^manual-/.test(firstId || '') && customer.id) {
-    showCustomerNote(customer.id, [customer.given_name, customer.family_name].filter(Boolean).join(' '), customerNote(customer.id));
+  if (/^manual-/.test(firstId || '') && customer.phone) {
+    showCustomerNote(customer.phone, [customer.given_name, customer.family_name].filter(Boolean).join(' '), customerNote(customer.phone));
   }
 }
 // Customer note lives as a SIDE PANEL beside the dashboard check-in (#manual-note-panel),
 // not a screen-covering modal: it opens when a returning customer is picked, auto-saves
 // as you type, the Save button saves without closing the check-in, and it closes (after
 // flushing) when the check-in window closes.
-let _noteCustomerId = null, _noteSaveTimer = null;
-export function showCustomerNote(squareId, name, note) {
+let _notePhoneKey = null, _noteSaveTimer = null;
+export function showCustomerNote(phone, name, note) {
   const nameEl = document.getElementById('customer-note-name');
   const editEl = document.getElementById('customer-note-edit');
   const panel = document.getElementById('manual-note-panel');
   if (!panel || !editEl) return;
-  _noteCustomerId = squareId || null;
+  _notePhoneKey = notePhoneKey(phone) || null;
   if (nameEl) nameEl.textContent = name || '';
   editEl.value = note || '';
   panel.classList.remove('hidden');
-  const phone = squareId ? (customerDirectory.find(x => x.squareId === squareId)?.phone || '') : '';
   window.renderCustomerHistory?.(phone, name, 'ci-history');
 }
 function _persistCustomerNote() {
-  if (!_noteCustomerId) return;
+  if (!_notePhoneKey) return;
   const editEl = document.getElementById('customer-note-edit'); if (!editEl) return;
   const val = editEl.value.trim();
   const notes = { ...(cfg().customer_notes || {}) };
-  if (val) notes[_noteCustomerId] = val; else delete notes[_noteCustomerId];
+  if (val) notes[_notePhoneKey] = val; else delete notes[_notePhoneKey];
   dispatch('config.set', { key: 'customer_notes', value: notes });
 }
 // Auto-save shortly after typing stops (debounced — no dispatch per keystroke).
@@ -156,7 +159,7 @@ export function saveCustomerNoteInline() { clearTimeout(_noteSaveTimer); _persis
 export function closeCustomerNote() {
   clearTimeout(_noteSaveTimer); _persistCustomerNote();
   const panel = document.getElementById('manual-note-panel'); if (panel) panel.classList.add('hidden');
-  _noteCustomerId = null;
+  _notePhoneKey = null;
 }
 
 export function buildDropdown(customers, dropdownId, guestIdx, phoneId, firstId, lastId, maskPhone = false) {
@@ -285,7 +288,7 @@ export function showEditCustomer(squareId) {
   document.getElementById('edit-cust-last').value      = c.lastName;
   document.getElementById('edit-cust-phone').value     = c.phone;
   document.getElementById('edit-cust-email').value     = c.email;
-  document.getElementById('edit-cust-notes').value     = customerNote(c.squareId);   // app-owned manual note (not Square's auto stamp)
+  document.getElementById('edit-cust-notes').value     = customerNote(c.phone);   // app-owned manual note, keyed by phone
   // Local visit history (derived from transaction records) — kept in reports.js to avoid
   // a circular import; safe no-op if reports hasn't loaded.
   window.renderCustomerHistory?.(c.phone, [c.firstName, c.lastName].filter(Boolean).join(' '));
@@ -317,10 +320,15 @@ export async function saveEditCustomer() {
   const local = customerDirectory.find(x => x.squareId === squareId);
   if (local) { local.firstName = first; local.lastName = last; local.phone = phone; local.email = email; }
   localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
-  // Manual note → app-owned synced store (kept out of Square's auto-stamped note).
-  const notes = { ...(cfg().customer_notes || {}) };
-  if (note) notes[squareId] = note; else delete notes[squareId];
-  dispatch('config.set', { key: 'customer_notes', value: notes });
+  // Manual note → app-owned synced store, keyed by phone (kept out of Square's note).
+  const phoneKey = notePhoneKey(phone);
+  if (phoneKey) {
+    const notes = { ...(cfg().customer_notes || {}) };
+    if (note) notes[phoneKey] = note; else delete notes[phoneKey];
+    dispatch('config.set', { key: 'customer_notes', value: notes });
+  } else if (note) {
+    showToast('Add a phone number to save a note');
+  }
   const sc = squareCustomers.find(c => c.id === squareId);
   if (sc) { sc.given_name = first; sc.family_name = last; sc.phone = phone; sc.display = `${first} ${last}`.trim(); }
 
@@ -437,4 +445,53 @@ export async function squareUpsertCustomer(entry) {
       }
     }
   } catch (e) { console.warn('[Square] Customer upsert failed:', e); }
+}
+
+// ── Notes re-key migration + orphan finder ──────────────────────────────────
+// One-time, idempotent, operator-triggered (Settings → Data Recovery). Moves any
+// legacy Square-ID-keyed note onto its customer's phone key; phone keys are left
+// untouched, so re-running is a no-op. Collisions concatenate (never lose a note).
+// A note whose Square ID isn't in the directory stays put and shows in the orphan
+// list. preview=true computes the summary without writing. The original map is
+// stashed once under customer_notes_backup_v361 for rollback.
+export function rekeyNotesByPhone(preview = false) {
+  const notes = cfg().customer_notes || {};
+  const byId = new Map((customerDirectory || []).map(c => [c.squareId, c]));
+  const next = {};
+  let rekeyed = 0, merged = 0, orphans = 0;
+  const place = (key, text) => {
+    if (!(key in next)) { next[key] = text; return false; }
+    if (next[key] !== text && !next[key].split('\n').some(l => l === text)) next[key] += '\n' + text;
+    return true;   // collision — appended (or a duplicate, skipped)
+  };
+  for (const [key, raw] of Object.entries(notes)) {
+    const text = (raw || '').trim();
+    if (!text) continue;
+    if (isPhoneKey(key)) { if (place(key, text)) merged++; continue; }
+    const pk = notePhoneKey(byId.get(key)?.phone || '');
+    if (pk) { if (place(pk, text)) merged++; rekeyed++; }
+    else { next[key] = text; orphans++; }
+  }
+  if (!preview) {
+    if (!cfg().customer_notes_backup_v361) dispatch('config.set', { key: 'customer_notes_backup_v361', value: notes });
+    dispatch('config.set', { key: 'customer_notes', value: next });
+    window.logAudit?.('Customer notes re-keyed by phone', `${rekeyed} re-keyed · ${merged} merged · ${orphans} orphan`);
+  }
+  return { rekeyed, merged, orphans, total: Object.keys(notes).filter(k => (notes[k] || '').trim()).length };
+}
+
+// Notes whose key matches no current customer phone — surfaced read-only so the
+// operator can spot a note that lost its customer (deleted/merged-away) or a
+// leftover Square-ID key the migration couldn't resolve.
+export function findOrphanNotes() {
+  const notes = cfg().customer_notes || {};
+  const phones = new Set((customerDirectory || []).map(c => notePhoneKey(c.phone)).filter(Boolean));
+  const out = [];
+  for (const [key, raw] of Object.entries(notes)) {
+    const text = (raw || '').trim();
+    if (!text) continue;
+    if (isPhoneKey(key) && phones.has(key)) continue;
+    out.push({ key, text, type: isPhoneKey(key) ? 'phone' : 'square-id' });
+  }
+  return out;
 }
