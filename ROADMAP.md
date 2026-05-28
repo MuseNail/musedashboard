@@ -4,6 +4,20 @@ All planned phases (Split through Phase 7) are complete. The app is live and ope
 
 ---
 
+## ⭐ TurnDesk — public SaaS productization (SEPARATE product, planned 2026-05-28)
+
+This `musedashboard` repo stays the **stable single-salon app**. A separate public product — **TurnDesk** — is being forked from this codebase into its **own repo / Worker / Cloudflare account**. It is **built in its own repo & chat — not here.** The kickoff prompt to start it lives at repo root: **`TURNDESK-KICKOFF.md`**.
+
+**Locked decisions:**
+- **Name:** TurnDesk (working name). **Repo:** fresh clean GitHub repo (copy of this code, no history); base path rebased `/musedashboard/` → `/turndesk/` (sw.js precache, manifests).
+- **Cloudflare:** **separate account under the same email login**; new Worker + **per-tenant Durable Object** + new R2/KV/secrets + own `workers.dev` URL. Salon app untouched and fully isolated.
+- **Tenancy:** **multi-tenant, one Durable Object per salon** ("Option 3" — Cloudflare-idiomatic; one codebase/deploy, per-tenant data isolation, auto-provisioning; scales to thousands). Built in stages. Evolution of today's single `MuseSalonDO`, not a rewrite.
+- **Payments:** **processor adapter layer from day one** — common interface implemented by `SquareAdapter` / `StripeAdapter` / `HelcimAdapter`; active processor chosen per-tenant. Migrate Square → adapter; build **Helcim first**; stub Stripe. (Helcim = interchange-plus rates + server-driven Smart Terminal / Payment Hardware API; see the kickoff doc for the integration facts.)
+
+**Build sequence:** P0 fork+isolate+blank twin → P1 adapter + Helcim → P2 choose-your-processor → P3 multi-tenancy + accounts/auth → P4 Stripe billing + onboarding → P5 public polish (a11y, marketing, DR/SLA). Productization gaps, pricing, legal (gift-card law, PCI) detailed in the "Commercialization & SaaS Productization" section below.
+
+---
+
 ## Phase Status
 
 | Phase | Title | Status |

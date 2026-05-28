@@ -10,6 +10,15 @@ A salon management PWA for Muse Nails & Spa. It runs in a browser on an iPad at 
 
 The app is **live and in active operational use**. All planned phases (Split through Phase 7) are complete.
 
+---
+
+## ⚠️ Product line — this repo vs TurnDesk (read before any "make it a product" work)
+
+**This repo (`musedashboard`) is the STABLE, single-salon, live app — keep it that way.** A separate public/SaaS product — **TurnDesk** — is being forked from this codebase into its **own GitHub repo, its own Cloudflare Worker, and its own Cloudflare account** (decision locked 2026-05-28). TurnDesk is **multi-tenant** (one Durable Object per salon), has a **pluggable payment-processor adapter layer** (Square / Stripe / **Helcim**), and adds accounts/billing/onboarding for public signups.
+
+- **Do NOT build TurnDesk features in this repo.** TurnDesk is developed in its own repo/chat.
+- Full plan + all locked decisions: `ROADMAP.md` (TurnDesk section). Kickoff prompt to start the fork in a new chat: **`TURNDESK-KICKOFF.md`** (repo root).
+
 > ## ⚡ Development Posture (v2.00+) — SUPERSEDES the rules below where they conflict
 >
 > A deliberate strategic decision (v2.00) changed the operating constraints:
