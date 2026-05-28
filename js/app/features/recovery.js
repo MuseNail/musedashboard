@@ -147,8 +147,8 @@ export function renderRecoveryReport() {
     </div>`).join('') : none('No orphaned notes — every note maps to a current customer.');
 
   el.innerHTML =
+    section('Customer notes', 'Notes are keyed by phone so a Square ID change can\'t orphan them. Run this once to migrate legacy notes — it\'s safe to re-run. Any note with no matching customer is listed below.', notesBtn + orphanHtml) +
     section('Waiting to sync', 'Writes from this device not yet confirmed by the server. These send automatically on reconnect.', pendingHtml) +
     section('Failed writes', 'Writes the server rejected. Restore re-adds the customer/transaction to the queue.', failedHtml) +
-    section('Possible lost check-ins (last 7 days)', 'Square recorded a check-in but the app has no matching record. Re-add puts them back in the queue.', lostHtml) +
-    section('Customer notes', 'Notes are keyed by phone so a Square ID change can\'t orphan them. Run this once to migrate legacy notes — it\'s safe to re-run. Any note with no matching customer is listed below.', notesBtn + orphanHtml);
+    section('Possible lost check-ins (last 7 days)', 'Square recorded a check-in but the app has no matching record. Re-add puts them back in the queue.', lostHtml);
 }
