@@ -21,12 +21,14 @@ export function renderServicesMerged() {
     const checkin = isServiceVisibleOnCheckin(s.id);
     const dash    = isServiceVisibleOnDash(s.id);
     const toggle = (on, label, fn, title) => `
-      <button onclick="${fn}('${s.id}')" title="${title}" class="flex flex-col items-center gap-1 flex-shrink-0 px-1 py-1">
+      <button onclick="event.stopPropagation();${fn}('${s.id}')" title="${title}" class="flex flex-col items-center gap-1 flex-shrink-0 px-1 py-1">
         <span class="text-[9px] font-body uppercase tracking-wider ${on ? 'text-primary' : 'text-outline-variant'}">${label}</span>
         <div class="mswitch relative w-14 h-7 rounded-full transition-colors ${on ? 'bg-primary' : 'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${on ? 'left-7' : 'left-0.5'}"></div></div>
       </button>`;
+    // Whole row opens the editor; the toggles + delete are nested actions that
+    // stopPropagation so they don't also fire the row's edit.
     return `
-    <div class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between gap-3">
+    <div onclick="showEditService('${s.id}')" title="Edit service" class="bg-surface-container-lowest rounded-xl px-4 py-3 border border-surface-container-high flex items-center justify-between gap-3 cursor-pointer hover:bg-surface-container transition-colors">
       <div class="flex items-center gap-3 min-w-0">
         <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
           <span class="text-xs font-headline font-bold text-on-primary">${s.abbr}</span>
@@ -39,14 +41,9 @@ export function renderServicesMerged() {
       <div class="flex items-center gap-4 flex-shrink-0">
         ${toggle(checkin, 'Check-in', 'toggleCheckinService', 'Show on the customer check-in screen')}
         ${toggle(dash, 'Dashboard', 'toggleDashService', 'Show in Assign, Turns, Queue & Calendar')}
-        <div class="flex items-center gap-1">
-          <button onclick="showEditService('${s.id}')" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors">
-            <span class="material-symbols-outlined" style="font-size:18px">edit</span>
-          </button>
-          <button onclick="deleteService('${s.id}')" class="w-9 h-9 rounded-full hover:bg-error/10 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors">
-            <span class="material-symbols-outlined" style="font-size:18px">delete</span>
-          </button>
-        </div>
+        <button onclick="event.stopPropagation();deleteService('${s.id}')" title="Delete service" class="w-9 h-9 rounded-full hover:bg-error/10 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors">
+          <span class="material-symbols-outlined" style="font-size:18px">delete</span>
+        </button>
       </div>
     </div>`;
   }).join('');
