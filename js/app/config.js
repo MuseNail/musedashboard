@@ -1,5 +1,5 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
-export const APP_VERSION = 'v3.68';
+export const APP_VERSION = 'v3.69';
 export const APP_NAME    = 'musedashboard';
 export const STAFF_PIN   = '1234'; // fallback when no front desk users are configured
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
@@ -17,8 +17,8 @@ export const VAPID_PUBLIC_KEY = 'BCoL00zoZ6BMiurBxzhh05439KLXdDCgmd6z6bQzOl4r30V
 
 // Seeded into config.role_permissions on first run; also the fallback in canDo().
 export const DEFAULT_ROLE_PERMISSIONS = {
-  manager:   { historicalEntry: true,  deleteTransaction: true,  refund: true,  viewReports: true, manageStaff: true,  manageServices: true  },
-  frontdesk: { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true, manageStaff: false, manageServices: false },
+  manager:   { historicalEntry: true,  deleteTransaction: true,  refund: true,  viewReports: true, manageStaff: true,  manageServices: true,  markPaidDirect: true  },
+  frontdesk: { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true, manageStaff: false, manageServices: false, markPaidDirect: false },
 };
 
 export const GROUP_COLORS = [

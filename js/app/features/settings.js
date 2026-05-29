@@ -25,6 +25,7 @@ const _PERM_LABELS = {
   historicalEntry: 'Add / Edit Historical Transactions', deleteTransaction: 'Delete Transactions',
   refund: 'Issue Refunds', viewReports: 'View Reports & Transactions',
   manageStaff: 'Manage Staff', manageServices: 'Manage Services & Catalog',
+  markPaidDirect: 'Mark Paid without the Pay flow (skips Square)',
 };
 function rolePerms() {
   const stored = cfg().role_permissions;
@@ -396,6 +397,7 @@ export function renderSettingsPanel() {
   if (sqStatus) sqStatus.textContent = cfg().square_config ? `✓ Connected — Location: ${cfg().square_config.locationId}` : 'Not connected';
   if (sqInput && cfg().square_config?.locationId) sqInput.value = cfg().square_config.locationId;
   if (sqAppInput && cfg().square_config?.applicationId) sqAppInput.value = cfg().square_config.applicationId;
+  window.renderTerminalStatus?.();
   const c = getTurnConfig();
   const fi = document.getElementById('thresh-full'), hi = document.getElementById('thresh-half');
   if (fi) fi.value = c.fullMin;
