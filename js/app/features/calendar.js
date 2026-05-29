@@ -116,7 +116,8 @@ export function apptsForTurns() {
     if (startMs < now) return;                                                   // passed
     if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;   // no-show
     let qm = null;                                                               // already in the queue → checked in
-    items.forEach(({ ev }) => { if (qm) return; const ph = _apptPhone(ev).replace(/\D/g, ''); qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || (ph ? queue().find(x => (x.phone || '').replace(/\D/g, '') === ph) : null); });
+    const _apptToday = new Date(startMs).toDateString() === new Date().toDateString();
+    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)); if (!qm && _apptToday) { const ph = _apptPhone(ev).replace(/\D/g, ''); if (ph) qm = queue().find(x => (x.phone || '').replace(/\D/g, '') === ph); } });
     if (qm) return;
     const name = ppriv.musePrimaryName || ppriv.museName || (pev.summary || '').split(' — ')[0] || 'Guest';
     const lines = [];
@@ -182,7 +183,7 @@ export function renderTodaysAppointments() {
   const isToday = new Date().toDateString() === _calDate.toDateString();
   if (titleEl) titleEl.textContent = isToday ? "Today's Appointments" : _calDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
   const uCal = unassignedCalId();
-  const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description||'') || ext.museLines !== undefined || cfg().services.some(s => (ev.summary||'').toLowerCase().includes(s.label.toLowerCase())); };
+  const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description||'') || ext.museLines !== undefined || cfg().services.some(s => s.label && (ev.summary||'').toLowerCase().includes(s.label.toLowerCase())); };
   const groups = new Map();
   Object.entries(_calEvents).forEach(([cid, list]) => (list||[]).forEach(ev => { if (!ev.start || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
   const rows = [];
@@ -196,7 +197,7 @@ export function renderTodaysAppointments() {
     const persons = new Map();
     items.forEach(({ ev }) => { const pnm = ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || name; if (!persons.has(pnm)) persons.set(pnm, _parseApptLines(ev, '')); });
     let qm = null;
-    items.forEach(({ ev }) => { if (qm) return; const ph = _apptPhone(ev).replace(/\D/g,''); qm = queue().find(x => x.calEventId && String(x.calEventId)===String(ev.id)) || (ph ? queue().find(x => (x.phone||'').replace(/\D/g,'')===ph) : null); });
+    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId)===String(ev.id)); if (!qm && isToday) { const ph = _apptPhone(ev).replace(/\D/g,''); if (ph) qm = queue().find(x => (x.phone||'').replace(/\D/g,'')===ph); } });
     rows.push({ startMin: startDt.getHours()*60 + startDt.getMinutes(), startDt, name, confirmed, noShow, persons, primaryEv: pev, primaryCalId: primary.calId, qm });
   });
   rows.sort((a,b) => a.startMin - b.startMin);
@@ -358,6 +359,7 @@ export function calRenderGrid() {
     document.getElementById('cal-loading').classList.remove('hidden'); grid.classList.add('hidden'); return;
   }
   calSetStatus(''); document.getElementById('cal-loading').classList.add('hidden'); grid.classList.remove('hidden');
+  try {
 
   const c = JSON.parse(localStorage.getItem('muse_cal_hours') || 'null');
   const START_HOUR = c?.start ?? 6, END_HOUR = c?.end ?? 22, SLOT_MINS = _calSlotMins || 30;
@@ -419,6 +421,7 @@ export function calRenderGrid() {
     layout.forEach(b => { if (cluster.length && b.startMin >= clusterEnd) { finalizeCluster(cluster); cluster = []; clusterEnd = -1; } cluster.push(b); clusterEnd = Math.max(clusterEnd, b.endMin); });
     if (cluster.length) finalizeCluster(cluster);
     layout.forEach(({ evs, first, startDt, top, ht, lane = 0, laneCount = 1 }) => {
+      try {
       const timeStr = startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
       const gid = first.extendedProperties?.private?.museGroupId || '';
       const linkedCals = gid && groupCals[gid] ? [...groupCals[gid]].filter(c => c !== cal.id) : [];
@@ -437,8 +440,8 @@ export function calRenderGrid() {
       let isAppt = false, qm = null;
       for (const ev of evs) {
         const ext = ev.extendedProperties?.private || {}, d = ev.description || '', t = ev.summary || '';
-        if (!!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(d) || cfg().services.some(s => t.toLowerCase().includes(s.label.toLowerCase())) || ext.museLines !== undefined) isAppt = true;
-        if (!qm) { const evPhone = _apptPhone(ev).replace(/\D/g,''); qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || (evPhone ? queue().find(x => (x.phone||'').replace(/\D/g,'') === evPhone) : null); }
+        if (!!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(d) || cfg().services.some(s => s.label && t.toLowerCase().includes(s.label.toLowerCase())) || ext.museLines !== undefined) isAppt = true;
+        if (!qm) { qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)); if (!qm && isToday) { const evPhone = _apptPhone(ev).replace(/\D/g,''); if (evPhone) qm = queue().find(x => (x.phone||'').replace(/\D/g,'') === evPhone); } }
       }
       const qs = qm?.status || null;
       // One row per service in THIS column: "FirstName — Service".
@@ -451,7 +454,7 @@ export function calRenderGrid() {
         // show the unassigned (no-tech) services. Keeps each service on one column.
         const isUcol = cal.id === uCal;
         const lines = _parseApptLines(ev, cal.id).filter(l => isUcol ? (!l.calId || l.calId === cal.id) : (l.calId === cal.id));
-        if (lines.length === 0 && ext.museLines === undefined) { cfg().services.filter(s => (ev.summary||'').toLowerCase().includes(s.label.toLowerCase())).forEach(s => svcRows.push({ fn, label: s.label, svcId: s.id })); return; }
+        if (lines.length === 0 && ext.museLines === undefined) { cfg().services.filter(s => s.label && (ev.summary||'').toLowerCase().includes(s.label.toLowerCase())).forEach(s => svcRows.push({ fn, label: s.label, svcId: s.id })); return; }
         lines.forEach(l => { const s = cfg().services.find(x => x.id === l.svcId); svcRows.push({ fn, label: s?.label || l.svcId || '', svcId: l.svcId || '' }); });
       });
       const dotColors = [...new Set(svcRows.map(r => (SVC_GROUPS.find(x => x.ids.some(id => (r.svcId||'').toLowerCase().includes(id)))||{}).color || '#455a64'))].slice(0,6);
@@ -476,8 +479,9 @@ export function calRenderGrid() {
         + `<div style="display:flex;align-items:center;gap:2px;overflow:hidden;line-height:1.25">${linkIcon}${chips}${confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0">✓</span>':''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}</span>${qBadge}</div>`
         + (ht>30?`<div style="font-size:10px;color:${tc};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(phoneLine)}</div>`:'')
         + (ht>44?svcHtml:'')
-        + (notes&&ht>44?`<div style="font-size:9px;color:${tc};opacity:0.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">📝 ${escHtml(notes.split('\n')[0])}</div>`:'')
+        + (notes&&ht>44?`<div style="font-size:9px;color:${tc};opacity:0.7;white-space:pre-wrap;overflow-wrap:anywhere;overflow:hidden;line-height:1.3">📝 ${escHtml(notes)}</div>`:'')
         + `</div>`;
+      } catch (_bErr) { console.warn('[calendar] skipped a booking render:', _bErr); }
     });
     body += '</div></div>';
   });
@@ -489,6 +493,7 @@ export function calRenderGrid() {
   grid.innerHTML = `<div id="cal-scroll" style="height:100%;overflow:auto;position:relative;-webkit-overflow-scrolling:touch"><div style="min-width:${TIME_W + COL_W*visible.length}px;display:flex;flex-direction:column;min-height:100%">${hdr}${body}</div></div>`;
   const gb = document.getElementById('cal-scroll');
   if (gb) { const scrollToHour = Math.max(START_HOUR, now.getHours()-1); gb.scrollTop = Math.max(0, (scrollToHour-START_HOUR)*(60/SLOT_MINS)*SLOT_H - 10); }
+  } catch (_calErr) { console.warn('[calendar] grid render failed:', _calErr); }
 }
 function calRenderGridPreserveScroll() { const gb = document.getElementById('cal-scroll'); const saved = gb ? gb.scrollTop : null; calRenderGrid(); if (saved !== null) requestAnimationFrame(() => { const n = document.getElementById('cal-scroll'); if (n) n.scrollTop = saved; }); }
 
@@ -643,8 +648,9 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   const confirmed = ev.extendedProperties?.private?.museConfirmed === '1';
   const noShow = ev.extendedProperties?.private?.museNoShow === '1';
   let queueMatch = queue().find(x => x.calEventId && x.calEventId === eventId);
-  if (!queueMatch && rawPhone) queueMatch = queue().find(x => { const p = (x.phone||'').replace(/\D/g,''); return p && p === rawPhone; });
-  if (!queueMatch) { const fullName = title.trim().toLowerCase(); if (fullName.length > 2) queueMatch = queue().find(x => x.name && x.name.trim().toLowerCase() === fullName && !(rawPhone && (x.phone||'').replace(/\D/g,''))); }
+  const _apptIsToday = startDt.toDateString() === new Date().toDateString();
+  if (!queueMatch && _apptIsToday && rawPhone) queueMatch = queue().find(x => { const p = (x.phone||'').replace(/\D/g,''); return p && p === rawPhone; });
+  if (!queueMatch && _apptIsToday) { const fullName = title.trim().toLowerCase(); if (fullName.length > 2) queueMatch = queue().find(x => x.name && x.name.trim().toLowerCase() === fullName && !(rawPhone && (x.phone||'').replace(/\D/g,''))); }
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-[85] flex items-center justify-center bg-on-surface/40 px-4';
   let statusBadge = '';
@@ -673,13 +679,30 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
 
 // Toggle the "confirmed" flag on an appointment (stored in extendedProperties so it
 // syncs through Google Calendar; shown as a ✓ on the bubble + popup).
+// Every calendar copy of a booking. A multi-staff/party appointment is stored as one
+// Google event per staff column, all sharing museGroupId — so confirm / no-show must
+// hit ALL copies, else only the clicked staff column reflects the change. Solo event
+// (no groupId) → just itself.
+function _eventGroupRefs(calId, eventId) {
+  const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
+  if (!ev) return [];
+  const gid = ev.extendedProperties?.private?.museGroupId || '';
+  if (!gid) return [{ calId, eventId }];
+  const refs = [];
+  Object.entries(_calEvents).forEach(([cid, list]) => (list || []).forEach(e => {
+    if ((e.extendedProperties?.private?.museGroupId || '') === gid) refs.push({ calId: cid, eventId: e.id });
+  }));
+  return refs.length ? refs : [{ calId, eventId }];
+}
 export async function calToggleConfirmed(calId, eventId) {
   const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
   if (!ev) return;
   const nowConfirmed = ev.extendedProperties?.private?.museConfirmed === '1';
+  const target = nowConfirmed ? null : '1';
+  const refs = _eventGroupRefs(calId, eventId);
   try {
     showToast('Saving…');
-    await gapi.client.calendar.events.patch({ calendarId: calId, eventId, resource: { extendedProperties: { private: { museConfirmed: nowConfirmed ? null : '1' } } } });
+    await Promise.all(refs.map(r => gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museConfirmed: target } } } })));
     showToast(nowConfirmed ? 'Marked unconfirmed' : 'Appointment confirmed ✓');
     await calLoadAndRender(true);
   } catch (err) { showToast('Update failed: ' + (err.result?.error?.message || 'Unknown error')); }
@@ -693,9 +716,10 @@ export async function calMarkNoShow(calId, eventId) {
   const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
   if (!ev) return;
   const isNoShow = ev.extendedProperties?.private?.museNoShow === '1';
+  const refs = _eventGroupRefs(calId, eventId);
   try {
     showToast('Saving…');
-    await gapi.client.calendar.events.patch({ calendarId: calId, eventId, resource: { extendedProperties: { private: { museNoShow: isNoShow ? null : '1' } } } });
+    await Promise.all(refs.map(r => gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museNoShow: isNoShow ? null : '1' } } } })));
     showToast(isNoShow ? 'No-show cleared' : 'Marked No Show');
     await calLoadAndRender(true);
     if (isNoShow) return;
