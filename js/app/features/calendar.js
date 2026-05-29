@@ -116,8 +116,7 @@ export function apptsForTurns() {
     if (startMs < now) return;                                                   // passed
     if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;   // no-show
     let qm = null;                                                               // already in the queue → checked in
-    const _apptToday = new Date(startMs).toDateString() === new Date().toDateString();
-    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)); if (!qm && _apptToday) { const ph = _apptPhone(ev).replace(/\D/g, ''); if (ph) qm = queue().find(x => (x.phone || '').replace(/\D/g, '') === ph); } });
+    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g, ''), startMs); });
     if (qm) return;
     const name = ppriv.musePrimaryName || ppriv.museName || (pev.summary || '').split(' — ')[0] || 'Guest';
     const lines = [];
@@ -197,7 +196,7 @@ export function renderTodaysAppointments() {
     const persons = new Map();
     items.forEach(({ ev }) => { const pnm = ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || name; if (!persons.has(pnm)) persons.set(pnm, _parseApptLines(ev, '')); });
     let qm = null;
-    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId)===String(ev.id)); if (!qm && isToday) { const ph = _apptPhone(ev).replace(/\D/g,''); if (ph) qm = queue().find(x => (x.phone||'').replace(/\D/g,'')===ph); } });
+    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId)===String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g,''), startDt.getTime()); });
     rows.push({ startMin: startDt.getHours()*60 + startDt.getMinutes(), startDt, name, confirmed, noShow, persons, primaryEv: pev, primaryCalId: primary.calId, qm });
   });
   rows.sort((a,b) => a.startMin - b.startMin);
@@ -441,7 +440,7 @@ export function calRenderGrid() {
       for (const ev of evs) {
         const ext = ev.extendedProperties?.private || {}, d = ev.description || '', t = ev.summary || '';
         if (!!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(d) || cfg().services.some(s => s.label && t.toLowerCase().includes(s.label.toLowerCase())) || ext.museLines !== undefined) isAppt = true;
-        if (!qm) { qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)); if (!qm && isToday) { const evPhone = _apptPhone(ev).replace(/\D/g,''); if (evPhone) qm = queue().find(x => (x.phone||'').replace(/\D/g,'') === evPhone); } }
+        if (!qm) { qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g,''), startDt.getTime()); }
       }
       const qs = qm?.status || null;
       // One row per service in THIS column: "FirstName — Service".
@@ -647,10 +646,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   const phone = _apptPhone(ev), rawPhone = phone.replace(/\D/g, ''), notes = _apptNotes(ev);
   const confirmed = ev.extendedProperties?.private?.museConfirmed === '1';
   const noShow = ev.extendedProperties?.private?.museNoShow === '1';
-  let queueMatch = queue().find(x => x.calEventId && x.calEventId === eventId);
-  const _apptIsToday = startDt.toDateString() === new Date().toDateString();
-  if (!queueMatch && _apptIsToday && rawPhone) queueMatch = queue().find(x => { const p = (x.phone||'').replace(/\D/g,''); return p && p === rawPhone; });
-  if (!queueMatch && _apptIsToday) { const fullName = title.trim().toLowerCase(); if (fullName.length > 2) queueMatch = queue().find(x => x.name && x.name.trim().toLowerCase() === fullName && !(rawPhone && (x.phone||'').replace(/\D/g,''))); }
+  let queueMatch = queue().find(x => x.calEventId && x.calEventId === eventId) || _phoneQueueMatch(rawPhone, startDt.getTime());
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-[85] flex items-center justify-center bg-on-surface/40 px-4';
   let statusBadge = '';
@@ -679,6 +675,21 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
 
 // Toggle the "confirmed" flag on an appointment (stored in extendedProperties so it
 // syncs through Google Calendar; shown as a ✓ on the bubble + popup).
+// Match a live-queue visit to an appointment by phone, but ONLY when the visit's
+// check-in time is near the appointment time. Without the window, a customer's earlier
+// same-day visit (e.g. a paid morning walk-in) would wrongly stamp its status onto a
+// different appointment they booked for later the same day. The explicit calEventId link
+// (set when checking in *from* the appointment) is matched separately and always wins.
+function _phoneQueueMatch(rawPhone, apptStartMs) {
+  if (!rawPhone || !isFinite(apptStartMs)) return null;
+  const before = 2 * 3600 * 1000, after = 4 * 3600 * 1000;   // up to 2h early … 4h late/mid-service
+  return queue().find(x => {
+    if ((x.phone || '').replace(/\D/g, '') !== rawPhone) return false;
+    const t = x.checkinTime ? new Date(x.checkinTime).getTime() : NaN;
+    return isFinite(t) && t >= apptStartMs - before && t <= apptStartMs + after;
+  }) || null;
+}
+
 // Every calendar copy of a booking. A multi-staff/party appointment is stored as one
 // Google event per staff column, all sharing museGroupId — so confirm / no-show must
 // hit ALL copies, else only the clicked staff column reflects the change. Solo event
