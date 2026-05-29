@@ -83,14 +83,21 @@ export function getCalEvents(calId) { return _calEvents[calId] || []; }
 // For the appointment-reminder engine: today's TIMED appointment bookings (grouped like the
 // Today's-Appointments panel), as { id, name, startMs }. Only events that have a start time.
 export function apptsForReminders() {
+  const uCal = unassignedCalId();
+  const staff = cfg().staff || [];
+  const staffForCal = calId => { if (!calId || calId === uCal) return null; const nm = _calCalendars.find(c => c.id === calId)?.name; if (!nm) return null; return staff.find(s => (s.name || '').trim().toLowerCase() === nm.trim().toLowerCase()) || null; };
   const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description || '') || ext.museLines !== undefined || cfg().services.some(s => (ev.summary || '').toLowerCase().includes((s.label || '').toLowerCase())); };
   const groups = new Map();
-  Object.entries(_calEvents).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(ev); }));
+  Object.entries(_calEvents).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
   const out = [];
-  groups.forEach((evs) => {
-    const primary = evs.find(e => e.extendedProperties?.private?.musePrimary === '1') || evs[0];
-    const ppriv = primary.extendedProperties?.private || {};
-    out.push({ id: primary.id, name: ppriv.musePrimaryName || ppriv.museName || (primary.summary || '').split(' — ')[0] || 'Guest', startMs: new Date(primary.start.dateTime).getTime() });
+  groups.forEach(items => {
+    const primary = items.find(it => it.ev.extendedProperties?.private?.musePrimary === '1') || items[0];
+    const pev = primary.ev, ppriv = pev.extendedProperties?.private || {};
+    const lines = [];
+    items.forEach(({ ev, calId }) => _parseApptLines(ev, calId).forEach(l => lines.push({ ...l, calId: l.calId || calId })));
+    const svc = [...new Set(lines.map(l => cfg().services.find(s => s.id === l.svcId)?.label).filter(Boolean))].join(', ');
+    const techName = [...new Set(lines.map(l => staffForCal(l.calId)?.name).filter(Boolean))].join(', ');
+    out.push({ id: pev.id, name: ppriv.musePrimaryName || ppriv.museName || (pev.summary || '').split(' — ')[0] || 'Guest', startMs: new Date(pev.start.dateTime).getTime(), svc, techName });
   });
   return out;
 }
@@ -124,8 +131,9 @@ export function apptsForTurns() {
     const svc = [...new Set(lines.map(l => cfg().services.find(s => s.id === l.svcId)?.label).filter(Boolean))].join(', ') || (pev.summary || '').split(' — ')[0] || 'Appointment';
     const techs = new Map();   // staffId -> name, distinct assigned techs
     lines.forEach(l => { const st = staffForCal(l.calId); if (st) techs.set(st.id, st.name); });
-    if (techs.size === 0) out.push({ startMs, name, svc, techStaffId: '', techName: 'Unassigned' });
-    else techs.forEach((tn, id) => out.push({ startMs, name, svc, techStaffId: id, techName: tn }));
+    const eCalId = primary.calId, eEventId = pev.id, eNotes = _apptNotes(pev);
+    if (techs.size === 0) out.push({ startMs, name, svc, techStaffId: '', techName: 'Unassigned', calId: eCalId, eventId: eEventId, notes: eNotes });
+    else techs.forEach((tn, id) => out.push({ startMs, name, svc, techStaffId: id, techName: tn, calId: eCalId, eventId: eEventId, notes: eNotes }));
   });
   out.sort((a, b) => a.startMs - b.startMs);
   return out;

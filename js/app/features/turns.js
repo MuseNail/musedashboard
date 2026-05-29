@@ -199,11 +199,12 @@ export function renderTurnsApptStrip() {
   const sub = document.getElementById('turns-appts-sub');
   // Collapse the per-tech entries back to one card per booking for the strip.
   const seen = new Map();
-  turnsUpcomingAppts().forEach(a => { const k = a.startMs + '|' + a.name; if (!seen.has(k)) seen.set(k, { startMs: a.startMs, name: a.name, svc: a.svc, techs: new Set() }); if (a.techName) seen.get(k).techs.add(a.techName); });
+  turnsUpcomingAppts().forEach(a => { const k = a.startMs + '|' + a.name; if (!seen.has(k)) seen.set(k, { startMs: a.startMs, name: a.name, svc: a.svc, techs: new Set(), calId: a.calId, eventId: a.eventId, notes: a.notes }); if (a.techName) seen.get(k).techs.add(a.techName); });
   const cards = [...seen.values()];
   if (sub) sub.textContent = cards.length ? `· ${cards.length} upcoming` : '· nothing upcoming';
   if (!cards.length) { host.innerHTML = `<div class="text-xs text-on-surface-variant py-3 px-1 opacity-70">No upcoming appointments today.</div>`; return; }
   const now = Date.now();
+  const _tJs = s => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, ' ').replace(/\r/g, '');
   // Compact bubble matching a turn-grid slot: w-[150px], rounded-xl, soft fill
   // (lavender = appointment, amber = ≤30 min). Two lines so the strip stays short.
   host.innerHTML = cards.map(a => {
@@ -211,7 +212,7 @@ export function renderTurnsApptStrip() {
     const mins = Math.round((a.startMs - now)/60000), soon = mins <= 30;
     const techLbl = [...a.techs].join(', ') || 'Unassigned';
     const bg = soon ? '#ffe0b2' : '#ede7f6', fg = soon ? '#6d3200' : '#42306b';
-    return `<div class="flex-shrink-0 w-[150px] px-0.5"><div class="w-full rounded-xl px-2 py-1 text-left text-xs font-body" style="background:${bg};color:${fg}">
+    return `<div class="flex-shrink-0 w-[150px] px-0.5"><div onclick="calEventClick(event,'${_tJs(a.calId)}','${_tJs(a.eventId)}','${_tJs(a.name)}','${_tJs(a.notes || '')}',true)" class="w-full rounded-xl px-2 py-1 text-left text-xs font-body cursor-pointer active:scale-95 transition-transform" style="background:${bg};color:${fg}">
       <div class="flex items-center gap-1"><span class="font-bold text-[11px] flex-shrink-0">${time}</span><span class="font-semibold text-[11px] truncate" style="flex:1;min-width:0">${_tEsc(a.name)}</span>${soon?`<span class="text-[9px] font-bold flex-shrink-0" style="color:#9a4a00">${mins}m</span>`:''}</div>
       <div class="text-[10px] leading-tight truncate" style="opacity:.8">${_tEsc(a.svc)} · ${_tEsc(techLbl)}</div>
     </div></div>`;
@@ -284,9 +285,9 @@ export function renderTurnsTechGrid() {
       ? `<span class="text-sm font-headline font-bold ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:' + sc.bg}">${turns.total}t</span>`
       : `<span class="text-sm font-headline text-outline-variant">0t</span>`;
     const techCol = `<div class="flex items-center gap-2 w-[155px] flex-shrink-0 pr-2">
-      <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
+      <button onclick="showTechPhoto('${staffId}')" title="View photo" class="focus:outline-none flex-shrink-0">${photo}</button>
       <div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate leading-tight">${st.name}</div>
-      <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none" style="background:${sc.bg};color:${sc.text}">${sc.label}</span>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
+      <div class="flex items-center gap-1.5 mt-0.5"><button onclick="showTechStatusMenu(event,'${staffId}')" title="Change status" class="text-[11px] px-3 py-1.5 rounded-full font-semibold leading-none focus:outline-none active:scale-95 transition-transform" style="background:${sc.bg};color:${sc.text}">${sc.label}</button>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
       <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
 
     const MIN_SLOTS = 5;

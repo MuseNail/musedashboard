@@ -29,8 +29,8 @@ export function renderStaffList() {
   list.innerHTML = [...cfg().staff].sort(byName).map(st => {
     const active = isStaffActive(st.id);
     const photoHtml = st.photo
-      ? `<button onclick="showEditStaff('${st.id}')" class="flex-shrink-0 focus:outline-none"><img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border border-surface-container-high hover:opacity-80 transition-opacity"></button>`
-      : `<button onclick="showEditStaff('${st.id}')" class="flex-shrink-0 focus:outline-none"><div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-primary hover:text-on-primary transition-colors"><span class="text-sm font-headline font-bold text-on-surface">${st.name.charAt(0).toUpperCase()}</span></div></button>`;
+      ? `<button onclick="showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border border-surface-container-high hover:opacity-80 transition-opacity"></button>`
+      : `<button onclick="showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-primary hover:text-on-primary transition-colors"><span class="text-sm font-headline font-bold text-on-surface">${st.name.charAt(0).toUpperCase()}</span></div></button>`;
     const staffSvcs = (st.services && st.services.length > 0)
       ? st.services.map(sid => cfg().services.find(s => s.id === sid)?.abbr || '?').join(', ')
       : 'All services';
@@ -59,6 +59,20 @@ export function renderStaffList() {
       </div>
     </div>`;
   }).join('');
+}
+
+// Full-size photo lightbox for a technician (tap the avatar in Turns / Staff).
+export function showTechPhoto(staffId) {
+  const st = (cfg().staff || []).find(s => String(s.id) === String(staffId));
+  if (!st) return;
+  const inner = st.photo
+    ? `<img src="${st.photo}" style="max-width:90vw;max-height:78vh;object-fit:contain;border-radius:16px;box-shadow:0 10px 50px rgba(0,0,0,.55)">`
+    : `<div style="width:220px;height:220px;border-radius:50%;background:#1a5252;color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--font-headline);font-weight:700;font-size:96px;box-shadow:0 10px 50px rgba(0,0,0,.55)">${(st.name || '?').charAt(0).toUpperCase()}</div>`;
+  const m = document.createElement('div');
+  m.className = 'fixed inset-0 z-[95] flex flex-col items-center justify-center bg-black/80 p-4';
+  m.onclick = () => m.remove();
+  m.innerHTML = `${inner}<div style="color:#fff;margin-top:16px;font-family:var(--font-headline);font-weight:700;font-size:18px">${(st.name || '')}</div><div style="color:#cbd5d5;margin-top:4px;font-size:12px">Tap anywhere to close</div>`;
+  document.body.appendChild(m);
 }
 
 export function renderStaffServicesPicker(selectedServices) {
