@@ -258,6 +258,31 @@ export async function cancelTerminalCheckout() {
   try { await fetch(`${SQUARE_PROXY}/v2/terminals/checkouts/${id}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch (e) {}
 }
 
+// Reprint a receipt for a PAST sale on the Square Terminal's built-in printer, using the
+// stored Square payment id (Terminal Action API, type RECEIPT). Only works for sales paid
+// through the Terminal flow (which captured a Square payment id).
+export async function reprintTerminalReceipt(recordId) {
+  const rec = (getState().records || []).find(r => String(r.id) === String(recordId))
+           || (getState().queue || []).find(r => String(r.id) === String(recordId));
+  const paymentId = rec?.squarePaymentIds?.[0];
+  if (!paymentId) { showToast('No Square payment on file — receipts reprint only for Square Terminal sales.'); return; }
+  const deviceId = sqConfig()?.terminalDeviceId;
+  if (!deviceId) { showToast('Pair your Square Terminal in Settings → Square first.'); return; }
+  try {
+    showToast('Sending receipt to the Terminal…');
+    const res = await fetch(`${SQUARE_PROXY}/v2/terminals/actions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotency_key: 'rcpt-' + recordId + '-' + Date.now(),
+        action: { type: 'RECEIPT', device_id: deviceId, receipt_options: { payment_id: paymentId, is_duplicate: true, print_only: true } },
+      }),
+    });
+    const j = await res.json();
+    if (!res.ok) { showToast('Square: ' + (j.errors?.[0]?.detail || 'could not print the receipt')); return; }
+    showToast('Receipt printing on the Terminal ✓');
+  } catch (e) { showToast('Could not reach Square.'); }
+}
+
 // ── R6: gift-card "used" recorder inside the Confirm Payment modal ────────────────
 // Pure bookkeeping: stage which cards were used + how much, shown under the ticket. The
 // "Charge in Square" line stays the FULL ticket total; nothing here reduces it. Staged amounts

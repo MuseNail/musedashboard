@@ -1145,7 +1145,7 @@ export function renderTransactions() {
         <div class="text-[11px] font-body text-outline mt-1">${dateStr} · ${timeStr}${r.phone?' · '+r.phone:''}</div>${r.tenders ? `<div class="text-[11px] font-body text-on-surface-variant mt-0.5">${[r.tenders.cash?'Cash $'+r.tenders.cash.toFixed(2):'',r.tenders.card?'Card $'+r.tenders.card.toFixed(2):'',r.tenders.gift?'Gift $'+r.tenders.gift.toFixed(2):''].filter(Boolean).join(' · ')}</div>` : ''}</div>
         <div class="ml-4 flex-shrink-0 flex items-center gap-2">
           <div class="flex items-center gap-1">
-            ${!isRefund?`<button onclick="event.stopPropagation();printReceipt('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"><span class="material-symbols-outlined" style="font-size:14px">receipt_long</span> Receipt</button>`:''}
+            ${!isRefund?`<button onclick="event.stopPropagation();reprintTerminalReceipt('${r.id}')" title="Reprint receipt on the Square Terminal" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"><span class="material-symbols-outlined" style="font-size:14px">receipt_long</span> Receipt</button>`:''}
             ${!isRefund&&canDo('refund')?`<button onclick="event.stopPropagation();initiateRefund('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-secondary transition-colors px-2 py-1 rounded-lg hover:bg-secondary/10"><span class="material-symbols-outlined" style="font-size:14px">undo</span> Refund</button>`:''}
             ${canDo('deleteTransaction')?`<button onclick="event.stopPropagation();initiateDeleteTransaction('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-error transition-colors px-2 py-1 rounded-lg hover:bg-error/10"><span class="material-symbols-outlined" style="font-size:14px">delete</span> Delete</button>`:''}
           </div>
@@ -1308,46 +1308,6 @@ function txnExportRows() {
   const recs = txnExportRecords();
   const letters = partyLetterMap(recs);
   return recs.map(r => txnRow(r, letters.get(r.groupId)));
-}
-// ── Customer receipt (NON-itemized) ───────────────────────────────────────────
-// A clean branded receipt to hand the customer: salon header, date, customer,
-// payment method, and a single total — no line-item breakdown. (Square keeps the
-// full itemized breakdown in the dashboard via the order we send at checkout.)
-export function printReceipt(recordId) {
-  const rec = buildCombinedRecords().find(r => String(r.id) === String(recordId));
-  if (!rec) { showToast('Transaction not found'); return; }
-  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const logo = cfg().logo || LOGO_PATH;
-  const biz  = 'Muse Nails & Spa';
-  const dt   = new Date(rec.completedAt || rec.checkinTime);
-  const when = dt.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-  const total  = rec.totalCost || 0;
-  let method = 'Paid';
-  if (rec.tenders) {
-    method = [rec.tenders.cash ? `Cash $${rec.tenders.cash.toFixed(2)}` : '', rec.tenders.card ? `Card $${rec.tenders.card.toFixed(2)}` : '', rec.tenders.gift ? `Gift $${rec.tenders.gift.toFixed(2)}` : ''].filter(Boolean).join(' · ') || method;
-  } else if (rec.squarePaymentIds?.length) method = 'Card · Square Terminal';
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Receipt — ${esc(rec.name || '')}</title><style>
-    body{font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;margin:0;padding:28px;display:flex;justify-content:center}
-    .r{width:300px}.c{text-align:center}
-    .logo{max-width:170px;max-height:66px;object-fit:contain;margin:0 auto 8px;display:block}
-    h1{font-size:18px;margin:0 0 2px}.sub{color:#666;font-size:11px;margin:0 0 16px;text-align:center}
-    .row{display:flex;justify-content:space-between;font-size:12px;margin:5px 0;color:#333}
-    .total{display:flex;justify-content:space-between;font-size:20px;font-weight:800;border-top:2px solid #222;margin-top:14px;padding-top:10px}
-    .ty{text-align:center;font-size:12px;color:#555;margin-top:22px;border-top:1px dashed #bbb;padding-top:14px}
-  </style></head><body><div class="r">
-    <div class="c">${logo ? `<img src="${esc(logo)}" class="logo" onerror="this.style.display='none'">` : ''}<h1>${esc(biz)}</h1></div>
-    <p class="sub">${esc(when)}</p>
-    <div class="row"><span>Customer</span><span>${esc(rec.name || '—')}</span></div>
-    <div class="row"><span>Payment</span><span>${esc(method)}</span></div>
-    ${rec.tenders && rec.tenders.cashReceived ? `<div class="row"><span>Cash received</span><span>$${rec.tenders.cashReceived.toFixed(2)}</span></div>` : ''}
-    ${rec.tenders && rec.tenders.change ? `<div class="row"><span>Change</span><span>$${rec.tenders.change.toFixed(2)}</span></div>` : ''}
-    <div class="total"><span>Total Paid</span><span>$${total.toFixed(2)}</span></div>
-    <div class="ty">Thank you for visiting — we look forward to seeing you again!</div>
-  </div><script>setTimeout(()=>window.print(),500)</script></body></html>`;
-  const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
-  const w = window.open(url, '_blank');
-  if (!w) showToast('Allow pop-ups to print the receipt');
-  URL.revokeObjectURL(url);
 }
 
 export function exportTransactionsCSV() {
