@@ -195,6 +195,7 @@
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
+    -webkit-user-drag: none;   /* desktop: stop the native image/element drag (ghost img) from hijacking the custom pointer drag */
   }
   /* Turns bubbles drag via tap-and-hold (see initTurnsDrag), so they MUST still allow
      native panning — otherwise a swipe can't scroll a tech's overflowing turn row or the
