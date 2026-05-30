@@ -933,6 +933,15 @@ tailwind.config = {
             <button onclick="syncSquareFromSettings()" class="w-full flex items-center justify-center gap-2 border border-primary text-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary hover:text-on-primary">
               <span class="material-symbols-outlined" style="font-size:18px">sync</span> Sync Customers & Catalog
             </button>
+            <div class="pt-3 border-t border-surface-container-high">
+              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Square Terminal</label>
+              <div id="sq-terminal-current" class="text-xs font-body mb-2"><span class="text-on-surface-variant">No Terminal paired yet.</span></div>
+              <div id="sq-terminal-status" class="text-xs font-body text-on-surface-variant mb-2"></div>
+              <button onclick="pairTerminal()" class="w-full flex items-center justify-center gap-2 border border-primary text-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary hover:text-on-primary">
+                <span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pair Terminal
+              </button>
+              <p class="text-[11px] font-body text-on-surface-variant mt-1">Enables itemized in-person payments on your Square Terminal (the "Pay on Terminal" button at checkout).</p>
+            </div>
           </div>
         </div>
 
@@ -1728,11 +1737,24 @@ tailwind.config = {
         <span class="font-headline font-semibold text-on-surface-variant">Total</span>
         <span id="square-confirm-total" class="text-2xl font-headline font-extrabold text-primary">$0.00</span>
       </div>
+      <button id="sq-terminal-btn" onclick="proceedTerminalPayment()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pay on Terminal</button>
       <div class="flex gap-2">
         <button onclick="closeSquareConfirm()" class="flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-semibold transition-all">Cancel</button>
-        <button onclick="proceedSquarePayment()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Pay in Square POS</button>
+        <button id="sq-pos-btn" onclick="proceedSquarePayment()" class="flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-semibold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Square POS</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     SQUARE TERMINAL STATUS MODAL
+═══════════════════════════════════════════════ -->
+<div id="square-terminal-modal" class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4" style="display:none;z-index:81">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-sm flex flex-col items-center text-center shadow-2xl px-6 py-7 gap-4">
+    <span class="material-symbols-outlined text-primary" style="font-size:44px">contactless</span>
+    <div id="square-terminal-status" class="font-headline font-semibold text-on-surface">Sending to the Terminal…</div>
+    <div class="text-xs font-body text-on-surface-variant">Complete the payment on the Square Terminal. This updates automatically.</div>
+    <button onclick="cancelTerminalCheckout()" class="w-full border border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-semibold transition-all">Cancel</button>
   </div>
 </div>
 

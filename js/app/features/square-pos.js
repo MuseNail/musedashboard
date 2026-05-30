@@ -16,9 +16,17 @@ let _pendingPay = null;
 // R6 gift-card-as-recorded-tender (staging for the current pay session). These NEVER change
 // the Square charge — the full ticket total always goes to Square; we only record which cards
 // were used so the app's gift-card balances stay in sync. Committed when the ticket is paid.
-let _payGc = [], _payTicketId = null, _gcPickerOpen = false;
+let _payGc = [], _payTicketId = null, _gcPickerOpen = false, _payCash = 0;   // _payCash in dollars (split-tender)
 const _gcBal = g => (g.amount || 0) - (window.gcTotalUsed ? window.gcTotalUsed(g) : 0);
-const _gcRoom = () => Math.max(0, (_pendingPay?.cents || 0) / 100 - _payGc.reduce((s, t) => s + (t.amount || 0), 0));
+const _payTotalDollars = () => (_pendingPay?.cents || 0) / 100;
+const _payGiftDollars  = () => _payGc.reduce((s, t) => s + (t.amount || 0), 0);
+// Cash actually applied to the ticket (anything beyond is change the front desk gives back).
+const _payCashAppliedDollars = () => Math.max(0, Math.min(_payCash, _payTotalDollars() - _payGiftDollars()));
+// Change owed back to the customer when they hand over more cash than the balance.
+const _payChangeDollars = () => Math.max(0, _payCash - Math.max(0, _payTotalDollars() - _payGiftDollars()));
+// What's charged on the Terminal after cash + gift cards are applied.
+const _payCardDueDollars = () => Math.max(0, _payTotalDollars() - _payGiftDollars() - _payCash);
+const _gcRoom = () => Math.max(0, _payTotalDollars() - _payCash - _payGiftDollars());
 const _gcStagedFor = id => _payGc.filter(t => t.giftcardId === id).reduce((s, t) => s + (t.amount || 0), 0);
 
 // A single entry's charge is computed from its parts via ticketTotal() (utils.js) — the one
@@ -70,7 +78,7 @@ export function openSquarePOS(entryId) {
 
 export function closeSquareConfirm() {
   _pendingPay = null;
-  _payGc = []; _payTicketId = null; _gcPickerOpen = false;
+  _payGc = []; _payTicketId = null; _gcPickerOpen = false; _payCash = 0;
   const gs = document.getElementById('square-gc-section'); if (gs) gs.innerHTML = '';
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.add('hidden'); m.style.display = ''; }
@@ -109,6 +117,147 @@ export function openSquarePOSFromModal() {
   if (entryId) openSquarePOS(entryId);
 }
 
+// ── Square Terminal checkout (total-only, in-person) ─────────────────────────
+// Charges the ticket TOTAL on the paired Square Terminal via the Terminal API (no
+// itemized order), polls for the result, marks the ticket Paid, and stores the Square
+// payment ids (unblocks exact refunds). Total-only by design: the customer's Square
+// receipt is NOT itemized and prints from the Terminal itself; the app's Reports keep
+// the full per-item breakdown. All calls go through SQUARE_PROXY (server-side token);
+// polling, no webhook.
+let _termCheckoutId = null, _termPollTimer = null;
+
+function showTerminalModal(msg) {
+  const t = document.getElementById('square-terminal-status'); if (t) t.textContent = msg;
+  const m = document.getElementById('square-terminal-modal'); if (!m) return;
+  m.classList.remove('hidden'); m.style.display = 'flex';
+}
+function hideTerminalModal() {
+  clearTimeout(_termPollTimer); _termPollTimer = null; _termCheckoutId = null;
+  const m = document.getElementById('square-terminal-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; }
+}
+
+export async function proceedTerminalPayment() {
+  if (!_pendingPay) return;
+  const sc = sqConfig();
+  if (!sc?.locationId) { showToast('Add your Square Location ID in Settings → Square first.'); return; }
+  const party = (_pendingPay.ids || []).map(id => queue().find(x => String(x.id) === String(id))).filter(Boolean);
+  if (!party.length) { showToast('Ticket not found.'); return; }
+  // Split tender: cash + gift cards reduce what's charged on the card.
+  const total         = _pendingPay.cents;
+  const giftCents      = Math.round(_payGiftDollars() * 100);
+  const cashAppliedC   = Math.round(_payCashAppliedDollars() * 100);
+  const cashReceivedC  = Math.round(_payCash * 100);
+  const changeCents    = Math.round(_payChangeDollars() * 100);
+  const cardCents      = Math.max(0, total - giftCents - cashAppliedC);
+  if (cardCents > 0 && !sc.terminalDeviceId) { showToast('Pair your Square Terminal in Settings → Square first.'); return; }
+  // Capture BEFORE closeSquareConfirm() — it nulls _pendingPay / _payTicketId / _payCash.
+  const payNames = _pendingPay.names || '', ticketId = _payTicketId, partyIds = party.map(e => String(e.id));
+  const tenders  = { cash: cashAppliedC / 100, card: cardCents / 100, gift: giftCents / 100, cashReceived: cashReceivedC / 100, change: changeCents / 100 };
+  // Stash recorded gift cards on the ticket so they're drawn down when marked Paid.
+  if (ticketId) {
+    const ge = queue().find(x => String(x.id) === ticketId);
+    if (ge) { ge.giftcardRedemptions = _payGc.map(t => ({ giftcardId: t.giftcardId, serial: t.serial, who: t.who, amount: t.amount })); dispatch('queue.upsert', { entry: ge }); }
+  }
+  // Stable idempotency keys for THIS charge, persisted so a retry never double-charges.
+  let pend; try { pend = JSON.parse(localStorage.getItem('muse_term_pending') || 'null'); } catch (e) {}
+  if (!pend || pend.ticketId !== ticketId || (Date.now() - (pend.at || 0)) > 15 * 60 * 1000) {
+    pend = { ticketId, checkoutKey: 'chk-' + ticketId + '-' + Date.now(), cashKey: 'cash-' + ticketId + '-' + Date.now(), at: Date.now() };
+    try { localStorage.setItem('muse_term_pending', JSON.stringify(pend)); } catch (e) {}
+  }
+  closeSquareConfirm();
+  try {
+    // 1) Card portion on the Terminal (the uncertain step) — do it FIRST.
+    let cardPaymentId = null;
+    if (cardCents > 0) {
+      showTerminalModal(`Charging $${(cardCents / 100).toFixed(2)} on the Terminal — finish on the device…`);
+      const coRes = await fetch(`${SQUARE_PROXY}/v2/terminals/checkouts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idempotency_key: pend.checkoutKey, checkout: {
+          amount_money: { amount: cardCents, currency: 'USD' },   // card balance only — no itemized order
+          device_options: { device_id: sc.terminalDeviceId },
+          reference_id: String(ticketId || '').slice(0, 40),
+          note: payNames.slice(0, 500),
+        } }),
+      });
+      const coJson = await coRes.json();
+      if (!coRes.ok) throw new Error(coJson.errors?.[0]?.detail || 'Could not start the Terminal checkout');
+      _termCheckoutId = coJson.checkout?.id;
+      const co = await _pollTerminalCheckout(_termCheckoutId);
+      if (co.status === 'TIMEOUT')  { hideTerminalModal(); showToast('Terminal timed out — check the device, then try again.'); return; }
+      if (co.status === 'CANCELED') { hideTerminalModal(); try { localStorage.removeItem('muse_term_pending'); } catch (e) {} showToast('Payment canceled on the Terminal.'); return; }
+      cardPaymentId = (co.payment_ids || [])[0] || null;
+    }
+    // 2) Only AFTER the card succeeds, record the cash portion in Square.
+    let cashPaymentId = null;
+    if (cashAppliedC > 0) {
+      showTerminalModal('Recording cash payment…');
+      cashPaymentId = await recordCashPayment(cashAppliedC, cashReceivedC, sc.locationId, pend.cashKey);
+    }
+    _finalizeTerminalPaid(partyIds, tenders, [cardPaymentId, cashPaymentId].filter(Boolean));
+  } catch (e) { hideTerminalModal(); showToast('Square: ' + (e.message || 'error')); }
+}
+
+// Record the cash portion as a CASH payment in Square (so Square's totals include it).
+// A failure here does NOT block marking the ticket Paid — the cash was physically received.
+async function recordCashPayment(appliedCents, receivedCents, locationId, idemKey) {
+  try {
+    const r = await fetch(`${SQUARE_PROXY}/v2/payments`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotency_key: idemKey,
+        source_id: 'CASH',
+        amount_money: { amount: appliedCents, currency: 'USD' },   // the sale amount paid in cash
+        cash_details: { buyer_supplied_money: { amount: Math.max(receivedCents, appliedCents), currency: 'USD' } },   // cash handed over → Square computes change_back
+        location_id: locationId,
+      }),
+    });
+    const j = await r.json();
+    if (!r.ok) { console.warn('[cash] Square record failed:', j.errors); return null; }
+    return j.payment?.id || null;
+  } catch (e) { console.warn('[cash] Square record error:', e); return null; }
+}
+
+// Poll the Terminal checkout to a terminal state. Resolves with the checkout object on
+// COMPLETED/CANCELED, or { status:'TIMEOUT' } after 5 min.
+function _pollTerminalCheckout(id) {
+  return new Promise(resolve => {
+    const started = Date.now();
+    const tick = async () => {
+      if (Date.now() - started > 5 * 60 * 1000) { resolve({ status: 'TIMEOUT' }); return; }
+      let co = null;
+      try { const r = await fetch(`${SQUARE_PROXY}/v2/terminals/checkouts/${id}`); const j = await r.json(); co = j.checkout || null; } catch (e) {}
+      if (co?.status === 'COMPLETED' || co?.status === 'CANCELED') { resolve(co); return; }
+      _termPollTimer = setTimeout(tick, 2000);   // PENDING / IN_PROGRESS / CANCEL_REQUESTED → keep waiting
+    };
+    tick();
+  });
+}
+
+function _finalizeTerminalPaid(partyIds, tenders, paymentIds) {
+  hideTerminalModal();
+  partyIds.forEach((id, i) => {
+    const ge = queue().find(x => String(x.id) === String(id));
+    if (ge) {
+      if (paymentIds.length) ge.squarePaymentIds = paymentIds;
+      if (i === 0) ge.tenders = tenders;   // group-level payment split recorded on the primary ticket
+      ge.totalCost = ticketTotal(ge);
+      dispatch('queue.upsert', { entry: ge });
+    }
+    window.updateStatus?.(String(id), 'paid');   // → saveRecord (records tenders/squarePaymentIds) + gift-card draw-down + audit
+  });
+  try { localStorage.removeItem('muse_term_pending'); } catch (e) {}
+  _pendingPay = null; _payGc = []; _payTicketId = null; _payCash = 0;
+  showToast('Paid ✓');
+}
+
+export async function cancelTerminalCheckout() {
+  const id = _termCheckoutId;
+  if (!id) { hideTerminalModal(); return; }
+  showTerminalModal('Canceling on the device…');
+  // Don't clear the poll timer here — let the poll observe CANCELED and finish cleanly.
+  try { await fetch(`${SQUARE_PROXY}/v2/terminals/checkouts/${id}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch (e) {}
+}
+
 // ── R6: gift-card "used" recorder inside the Confirm Payment modal ────────────────
 // Pure bookkeeping: stage which cards were used + how much, shown under the ticket. The
 // "Charge in Square" line stays the FULL ticket total; nothing here reduces it. Staged amounts
@@ -131,7 +280,41 @@ function renderPayGc() {
       <div class="px-3 py-2 bg-surface-container"><input id="sq-gc-search" oninput="filterGcPicker()" placeholder="Search serial / name…" class="w-full bg-transparent text-sm focus:outline-none text-on-surface"></div>
       <div id="sq-gc-rows" class="max-h-44 overflow-y-auto">${_gcPickerRows(room)}</div>
     </div>` : '';
-  host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Gift card used — optional (recorded; keeps balances in sync)</div>${lines}${addBtn}${picker}${_payGc.length ? `<div class="text-[11px] font-body text-on-surface-variant mt-2">The full total still goes to Square — Square applies the gift card to the charge. This only records the redemption.</div>` : ''}`;
+  const cashRow = `<div class="flex items-center justify-between mb-3">
+      <span class="text-sm font-body text-on-surface">Cash received</span>
+      <span class="flex items-center gap-1"><span class="text-on-surface-variant text-sm">$</span>
+      <input id="sq-cash-amt" type="text" inputmode="none" value="${_payCash > 0 ? _payCash.toFixed(2) : ''}" placeholder="0.00" onfocus="openNumpad(this,'Cash received','cost')" onclick="openNumpad(this,'Cash received','cost')" oninput="sqCashInput(this.value)" class="w-24 border border-surface-container-high rounded-lg px-2 py-1.5 text-sm text-right text-on-surface bg-surface-container-lowest focus:outline-none focus:border-primary"></span>
+    </div>`;
+  const breakdown = `<div class="mt-3 pt-2 border-t border-surface-container-high text-xs font-body space-y-0.5">
+      <div class="flex justify-between text-on-surface-variant"><span>Total</span><span>$${_payTotalDollars().toFixed(2)}</span></div>
+      ${_payGiftDollars() > 0 ? `<div class="flex justify-between text-on-surface-variant"><span>Gift card</span><span>$${_payGiftDollars().toFixed(2)}</span></div>` : ''}
+      <div id="sq-row-cashrcv" class="flex justify-between text-on-surface-variant" style="display:none"><span>Cash received</span><span id="sq-cash-rcv">$0.00</span></div>
+      <div id="sq-row-change" class="flex justify-between items-center text-2xl font-headline font-extrabold text-on-surface mt-1.5" style="display:none"><span>Change due</span><span id="sq-change">$0.00</span></div>
+      <div id="sq-row-cashpaid" class="flex justify-between text-on-surface" style="display:none"><span>Cash paid</span><span id="sq-cash-applied">$0.00</span></div>
+      <div class="flex justify-between items-center text-2xl font-headline font-extrabold text-on-surface mt-1.5"><span>Card on Terminal</span><span id="sq-card-due">$${_payCardDueDollars().toFixed(2)}</span></div>
+    </div>`;
+  host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${picker}${breakdown}`;
+  sqUpdatePayBreakdown();
+}
+export function sqCashInput(v) {
+  const n = parseFloat(v);
+  _payCash = isFinite(n) && n > 0 ? n : 0;
+  sqUpdatePayBreakdown();
+}
+// Live-patch the breakdown numbers + the action buttons as cash is typed, WITHOUT
+// re-rendering the section (which would yank the numpad's target input mid-entry).
+export function sqUpdatePayBreakdown() {
+  const cardDue = _payCardDueDollars(), applied = _payCashAppliedDollars(), change = _payChangeDollars(), cash = _payCash;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = '$' + v.toFixed(2); };
+  set('sq-card-due', cardDue); set('sq-cash-applied', applied); set('sq-cash-rcv', cash); set('sq-change', change);
+  const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? 'flex' : 'none'; };
+  show('sq-row-cashrcv', cash > 0); show('sq-row-cashpaid', cash > 0); show('sq-row-change', change > 0.0001);
+  const tb = document.getElementById('sq-terminal-btn');
+  if (tb) tb.innerHTML = cardDue > 0
+    ? `<span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pay $${cardDue.toFixed(2)} on Terminal`
+    : `<span class="material-symbols-outlined" style="font-size:18px">check</span> Record Payment`;
+  const pb = document.getElementById('sq-pos-btn');
+  if (pb) { const off = _payCash > 0; pb.disabled = off; pb.style.opacity = off ? '0.4' : ''; pb.style.pointerEvents = off ? 'none' : ''; pb.title = off ? 'Cash split is handled by the Terminal' : ''; }
 }
 function _gcPickerRows(room) {
   const q = (document.getElementById('sq-gc-search')?.value || '').toLowerCase();

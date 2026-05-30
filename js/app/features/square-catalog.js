@@ -49,6 +49,57 @@ export async function testSquareConnection() {
   } catch (e) { status.textContent = '✗ Could not reach proxy — check Worker is deployed'; status.style.color = '#a83836'; }
 }
 
+// ── Square Terminal pairing ──────────────────────────────────────────────────
+// Create a device code (product_type TERMINAL_API), the operator signs into the
+// Square Terminal with that code, then we poll until it's PAIRED and store the
+// device_id in config.square_config.terminalDeviceId (synced across devices).
+export async function pairTerminal() {
+  const sc = sqConfig();
+  if (!sc?.locationId) { showToast('Save your Location ID first.'); return; }
+  const el = document.getElementById('sq-terminal-status');
+  if (el) el.textContent = 'Requesting a device code…';
+  try {
+    const res = await fetch(`${SQUARE_PROXY}/v2/devices/codes`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idempotency_key: 'devcode-' + Date.now(), device_code: { name: 'Front Desk Terminal', location_id: sc.locationId, product_type: 'TERMINAL_API' } }),
+    });
+    const j = await res.json();
+    if (!res.ok) { if (el) el.textContent = ''; showToast('Square: ' + (j.errors?.[0]?.detail || 'could not create a device code')); return; }
+    const dc = j.device_code || {};
+    if (el) el.innerHTML = `On the Square Terminal: <b>Sign in → Use a device code</b>, then enter:<div style="font-size:30px;font-weight:800;letter-spacing:5px;margin:8px 0;color:var(--primary,#1a5252)">${(dc.code || '').replace(/[^A-Z0-9]/g, '')}</div><span class="text-on-surface-variant">Waiting for the Terminal to pair… (code expires in 5 min)</span>`;
+    _pollDeviceCode(dc.id, Date.now());
+  } catch (e) { if (el) el.textContent = ''; showToast('Could not reach Square.'); }
+}
+function _pollDeviceCode(id, started) {
+  const el = document.getElementById('sq-terminal-status');
+  if (Date.now() - started > 5 * 60 * 1000) { if (el) el.textContent = 'Code expired — tap "Pair Terminal" to try again.'; return; }
+  setTimeout(async () => {
+    let dc = null;
+    try { const r = await fetch(`${SQUARE_PROXY}/v2/devices/codes/${id}`); const j = await r.json(); dc = j.device_code || null; } catch (e) {}
+    if (dc?.status === 'PAIRED' && dc.device_id) {
+      dispatch('config.set', { key: 'square_config', value: { ...(sqConfig() || {}), terminalDeviceId: dc.device_id, terminalName: dc.name || '' } });
+      if (el) el.textContent = '';
+      showToast('Square Terminal paired ✓');
+      renderTerminalStatus();
+      return;
+    }
+    _pollDeviceCode(id, started);
+  }, 3000);
+}
+export function unpairTerminal() {
+  const sc = { ...(sqConfig() || {}) }; delete sc.terminalDeviceId; delete sc.terminalName;
+  dispatch('config.set', { key: 'square_config', value: sc });
+  renderTerminalStatus();
+  showToast('Terminal unpaired.');
+}
+export function renderTerminalStatus() {
+  const el = document.getElementById('sq-terminal-current'); if (!el) return;
+  const id = sqConfig()?.terminalDeviceId;
+  el.innerHTML = id
+    ? `<span style="color:#2a6868;font-weight:700">✓ Terminal paired</span> · <span style="font-family:monospace;font-size:11px">${id}</span> · <button onclick="unpairTerminal()" class="text-error underline" style="font-size:12px">Unpair</button>`
+    : `<span class="text-on-surface-variant">No Terminal paired yet.</span>`;
+}
+
 export async function syncSquare() {
   if (!sqConfig()) { showSquareModal(); return; }
   updateSyncLabel('pending', 'Syncing…');

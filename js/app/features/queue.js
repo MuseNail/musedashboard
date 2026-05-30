@@ -7,7 +7,7 @@ import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
 import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
-import { ui } from '../session.js';
+import { ui, canDo } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
@@ -323,7 +323,7 @@ function buildQueueRow(e) {
         ${e.status === 'complete' ? `
           <button onclick="updateStatus('${id}','inservice')" title="Back to In Service" class="${btnCls}" style="background:#c8e6c5;color:#1b5e20;"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
           ${hasSquare && e.totalCost > 0 ? `<button onclick="openSquarePOS('${id}')" title="Pay in Square POS" class="${btnCls}" style="background:#1b5e3b;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">point_of_sale</span></button>` : ''}
-          <button onclick="tryAdvanceStatus('${id}','paid')" title="Mark Paid" class="${btnCls}" style="background:#2a7a4f;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">paid</span></button>` : ''}
+          ${(canDo('markPaidDirect') || !(hasSquare && e.totalCost > 0)) ? `<button onclick="tryAdvanceStatus('${id}','paid')" title="Mark Paid" class="${btnCls}" style="background:#2a7a4f;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">paid</span></button>` : ''}` : ''}
         ${isPaidStatus(e.status) ? `<button onclick="confirmReopen('${id}')" title="Reopen" class="${btnCls} bg-surface-container hover:bg-secondary-container text-outline-variant"><span class="material-symbols-outlined" style="font-size:19px">undo</span></button>` : ''}
         <button onclick="removeFromQueue('${id}')" title="Remove" class="${btnCls} bg-surface-container hover:bg-error/20 text-outline hover:text-error"><span class="material-symbols-outlined" style="font-size:17px">close</span></button>
       </div>
@@ -373,6 +373,20 @@ export function validateAssignments(entry) {
   return entry.assignments.every(a => a.techId && a.cost > 0);
 }
 
+// Front desk (no markPaidDirect permission) can't finalize a sale outside the Pay flow —
+// route them there so the payment (cash or card) is recorded in Square. Managers/admins
+// keep the quick mark-paid. $0 tickets (nothing to record) and no-Square setups pass through.
+// Returns true if it handled (redirected) the action, meaning the caller should stop.
+function _blockDirectPaid(entryId) {
+  const entry = q().find(e => String(e.id) === String(entryId));
+  if (!entry) return false;
+  if (canDo('markPaidDirect')) return false;
+  if (!cfg().square_config || ticketTotal(entry) <= 0) return false;
+  showToast('Use Pay to record the payment in Square.');
+  window.openSquarePOS?.(String(entryId));
+  return true;
+}
+
 export function tryAdvanceStatus(id, targetStatus) {
   const entry = q().find(e => String(e.id) === String(id));
   if (!entry) return;
@@ -381,6 +395,7 @@ export function tryAdvanceStatus(id, targetStatus) {
     showGroupAssignModal(id);
     return;
   }
+  if (targetStatus === 'paid' && _blockDirectPaid(id)) return;
   updateStatus(id, targetStatus);
 }
 
@@ -672,6 +687,7 @@ export function cycleServiceStatus(entryId, serviceId, newStatus) {
     if (!a || !a.techId) { showToast('Assign a technician first.'); return; }
     if (!a.cost || a.cost <= 0) { showToast('Enter a price first.'); return; }
   }
+  if (newStatus === 'paid' && _blockDirectPaid(entryId)) return;
   setAssignmentStatus(entry, serviceId, newStatus);
   renderGroupAssignContent();
 }
