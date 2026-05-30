@@ -560,6 +560,10 @@ tailwind.config = {
             <p class="text-sm font-body text-on-surface-variant mt-0.5">All check-ins with service and payment details</p>
           </div>
           <div class="flex items-center gap-2 flex-wrap justify-end">
+            <button onclick="openCashRegister()" title="Open the cash drawer / register"
+              class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary font-body font-semibold text-sm hover:bg-primary/20 transition-colors">
+              <span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Cash Register
+            </button>
             <button id="add-historical-btn" onclick="showHistoricalEntryModal()"
               class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical
@@ -1770,6 +1774,19 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      SQUARE TERMINAL STATUS MODAL
 ═══════════════════════════════════════════════ -->
+<!-- ═══════════════════════════════════════════════
+     CASH REGISTER / CASH DRAWER MODAL
+═══════════════════════════════════════════════ -->
+<div id="cash-register-modal" class="fixed inset-0 hidden items-center justify-center bg-on-surface/50 p-4" style="display:none;z-index:82">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-md shadow-2xl fade-up flex flex-col max-h-[90vh]">
+    <div class="flex items-center justify-between px-6 pt-5 pb-3 flex-shrink-0">
+      <h2 id="cash-register-title" class="text-xl font-headline font-bold text-on-surface">Cash Register</h2>
+      <button onclick="closeCashRegister()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div id="cash-register-body" class="px-6 pb-6 overflow-y-auto"></div>
+  </div>
+</div>
+
 <div id="square-terminal-modal" class="fixed inset-0 hidden items-center justify-center bg-black/50 p-4" style="display:none;z-index:81">
   <div class="bg-surface-container-lowest rounded-2xl w-full max-w-sm flex flex-col items-center text-center shadow-2xl px-6 py-7 gap-4">
     <span class="material-symbols-outlined text-primary" style="font-size:44px">contactless</span>

@@ -21,6 +21,8 @@ function emptyConfig() {
     appt_reminder_leads: [30],   // minutes-before to show appointment reminder banners
     cal_autohide_offduty: false, // opt-in: hide off-duty staff calendars by default each day
     svc_time_reset: {},  // per-tech service-time benchmark cutoff { [techId]: ms } — ignore visits before this
+    cash_drawer: null,         // the current OPEN cash-drawer shift (or null); see features/cashdrawer.js
+    cash_drawer_history: [],   // closed drawer shifts (rolling cap), each with its reconciliation
   };
 }
 

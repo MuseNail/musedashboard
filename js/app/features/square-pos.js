@@ -1,6 +1,7 @@
 // ── Square POS deep link, orders, appointments, bookings ────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
+import { getActiveUser } from '../session.js';
 import { showToast, commitNumpad, ticketTotal } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
 import { customerDirectory } from './square-customers.js';
@@ -165,6 +166,13 @@ export async function proceedTerminalPayment() {
   const cardCents      = Math.max(0, total - giftCents - cashAppliedC);
   const tipCents       = Math.round(_payTip * 100);   // card tip, charged ON TOP of the bill — never part of `total`
   const termCharge     = cardCents + tipCents;          // what actually goes on the Terminal
+  // Cash-drawer gate: non-Admin users must open a cash drawer before taking cash, so the
+  // cash lands in a reconciled shift. Admin (Manager PIN) is exempt. See features/cashdrawer.js.
+  if (cashAppliedC > 0 && !getState().config.cash_drawer && getActiveUser()?.role !== 'admin') {
+    showToast('Open a cash drawer before taking cash.');
+    window.openCashRegister?.();
+    return;
+  }
   if (termCharge > 0 && !sc.terminalDeviceId) { showToast('Pair your Square Terminal in Settings → Square first.'); return; }
   // Capture BEFORE closeSquareConfirm() — it nulls _pendingPay / _payTicketId / _payCash / _payTip.
   const payNames = _pendingPay.names || '', ticketId = _payTicketId, partyIds = party.map(e => String(e.id));

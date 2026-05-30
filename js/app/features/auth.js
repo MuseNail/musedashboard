@@ -98,6 +98,12 @@ function checkPin() {
       window.goTo?.('screen-desk');
       window.showDashPanel?.('turns');
       showToast(`Welcome, ${getActiveUser().name}`);
+      // Cash-drawer reminder: non-Admin staff are prompted to open a drawer when none is open
+      // (taking cash is blocked until they do — see features/cashdrawer.js). Admin is exempt.
+      const cu = getActiveUser();
+      if (cu && cu.role !== 'admin' && !cfg().cash_drawer) {
+        setTimeout(() => window.showWarnModal?.('Open a cash drawer?', 'No cash drawer is open yet. Open one to take cash payments and track the register.', () => window.openCashRegister?.(), 'Open drawer'), 800);
+      }
     }, 300);
   } else if (pinBuffer.length >= 6) {
     document.getElementById('pin-error').classList.remove('hidden');

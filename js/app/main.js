@@ -30,9 +30,10 @@ import * as chat from './features/chat.js';
 import * as apptReminders from './features/appt-reminders.js';
 import * as recovery from './features/recovery.js';
 import * as audit from './features/audit.js';
+import * as cashdrawer from './features/cashdrawer.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -58,7 +59,7 @@ const MODAL_CLOSERS = [
   ['square-confirm-modal', sqPos.closeSquareConfirm], ['admin-code-modal', auth.closeAdminCode],
   ['date-picker-modal', reports.closeDatePicker], ['compare-menu', reports.closeCompareMenu],
   ['day-picker-modal', reports.closeDayPicker], ['txn-merge-modal', reports.closeTxnMergeModal],
-  ['rpt-drill-modal', reports.closeDrillDown],
+  ['rpt-drill-modal', reports.closeDrillDown], ['cash-register-modal', cashdrawer.closeCashRegister],
   ['square-modal', () => { const m = document.getElementById('square-modal'); m.classList.add('hidden'); m.style.display = ''; }],
   ['numpad-modal', utils.numpadConfirm],
 ];

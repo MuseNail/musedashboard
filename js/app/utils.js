@@ -167,11 +167,16 @@ function _watchNumpadHost(inputEl) {
 
 export function openNumpad(inputEl, label, mode) {
   if (window.matchMedia('(pointer: fine)').matches) return;
-  _numpadMode = mode === 'percent' ? 'percent' : 'cost'; _numpadTarget = inputEl; _numpadCallback = null;
+  _numpadMode = mode === 'percent' ? 'percent' : (mode === 'int' ? 'int' : 'cost'); _numpadTarget = inputEl; _numpadCallback = null;
   const existing = (inputEl.value || '').replace(/[^0-9.]/g, '');
   if (_numpadMode === 'percent') {
     // A percent is a plain whole/decimal value (20 → 20%), NOT a cents accumulator.
     _numpadRaw = existing && !isNaN(parseFloat(existing)) ? String(parseFloat(existing)) : '';
+    document.getElementById('numpad-plus-key').textContent = '';
+  } else if (_numpadMode === 'int') {
+    // A plain whole count (bill quantity) — no decimals, no cents accumulator.
+    const n = parseInt(existing.replace(/\./g, ''), 10);
+    _numpadRaw = isFinite(n) && n > 0 ? String(n) : '';
     document.getElementById('numpad-plus-key').textContent = '';
   } else if (_wholeDollars()) {
     // Whole-dollar mode: keep the entered value as a plain decimal string ("45", "45.5").
@@ -181,8 +186,8 @@ export function openNumpad(inputEl, label, mode) {
     _numpadRaw = existing && !isNaN(parseFloat(existing)) ? Math.round(parseFloat(existing) * 100).toString() : '';
     document.getElementById('numpad-plus-key').textContent = '+';
   }
-  document.getElementById('numpad-label').textContent = label || (_numpadMode === 'percent' ? 'Percent' : 'Cost');
-  document.getElementById('numpad-dot-key').textContent  = '.';
+  document.getElementById('numpad-label').textContent = label || (_numpadMode === 'percent' ? 'Percent' : _numpadMode === 'int' ? 'Count' : 'Cost');
+  document.getElementById('numpad-dot-key').textContent  = _numpadMode === 'int' ? '' : '.';
   _numpadUpdateDisplay();
   _setNumpadChrome(false);   // amounts: dimmed modal (no autocomplete to preserve)
   const m = document.getElementById('numpad-modal');
@@ -230,6 +235,12 @@ function _numpadSyncPhone() {
 // fields, Save) keeps it — no confirm tap required, and switching fields can't drop a value.
 function _numpadSyncAmount() {
   if (!_numpadTarget || _numpadMode === 'phone') return;
+  if (_numpadMode === 'int') {
+    const n = parseInt(_numpadRaw || '0', 10) || 0;
+    _numpadTarget.value = n > 0 ? String(n) : '';
+    _numpadTarget.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
   if (_numpadMode === 'percent') {
     const v = parseFloat(_numpadRaw);
     _numpadTarget.value = !isNaN(v) && v > 0 ? String(v) : '';
@@ -248,6 +259,10 @@ export function dismissNumpad() { _closeNumpadModal(); }
 
 function _numpadUpdateDisplay() {
   const el = document.getElementById('numpad-display');
+  if (_numpadMode === 'int') {
+    el.textContent = _numpadRaw || '0';
+    return;
+  }
   if (_numpadMode === 'phone') {
     const d = _numpadRaw;
     let f = '';
@@ -275,6 +290,15 @@ export function numpadKey(key) {
       else if (_numpadRaw.length + 1 <= 10) _numpadRaw += '0';
     } else { _numpadRaw += key; }
     _numpadUpdateDisplay(); _numpadSyncPhone();
+    return;
+  }
+  if (_numpadMode === 'int') {
+    if (key === '.' || key === '+') return;
+    let raw = _numpadRaw;
+    if (key === '00') { if (raw === '' || raw === '0') return; raw += '00'; }
+    else { raw = raw === '0' ? key : raw + key; }
+    if (raw.length > 4) return;   // cap at 9999 of a single denomination
+    _numpadRaw = raw; _numpadUpdateDisplay(); _numpadSyncAmount();
     return;
   }
   if (_numpadMode === 'percent') {
@@ -321,6 +345,9 @@ export function numpadConfirm() {
       if (d.length === 10) f = '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
       else if (d.length > 0) f = d;
       _numpadTarget.value = f;
+    } else if (_numpadMode === 'int') {
+      const n = parseInt(_numpadRaw || '0', 10) || 0;
+      _numpadTarget.value = n > 0 ? String(n) : '';
     } else if (_numpadMode === 'percent') {
       const v = parseFloat(_numpadRaw);
       _numpadTarget.value = !isNaN(v) && v > 0 ? String(v) : '';
