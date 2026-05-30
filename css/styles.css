@@ -189,6 +189,7 @@
      Must come AFTER the manipulation rule above to win; descendants included because
      the touch lands on the inner button/text, not the wrapper. */
   .floor-bubble, .floor-bubble *, .floor-station, .floor-station *,
+  .floor-tech, .floor-tech *,
   .tech-drag-handle {
     touch-action: none;
     -webkit-user-select: none;
