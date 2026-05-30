@@ -209,21 +209,27 @@ export function renderTurnsApptStrip() {
   // (lavender = appointment, amber = ≤30 min). Two lines so the strip stays short.
   host.innerHTML = cards.map(a => {
     const time = new Date(a.startMs).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
-    const mins = Math.round((a.startMs - now)/60000), soon = mins <= 30;
+    const mins = Math.round((a.startMs - now)/60000), late = mins < 0, soon = !late && mins <= 30;
     const techLbl = [...a.techs].join(', ') || 'Unassigned';
-    const bg = soon ? '#ffe0b2' : '#ede7f6', fg = soon ? '#6d3200' : '#42306b';
+    const bg = late ? '#ffd9d9' : soon ? '#ffe0b2' : '#ede7f6', fg = late ? '#7a1a1a' : soon ? '#6d3200' : '#42306b';
+    const badge = late ? `<span class="text-[9px] font-bold flex-shrink-0" style="color:#b91c1c">${-mins}m late</span>`
+               : soon ? `<span class="text-[9px] font-bold flex-shrink-0" style="color:#9a4a00">${mins}m</span>` : '';
     return `<div class="flex-shrink-0 w-[150px] px-0.5"><div onclick="calEventClick(event,'${_tJs(a.calId)}','${_tJs(a.eventId)}','${_tJs(a.name)}','${_tJs(a.notes || '')}',true)" class="w-full rounded-xl px-2 py-1 text-left text-xs font-body cursor-pointer active:scale-95 transition-transform" style="background:${bg};color:${fg}">
-      <div class="flex items-center gap-1"><span class="font-bold text-[11px] flex-shrink-0">${time}</span><span class="font-semibold text-[11px] truncate" style="flex:1;min-width:0">${_tEsc(a.name)}</span>${soon?`<span class="text-[9px] font-bold flex-shrink-0" style="color:#9a4a00">${mins}m</span>`:''}</div>
+      <div class="flex items-center gap-1"><span class="font-bold text-[11px] flex-shrink-0">${time}</span><span class="font-semibold text-[11px] truncate" style="flex:1;min-width:0">${_tEsc(a.name)}</span>${badge}</div>
       <div class="text-[10px] leading-tight truncate" style="opacity:.8">${_tEsc(a.svc)} · ${_tEsc(techLbl)}</div>
     </div></div>`;
   }).join('');
 }
 function turnsDueNoteCard(a, mins) {
   const time = new Date(a.startMs).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
-  return `<div class="flex-shrink-0 w-[150px] px-1"><div class="w-full rounded-xl px-2 py-1.5 text-left text-xs font-body" style="background:#fff7e6;border:2px solid #f5a623;min-height:66px">
-    <div class="flex items-center justify-between gap-0.5" style="margin-bottom:2px"><div class="flex items-center gap-1 min-w-0"><span class="material-symbols-outlined" style="font-size:13px;color:#c77700">notifications_active</span><span class="text-[9px] font-bold uppercase tracking-wide" style="color:#c77700">Next appt</span></div><span class="font-bold text-[11px]" style="color:#8a5a00">in ${mins}m</span></div>
-    <div class="font-semibold text-[11px] truncate" style="color:#5a3a00">${_tEsc(time)} · ${_tEsc(a.name)}</div>
-    <div class="text-[10px] leading-tight truncate" style="color:#7a5a10">${_tEsc(a.svc)}</div>
+  const late = mins < 0;
+  const bg = late ? '#ffd9d9' : '#fff7e6', border = late ? '#dc2626' : '#f5a623', icon = late ? '#b91c1c' : '#c77700';
+  const label = late ? 'Late appt' : 'Next appt', when = late ? `${-mins}m late` : `in ${mins}m`;
+  const nameC = late ? '#7a1a1a' : '#5a3a00', whenC = late ? '#b91c1c' : '#8a5a00', svcC = late ? '#8a3030' : '#7a5a10';
+  return `<div class="flex-shrink-0 w-[150px] px-1"><div class="w-full rounded-xl px-2 py-1.5 text-left text-xs font-body" style="background:${bg};border:2px solid ${border};min-height:66px">
+    <div class="flex items-center justify-between gap-0.5" style="margin-bottom:2px"><div class="flex items-center gap-1 min-w-0"><span class="material-symbols-outlined" style="font-size:13px;color:${icon}">notifications_active</span><span class="text-[9px] font-bold uppercase tracking-wide" style="color:${icon}">${label}</span></div><span class="font-bold text-[11px]" style="color:${whenC}">${when}</span></div>
+    <div class="font-semibold text-[11px] truncate" style="color:${nameC}">${_tEsc(time)} · ${_tEsc(a.name)}</div>
+    <div class="text-[10px] leading-tight truncate" style="color:${svcC}">${_tEsc(a.svc)}</div>
   </div></div>`;
 }
 function startTurnsApptRefresh() {
@@ -343,7 +349,7 @@ export function renderTurnsTechGrid() {
     // 30-min note: drop an amber "next appt" card into this tech's next-turn position
     // (right after their filled slots) when their soonest upcoming appt is ≤30 min out.
     const nextAppt = nextApptFor(staffId);
-    if (nextAppt) { const mins = Math.round((nextAppt.startMs - _nowMs) / 60000); if (mins >= 0 && mins <= 30) slotArr.splice(filled.length, 0, turnsDueNoteCard(nextAppt, mins)); }
+    if (nextAppt) { const mins = Math.round((nextAppt.startMs - _nowMs) / 60000); if (mins <= 30) slotArr.splice(filled.length, 0, turnsDueNoteCard(nextAppt, mins)); }
     const slotHtml = slotArr.join('');
 
     return `<div class="flex items-center border-b border-surface-container-high py-2 gap-2">${techCol}

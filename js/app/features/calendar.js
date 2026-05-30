@@ -15,6 +15,13 @@ const queue = () => getState().queue;
 
 let _calGapiLoaded = false, _calGisLoaded = false, _calTokenClient = null, _calRefreshTimer = null;
 let _calDate = new Date(), _calCalendars = [], _calEvents = {}, _calPrimaryId = '';
+// Today's appointment events, loaded INDEPENDENTLY of the calendar's viewed day (_calDate) so
+// the Turns "upcoming" strip + appointment reminders always reflect TODAY even when the Calendar
+// tab is parked on another date. (Before, both read _calEvents, which holds whatever day you're
+// viewing — so navigating the calendar polluted Turns/reminders.) Short TTL; refreshed in the
+// background by callers (fire-and-forget). Needs gapi + a Google token (Calendar opened/connected
+// at least once this session); otherwise empty and callers fall back to _calEvents when it's today.
+let _todayEvents = {}, _todayEventsAt = 0, _todayLoading = false;
 let _unassignedOnly = false;
 // Today's-Appointments panel filter (device-local): hide past-time + finished rows.
 let _apptsUpcomingOnly = localStorage.getItem('muse_cal_upcoming') === '1';
@@ -80,6 +87,35 @@ export function toggleCalAutoHide() {
 // Exposed for square-pos.squarePushBooking (via window.calEventsFor in main.js).
 export function getCalEvents(calId) { return _calEvents[calId] || []; }
 
+// Load TODAY's events for all calendars into _todayEvents, independent of _calDate. Cached with
+// a 60s TTL; fire-and-forget from the callers. Re-renders the Turns strip when a load completes.
+async function ensureTodayApptEvents(force) {
+  if (_todayLoading) return;
+  if (!force && _todayEventsAt && Date.now() - _todayEventsAt < 60000) return;
+  if (!window.gapi?.client?.calendar || !localStorage.getItem('gcal_token') || !_calCalendars.length) return;
+  _todayLoading = true;
+  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(); dayEnd.setHours(23, 59, 59, 999);
+  const next = {};
+  try {
+    await Promise.all(_calCalendars.map(async cal => {
+      try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); next[cal.id] = r.result.items || []; }
+      catch (e) { next[cal.id] = _todayEvents[cal.id] || []; }
+    }));
+    _todayEvents = next; _todayEventsAt = Date.now();
+    if (document.getElementById('panel-turns')?.classList.contains('active')) window.renderTurnsApptStrip?.();
+  } finally { _todayLoading = false; }
+}
+// The event source for "today" features (Turns strip, reminders). Triggers a background refresh
+// and returns the freshest today-scoped events; before the first load lands, fall back to
+// _calEvents only when the calendar is showing today, so the common case never regresses.
+function todayApptSource() {
+  ensureTodayApptEvents();
+  if (_todayEventsAt) return _todayEvents;
+  if (new Date().toDateString() === _calDate.toDateString()) return _calEvents;
+  return {};
+}
+
 // For the appointment-reminder engine: today's TIMED appointment bookings (grouped like the
 // Today's-Appointments panel), as { id, name, startMs }. Only events that have a start time.
 export function apptsForReminders() {
@@ -88,7 +124,7 @@ export function apptsForReminders() {
   const staffForCal = calId => { if (!calId || calId === uCal) return null; const nm = _calCalendars.find(c => c.id === calId)?.name; if (!nm) return null; return staff.find(s => (s.name || '').trim().toLowerCase() === nm.trim().toLowerCase()) || null; };
   const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description || '') || ext.museLines !== undefined || cfg().services.some(s => (ev.summary || '').toLowerCase().includes((s.label || '').toLowerCase())); };
   const groups = new Map();
-  Object.entries(_calEvents).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
+  Object.entries(todayApptSource()).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
   const out = [];
   groups.forEach(items => {
     const primary = items.find(it => it.ev.extendedProperties?.private?.musePrimary === '1') || items[0];
@@ -114,13 +150,16 @@ export function apptsForTurns() {
   const isApptEv = ev => { const ext = ev.extendedProperties?.private || {}; return !!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(ev.description || '') || ext.museLines !== undefined || cfg().services.some(s => (ev.summary || '').toLowerCase().includes((s.label || '').toLowerCase())); };
   const staffForCal = calId => { if (!calId || calId === uCal) return null; const nm = _calCalendars.find(c => c.id === calId)?.name; if (!nm) return null; return staff.find(s => (s.name || '').trim().toLowerCase() === nm.trim().toLowerCase()) || null; };
   const groups = new Map();
-  Object.entries(_calEvents).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
+  Object.entries(todayApptSource()).forEach(([cid, list]) => (list || []).forEach(ev => { if (!ev.start?.dateTime || !isApptEv(ev)) return; const g = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id); if (!groups.has(g)) groups.set(g, []); groups.get(g).push({ ev, calId: cid }); }));
   const out = [];
   groups.forEach(items => {
     const primary = items.find(it => it.ev.extendedProperties?.private?.musePrimary === '1') || items[0];
     const pev = primary.ev, ppriv = pev.extendedProperties?.private || {};
     const startMs = new Date(pev.start.dateTime).getTime();
-    if (startMs < now) return;                                                   // passed
+    // Keep LATE appointments (start time already passed) — a running-late customer still hasn't
+    // arrived, so the front desk needs to see them. They drop off only when checked in or no-show
+    // (handled below). `late`/`minsLate` let the Turns UI flag them.
+    const late = startMs < now, minsLate = late ? Math.round((now - startMs) / 60000) : 0;
     if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;   // no-show
     let qm = null;                                                               // already in the queue → checked in
     items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g, ''), startMs); });
@@ -132,8 +171,8 @@ export function apptsForTurns() {
     const techs = new Map();   // staffId -> name, distinct assigned techs
     lines.forEach(l => { const st = staffForCal(l.calId); if (st) techs.set(st.id, st.name); });
     const eCalId = primary.calId, eEventId = pev.id, eNotes = _apptNotes(pev);
-    if (techs.size === 0) out.push({ startMs, name, svc, techStaffId: '', techName: 'Unassigned', calId: eCalId, eventId: eEventId, notes: eNotes });
-    else techs.forEach((tn, id) => out.push({ startMs, name, svc, techStaffId: id, techName: tn, calId: eCalId, eventId: eEventId, notes: eNotes }));
+    if (techs.size === 0) out.push({ startMs, late, minsLate, name, svc, techStaffId: '', techName: 'Unassigned', calId: eCalId, eventId: eEventId, notes: eNotes });
+    else techs.forEach((tn, id) => out.push({ startMs, late, minsLate, name, svc, techStaffId: id, techName: tn, calId: eCalId, eventId: eEventId, notes: eNotes }));
   });
   out.sort((a, b) => a.startMs - b.startMs);
   return out;

@@ -138,6 +138,7 @@ export function addGuestCard() {
         </div>
       </div>`;
   }
+  card.insertAdjacentHTML('beforeend', notesSectionHtml(idx));
   container.appendChild(card);
   renderAddGuestButton();
   setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
@@ -165,6 +166,24 @@ export function toggleSameContact(idx) {
   }
 }
 
+// Notes block appended to every guest card: a per-VISIT note (saved on this check-in as txnNote
+// → flows to the record + customer/staff history) and the persistent CUSTOMER note (kept on file,
+// phone-keyed), revealed + pre-filled when a returning customer is picked from autofill.
+function notesSectionHtml(idx) {
+  return `<div class="mt-5 space-y-3">
+    <div id="ci-cust-note-wrap-${idx}" class="hidden">
+      <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest px-1 block mb-1">Customer note <span class="text-outline normal-case tracking-normal">· kept on file</span></label>
+      <textarea id="ci-cust-note-${idx}" rows="2" oninput="ciCustNoteInput(${idx})" placeholder="Allergies, preferences, anything to remember…"
+        class="w-full bg-surface-container rounded-lg border border-surface-container-high px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none"></textarea>
+    </div>
+    <div>
+      <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest px-1 block mb-1">Note for this visit <span class="text-outline normal-case tracking-normal">· optional</span></label>
+      <textarea id="visit-note-${idx}" rows="2" placeholder="e.g., design on ring fingers, in a hurry…"
+        class="w-full bg-surface-container rounded-lg border border-surface-container-high px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none"></textarea>
+    </div>
+  </div>`;
+}
+
 export function removeGuest(idx) { document.getElementById(`guest-card-${idx}`)?.remove(); }
 export function toggleService(btn) { btn.classList.toggle('selected'); }
 
@@ -186,12 +205,16 @@ export function submitCheckin() {
     }
     if (!first) { showToast('Please enter a first name for each guest.'); return; }
     const services = Array.from(card.querySelectorAll('.service-btn.selected')).map(b => b.dataset.service);
-    newEntries.push({
+    const visitNote = document.getElementById(`visit-note-${i}`)?.value.trim() || '';
+    window.flushCiCustNote?.(i);   // persist any edited "customer note on file" before we navigate away
+    const entry = {
       id: newEntryId(),
       name: first + (last ? ' ' + last : ''), phone, services,
       status: 'waiting', checkinTime: new Date().toISOString(), isNew: true,
       skipSquare: sameContact, isAppointment: ui.currentCheckinType === 'appointment',
-    });
+    };
+    if (visitNote) entry.txnNote = visitNote;   // per-visit note → carried to the record + history
+    newEntries.push(entry);
   }
   if (newEntries.length === 0) return;
 

@@ -125,6 +125,10 @@ export function fillFromCustomer(customer, guestIdx, prefix, phoneId, firstId, l
   // note in the moment (pre-filled with any existing note).
   if (/^manual-/.test(firstId || '') && customer.phone) {
     showCustomerNote(customer.phone, [customer.given_name, customer.family_name].filter(Boolean).join(' '), customerNote(customer.phone));
+  } else if (/^first-\d+$/.test(firstId || '') && customer.phone) {
+    // Customer-facing KIOSK check-in: reveal the per-guest "customer note (kept on file)"
+    // textarea, pre-filled with this returning customer's saved note (phone-keyed).
+    fillCiCustNote(guestIdx, customer.phone);
   }
 }
 // Customer note lives as a SIDE PANEL beside the dashboard check-in (#manual-note-panel),
@@ -161,6 +165,32 @@ export function closeCustomerNote() {
   const panel = document.getElementById('manual-note-panel'); if (panel) panel.classList.add('hidden');
   _notePhoneKey = null;
 }
+
+// ── Kiosk per-guest "customer note (kept on file)" ────────────────────────────
+// The customer-facing kiosk has no side panel, so the persistent customer note lives inline in
+// each guest card (#ci-cust-note-wrap-<idx>). Shown + pre-filled when a returning customer is
+// picked; auto-saved (debounced) to config.customer_notes keyed by the live phone field.
+const _ciNoteTimers = {};
+export function fillCiCustNote(idx, phone) {
+  const wrap = document.getElementById('ci-cust-note-wrap-' + idx);
+  const ta = document.getElementById('ci-cust-note-' + idx);
+  if (!wrap || !ta) return;
+  ta.value = customerNote(phone);
+  ta.dataset.phoneKey = notePhoneKey(phone) || '';
+  wrap.classList.remove('hidden');
+}
+function _persistCiCustNote(idx) {
+  const ta = document.getElementById('ci-cust-note-' + idx); if (!ta) return;
+  // Prefer the live phone field (it may have been edited after the autofill pick).
+  const key = notePhoneKey(document.getElementById('phone-' + idx)?.value || '') || ta.dataset.phoneKey || '';
+  if (!key) return;
+  const val = ta.value.trim();
+  const notes = { ...(cfg().customer_notes || {}) };
+  if (val) notes[key] = val; else delete notes[key];
+  dispatch('config.set', { key: 'customer_notes', value: notes });
+}
+export function ciCustNoteInput(idx) { clearTimeout(_ciNoteTimers[idx]); _ciNoteTimers[idx] = setTimeout(() => _persistCiCustNote(idx), 600); }
+export function flushCiCustNote(idx) { clearTimeout(_ciNoteTimers[idx]); _persistCiCustNote(idx); }
 
 export function buildDropdown(customers, dropdownId, guestIdx, phoneId, firstId, lastId, maskPhone = false) {
   const dropdown = document.getElementById(dropdownId);

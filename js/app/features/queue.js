@@ -469,6 +469,13 @@ function renderManualGuestCard(idx) {
       <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest block mb-2">Services</label>
       <div class="grid grid-cols-4 gap-2" id="manual-services-${idx}">${serviceButtonsHtml()}</div>
     </div>`;
+  // Per-visit note (txnNote) captured at check-in → carried to the record + customer/staff history.
+  // (The persistent customer note is handled separately by the side panel for returning customers.)
+  card.insertAdjacentHTML('beforeend', `<div>
+      <label class="text-[11px] font-body font-semibold text-outline-variant uppercase tracking-widest block mb-1">Note for this visit <span class="text-outline normal-case tracking-normal">· optional</span></label>
+      <textarea id="manual-visit-note-${idx}" rows="2" placeholder="e.g., design on ring fingers, in a hurry…"
+        class="w-full bg-surface-container rounded-lg border border-surface-container-high px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none"></textarea>
+    </div>`);
   container.appendChild(card);
 }
 
@@ -538,7 +545,9 @@ export function submitManualAdd() {
     else { phone = document.getElementById(`manual-phone-${i}`)?.value.trim() || ''; first = document.getElementById(`manual-first-${i}`)?.value.trim() || ''; last = document.getElementById(`manual-last-${i}`)?.value.trim() || ''; }
     if (!first) { showToast('Please enter a first name for each guest.'); return; }
     const services = Array.from(card.querySelectorAll('.service-btn.selected')).map(b => b.dataset.service);
+    const visitNote = document.getElementById(`manual-visit-note-${i}`)?.value.trim() || '';
     const entry = { id: newEntryId(), name: first + (last ? ' ' + last : ''), phone, services, status: 'waiting', checkinTime: new Date().toISOString(), isNew: false, skipSquare: sameContact, isAppointment };
+    if (visitNote) entry.txnNote = visitNote;   // per-visit note → carried to the record + history
     // Appointment + chosen tech → pre-assign that tech to each service (remembered on
     // the check-in). Blank tech leaves it unassigned (no assignments created here).
     if (apptTechId && services.length) entry.assignments = services.map(sid => ({ serviceId: sid, techId: apptTechId, station: '', status: 'waiting', cost: 0, assignedAt: Date.now() }));

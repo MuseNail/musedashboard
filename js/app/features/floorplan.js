@@ -334,16 +334,17 @@ function validTechStations() {
 function assignTechToStation(techId, stationId) {
   const e = collectFloor().byStation[stationId];
   if (!e) { showToast(`No customer at ${stationLabel(stationId)}`); return; }
-  // Assign to the first service seated here that still needs a tech (pedicures can need several;
-  // drag again for the next). Don't reassign a service that already has a tech.
+  // Prefill the dropped tech onto the first service seated here that still needs one (pedicures
+  // can need several; drag again for the next), then open Assign & Price so the price can be set
+  // in the same motion. If every service here already has a tech, still open the modal to edit.
   const a = activeAssignments(e).find(x => x.station === stationId && !x.techId);
-  if (!a) { showToast(`No service awaiting a tech at ${stationLabel(stationId)}`); return; }
-  a.techId = techId;
-  dispatch('queue.upsert', { entry: e });
-  renderFloorPlan();
-  window.renderQueue?.(); window.renderTurns?.();
-  const t = staffById(techId);
-  showToast(`${t ? t.name.split(' ')[0] : 'Tech'} → ${stationLabel(stationId)}`);
+  if (a) {
+    a.techId = techId;
+    dispatch('queue.upsert', { entry: e });
+    renderFloorPlan();
+    window.renderQueue?.(); window.renderTurns?.();
+  }
+  window.showGroupAssignModal?.(String(e.id));
 }
 
 // ── Alignment snapping (snap a dragged station's edges/centers to others) ─────
