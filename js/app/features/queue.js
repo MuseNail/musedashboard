@@ -141,7 +141,12 @@ export function renderStationsSettings() {
     <button onclick="addStationCategory();renderStationsSettings()" class="w-full mt-1 py-2.5 rounded-xl border border-dashed border-surface-container-high text-sm font-headline font-bold text-primary flex items-center justify-center gap-1 hover:bg-primary/5"><span class="material-symbols-outlined" style="font-size:18px">add</span>Add category</button>`;
 }
 
-const upsert = entry => dispatch('queue.upsert', { entry });
+// Single write path for queue entries. A FINALIZED (paid) entry mirrors to its record on
+// every change — so the record (the source of truth for reports/edits) can never silently
+// diverge from the board (the bug behind 3 records losing a $2 fee). saveRecord is
+// idempotent (overwrites by id), so the redundant save on already-record-saving paths
+// (updateStatus) is harmless. Non-paid edits don't touch records.
+const upsert = entry => { dispatch('queue.upsert', { entry }); if (isPaidStatus(entry.status)) window.saveRecord?.(entry); };
 
 // ── Queue history (read-only past-day view) ───────
 // Source: the daily turns-history snapshot (turns.js archives q() into
@@ -231,7 +236,9 @@ export function renderQueue() {
       { key: 'paid',      label: 'Paid Today', color: 'text-outline' },
     ];
     list.innerHTML = groups.map(g => {
-      const entries = filtered.filter(e => g.key === 'paid' ? isPaidStatus(e.status) : e.status === g.key);
+      // "Paid Today" shows only today's paid tickets, so the board self-cleans at midnight
+      // even before the rollover clears yesterday's finished entries from storage.
+      const entries = filtered.filter(e => g.key === 'paid' ? (isPaidStatus(e.status) && localDateStr(new Date(e.checkinTime)) === todayStr()) : e.status === g.key);
       if (entries.length === 0) return '';
       return `<div class="mb-4">
         <div class="flex items-center gap-2 mb-2">

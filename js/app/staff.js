@@ -40,16 +40,18 @@ export function myActiveAssignments(queueArr, techId) {
   });
   return out;
 }
-// This tech's COMPLETED work (complete + paid), merging the live queue with stored
-// records (queue wins by id), excluding deletions — same source/rule as the
-// dashboard turns "billed today", so the tech's totals match the front desk.
-// Returns { name, serviceId, cost, date, time, paid } lines, newest first.
+// This tech's COMPLETED work (complete + paid), merging stored records with the live queue
+// — records are the source of truth (a queue entry is used only when no record exists for
+// its id yet), same rule as the dashboard, so the tech's totals match the front desk and a
+// stale paid queue copy can't shadow an edited record. Returns { name, serviceId, cost,
+// date, time, paid } lines, newest first.
 export function myHistory(queueArr, recordsArr, deletions, techId) {
   if (!techId) return [];
   const deleted = new Set((deletions || []).map(String));
   (recordsArr || []).forEach(r => { if (r.status === 'deleted') deleted.add(String(r.id)); });
+  const recordedIds = new Set((recordsArr || []).filter(r => r.status !== 'deleted' && !deleted.has(String(r.id))).map(r => String(r.id)));
   const liveIds = new Set(), src = [];
-  (queueArr || []).forEach(e => { if (deleted.has(String(e.id))) return; liveIds.add(String(e.id)); src.push(e); });
+  (queueArr || []).forEach(e => { if (deleted.has(String(e.id)) || recordedIds.has(String(e.id))) return; liveIds.add(String(e.id)); src.push(e); });
   (recordsArr || []).forEach(r => { if (r.status === 'deleted' || deleted.has(String(r.id)) || liveIds.has(String(r.id))) return; src.push(r); });
   const lines = [];
   src.forEach(rec => (rec.assignments || []).forEach(a => {

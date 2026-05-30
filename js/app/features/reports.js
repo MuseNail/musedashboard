@@ -42,16 +42,18 @@ export function saveRecord(entry) {
   dispatch('record.save', { record });
 }
 
-// Combine live done queue entries with stored records (queue wins for TODAY only).
+// Combine stored records with the live queue. Records are the SINGLE SOURCE OF TRUTH for
+// finished sales: a paid queue entry is included only when no record exists for its id yet.
 export function buildCombinedRecords() {
   const deletedIds = new Set(getState().deletions.map(String));
   records().filter(r => r.status === 'deleted').forEach(r => deletedIds.add(String(r.id)));
-  // A queue copy only overrides its saved record for TODAY's tickets. A paid entry left
-  // over from a previous day (e.g. a missed 4 AM reset after an outage) must NOT shadow
-  // its record — that shadowing hid historical edits and could skew totals. Past days are
-  // always served from records (the authoritative, manager-editable source of truth).
-  const _today = todayStr();
-  const liveSnaps = queue().filter(e => isPaidStatus(e.status) && !deletedIds.has(String(e.id)) && localDateStr(new Date(e.checkinTime)) === _today).map(e => ({
+  // For every recorded ticket the record wins; a paid queue entry surfaces only when there's
+  // no record for it yet (e.g. a crash between the queue upsert and saveRecord). This means a
+  // historical edit always takes effect and a leftover/duplicate queue copy can never shadow
+  // or skew it — independent of the day boundary. The queue↔record sync invariant in queue.js
+  // (paid upserts mirror to the record) keeps records current, so this is always correct.
+  const recordedIds = new Set(records().filter(r => r.status !== 'deleted' && !deletedIds.has(String(r.id))).map(r => String(r.id)));
+  const liveSnaps = queue().filter(e => isPaidStatus(e.status) && !deletedIds.has(String(e.id)) && !recordedIds.has(String(e.id))).map(e => ({
     id: String(e.id), name: e.name, phone: e.phone || '', services: e.services, assignments: e.assignments || [],
     items: e.items || [], fees: e.fees || [], discount: e.discount || 0, discountNote: e.discountNote || '', txnNote: e.txnNote || '',
     totalCost: e.totalCost || 0, checkinTime: e.checkinTime, completedAt: e.completedAt || null,

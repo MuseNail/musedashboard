@@ -165,7 +165,7 @@ function applySquarePaidFlag() {
   else localStorage.removeItem('muse_sq_paid');
 }
 window.addEventListener('storage', e => { if (e.key === 'muse_sq_paid' && e.newValue) applySquarePaidFlag(); });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); runDayRolloverIfNeeded(); } });
 
 // Installed-PWA fallback for the Square charge. On iOS a Home-Screen app is resumed
 // after the Square hand-off WITHOUT the callback data, so the muse_sq_paid handoff
@@ -201,7 +201,7 @@ let _custAutoLoaded = false;
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
   if (changed === 'connection') return;
-  if (changed === 'hydrate') { applySquarePaidFlag(); catchUpMissedReset(); }   // apply pending Square auto-paid + heal a missed nightly reset, once the queue loads
+  if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); }   // apply pending Square auto-paid + roll over the day if needed, once the queue loads
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync();
     // T2.17: once Square is configured, auto-load the customer directory so
@@ -273,42 +273,49 @@ function registerServiceWorker() {
   navigator.serviceWorker.register('/musedashboard/sw.js').catch(e => console.warn('[SW] registration failed:', e));
 }
 
-// ── Daily 4 AM reset ──────────────────────────────
-function scheduleMidnightReset() {
-  const now = new Date();
-  const reset = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 4, 0, 5);
-  if (reset <= now) reset.setDate(reset.getDate() + 1);
-  setTimeout(() => {
-    turns.archiveTurnsForToday();                              // snapshots + clears turns_order
-    store.getState().queue.slice().forEach(e => sync.dispatch('queue.remove', { id: e.id }));
-    sync.dispatch('config.set', { key: 'turns_break', value: [] });
-    sync.dispatch('config.set', { key: 'chat_log', value: [] });   // staff chat starts fresh each day
-    queue.renderQueue(); queue.updateStats(); turns.renderTurns(); chat.renderChat(); chat.updateChatBadge();
-    utils.showToast("New day — yesterday's history saved");
-    scheduleMidnightReset();
-  }, reset - now);
-}
-
-// Heal a missed nightly reset: if the 4 AM reset didn't run (app closed / outage), paid
-// tickets from a previous day linger in the live queue and shadow their saved records
-// (which hid historical edits and could skew the board). On the first hydrate, remove any
-// paid queue entry dated before today that is ALREADY saved as a record — provably no data
-// loss, and self-heals exactly what the reset would have done. Runs once per session.
-let _resetCaughtUp = false;
-function catchUpMissedReset() {
-  if (_resetCaughtUp) return;
-  _resetCaughtUp = true;
-  const st = store.getState();
+// ── Daily rollover (self-healing, midnight boundary) ──────────────────────────
+// Replaces the old fragile 4 AM `setTimeout` reset. The day boundary no longer affects data
+// integrity (records are the source of truth — see buildCombinedRecords), so this is just
+// board hygiene + new-day housekeeping. Runs on hydrate, on tab-visible, and on a timer
+// armed to the next local midnight; idempotent, so running it repeatedly is safe.
+function runDayRolloverIfNeeded() {
   const today = utils.todayStr();
+  const last  = localStorage.getItem('muse_last_reset_date');
+  const st = store.getState();
   const recIds = new Set((st.records || []).filter(r => r.status !== 'deleted').map(r => String(r.id)));
+  // Finished tickets from a previous day that are ALREADY saved as a record — safe to drop
+  // from the live board (the record is the permanent copy). Computed BEFORE we clear, so the
+  // archive below still sees them. Active or unrecorded entries are never auto-removed.
   const stale = (st.queue || []).filter(e =>
-    (e.status === 'paid' || e.status === 'done') &&                       // finalized tickets only
-    recIds.has(String(e.id)) &&                                          // safe: already saved as a record
-    utils.localDateStr(new Date(e.checkinTime)) < today);                 // from a previous day
-  if (!stale.length) return;
-  stale.forEach(e => sync.dispatch('queue.remove', { id: e.id }));
-  window.logAudit?.('Auto-cleanup', `Cleared ${stale.length} leftover paid ticket(s) from a missed nightly reset`);
-  queue.renderQueue(); queue.updateStats();
+    (e.status === 'paid' || e.status === 'done') &&
+    recIds.has(String(e.id)) &&
+    utils.localDateStr(new Date(e.checkinTime)) < today);
+  // New-day housekeeping — once per device per day (marker-gated). Done before the clear so
+  // `rolloverTurns` archives the closed day while its entries are still in the queue.
+  if (last !== today) {
+    if (last) {   // skip on the very first run so a fresh mid-day boot isn't wiped
+      try { turns.rolloverTurns(last); } catch (e) {}   // archive closed day + clear the rotation
+      sync.dispatch('config.set', { key: 'turns_break', value: [] });
+      sync.dispatch('config.set', { key: 'chat_log', value: [] });   // staff chat starts fresh each day
+      utils.showToast("New day — yesterday's history saved");
+    }
+    localStorage.setItem('muse_last_reset_date', today);
+  }
+  // Safe board cleanup — runs every time (idempotent); also self-heals a stale entry that a
+  // still-connected device re-pushed from its outbox after a clear.
+  if (stale.length) {
+    stale.forEach(e => sync.dispatch('queue.remove', { id: e.id }));
+    window.logAudit?.('Day rollover', `Cleared ${stale.length} finished ticket(s) from a prior day`);
+  }
+  if (stale.length || last !== today) { queue.renderQueue(); queue.updateStats(); turns.renderTurns(); chat.renderChat(); chat.updateChatBadge(); }
+}
+// Arm a one-shot timer to the next local midnight (+30s); it re-arms itself after firing.
+// Hydrate + visibilitychange are the real safety net (cover device sleep / clock changes);
+// this timer only handles a device left open across midnight.
+function armMidnightRollover() {
+  const now = new Date();
+  const nextMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 30);
+  setTimeout(() => { runDayRolloverIfNeeded(); armMidnightRollover(); }, nextMidnight - now);
 }
 
 // ── PWA install ───────────────────────────────────
@@ -404,7 +411,7 @@ function boot() {
   setTimeout(() => { if (!store.getState().config.square_config && !sessionStorage.getItem('muse_setup_skipped')) settings.showSetupWizard(); }, 1500);
 
   wireKeyboard();
-  scheduleMidnightReset();
+  armMidnightRollover();
   checkAppVersion();
   registerServiceWorker();
 }

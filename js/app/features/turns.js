@@ -612,17 +612,24 @@ function onTechReorderEnd(e) {
 export function saveTurnsAndSync() { renderTurns(); showToast('Turns saved & synced ✓'); }
 
 // ── History (device-local archive) ────────────────
-export function archiveTurnsForToday() {
-  const today = todayStr();
-  turnsHistory[today] = {
+// Archive one day's turns snapshot into the device-local history (a fallback for the
+// history grids; Reports + turns grids primarily rebuild from synced records). Filtered to
+// the given day so the rollover keys the JUST-ENDED day correctly — the old "archive today
+// at 4 AM" mis-keyed it, since todayStr() was already the new day by then.
+export function archiveTurnsForDay(dateStr) {
+  turnsHistory[dateStr] = {
     order: [...cfg().turns_order],
-    snapshot: q().map(e => ({ id: String(e.id), name: e.name, phone: e.phone||'', services: e.services, assignments: e.assignments||[], totalCost: e.totalCost||0, status: e.status, checkinTime: e.checkinTime })),
+    snapshot: q().filter(e => localDateStr(new Date(e.checkinTime)) === dateStr)
+      .map(e => ({ id: String(e.id), name: e.name, phone: e.phone||'', services: e.services, assignments: e.assignments||[], totalCost: e.totalCost||0, status: e.status, checkinTime: e.checkinTime })),
   };
   const keys = Object.keys(turnsHistory).sort().slice(-90);
   const pruned = {}; keys.forEach(k => pruned[k] = turnsHistory[k]);
   turnsHistory = pruned; saveTurnsHistory();
-  setOrder([]);
 }
+// Close out a finished day during the daily rollover: archive it, then clear the rotation
+// so the new day starts fresh.
+export function rolloverTurns(closedDateStr) { archiveTurnsForDay(closedDateStr); setOrder([]); }
+export function archiveTurnsForToday() { rolloverTurns(todayStr()); }
 export function openTurnsHistoryPicker(ev) {
   window.openDayPicker?.(ev, { value: turnsViewingHistory || todayStr(), onPick: loadTurnsHistory });
 }
