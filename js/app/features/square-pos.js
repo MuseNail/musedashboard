@@ -16,7 +16,7 @@ let _pendingPay = null;
 // R6 gift-card-as-recorded-tender (staging for the current pay session). These NEVER change
 // the Square charge — the full ticket total always goes to Square; we only record which cards
 // were used so the app's gift-card balances stay in sync. Committed when the ticket is paid.
-let _payGc = [], _payTicketId = null, _gcPickerOpen = false, _payCash = 0;   // _payCash in dollars (split-tender)
+let _payGc = [], _payTicketId = null, _gcPickerOpen = false, _payCash = 0, _payTip = 0;   // _payCash/_payTip in dollars (split-tender cash / card tip — tip is charged ON TOP of the bill, never part of ticketTotal)
 const _gcBal = g => (g.amount || 0) - (window.gcTotalUsed ? window.gcTotalUsed(g) : 0);
 const _payTotalDollars = () => (_pendingPay?.cents || 0) / 100;
 const _payGiftDollars  = () => _payGc.reduce((s, t) => s + (t.amount || 0), 0);
@@ -40,6 +40,7 @@ function payCustomerBlock(e) {
   (e.items || []).forEach(it => { const item = cfg().items.find(x => x.id === it.itemId); lines.push(payLine(`${item?.label || 'Item'} ×${it.qty || 1}`, (it.price || 0) * (it.qty || 0))); });
   (e.fees || []).forEach(f => { const fee = cfg().fees.find(x => x.id === f.feeId); lines.push(payLine(fee?.label || 'Fee', f.amount || 0)); });
   if (e.discount > 0) lines.push(payLine(`Discount${e.discountNote ? ' (' + e.discountNote + ')' : ''}`, -e.discount));
+  if (e.tip > 0) lines.push(payLine('Tip', e.tip));   // informational only — never part of ticketTotal (the header total below)
   return `<div class="bg-surface-container rounded-xl px-4 py-3">
     <div class="flex justify-between items-center mb-1.5"><span class="font-headline font-bold text-on-surface">${e.name}</span><span class="font-headline font-bold text-primary">$${ticketTotal(e).toFixed(2)}</span></div>
     ${lines.join('') || '<div class="text-xs text-on-surface-variant italic">No charges</div>'}
@@ -70,7 +71,7 @@ export function openSquarePOS(entryId) {
   // tapped earlier but the charge wasn't completed). Balances are only drawn down when paid.
   _payTicketId = String(entryId);
   _payGc = (entry.giftcardRedemptions || []).map(t => ({ giftcardId: t.giftcardId, serial: t.serial, who: t.who, amount: t.amount }));
-  _gcPickerOpen = false;
+  _gcPickerOpen = false; _payCash = 0; _payTip = 0;
   renderPayGc();
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
@@ -78,7 +79,7 @@ export function openSquarePOS(entryId) {
 
 export function closeSquareConfirm() {
   _pendingPay = null;
-  _payGc = []; _payTicketId = null; _gcPickerOpen = false; _payCash = 0;
+  _payGc = []; _payTicketId = null; _gcPickerOpen = false; _payCash = 0; _payTip = 0;
   const gs = document.getElementById('square-gc-section'); if (gs) gs.innerHTML = '';
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.add('hidden'); m.style.display = ''; }
@@ -149,8 +150,10 @@ export async function proceedTerminalPayment() {
   const cashReceivedC  = Math.round(_payCash * 100);
   const changeCents    = Math.round(_payChangeDollars() * 100);
   const cardCents      = Math.max(0, total - giftCents - cashAppliedC);
-  if (cardCents > 0 && !sc.terminalDeviceId) { showToast('Pair your Square Terminal in Settings → Square first.'); return; }
-  // Capture BEFORE closeSquareConfirm() — it nulls _pendingPay / _payTicketId / _payCash.
+  const tipCents       = Math.round(_payTip * 100);   // card tip, charged ON TOP of the bill — never part of `total`
+  const termCharge     = cardCents + tipCents;          // what actually goes on the Terminal
+  if (termCharge > 0 && !sc.terminalDeviceId) { showToast('Pair your Square Terminal in Settings → Square first.'); return; }
+  // Capture BEFORE closeSquareConfirm() — it nulls _pendingPay / _payTicketId / _payCash / _payTip.
   const payNames = _pendingPay.names || '', ticketId = _payTicketId, partyIds = party.map(e => String(e.id));
   const tenders  = { cash: cashAppliedC / 100, card: cardCents / 100, gift: giftCents / 100, cashReceived: cashReceivedC / 100, change: changeCents / 100 };
   // Stash recorded gift cards on the ticket so they're drawn down when marked Paid.
@@ -166,14 +169,14 @@ export async function proceedTerminalPayment() {
   }
   closeSquareConfirm();
   try {
-    // 1) Card portion on the Terminal (the uncertain step) — do it FIRST.
+    // 1) Card portion + tip on the Terminal (the uncertain step) — do it FIRST.
     let cardPaymentId = null;
-    if (cardCents > 0) {
-      showTerminalModal(`Charging $${(cardCents / 100).toFixed(2)} on the Terminal — finish on the device…`);
+    if (termCharge > 0) {
+      showTerminalModal(`Charging $${(termCharge / 100).toFixed(2)} on the Terminal — finish on the device…`);
       const coRes = await fetch(`${SQUARE_PROXY}/v2/terminals/checkouts`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idempotency_key: pend.checkoutKey, checkout: {
-          amount_money: { amount: cardCents, currency: 'USD' },   // card balance only — no itemized order
+          amount_money: { amount: termCharge, currency: 'USD' },   // card balance + tip — no itemized order
           device_options: { device_id: sc.terminalDeviceId },
           reference_id: String(ticketId || '').slice(0, 40),
           note: payNames.slice(0, 500),
@@ -193,7 +196,7 @@ export async function proceedTerminalPayment() {
       showTerminalModal('Recording cash payment…');
       cashPaymentId = await recordCashPayment(cashAppliedC, cashReceivedC, sc.locationId, pend.cashKey);
     }
-    _finalizeTerminalPaid(partyIds, tenders, [cardPaymentId, cashPaymentId].filter(Boolean));
+    _finalizeTerminalPaid(partyIds, tenders, [cardPaymentId, cashPaymentId].filter(Boolean), tipCents / 100);
   } catch (e) { hideTerminalModal(); showToast('Square: ' + (e.message || 'error')); }
 }
 
@@ -233,20 +236,20 @@ function _pollTerminalCheckout(id) {
   });
 }
 
-function _finalizeTerminalPaid(partyIds, tenders, paymentIds) {
+function _finalizeTerminalPaid(partyIds, tenders, paymentIds, tipDollars) {
   hideTerminalModal();
   partyIds.forEach((id, i) => {
     const ge = queue().find(x => String(x.id) === String(id));
     if (ge) {
       if (paymentIds.length) ge.squarePaymentIds = paymentIds;
-      if (i === 0) ge.tenders = tenders;   // group-level payment split recorded on the primary ticket
-      ge.totalCost = ticketTotal(ge);
+      if (i === 0) { ge.tenders = tenders; if (tipDollars > 0) ge.tip = tipDollars; }   // group-level split + one tip, recorded on the primary ticket
+      ge.totalCost = ticketTotal(ge);   // bill only — tip is NOT folded in
       dispatch('queue.upsert', { entry: ge });
     }
-    window.updateStatus?.(String(id), 'paid');   // → saveRecord (records tenders/squarePaymentIds) + gift-card draw-down + audit
+    window.updateStatus?.(String(id), 'paid');   // → saveRecord (records tenders/tip/squarePaymentIds) + gift-card draw-down + audit
   });
   try { localStorage.removeItem('muse_term_pending'); } catch (e) {}
-  _pendingPay = null; _payGc = []; _payTicketId = null; _payCash = 0;
+  _pendingPay = null; _payGc = []; _payTicketId = null; _payCash = 0; _payTip = 0;
   showToast('Paid ✓');
 }
 
@@ -310,15 +313,23 @@ function renderPayGc() {
       <span class="flex items-center gap-1"><span class="text-on-surface-variant text-sm">$</span>
       <input id="sq-cash-amt" type="text" inputmode="none" value="${_payCash > 0 ? _payCash.toFixed(2) : ''}" placeholder="0.00" onfocus="openNumpad(this,'Cash received','cost')" onclick="openNumpad(this,'Cash received','cost')" oninput="sqCashInput(this.value)" class="w-24 border border-surface-container-high rounded-lg px-2 py-1.5 text-sm text-right text-on-surface bg-surface-container-lowest focus:outline-none focus:border-primary"></span>
     </div>`;
+  // Tip is charged ON TOP of the card on the Terminal (card-only). It is NOT part of the bill/
+  // ticketTotal — it's added to the Terminal charge and tracked separately in Reports.
+  const tipRow = `<div class="flex items-center justify-between mb-3">
+      <span class="text-sm font-body text-on-surface">Tip <span class="text-on-surface-variant text-xs">(added to card)</span></span>
+      <span class="flex items-center gap-1"><span class="text-on-surface-variant text-sm">$</span>
+      <input id="sq-tip-amt" type="text" inputmode="none" value="${_payTip > 0 ? _payTip.toFixed(2) : ''}" placeholder="0.00" onfocus="openNumpad(this,'Tip','cost')" onclick="openNumpad(this,'Tip','cost')" oninput="sqTipInput(this.value)" class="w-24 border border-surface-container-high rounded-lg px-2 py-1.5 text-sm text-right text-on-surface bg-surface-container-lowest focus:outline-none focus:border-primary"></span>
+    </div>`;
   const breakdown = `<div class="mt-3 pt-2 border-t border-surface-container-high text-xs font-body space-y-0.5">
       <div class="flex justify-between text-on-surface-variant"><span>Total</span><span>$${_payTotalDollars().toFixed(2)}</span></div>
       ${_payGiftDollars() > 0 ? `<div class="flex justify-between text-on-surface-variant"><span>Gift card</span><span>$${_payGiftDollars().toFixed(2)}</span></div>` : ''}
       <div id="sq-row-cashrcv" class="flex justify-between text-on-surface-variant" style="display:none"><span>Cash received</span><span id="sq-cash-rcv">$0.00</span></div>
       <div id="sq-row-change" class="flex justify-between items-center text-2xl font-headline font-extrabold text-on-surface mt-1.5" style="display:none"><span>Change due</span><span id="sq-change">$0.00</span></div>
       <div id="sq-row-cashpaid" class="flex justify-between text-on-surface" style="display:none"><span>Cash paid</span><span id="sq-cash-applied">$0.00</span></div>
-      <div class="flex justify-between items-center text-2xl font-headline font-extrabold text-on-surface mt-1.5"><span>Card on Terminal</span><span id="sq-card-due">$${_payCardDueDollars().toFixed(2)}</span></div>
+      <div id="sq-row-tip" class="flex justify-between text-on-surface-variant" style="display:none"><span>Tip</span><span id="sq-tip">$0.00</span></div>
+      <div class="flex justify-between items-center text-2xl font-headline font-extrabold text-on-surface mt-1.5"><span>Card on Terminal</span><span id="sq-card-due">$${(_payCardDueDollars() + _payTip).toFixed(2)}</span></div>
     </div>`;
-  host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${picker}${breakdown}`;
+  host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}${tipRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${picker}${breakdown}`;
   sqUpdatePayBreakdown();
 }
 export function sqCashInput(v) {
@@ -326,20 +337,28 @@ export function sqCashInput(v) {
   _payCash = isFinite(n) && n > 0 ? n : 0;
   sqUpdatePayBreakdown();
 }
-// Live-patch the breakdown numbers + the action buttons as cash is typed, WITHOUT
+export function sqTipInput(v) {
+  const n = parseFloat(v);
+  _payTip = isFinite(n) && n > 0 ? n : 0;
+  sqUpdatePayBreakdown();
+}
+// Live-patch the breakdown numbers + the action buttons as cash/tip are typed, WITHOUT
 // re-rendering the section (which would yank the numpad's target input mid-entry).
 export function sqUpdatePayBreakdown() {
-  const cardDue = _payCardDueDollars(), applied = _payCashAppliedDollars(), change = _payChangeDollars(), cash = _payCash;
+  const cardDue = _payCardDueDollars(), applied = _payCashAppliedDollars(), change = _payChangeDollars(), cash = _payCash, tip = _payTip;
+  const termCharge = cardDue + tip;   // tip rides on top of the card portion of the bill
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = '$' + v.toFixed(2); };
-  set('sq-card-due', cardDue); set('sq-cash-applied', applied); set('sq-cash-rcv', cash); set('sq-change', change);
+  set('sq-card-due', termCharge); set('sq-cash-applied', applied); set('sq-cash-rcv', cash); set('sq-change', change); set('sq-tip', tip);
   const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? 'flex' : 'none'; };
-  show('sq-row-cashrcv', cash > 0); show('sq-row-cashpaid', cash > 0); show('sq-row-change', change > 0.0001);
+  show('sq-row-cashrcv', cash > 0); show('sq-row-cashpaid', cash > 0); show('sq-row-change', change > 0.0001); show('sq-row-tip', tip > 0.0001);
   const tb = document.getElementById('sq-terminal-btn');
-  if (tb) tb.innerHTML = cardDue > 0
-    ? `<span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pay $${cardDue.toFixed(2)} on Terminal`
+  if (tb) tb.innerHTML = termCharge > 0
+    ? `<span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pay $${termCharge.toFixed(2)} on Terminal`
     : `<span class="material-symbols-outlined" style="font-size:18px">check</span> Record Payment`;
+  // The legacy Square POS deep link charges the bill only (no cash split, no tip) — disable it
+  // whenever a cash split or a tip is in play, since those are handled by the Terminal.
   const pb = document.getElementById('sq-pos-btn');
-  if (pb) { const off = _payCash > 0; pb.disabled = off; pb.style.opacity = off ? '0.4' : ''; pb.style.pointerEvents = off ? 'none' : ''; pb.title = off ? 'Cash split is handled by the Terminal' : ''; }
+  if (pb) { const off = _payCash > 0 || _payTip > 0; pb.disabled = off; pb.style.opacity = off ? '0.4' : ''; pb.style.pointerEvents = off ? 'none' : ''; pb.title = off ? 'Cash/tip is handled by the Terminal' : ''; }
 }
 function _gcPickerRows(room) {
   const q = (document.getElementById('sq-gc-search')?.value || '').toLowerCase();

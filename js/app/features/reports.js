@@ -37,6 +37,7 @@ export function saveRecord(entry) {
     ...(entry.squareOrderId ? { squareOrderId: entry.squareOrderId } : {}),
     ...(entry.squarePaymentIds?.length ? { squarePaymentIds: entry.squarePaymentIds } : {}),
     ...(entry.tenders ? { tenders: entry.tenders } : {}),
+    ...(entry.tip ? { tip: entry.tip } : {}),   // card tip — tracked separately; NOT part of totalCost
   };
   dispatch('record.save', { record });
 }
@@ -401,14 +402,24 @@ export function runReport() {
   const itemsTotal = filtered.reduce((s,r)=>s+(r.items||[]).reduce((a,x)=>a+(x.price||0)*(x.qty||0),0),0);
   const feesTotal = filtered.reduce((s,r)=>s+(r.fees||[]).reduce((a,x)=>a+(x.amount||0),0),0);
   const discountTotal = filtered.reduce((s,r)=>s+(r.discount||0),0);
-  const totalIncome = filtered.reduce((s,r)=>s+(r.totalCost||0),0);
+  const totalIncome = filtered.reduce((s,r)=>s+(r.totalCost||0),0);   // "Total Billed" — bill only, no tips; still drives Avg Ticket / Shop Keeps
   const guestCount = filtered.filter(r => isPaidStatus(r.status)).length;
   const avgTicket = guestCount > 0 ? totalIncome / guestCount : 0;
+  const tipsTotal = filtered.reduce((s,r)=>s+(r.tip||0),0);
+  // Payment Mix — how the money was actually collected. Tips ride on the card (Square deposits
+  // card + tips together). "Other" = paid sales with no recorded tender (older / direct Mark-Paid /
+  // historical) so card+cash+gift+other === totalIncome (billed) + tipsTotal — nothing disappears.
+  const cardMix  = filtered.reduce((s,r)=>s+(r.tenders?.card||0),0) + tipsTotal;
+  const cashMix  = filtered.reduce((s,r)=>s+(r.tenders?.cash||0),0);
+  const giftMix  = filtered.reduce((s,r)=>s+(r.tenders?.gift||0),0);
+  const otherMix = filtered.reduce((s,r)=> r.tenders ? s : s+(r.totalCost||0), 0);
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('rpt-total-income', `$${totalIncome.toFixed(2)}`); set('rpt-total-guests', guestCount); set('rpt-avg-ticket', `$${avgTicket.toFixed(2)}`);
+  set('rpt-total-guests', guestCount); set('rpt-avg-ticket', `$${avgTicket.toFixed(2)}`);
   set('rpt-svc-total', `$${svcTotal.toFixed(2)}`); set('rpt-items-total', `$${itemsTotal.toFixed(2)}`); set('rpt-fees-total', `$${feesTotal.toFixed(2)}`);
   set('rpt-discount-total', discountTotal > 0 ? `-$${discountTotal.toFixed(2)}` : '-$0.00');
+  set('rpt-total-tips', `$${tipsTotal.toFixed(2)}`);
+  set('rpt-pay-card', `$${cardMix.toFixed(2)}`); set('rpt-pay-cash', `$${cashMix.toFixed(2)}`); set('rpt-pay-gift', `$${giftMix.toFixed(2)}`); set('rpt-pay-other', `$${otherMix.toFixed(2)}`);
   const refundsTotal = filtered.filter(r => r.status === 'refund').reduce((s,r)=>s+(r.totalCost||0),0);
   document.getElementById('rpt-refunds-row')?.classList.toggle('hidden', refundsTotal === 0);
   if (refundsTotal !== 0) set('rpt-refunds-total', `-$${Math.abs(refundsTotal).toFixed(2)}`);
@@ -512,7 +523,7 @@ export function runReport() {
   // Gross income = true new cash collected: billed work + new gift-card cash, minus
   // redemptions (those tickets are already in totalBilled but were paid from cards
   // sold earlier, so the redeemed portion isn't new cash this period).
-  const grossIncome = totalIncome + gcSoldValue - gcRedeemed;
+  const grossIncome = totalIncome + gcSoldValue - gcRedeemed + tipsTotal;   // "Total Money Collected"
   set('rpt-gross-income', `$${grossIncome.toFixed(2)}`);
   set('rpt-gc-sold', `$${gcSoldValue.toFixed(2)}`);
   set('rpt-gc-redeemed', `$${gcRedeemed.toFixed(2)}`);
@@ -525,10 +536,10 @@ export function runReport() {
       row('Outstanding Balance', `$${gcOutstanding.toFixed(2)}`, 'Unredeemed value across all gift cards');
   }
 
-  renderDeltas({ totalIncome, grossIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold: gcSoldValue, gcRedeemed });
+  renderDeltas({ totalIncome, grossIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold: gcSoldValue, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, otherMix });
   renderPerformance(filtered);
   updateDateButtons();
-  window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding };
+  window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding, tipsTotal, cardMix, cashMix, giftMix, otherMix };
 }
 
 // ── AI analytics: aggregate builder + ask/bridge ──────────────────────────
@@ -601,13 +612,19 @@ function computeMetrics(from, to) {
   const inPeriod = ds => ds && ds >= localDateStr(from) && ds <= localDateStr(to);
   const gcSold = giftCards().filter(g => inPeriod(g.datePurchased)).reduce((s,g)=>s+(g.amount||0),0);
   const gcRedeemed = giftCards().reduce((s,g)=> s + gcRedemptions(g).reduce((a,r)=> a + (inPeriod(r.date) ? (r.amount||0) : 0), 0), 0);
-  return { totalIncome, grossIncome: totalIncome + gcSold - gcRedeemed, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold, gcRedeemed };
+  const tipsTotal = sum(filtered, r => r.tip||0);
+  const cardMix  = sum(filtered, r => r.tenders?.card||0) + tipsTotal;
+  const cashMix  = sum(filtered, r => r.tenders?.cash||0);
+  const giftMix  = sum(filtered, r => r.tenders?.gift||0);
+  const otherMix = filtered.reduce((s,r)=> r.tenders ? s : s+(r.totalCost||0), 0);
+  return { totalIncome, grossIncome: totalIncome + gcSold - gcRedeemed + tipsTotal, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, otherMix };
 }
 const _DELTA_CARDS = [
-  ['rpt-gross-income-delta','grossIncome'], ['rpt-total-income-delta','totalIncome'], ['rpt-total-guests-delta','guestCount'], ['rpt-avg-ticket-delta','avgTicket'],
+  ['rpt-gross-income-delta','grossIncome'], ['rpt-total-tips-delta','tipsTotal'], ['rpt-total-guests-delta','guestCount'], ['rpt-avg-ticket-delta','avgTicket'],
   ['rpt-shop-keeps-delta','shopKeeps'], ['rpt-total-commission-delta','commission'],
   ['rpt-svc-total-delta','svcTotal'], ['rpt-items-total-delta','itemsTotal'], ['rpt-fees-total-delta','feesTotal'],
   ['rpt-discount-total-delta','discountTotal'], ['rpt-gc-sold-delta','gcSold'], ['rpt-gc-redeemed-delta','gcRedeemed'],
+  ['rpt-pay-card-delta','cardMix'], ['rpt-pay-cash-delta','cashMix'], ['rpt-pay-gift-delta','giftMix'], ['rpt-pay-other-delta','otherMix'],
 ];
 function setDelta(id, cur, prev) {
   const el = document.getElementById(id); if (!el) return;
@@ -1142,7 +1159,7 @@ export function renderTransactions() {
       <div class="flex items-start justify-between"><div class="flex-grow min-w-0">
         <div class="flex items-center gap-2 flex-wrap mb-1"><span class="font-headline font-bold text-on-surface">${r.name}</span><span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badgeClass}">${isRefund?'refund':r.status}</span>${!isRefund&&r.isAppointment?'<span class="badge-appointment text-[11px] px-2 py-0.5 rounded-full font-body font-semibold">Appt</span>':''}</div>
         <div class="text-xs font-body text-on-surface-variant mb-1">${serviceLabels}</div>${assignRows||''}${refundNote}
-        <div class="text-[11px] font-body text-outline mt-1">${dateStr} · ${timeStr}${r.phone?' · '+r.phone:''}</div>${r.tenders ? `<div class="text-[11px] font-body text-on-surface-variant mt-0.5">${[r.tenders.cash?'Cash $'+r.tenders.cash.toFixed(2):'',r.tenders.card?'Card $'+r.tenders.card.toFixed(2):'',r.tenders.gift?'Gift $'+r.tenders.gift.toFixed(2):''].filter(Boolean).join(' · ')}</div>` : ''}</div>
+        <div class="text-[11px] font-body text-outline mt-1">${dateStr} · ${timeStr}${r.phone?' · '+r.phone:''}</div>${r.tenders ? `<div class="text-[11px] font-body text-on-surface-variant mt-0.5">${[r.tenders.cash?'Cash $'+r.tenders.cash.toFixed(2):'',r.tenders.card?'Card $'+r.tenders.card.toFixed(2):'',r.tenders.gift?'Gift $'+r.tenders.gift.toFixed(2):''].filter(Boolean).join(' · ')}</div>` : ''}${r.tip ? `<div class="text-[11px] font-body text-primary font-semibold mt-0.5">Tip $${r.tip.toFixed(2)}</div>` : ''}</div>
         <div class="ml-4 flex-shrink-0 flex items-center gap-2">
           <div class="flex items-center gap-1">
             ${!isRefund?`<button onclick="event.stopPropagation();reprintTerminalReceipt('${r.id}')" title="Reprint receipt on the Square Terminal" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"><span class="material-symbols-outlined" style="font-size:14px">receipt_long</span> Receipt</button>`:''}
@@ -1300,6 +1317,7 @@ function txnRow(r, letter) {
     date: dt.toLocaleDateString(), time: dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),
     customer: r.name||'', phone: r.phone||'', party: r.groupId ? (letter||'•') : '',
     services, techs, items, fees: feeAmt ? feeAmt.toFixed(2) : '', discount: r.discount ? r.discount.toFixed(2) : '',
+    tip: r.tip ? r.tip.toFixed(2) : '',
     total: (isRefund?'-':'') + '$' + Math.abs(r.totalCost||0).toFixed(2), totalNum: isRefund ? -Math.abs(r.totalCost||0) : (r.totalCost||0),
     status: isRefund ? 'refund' : 'paid',
   };
@@ -1316,8 +1334,8 @@ export function exportTransactionsCSV() {
   const net = rows.reduce((s,r)=>s+r.totalNum,0);
   const matrix = [
     ['Muse Nails & Spa — Transactions'], [`Showing: ${rangeLabel()}`], [`Tickets: ${rows.length}`, `Net total: $${net.toFixed(2)}`], [],
-    ['Date','Time','Customer','Phone','Party','Services','Technicians','Items','Fees','Discount','Total','Status'],
-    ...rows.map(r => [r.date, r.time, r.customer, r.phone, r.party, r.services, r.techs, r.items, r.fees, r.discount, r.total, r.status]),
+    ['Date','Time','Customer','Phone','Party','Services','Technicians','Items','Fees','Discount','Tip','Total','Status'],
+    ...rows.map(r => [r.date, r.time, r.customer, r.phone, r.party, r.services, r.techs, r.items, r.fees, r.discount, r.tip, r.total, r.status]),
   ];
   const csv = matrix.map(line => line.map(c => `"${String(c==null?'':c).replace(/"/g,'""')}"`).join(',')).join('\r\n');
   const url = URL.createObjectURL(new Blob(['﻿'+csv], { type: 'text/csv;charset=utf-8;' }));
@@ -1337,7 +1355,7 @@ const _eTxn = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;
 function buildTxnHtml(rows) {
   const logo = cfg().logo || LOGO_PATH;
   const net = rows.reduce((s,r)=>s+r.totalNum,0);
-  const tr = rows.map(r => `<tr><td>${r.date}</td><td>${r.time}</td><td>${_eTxn(r.customer)}</td><td style="text-align:center">${r.party}</td><td>${_eTxn(r.services)}</td><td>${_eTxn(r.techs)}</td><td>${_eTxn(r.items)}</td><td style="text-align:right">${r.fees?'$'+r.fees:''}</td><td style="text-align:right">${r.discount?'-$'+r.discount:''}</td><td style="text-align:right">${r.total}</td><td>${r.status}</td></tr>`).join('');
+  const tr = rows.map(r => `<tr><td>${r.date}</td><td>${r.time}</td><td>${_eTxn(r.customer)}</td><td style="text-align:center">${r.party}</td><td>${_eTxn(r.services)}</td><td>${_eTxn(r.techs)}</td><td>${_eTxn(r.items)}</td><td style="text-align:right">${r.fees?'$'+r.fees:''}</td><td style="text-align:right">${r.discount?'-$'+r.discount:''}</td><td style="text-align:right">${r.tip?'$'+r.tip:''}</td><td style="text-align:right">${r.total}</td><td>${r.status}</td></tr>`).join('');
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Transactions — ${_eTxn(rangeLabel())}</title><style>
     body{font-family:Arial,sans-serif;font-size:11px;color:#222;margin:20px}.h{display:flex;align-items:center;gap:14px;margin-bottom:6px}.logo{max-width:140px;max-height:52px;width:auto;height:auto;object-fit:contain;border-radius:8px;flex-shrink:0}
     h1{color:#1a5252;font-size:18px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
@@ -1347,7 +1365,7 @@ function buildTxnHtml(rows) {
   </style></head><body>
     <div class="h">${logo?`<img src="${logo}" class="logo" onerror="this.style.display='none'">`:''}<div><h1>Muse Nails &amp; Spa — Transactions</h1><p class="sub">${_eTxn(rangeLabel())} · ${rows.length} ticket${rows.length===1?'':'s'}</p></div></div>
     <div class="tot"><div class="v">$${net.toFixed(2)}</div><div class="l">Net total</div></div>
-    <table><thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Party</th><th>Services</th><th>Tech</th><th>Items</th><th>Fees</th><th>Disc</th><th>Total</th><th>Status</th></tr></thead><tbody>${tr}</tbody></table>
+    <table><thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Party</th><th>Services</th><th>Tech</th><th>Items</th><th>Fees</th><th>Disc</th><th>Tip</th><th>Total</th><th>Status</th></tr></thead><tbody>${tr}</tbody></table>
     <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
 }
 
@@ -1357,7 +1375,9 @@ export function exportReportExcel() {
   if (!d || d.filtered.length === 0) { showToast('No data to export.'); return; }
   const rows = [
     ['Muse Nails & Spa — Report'], [`Period: ${d.from.toLocaleDateString()} – ${d.to.toLocaleDateString()}`],
-    [`Total Income: $${d.totalIncome.toFixed(2)}`, `Guests Served: ${d.guestCount}`, `Avg Ticket: $${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}`], [],
+    [`Total Billed: $${d.totalIncome.toFixed(2)}`, `Guests Served: ${d.guestCount}`, `Avg Ticket: $${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}`],
+    [`Total Money Collected: $${(d.totalIncome+(d.gcSoldValue||0)-(d.gcRedeemed||0)+(d.tipsTotal||0)).toFixed(2)}`, `Total Tips: $${(d.tipsTotal||0).toFixed(2)}`],
+    [`Payment Mix — Card (incl. tips): $${(d.cardMix||0).toFixed(2)}`, `Cash: $${(d.cashMix||0).toFixed(2)}`, `Gift: $${(d.giftMix||0).toFixed(2)}`, `Other: $${(d.otherMix||0).toFixed(2)}`], [],
     ['CHECK-INS'], ['Date','Time','Name','Phone','Services','Type','Staff','Total','Status'],
     ...d.filtered.map(r => { const dt = new Date(r.checkinTime); const staffNames = (r.assignments||[]).map(a=>staffById(a.techId)?.name).filter(Boolean).join(', '); return [dt.toLocaleDateString(), dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.name, r.phone, r.services.map(sid=>svc(sid)?.label||sid).join(', '), r.isAppointment?'Appointment':'Walk-In', staffNames, r.totalCost?`$${r.totalCost.toFixed(2)}`:'$0.00', r.status]; }),
     [], ['STAFF BREAKDOWN'], ['Technician','Services','Turns','Bonus Turns','Total Billed','Commission %','Commission Earned','Salon Keeps'],
@@ -1390,7 +1410,7 @@ function buildReportHtml(d) {
     table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#1a5252;color:#fff;padding:6px 8px;text-align:left;font-size:11px}td{padding:5px 8px;border-bottom:1px solid #e0e0e0;font-size:11px}tr:nth-child(even) td{background:#fafafa}.footer{margin-top:24px;font-size:10px;color:#999;text-align:center}
   </style></head><body>
     <div class="report-header">${logo?`<img src="${logo}" class="report-logo" onerror="this.style.display='none'">`:''}<div><h1>Muse Nails &amp; Spa — Daily Report</h1><p style="color:#666;margin:0">${period}</p></div></div>
-    <div class="summary"><div class="card"><div class="val">$${d.totalIncome.toFixed(2)}</div><div class="lbl">Total Billed</div></div><div class="card"><div class="val">${d.guestCount}</div><div class="lbl">Guests Served</div></div><div class="card"><div class="val">$${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}</div><div class="lbl">Avg Ticket</div></div><div class="card"><div class="val">$${shopKeeps.toFixed(2)}</div><div class="lbl">Shop Keeps</div></div><div class="card amber"><div class="val">$${totalComm.toFixed(2)}</div><div class="lbl">Commission Owed</div></div></div>
+    <div class="summary"><div class="card"><div class="val">$${(d.totalIncome+(d.gcSoldValue||0)-(d.gcRedeemed||0)+(d.tipsTotal||0)).toFixed(2)}</div><div class="lbl">Total Money Collected</div></div><div class="card"><div class="val">$${d.totalIncome.toFixed(2)}</div><div class="lbl">Total Billed</div></div><div class="card"><div class="val">${d.guestCount}</div><div class="lbl">Guests Served</div></div><div class="card"><div class="val">$${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}</div><div class="lbl">Avg Ticket</div></div><div class="card"><div class="val">$${(d.tipsTotal||0).toFixed(2)}</div><div class="lbl">Total Tips</div></div><div class="card"><div class="val">$${shopKeeps.toFixed(2)}</div><div class="lbl">Shop Keeps</div></div><div class="card amber"><div class="val">$${totalComm.toFixed(2)}</div><div class="lbl">Commission Owed</div></div></div>
     <h2>Staff Breakdown</h2><table><thead><tr><th>Technician</th><th>Services</th><th>Turns</th><th>Billed</th><th>Comm %</th><th>Commission</th><th>Shop Keeps</th></tr></thead><tbody>${staffRows}</tbody></table>
     <h2>Transactions (${d.filtered.length})</h2><table><thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Services</th><th>Staff</th><th>Total</th><th>Status</th></tr></thead><tbody>${txRows}</tbody></table>
     <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
@@ -1555,6 +1575,7 @@ export function showHistoricalEntryModal(editId, prefillDate) {
     document.getElementById('hist-phone').value = rec.phone || '';
     document.getElementById('hist-discount').value = rec.discount > 0 ? rec.discount : '';
     document.getElementById('hist-discount-note').value = rec.discountNote || '';
+    { const t = document.getElementById('hist-tip'); if (t) t.value = rec.tip > 0 ? rec.tip : ''; }
     _histSelectedSvcs = [...(rec.services || [])];
     rec.assignments.forEach(a => { if (a.serviceId) _histAssignments[a.serviceId] = { techId: a.techId||'', station: a.station||'', cost: a.cost||0 }; });
     _histItems = (rec.items||[]).map(i => ({ itemId: i.itemId, qty: i.qty||1, price: i.price||0 }));
@@ -1568,6 +1589,7 @@ export function showHistoricalEntryModal(editId, prefillDate) {
     document.getElementById('hist-phone').value = '';
     document.getElementById('hist-discount').value = '';
     document.getElementById('hist-discount-note').value = '';
+    { const t = document.getElementById('hist-tip'); if (t) t.value = ''; }
     _histType = 'Walk-In';
   }
   setHistType(_histType); _renderHistServices(); _renderHistAssignments(); _renderHistItems(); _renderHistFees(); _computeHistTotal();
@@ -1631,6 +1653,7 @@ export function saveHistoricalTransaction() {
   const timeVal = document.getElementById('hist-time').value || '12:00';
   const discount = parseFloat(document.getElementById('hist-discount').value) || 0;
   const discountNote = document.getElementById('hist-discount-note').value.trim();
+  const tip = parseFloat(document.getElementById('hist-tip')?.value) || 0;   // card tip — recorded only; NOT part of totalCost (no re-charge)
   if (!name) { showToast('Customer name is required'); return; }
   if (!dateVal) { showToast('Date is required'); return; }
   if (dateVal >= todayStr()) { showToast('Date must be before today'); return; }
@@ -1640,7 +1663,7 @@ export function saveHistoricalTransaction() {
   if (assignments.length === 0 && total > 0) assignments.push({ serviceId:'', techId:'', station:'', cost: total, status:'paid', assignedAt: checkinTime.getTime() });
   const items = _histItems.filter(i => i.itemId && i.qty > 0).map(i => ({ itemId: i.itemId, qty: i.qty, price: i.price }));
   const fees = _histFees.filter(f => f.feeId && f.amount > 0).map(f => ({ feeId: f.feeId, amount: f.amount }));
-  const base = { name, phone, services: _histSelectedSvcs, assignments, items, fees, discount, discountNote, totalCost: total, checkinTime: checkinTime.toISOString(), status: 'paid', isAppointment: _histType === 'Appointment', loggedBy: getActiveUser()?.name || 'Admin' };
+  const base = { name, phone, services: _histSelectedSvcs, assignments, items, fees, discount, discountNote, tip, totalCost: total, checkinTime: checkinTime.toISOString(), status: 'paid', isAppointment: _histType === 'Appointment', loggedBy: getActiveUser()?.name || 'Admin' };
   if (_histMode === 'edit') {
     const existing = records().find(r => String(r.id) === String(_histEditId));
     dispatch('record.save', { record: { ...existing, ...base, id: String(_histEditId), completedAt: existing?.completedAt || checkinTime.toISOString() } });

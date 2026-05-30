@@ -367,10 +367,10 @@ tailwind.config = {
 
         <!-- Summary cards -->
         <div class="grid grid-cols-3 gap-3 mb-3">
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="Total Billed + gift card sales − redemptions (true new cash collected)">
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="All money collected: Total Billed + gift card sales − redemptions + tips">
             <div class="text-2xl font-headline font-extrabold text-primary" id="rpt-gross-income">$0.00</div>
             <span class="rpt-delta" id="rpt-gross-income-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Gross Income</div>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Total Money Collected</div>
           </div>
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-total-guests">0</div>
@@ -384,10 +384,10 @@ tailwind.config = {
           </div>
         </div>
         <div class="grid grid-cols-3 gap-3 mb-5">
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
-            <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-total-income">$0.00</div>
-            <span class="rpt-delta" id="rpt-total-income-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Total Billed</div>
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="Card tips collected this period (not salon revenue — paid out to staff)">
+            <div class="text-2xl font-headline font-extrabold text-primary" id="rpt-total-tips">$0.00</div>
+            <span class="rpt-delta" id="rpt-total-tips-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Total Tips</div>
           </div>
           <div class="rounded-xl p-4 border text-center" style="background:rgba(26,82,82,0.08);border-color:rgba(26,82,82,0.3)">
             <div class="text-2xl font-headline font-extrabold" style="color:#1a5252" id="rpt-shop-keeps">$0.00</div>
@@ -436,6 +436,31 @@ tailwind.config = {
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center col-span-2 hidden" id="rpt-refunds-row">
             <div class="text-lg font-headline font-extrabold" style="color:#c53030" id="rpt-refunds-total">-$0.00</div>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Refunds Issued</div>
+          </div>
+        </div>
+
+        <!-- Payment mix — how the money was actually collected -->
+        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Payment Mix</h3>
+        <div class="grid grid-cols-2 gap-3 mb-5">
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="Card charges including tips — matches your Square deposit">
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-card">$0.00</div>
+            <span class="rpt-delta" id="rpt-pay-card-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Card (incl. tips)</div>
+          </div>
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="Cash collected (drawer)">
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-cash">$0.00</div>
+            <span class="rpt-delta" id="rpt-pay-cash-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Cash</div>
+          </div>
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="Gift cards redeemed as payment">
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-gift">$0.00</div>
+            <span class="rpt-delta" id="rpt-pay-gift-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Gift Card</div>
+          </div>
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="Sales with no recorded payment method (older / direct Mark-Paid / historical)">
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-other">$0.00</div>
+            <span class="rpt-delta" id="rpt-pay-other-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Other / Untracked</div>
           </div>
         </div>
 
@@ -2327,6 +2352,13 @@ tailwind.config = {
           <input type="text" id="hist-discount-note" placeholder="Optional note"
             class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
         </div>
+      </div>
+
+      <!-- Tip (recorded only — adjusts the tracked number; never re-charges the card; not part of the total below) -->
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Tip ($) <span class="text-on-surface-variant normal-case tracking-normal">— recorded only, not part of the total</span></label>
+        <input type="text" inputmode="decimal" id="hist-tip" placeholder="0.00"
+          class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
       </div>
 
       <!-- Auto-calculated total -->
