@@ -132,7 +132,7 @@ No server-side logic in the front end, no dynamic routes, no build artifacts —
 | Muse Staff tech app | `js/app/staff.js` + `staff.html` |
 | Styles | `css/styles.css` |
 | HTML structure (dashboard / staff) | `index.html` / `staff.html` |
-| Cloudflare Worker + Durable Object (proxy, R2, DO, KV, Cron, Push) | `cloudflare/worker.js` |
+| Cloudflare Worker + Durable Object (proxy, R2, DO, KV, R2-snapshot backups, Push) | `cloudflare/worker.js` |
 
 **Do not edit inline JS or CSS in `index.html`** beyond the existing Tailwind config `<script>` block — CSS lives in `css/styles.css`, all app logic in `js/app/**`.
 
@@ -170,7 +170,7 @@ All mutable state (queue, records, gift cards, and config: staff/services/items/
 - **`dispatch(op, payload)`** (`sync.js`) is the single write path: it applies the change optimistically via `applyChange` (`store.js`), saves the cache, enqueues to the outbox, and sends to the DO over WebSocket (HTTP `/state` fallback). Ops: `config.set`, `queue.upsert`, `queue.remove`, `record.save`, `record.delete`, `giftcard.save`, `giftcard.delete`.
 - **Save pattern for a config value:** `dispatch('config.set', { key, value })` — e.g. turns order = `dispatch('config.set', { key: 'turns_order', value: order })`. Mutate state only through `dispatch`/`applyChange`, never by writing localStorage.
 - **Inbound:** the DO broadcasts changes; `sync.js` ignores echoes of this device's own ops (by `device` id) and applies the rest. A full snapshot hydrates `store.js` and replays the outbox.
-- The Worker also persists each record/queue entry as its own DO key and runs the Square proxy, R2 photos, the daily Sheets backup cron, and Web Push.
+- The Worker also persists each record/queue entry as its own DO key and runs the Square proxy, R2 photos, periodic R2 state-snapshot backups (the DO `alarm()`), and Web Push. _(The old daily Google Sheets backup cron was removed — commit `467317b`; takes effect on the next `wrangler deploy`.)_
 
 ---
 
@@ -233,7 +233,7 @@ These markers use Unicode box-drawing characters (U+2500 `─`). If you add a ne
 | `manifest.json` | PWA manifest (name, icons, display mode, theme color) |
 | `sw.js` | Service worker — precache + offline fallback; CACHE_NAME must match APP_VERSION |
 | `icons/` | PWA launcher icons (192px + 512px PNG) |
-| `cloudflare/worker.js` | Cloudflare Worker — Square proxy, R2 photos, KV config cache, DO WebSocket, Cron |
-| `cloudflare/wrangler.toml` | Worker configuration, bindings, cron schedule |
+| `cloudflare/worker.js` | Cloudflare Worker — Square proxy, R2 photos, KV config cache, DO WebSocket, R2-snapshot backups |
+| `cloudflare/wrangler.toml` | Worker configuration + bindings (the daily-backup cron trigger was removed) |
 | `split.ps1` / `split.js` | One-time extraction scripts (original monolith → modules); committed for historical reference only |
-| `muse-sheets-script.gs` | Google Apps Script — not in this repo, deployed separately |
+| `muse-sheets-script.gs` | Google Apps Script — **retired** (the Sheets backup was removed); not in this repo |
