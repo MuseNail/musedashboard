@@ -285,9 +285,9 @@ export function renderTurnsTechGrid() {
       ? `<span class="text-sm font-headline font-bold ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:' + sc.bg}">${turns.total}t</span>`
       : `<span class="text-sm font-headline text-outline-variant">0t</span>`;
     const techCol = `<div class="flex items-center gap-2 w-[155px] flex-shrink-0 pr-2">
-      <button onclick="showTechPhoto('${staffId}')" title="View photo" class="focus:outline-none flex-shrink-0">${photo}</button>
+      <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
       <div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate leading-tight">${st.name}</div>
-      <div class="flex items-center gap-1.5 mt-0.5"><button onclick="showTechStatusMenu(event,'${staffId}')" title="Change status" class="text-[11px] px-3 py-1.5 rounded-full font-semibold leading-none focus:outline-none active:scale-95 transition-transform" style="background:${sc.bg};color:${sc.text}">${sc.label}</button>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
+      <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none" style="background:${sc.bg};color:${sc.text}">${sc.label}</span>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
       <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
 
     const MIN_SLOTS = 5;
@@ -494,8 +494,8 @@ export function showTechStatusMenu(event, staffId) {
   if (photoEl) {
     const sc = getTechStatusColor(staffId);
     photoEl.innerHTML = st.photo
-      ? `<img src="${st.photo}" style="width:128px;height:128px;border-radius:50%;object-fit:cover;border:6px solid ${sc.bg}">`
-      : `<div style="width:128px;height:128px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${sc.bg}20;border:6px solid ${sc.bg};color:${sc.bg};font-family:var(--font-headline);font-weight:700;font-size:52px">${(st.name||'?').charAt(0).toUpperCase()}</div>`;
+      ? `<img src="${st.photo}" style="width:175px;height:175px;border-radius:50%;object-fit:cover;border:6px solid ${sc.bg}">`
+      : `<div style="width:175px;height:175px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${sc.bg}20;border:6px solid ${sc.bg};color:${sc.bg};font-family:var(--font-headline);font-weight:700;font-size:72px">${(st.name||'?').charAt(0).toUpperCase()}</div>`;
   }
   const isBreak = cfg().turns_break.includes(staffId);
   document.getElementById('tsm-available').style.opacity = isBreak ? '0.4' : '1';

@@ -29,13 +29,13 @@ export function renderStaffList() {
   list.innerHTML = [...cfg().staff].sort(byName).map(st => {
     const active = isStaffActive(st.id);
     const photoHtml = st.photo
-      ? `<button onclick="showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border border-surface-container-high hover:opacity-80 transition-opacity"></button>`
-      : `<button onclick="showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-primary hover:text-on-primary transition-colors"><span class="text-sm font-headline font-bold text-on-surface">${st.name.charAt(0).toUpperCase()}</span></div></button>`;
+      ? `<button onclick="event.stopPropagation();showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border border-surface-container-high hover:opacity-80 transition-opacity"></button>`
+      : `<button onclick="event.stopPropagation();showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-primary hover:text-on-primary transition-colors"><span class="text-sm font-headline font-bold text-on-surface">${st.name.charAt(0).toUpperCase()}</span></div></button>`;
     const staffSvcs = (st.services && st.services.length > 0)
       ? st.services.map(sid => cfg().services.find(s => s.id === sid)?.abbr || '?').join(', ')
       : 'All services';
     return `
-    <div class="bg-surface-container-lowest rounded-xl px-5 py-4 border border-surface-container-high flex items-center justify-between">
+    <div onclick="showEditStaff('${st.id}')" title="Edit technician" class="bg-surface-container-lowest rounded-xl px-5 py-4 border border-surface-container-high flex items-center justify-between cursor-pointer hover:border-primary/50 hover:shadow-sm transition-all">
       <div class="flex items-center gap-4 min-w-0">
         ${photoHtml}
         <div class="min-w-0">
@@ -47,14 +47,14 @@ export function renderStaffList() {
         </div>
       </div>
       <div class="flex items-center gap-2 flex-shrink-0">
-        <button onclick="toggleActiveStaff('${st.id}')" title="${active ? 'Active — shown in menus' : 'Inactive — hidden from menus'}" class="flex flex-col items-center gap-1 px-1 py-1">
+        <button onclick="event.stopPropagation();toggleActiveStaff('${st.id}')" title="${active ? 'Active — shown in menus' : 'Inactive — hidden from menus'}" class="flex flex-col items-center gap-1 px-1 py-1">
           <span class="text-[9px] font-body uppercase tracking-wider ${active ? 'text-primary' : 'text-outline-variant'}">Active</span>
           <div class="mswitch relative w-14 h-7 rounded-full transition-colors ${active ? 'bg-primary' : 'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${active ? 'left-7' : 'left-0.5'}"></div></div>
         </button>
         <div class="flex items-center gap-1">
-          <button onclick="showPhotoUpload('staff','${st.id}')" title="Photo" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size:18px">photo_camera</span></button>
-          <button onclick="showEditStaff('${st.id}')" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size:18px">edit</span></button>
-          <button onclick="deleteStaff('${st.id}')" class="w-9 h-9 rounded-full hover:bg-error/10 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
+          <button onclick="event.stopPropagation();showPhotoUpload('staff','${st.id}')" title="Photo" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size:18px">photo_camera</span></button>
+          <button onclick="event.stopPropagation();showEditStaff('${st.id}')" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size:18px">edit</span></button>
+          <button onclick="event.stopPropagation();deleteStaff('${st.id}')" class="w-9 h-9 rounded-full hover:bg-error/10 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
         </div>
       </div>
     </div>`;
@@ -70,8 +70,11 @@ export function showTechPhoto(staffId) {
     : `<div style="width:220px;height:220px;border-radius:50%;background:#1a5252;color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--font-headline);font-weight:700;font-size:96px;box-shadow:0 10px 50px rgba(0,0,0,.55)">${(st.name || '?').charAt(0).toUpperCase()}</div>`;
   const m = document.createElement('div');
   m.className = 'fixed inset-0 z-[95] flex flex-col items-center justify-center bg-black/80 p-4';
-  m.onclick = () => m.remove();
-  m.innerHTML = `${inner}<div style="color:#fff;margin-top:16px;font-family:var(--font-headline);font-weight:700;font-size:18px">${(st.name || '')}</div><div style="color:#cbd5d5;margin-top:4px;font-size:12px">Tap anywhere to close</div>`;
+  const close = () => { m.remove(); document.removeEventListener('keydown', onKey); };
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  m.onclick = close;
+  document.addEventListener('keydown', onKey);
+  m.innerHTML = `${inner}<div style="color:#fff;margin-top:16px;font-family:var(--font-headline);font-weight:700;font-size:18px">${(st.name || '')}</div><div style="color:#cbd5d5;margin-top:4px;font-size:12px">Tap anywhere or press Esc to close</div>`;
   document.body.appendChild(m);
 }
 
