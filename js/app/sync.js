@@ -25,6 +25,7 @@ export const DEVICE_ID = (() => {
 })();
 
 let _ws = null, _connected = false, _reconnect = null, _ping = null, _mutCounter = 0;
+let _lastRecv = 0, _resyncTimer = null;   // heartbeat watchdog + resync throttle
 let _outbox = loadOutbox();
 
 function loadOutbox() { try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch { return []; } }
@@ -61,6 +62,23 @@ export function start() {
   loadCache();                                   // instant render from last snapshot
   connect();
   setTimeout(() => { if (!_connected) httpSnapshot(); }, 2500); // WS slow/blocked → HTTP hydrate
+  // Re-establish + catch up the moment the device wakes or the network returns. An iPad that
+  // slept or had a wifi blip otherwise keeps a dead socket and stops seeing other devices'
+  // changes until a manual refresh — this is what makes updates appear without one.
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (!document.hidden) resync(); });
+  if (typeof window !== 'undefined') { window.addEventListener('online', resync); window.addEventListener('focus', resync); }
+}
+
+// Force the connection healthy and pull a fresh snapshot to catch any broadcasts missed while
+// the socket was dead/asleep. Throttled so visibility+focus firing together don't double-fetch.
+export function resync() {
+  if (_resyncTimer) return;
+  _resyncTimer = setTimeout(() => { _resyncTimer = null; }, 1500);
+  if (!_ws || (_ws.readyState !== WebSocket.OPEN && _ws.readyState !== WebSocket.CONNECTING)) {
+    if (_reconnect) { clearTimeout(_reconnect); _reconnect = null; }
+    connect();
+  }
+  httpSnapshot();   // idempotent: hydrate replaces state, reapplyOutbox preserves pending writes
 }
 
 function connect() {
@@ -69,11 +87,19 @@ function connect() {
 
   _ws.onopen = () => {
     _connected = true;
+    _lastRecv = Date.now();
     setConnection(true, _outbox.length);
     send({ type: 'hello' });
-    _ping = setInterval(() => send({ type: 'ping' }), 20000);
+    _ping = setInterval(() => {
+      // Heartbeat watchdog: if nothing (not even a pong) has arrived in ~40s the socket is a
+      // zombie — device slept / wifi blipped with no close event — so it silently stops
+      // receiving other devices' changes. Force-close it; onclose schedules a reconnect, which
+      // re-hellos and pulls a fresh snapshot. (Was the "have to refresh to see updates" bug.)
+      if (Date.now() - _lastRecv > 40000) { try { _ws && _ws.close(); } catch {} return; }
+      send({ type: 'ping' });
+    }, 20000);
   };
-  _ws.onmessage = ({ data }) => { let msg; try { msg = JSON.parse(data); } catch { return; } handle(msg); };
+  _ws.onmessage = ({ data }) => { _lastRecv = Date.now(); let msg; try { msg = JSON.parse(data); } catch { return; } handle(msg); };
   _ws.onclose = _ws.onerror = () => {
     _connected = false;
     setConnection(false, _outbox.length);

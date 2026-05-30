@@ -416,12 +416,16 @@ export async function squarePullStaff() {
 }
 
 // Creates/updates a Square customer on check-in (requires a phone number).
+// Returns the Square customer id (existing or newly created), or null when there's nothing to
+// link (no name / no phone / Square not reachable). The pay flow uses the returned id to attach
+// the sale to the customer in Square (customer_id on the checkout + payment).
 export async function squareUpsertCustomer(entry) {
-  if (!entry.name || entry.name.trim() === '-') return;
+  if (!entry.name || entry.name.trim() === '-') return null;
   const parts = entry.name.trim().split(/\s+/);
   const firstName = parts[0] || '', lastName = parts.slice(1).join(' ') || '';
   const rawPhone = (entry.phone || '').replace(/\D/g, '');
-  if (!rawPhone) return;
+  if (!rawPhone) return null;
+  let resolvedId = null;
   try {
     let existingId = null;
     if (squareCustomers.length > 0) {
@@ -441,6 +445,7 @@ export async function squareUpsertCustomer(entry) {
         if (sr.ok) existingId = (await sr.json())?.customers?.[0]?.id || null;
       } catch (e) {}
     }
+    resolvedId = existingId;   // the customer to attach a sale to (null until a create succeeds)
     // The app no longer writes Square's own `note` field — it kept overwriting the
     // salon's manual note box every check-in. Visit history is tracked app-side.
     const payload = { given_name: firstName, family_name: lastName };
@@ -468,6 +473,7 @@ export async function squareUpsertCustomer(entry) {
       if (res.ok) {
         const c = (await res.json()).customer;
         if (c) {
+          resolvedId = c.id;
           squareCustomers.push({ id: c.id, given_name: c.given_name||'', family_name: c.family_name||'', phone: c.phone_number||'', display: entry.name });
           customerDirectory.push({ squareId: c.id, firstName: c.given_name||'', lastName: c.family_name||'', phone: c.phone_number||'', email: '', note: c.note||'' });
           localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
@@ -475,6 +481,7 @@ export async function squareUpsertCustomer(entry) {
       }
     }
   } catch (e) { console.warn('[Square] Customer upsert failed:', e); }
+  return resolvedId;
 }
 
 // ── Notes re-key migration + orphan finder ──────────────────────────────────

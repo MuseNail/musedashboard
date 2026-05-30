@@ -4,7 +4,7 @@ import { dispatch } from '../sync.js';
 import { getActiveUser } from '../session.js';
 import { showToast, commitNumpad, ticketTotal } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
-import { customerDirectory } from './square-customers.js';
+import { customerDirectory, squareUpsertCustomer } from './square-customers.js';
 
 const cfg     = () => getState().config;
 const sqConfig = () => cfg().square_config || null;
@@ -188,6 +188,11 @@ export async function proceedTerminalPayment() {
     pend = { ticketId, checkoutKey: 'chk-' + ticketId + '-' + Date.now(), cashKey: 'cash-' + ticketId + '-' + Date.now(), at: Date.now() };
     try { localStorage.setItem('muse_term_pending', JSON.stringify(pend)); } catch (e) {}
   }
+  // Resolve/create the Square customer for this ticket (by the primary guest's phone) so the
+  // sale is ATTACHED to them in Square via customer_id — not just a free-text name note.
+  // Best-effort: never blocks the charge (no phone / Square unreachable → stays unlinked).
+  let customerId = null;
+  try { customerId = await squareUpsertCustomer(party[0]); } catch (e) {}
   closeSquareConfirm();
   try {
     // 1) Card portion + tip on the Terminal (the uncertain step) — do it FIRST.
@@ -201,6 +206,7 @@ export async function proceedTerminalPayment() {
           device_options: { device_id: sc.terminalDeviceId },
           reference_id: String(ticketId || '').slice(0, 40),
           note: payNames.slice(0, 500),
+          ...(customerId ? { customer_id: customerId } : {}),
         } }),
       });
       const coJson = await coRes.json();
@@ -215,7 +221,7 @@ export async function proceedTerminalPayment() {
     let cashPaymentId = null;
     if (cashAppliedC > 0) {
       showTerminalModal('Recording cash payment…');
-      cashPaymentId = await recordCashPayment(cashAppliedC, cashReceivedC, sc.locationId, pend.cashKey);
+      cashPaymentId = await recordCashPayment(cashAppliedC, cashReceivedC, sc.locationId, pend.cashKey, customerId);
     }
     _finalizeTerminalPaid(partyIds, tenders, [cardPaymentId, cashPaymentId].filter(Boolean), tipCents / 100);
   } catch (e) { hideTerminalModal(); showToast('Square: ' + (e.message || 'error')); }
@@ -223,7 +229,7 @@ export async function proceedTerminalPayment() {
 
 // Record the cash portion as a CASH payment in Square (so Square's totals include it).
 // A failure here does NOT block marking the ticket Paid — the cash was physically received.
-async function recordCashPayment(appliedCents, receivedCents, locationId, idemKey) {
+async function recordCashPayment(appliedCents, receivedCents, locationId, idemKey, customerId) {
   try {
     const r = await fetch(`${SQUARE_PROXY}/v2/payments`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -233,6 +239,7 @@ async function recordCashPayment(appliedCents, receivedCents, locationId, idemKe
         amount_money: { amount: appliedCents, currency: 'USD' },   // the sale amount paid in cash
         cash_details: { buyer_supplied_money: { amount: Math.max(receivedCents, appliedCents), currency: 'USD' } },   // cash handed over → Square computes change_back
         location_id: locationId,
+        ...(customerId ? { customer_id: customerId } : {}),
       }),
     });
     const j = await r.json();

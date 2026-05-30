@@ -143,9 +143,9 @@ function showStaffListView() {
 }
 Object.assign(window, { goTo, showDashPanel, toggleStaffScheduleView, showStaffListView });
 
-// Live-sync status pill: clicking it just reports DO connection state (the DO
-// syncs in real time — there's no manual sync to trigger).
-window.forceSyncNow = () => utils.showToast(store.getState().connected ? 'Live — in sync' : 'Reconnecting…');
+// Live-sync status pill: tapping it forces a reconnect + fresh snapshot (catches up any
+// changes missed while the socket was asleep), then reports state.
+window.forceSyncNow = () => { sync.resync?.(); utils.showToast(store.getState().connected ? 'Live — syncing…' : 'Reconnecting…'); };
 
 // ── Square auto-paid ──────────────────────────────
 // The Square return tab writes muse_sq_paid on a successful charge; this (main)
