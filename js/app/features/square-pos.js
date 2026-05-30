@@ -28,6 +28,19 @@ const _payChangeDollars = () => Math.max(0, _payCash - Math.max(0, _payTotalDoll
 const _payCardDueDollars = () => Math.max(0, _payTotalDollars() - _payGiftDollars() - _payCash);
 const _gcRoom = () => Math.max(0, _payTotalDollars() - _payCash - _payGiftDollars());
 const _gcStagedFor = id => _payGc.filter(t => t.giftcardId === id).reduce((s, t) => s + (t.amount || 0), 0);
+// Bill components across the party, for the Confirm Payment summary. Sales Total = the bill =
+// svc + items + fees − discount = _payTotalDollars(); the tip is separate (added to the card).
+function _payParts() {
+  let svc = 0, items = 0, fees = 0, discount = 0;
+  (_pendingPay?.ids || []).forEach(id => {
+    const e = queue().find(x => String(x.id) === String(id)); if (!e) return;
+    (e.assignments || []).forEach(a => svc += a.cost || 0);
+    (e.items || []).forEach(i => items += (i.price || 0) * (i.qty || 0));
+    (e.fees || []).forEach(f => fees += f.amount || 0);
+    discount += e.discount || 0;
+  });
+  return { svc, items, fees, discount };
+}
 
 // A single entry's charge is computed from its parts via ticketTotal() (utils.js) — the one
 // source of truth — so a possibly-stale entry.totalCost can't make the group total wrong.
@@ -320,14 +333,24 @@ function renderPayGc() {
       <span class="flex items-center gap-1"><span class="text-on-surface-variant text-sm">$</span>
       <input id="sq-tip-amt" type="text" inputmode="none" value="${_payTip > 0 ? _payTip.toFixed(2) : ''}" placeholder="0.00" onfocus="openNumpad(this,'Tip','cost')" onclick="openNumpad(this,'Tip','cost')" oninput="sqTipInput(this.value)" class="w-24 border border-surface-container-high rounded-lg px-2 py-1.5 text-sm text-right text-on-surface bg-surface-container-lowest focus:outline-none focus:border-primary"></span>
     </div>`;
-  const breakdown = `<div class="mt-3 pt-2 border-t border-surface-container-high text-xs font-body space-y-0.5">
-      <div class="flex justify-between text-on-surface-variant"><span>Total</span><span>$${_payTotalDollars().toFixed(2)}</span></div>
-      ${_payGiftDollars() > 0 ? `<div class="flex justify-between text-on-surface-variant"><span>Gift card</span><span>$${_payGiftDollars().toFixed(2)}</span></div>` : ''}
+  // Summary: small detail rows (shown only when they apply), then the three key amounts —
+  // Sales Total (the bill), Change due, and Card on Terminal (last, divided off) — each ~1.2×
+  // the detail rows with a teal amount. Tip Total / Cash received / Change due / Card on
+  // Terminal carry ids so sqUpdatePayBreakdown can live-patch them as cash/tip are typed.
+  const P = _payParts();
+  const sm = (label, amt, neg) => `<div class="flex justify-between text-on-surface-variant"><span>${label}</span><span>${neg ? '−' : ''}$${Math.abs(amt).toFixed(2)}</span></div>`;
+  const BIG = 'flex justify-between items-center font-headline font-semibold', BIGS = 'font-size:1.05rem';
+  const breakdown = `<div class="mt-3 pt-2 border-t border-surface-container-high text-sm font-body space-y-1">
+      ${P.svc > 0 ? sm('Services total', P.svc) : ''}
+      ${P.items > 0 ? sm('Items total', P.items) : ''}
+      ${P.fees > 0 ? sm('Fee Total', P.fees) : ''}
+      ${P.discount > 0 ? sm('Discount', P.discount, true) : ''}
+      <div id="sq-row-tip" class="flex justify-between text-on-surface-variant" style="display:none"><span>Tip Total</span><span id="sq-tip">$0.00</span></div>
+      ${_payGiftDollars() > 0 ? sm('Gift card used', _payGiftDollars(), true) : ''}
       <div id="sq-row-cashrcv" class="flex justify-between text-on-surface-variant" style="display:none"><span>Cash received</span><span id="sq-cash-rcv">$0.00</span></div>
-      <div id="sq-row-change" class="flex justify-between items-center text-2xl font-headline font-extrabold text-on-surface mt-1.5" style="display:none"><span>Change due</span><span id="sq-change">$0.00</span></div>
-      <div id="sq-row-cashpaid" class="flex justify-between text-on-surface" style="display:none"><span>Cash paid</span><span id="sq-cash-applied">$0.00</span></div>
-      <div id="sq-row-tip" class="flex justify-between text-on-surface-variant" style="display:none"><span>Tip</span><span id="sq-tip">$0.00</span></div>
-      <div class="flex justify-between items-center text-2xl font-headline font-extrabold text-on-surface mt-1.5"><span>Card on Terminal</span><span id="sq-card-due">$${(_payCardDueDollars() + _payTip).toFixed(2)}</span></div>
+      <div class="${BIG} mt-1.5" style="${BIGS}"><span class="text-on-surface">Sales Total</span><span class="text-primary">$${_payTotalDollars().toFixed(2)}</span></div>
+      <div id="sq-row-change" class="${BIG}" style="${BIGS};display:none"><span class="text-on-surface">Change due</span><span class="text-primary" id="sq-change">$0.00</span></div>
+      <div class="${BIG} border-t border-surface-container-high mt-2 pt-2" style="${BIGS}"><span class="text-on-surface">Card on Terminal</span><span class="text-primary" id="sq-card-due">$${(_payCardDueDollars() + _payTip).toFixed(2)}</span></div>
     </div>`;
   host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}${tipRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${picker}${breakdown}`;
   sqUpdatePayBreakdown();
@@ -345,12 +368,12 @@ export function sqTipInput(v) {
 // Live-patch the breakdown numbers + the action buttons as cash/tip are typed, WITHOUT
 // re-rendering the section (which would yank the numpad's target input mid-entry).
 export function sqUpdatePayBreakdown() {
-  const cardDue = _payCardDueDollars(), applied = _payCashAppliedDollars(), change = _payChangeDollars(), cash = _payCash, tip = _payTip;
+  const cardDue = _payCardDueDollars(), change = _payChangeDollars(), cash = _payCash, tip = _payTip;
   const termCharge = cardDue + tip;   // tip rides on top of the card portion of the bill
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = '$' + v.toFixed(2); };
-  set('sq-card-due', termCharge); set('sq-cash-applied', applied); set('sq-cash-rcv', cash); set('sq-change', change); set('sq-tip', tip);
+  set('sq-card-due', termCharge); set('sq-cash-rcv', cash); set('sq-change', change); set('sq-tip', tip);
   const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? 'flex' : 'none'; };
-  show('sq-row-cashrcv', cash > 0); show('sq-row-cashpaid', cash > 0); show('sq-row-change', change > 0.0001); show('sq-row-tip', tip > 0.0001);
+  show('sq-row-cashrcv', cash > 0); show('sq-row-change', change > 0.0001); show('sq-row-tip', tip > 0.0001);
   const tb = document.getElementById('sq-terminal-btn');
   if (tb) tb.innerHTML = termCharge > 0
     ? `<span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pay $${termCharge.toFixed(2)} on Terminal`
