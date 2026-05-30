@@ -53,7 +53,6 @@ export function renderStaffList() {
         </button>
         <div class="flex items-center gap-1">
           <button onclick="event.stopPropagation();showPhotoUpload('staff','${st.id}')" title="Photo" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size:18px">photo_camera</span></button>
-          <button onclick="event.stopPropagation();showEditStaff('${st.id}')" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors"><span class="material-symbols-outlined" style="font-size:18px">edit</span></button>
           <button onclick="event.stopPropagation();deleteStaff('${st.id}')" class="w-9 h-9 rounded-full hover:bg-error/10 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
         </div>
       </div>

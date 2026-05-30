@@ -384,10 +384,10 @@ tailwind.config = {
           </div>
         </div>
         <div class="grid grid-cols-3 gap-3 mb-5">
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="Card tips collected this period (not salon revenue — paid out to staff)">
-            <div class="text-2xl font-headline font-extrabold text-primary" id="rpt-total-tips">$0.00</div>
-            <span class="rpt-delta" id="rpt-total-tips-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Total Tips</div>
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
+            <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-svc-total">$0.00</div>
+            <span class="rpt-delta" id="rpt-svc-total-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Services</div>
           </div>
           <div class="rounded-xl p-4 border text-center" style="background:rgba(26,82,82,0.08);border-color:rgba(26,82,82,0.3)">
             <div class="text-2xl font-headline font-extrabold" style="color:#1a5252" id="rpt-shop-keeps">$0.00</div>
@@ -403,10 +403,10 @@ tailwind.config = {
 
         <!-- Revenue breakdown by type -->
         <div class="grid grid-cols-2 gap-3 mb-3">
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
-            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-svc-total">$0.00</div>
-            <span class="rpt-delta" id="rpt-svc-total-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Services</div>
+          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="Card tips collected this period (not salon revenue — paid out to staff)">
+            <div class="text-lg font-headline font-extrabold text-primary" id="rpt-total-tips">$0.00</div>
+            <span class="rpt-delta" id="rpt-total-tips-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Total Tips</div>
           </div>
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-items-total">$0.00</div>
@@ -1517,7 +1517,7 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      STAFF EDIT MODAL
 ═══════════════════════════════════════════════ -->
-<div id="staff-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
+<div id="staff-modal" onclick="if(event.target===this)closeStaffModal()" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
   <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4">
     <div class="flex items-center justify-between mb-5">
       <h2 id="staff-modal-title" class="text-xl font-headline font-bold text-on-surface">Add Staff</h2>
