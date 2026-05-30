@@ -42,11 +42,16 @@ export function saveRecord(entry) {
   dispatch('record.save', { record });
 }
 
-// Combine live done queue entries with stored records (queue wins for today).
+// Combine live done queue entries with stored records (queue wins for TODAY only).
 export function buildCombinedRecords() {
   const deletedIds = new Set(getState().deletions.map(String));
   records().filter(r => r.status === 'deleted').forEach(r => deletedIds.add(String(r.id)));
-  const liveSnaps = queue().filter(e => isPaidStatus(e.status) && !deletedIds.has(String(e.id))).map(e => ({
+  // A queue copy only overrides its saved record for TODAY's tickets. A paid entry left
+  // over from a previous day (e.g. a missed 4 AM reset after an outage) must NOT shadow
+  // its record — that shadowing hid historical edits and could skew totals. Past days are
+  // always served from records (the authoritative, manager-editable source of truth).
+  const _today = todayStr();
+  const liveSnaps = queue().filter(e => isPaidStatus(e.status) && !deletedIds.has(String(e.id)) && localDateStr(new Date(e.checkinTime)) === _today).map(e => ({
     id: String(e.id), name: e.name, phone: e.phone || '', services: e.services, assignments: e.assignments || [],
     items: e.items || [], fees: e.fees || [], discount: e.discount || 0, discountNote: e.discountNote || '', txnNote: e.txnNote || '',
     totalCost: e.totalCost || 0, checkinTime: e.checkinTime, completedAt: e.completedAt || null,

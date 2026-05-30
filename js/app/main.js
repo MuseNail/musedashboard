@@ -201,7 +201,7 @@ let _custAutoLoaded = false;
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
   if (changed === 'connection') return;
-  if (changed === 'hydrate') applySquarePaidFlag();   // apply any pending Square auto-paid once the queue loads
+  if (changed === 'hydrate') { applySquarePaidFlag(); catchUpMissedReset(); }   // apply pending Square auto-paid + heal a missed nightly reset, once the queue loads
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync();
     // T2.17: once Square is configured, auto-load the customer directory so
@@ -287,6 +287,28 @@ function scheduleMidnightReset() {
     utils.showToast("New day — yesterday's history saved");
     scheduleMidnightReset();
   }, reset - now);
+}
+
+// Heal a missed nightly reset: if the 4 AM reset didn't run (app closed / outage), paid
+// tickets from a previous day linger in the live queue and shadow their saved records
+// (which hid historical edits and could skew the board). On the first hydrate, remove any
+// paid queue entry dated before today that is ALREADY saved as a record — provably no data
+// loss, and self-heals exactly what the reset would have done. Runs once per session.
+let _resetCaughtUp = false;
+function catchUpMissedReset() {
+  if (_resetCaughtUp) return;
+  _resetCaughtUp = true;
+  const st = store.getState();
+  const today = utils.todayStr();
+  const recIds = new Set((st.records || []).filter(r => r.status !== 'deleted').map(r => String(r.id)));
+  const stale = (st.queue || []).filter(e =>
+    (e.status === 'paid' || e.status === 'done') &&                       // finalized tickets only
+    recIds.has(String(e.id)) &&                                          // safe: already saved as a record
+    utils.localDateStr(new Date(e.checkinTime)) < today);                 // from a previous day
+  if (!stale.length) return;
+  stale.forEach(e => sync.dispatch('queue.remove', { id: e.id }));
+  window.logAudit?.('Auto-cleanup', `Cleared ${stale.length} leftover paid ticket(s) from a missed nightly reset`);
+  queue.renderQueue(); queue.updateStats();
 }
 
 // ── PWA install ───────────────────────────────────
