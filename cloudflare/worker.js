@@ -5,17 +5,14 @@
 //   PUT      /photos/{key}  — Upload binary to R2, returns { url }
 //   GET      /photos/{key}  — Serve object from R2 (used as <img src>)
 //   DELETE   /photos/{key}  — Delete object from R2
-//   POST     /backup/run    — Manually trigger the daily Sheets backup (token-gated; for testing)
 //   /ws, /state/*           — Durable Object sync (source of truth)
 //
-// Google Sheets is now a WRITE-ONLY daily backup target only (the app never reads
-// from it). The nightly cron exports yesterday's turns/queue/transactions to a
-// fresh Apps Script via SHEETS_URL. The old /sheets config proxy + KV cache are gone.
+// Backups: the Durable Object periodically snapshots full state to R2 (see alarm()).
+// (The old write-only Google Sheets daily export + its cron were retired and removed.)
 //
 // Required secrets (set via: wrangler secret put <NAME>)
-//   SHEETS_URL           Google Apps Script web-app /exec URL (daily backup intake)
 //   SQUARE_TOKEN         Square access token
-//   RESTORE_TOKEN        (optional) gates /state/restore, /state/reset, and /backup/run
+//   RESTORE_TOKEN        (optional) gates /state/restore and /state/reset
 //   ORIGIN_GATE_ENABLED  (optional) "true" turns on the Origin allow-list gate (default off)
 //   ALLOWED_ORIGINS      (optional) extra comma-separated origins to allow (prod origin is built in)
 //
@@ -86,122 +83,6 @@ function originAllowed(request, env) {
       .map(s => s.toLowerCase())
   );
   return allow.has(origin.toLowerCase());
-}
-
-// ── Daily one-way backup → Google Sheets ────────────────────────────────────
-// Runs from the Cron Trigger (10:30 UTC = 2:30 AM PST / 3:30 AM PDT — always
-// BEFORE the client's 4 AM day-reset, so the queue is still intact). Reads the
-// just-finished business day (yesterday, Pacific) from the DO and POSTs a
-// detailed, one-way backup to the fresh write-only Apps Script. The app never
-// reads this sheet. Records are the financial truth; turns are derived from
-// them; the queue is the pre-reset snapshot. Failure is logged, not fatal.
-const PACIFIC = 'America/Los_Angeles';
-const pacificDate = (ms) => new Date(ms).toLocaleDateString('en-CA', { timeZone: PACIFIC });
-
-async function _runDailyBackup(env, dateOverride) {
-  const sheetsUrl = (env.SHEETS_URL || '').trim();
-  if (!sheetsUrl) { console.warn('[Backup] SHEETS_URL not set — skipped'); return { skipped: true }; }
-  // Shift back 6h so the small-hours run lands on the previous Pacific evening,
-  // then take that calendar date — the just-finished business day.
-  const targetDate = dateOverride || pacificDate(Date.now() - 6 * 3600 * 1000);
-  try {
-    const stub    = env.SALON_DO.get(env.SALON_DO.idFromName('muse'));
-    const snapRes = await stub.fetch('https://do/state/snapshot');
-    const snap    = await snapRes.json();
-    const payload = buildDailyBackup(snap.state || {}, targetDate);
-    const res = await fetch(sheetsUrl, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ action: 'dailyBackup', ...payload }),
-    });
-    console.log('[Backup]', targetDate, 'HTTP', res.status,
-      `tx=${payload.transactions.rows.length} turns=${payload.turns.rows.length} queue=${payload.queue.rows.length}`);
-    return { ok: res.ok, date: targetDate, status: res.status };
-  } catch (e) {
-    console.error('[Backup] failed:', e && e.message || e);
-    return { ok: false, error: String(e) };
-  }
-}
-
-// Build the one-day backup payload from a DO snapshot. Mirrors the client's
-// buildCombinedRecords (merge live `done` queue entries with stored records,
-// dedupe by id, drop deleted) so the backup matches what Reports/Transactions
-// show — no double-counting.
-function buildDailyBackup(state, dateStr) {
-  const config    = state.config    || {};
-  const queue     = state.queue     || [];
-  const records   = state.records   || [];
-  const deletions = state.deletions || [];
-
-  const svcById = {}; (config.services || []).forEach(s => { svcById[s.id] = s.label || s.abbr || s.id; });
-  const staffById = {}; (config.staff || []).forEach(s => { staffById[s.id] = s.name; });
-
-  const deletedIds = new Set(deletions.map(d => String(d.id)));
-  records.filter(r => r.status === 'deleted').forEach(r => deletedIds.add(String(r.id)));
-
-  const liveDone = queue.filter(e => e.status === 'done' && !deletedIds.has(String(e.id)));
-  const liveIds  = new Set(liveDone.map(e => String(e.id)));
-  const combined = [
-    ...liveDone,
-    ...records.filter(r => !liveIds.has(String(r.id)) && r.status !== 'deleted' && !deletedIds.has(String(r.id))),
-  ];
-
-  const onDay = iso => { try { return iso && pacificDate(new Date(iso).getTime()) === dateStr; } catch { return false; } };
-  const svcList   = ids => (ids || []).map(id => svcById[id] || id).join(', ');
-  const techList  = a   => [...new Set((a || []).filter(x => x.techId).map(x => staffById[x.techId] || x.techId))].join(', ');
-  const fmtTime   = iso => { try { return new Date(iso).toLocaleString('en-US', { timeZone: PACIFIC }); } catch { return iso || ''; } };
-  const itemsTot  = r   => (r.items || []).reduce((s, x) => s + (x.price || 0) * (x.qty || 0), 0);
-  const feesTot   = r   => (r.fees  || []).reduce((s, x) => s + (x.amount || 0), 0);
-
-  // Transactions (done + refund), matching Reports.
-  const txnRows = combined
-    .filter(r => onDay(r.checkinTime) && (r.status === 'done' || r.status === 'refund'))
-    .sort((a, b) => new Date(a.checkinTime) - new Date(b.checkinTime))
-    .map(r => [
-      fmtTime(r.checkinTime), r.name || '', r.phone || '', svcList(r.services),
-      techList(r.assignments), +itemsTot(r).toFixed(2), +feesTot(r).toFixed(2),
-      +(r.discount || 0).toFixed(2), +(r.totalCost || 0).toFixed(2),
-      r.status, r.isAppointment ? 'Appointment' : 'Walk-In', r.loggedBy || '',
-    ]);
-
-  // Per-tech turns tally (done only), ordered by the rotation.
-  const tally = {};
-  combined.filter(r => onDay(r.checkinTime) && r.status === 'done').forEach(r => {
-    (r.assignments || []).forEach(a => {
-      if (!a.techId) return;
-      (tally[a.techId] = tally[a.techId] || { count: 0, billed: 0 });
-      tally[a.techId].count++; tally[a.techId].billed += a.cost || 0;
-    });
-  });
-  const order = config.turns_order || [];
-  const turnRows = Object.keys(tally)
-    .sort((a, b) => {
-      const ra = order.indexOf(a) === -1 ? Infinity : order.indexOf(a);
-      const rb = order.indexOf(b) === -1 ? Infinity : order.indexOf(b);
-      return ra - rb;
-    })
-    .map(id => [staffById[id] || id, tally[id].count, +tally[id].billed.toFixed(2)]);
-
-  // Queue snapshot for the day (all statuses).
-  const queueRows = queue
-    .filter(e => onDay(e.checkinTime))
-    .sort((a, b) => new Date(a.checkinTime) - new Date(b.checkinTime))
-    .map(e => [
-      fmtTime(e.checkinTime), e.name || '', e.phone || '', svcList(e.services),
-      techList(e.assignments), e.status || '', +(e.totalCost || 0).toFixed(2),
-      e.isAppointment ? 'Appointment' : 'Walk-In',
-    ]);
-
-  const revenue   = txnRows.filter(r => r[9] === 'done').reduce((s, r) => s + (r[8] || 0), 0);
-  const customers = txnRows.filter(r => r[9] === 'done').length;
-
-  return {
-    date: dateStr,
-    summary: { customers, revenue: +revenue.toFixed(2) },
-    transactions: { columns: ['Time', 'Name', 'Phone', 'Services', 'Technician(s)', 'Items $', 'Fees $', 'Discount $', 'Total $', 'Status', 'Type', 'Logged By'], rows: txnRows },
-    turns:        { columns: ['Technician', 'Customers', 'Billed $'], rows: turnRows },
-    queue:        { columns: ['Time', 'Name', 'Phone', 'Services', 'Technician(s)', 'Status', 'Total $', 'Type'], rows: queueRows },
-  };
 }
 
 export default {
@@ -302,16 +183,6 @@ export default {
       return new Response(body, { status: doRes.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
     }
 
-    // ── Manual backup trigger (testing) ─────────────────────────────────────────
-    // POST /backup/run[?date=YYYY-MM-DD] — runs the daily Sheets backup on demand.
-    // Token-gated by RESTORE_TOKEN when set (open in dev when unset).
-    if (path === '/backup/run' && method === 'POST') {
-      let body = {}; try { body = await request.json(); } catch {}
-      if (env.RESTORE_TOKEN && body.token !== env.RESTORE_TOKEN) return json({ error: 'unauthorized' }, 403);
-      const result = await _runDailyBackup(env, url.searchParams.get('date') || body.date);
-      return json(result);
-    }
-
     // ── AI analytics (Google Gemini) ────────────────────────────────────────────
     // POST /ai/ask { question, data } → Gemini generateContent. The API key is held
     // server-side as a secret (GEMINI_API_KEY) so it never ships in the public PWA.
@@ -373,10 +244,6 @@ export default {
     }
 
     return json({ error: 'Not found' }, 404);
-  },
-
-  async scheduled(event, env, ctx) {
-    ctx.waitUntil(_runDailyBackup(env));
   },
 };
 

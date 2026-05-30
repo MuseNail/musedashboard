@@ -10,14 +10,6 @@ compatibility_date = "2024-11-20"
 enabled = true
 head_sampling_rate = 1
 
-# ── Cron Trigger ───────────────────────────────────────────────────────────────
-# Fires at 10:30 UTC = 2:30 AM PST (winter) / 3:30 AM PDT (summer) — always BEFORE
-# the client's 4 AM day-reset, so the queue is still intact. Exports yesterday's
-# turns/queue/transactions one-way to Google Sheets (write-only backup) + emails
-# the daily summary. The app never reads from the sheet.
-[triggers]
-crons = ["30 10 * * *"]
-
 # ── R2 bucket binding ─────────────────────────────────────────────────────────
 # Create the bucket first:  wrangler r2 bucket create musedashboard-photos
 [[r2_buckets]]
@@ -37,12 +29,10 @@ new_sqlite_classes = ["MuseSalonDO"]
 # ── Secrets ───────────────────────────────────────────────────────────────────
 # Set each secret once via the CLI — never commit secret values to this file:
 #
-#   wrangler secret put SHEETS_URL
 #   wrangler secret put SQUARE_TOKEN
 #
-# SHEETS_URL          — FRESH Google Apps Script web-app /exec URL (write-only daily backup intake)
 # SQUARE_TOKEN        — Square access token (sandbox or production)
-# RESTORE_TOKEN       — (optional) gates POST /state/restore and POST /backup/run
+# RESTORE_TOKEN       — (optional) gates POST /state/restore and POST /state/reset
 # VAPID_PRIVATE_KEY   — Web Push signing key (JWK JSON string). Set once:
 #                         wrangler secret put VAPID_PRIVATE_KEY
 #                       (matching public key is VAPID_PUBLIC_KEY below + js/app/config.js)
