@@ -398,8 +398,13 @@ function clearGuides() { fpGuide('v', null); fpGuide('h', null); }
       const st = closest(e.target, '.floor-station');
       if (st) { mode = 'station'; dragStation = st.dataset.station; pending = st; }
       // Empty canvas: desktop draws a marquee; touch lets the gesture scroll natively
-      // (and a touch with no movement is treated as a tap-to-clear in onUp).
-      else { mode = 'marquee'; marqueeStart = canvasPoint(e); }
+      // (and a touch with no movement is treated as a tap-to-clear in onUp). Guard: only when
+      // the pointer is actually on the canvas. A tap on the edit toolbar above it (#floorplan-props
+      // W/H steppers, colors, shape, font — or the zoom tools) is NOT a canvas gesture; without
+      // this, pointerup ran "tap empty → clear selection" BEFORE the control's click, wiping
+      // _selected so resize/recolor/reshape silently no-oped on the now-empty selection.
+      else if (closest(e.target, '#floorplan-grid')) { mode = 'marquee'; marqueeStart = canvasPoint(e); }
+      else return;
     } else {
       const techEl = closest(e.target, '.floor-tech');
       if (techEl) { mode = 'tech'; dragTechId = techEl.dataset.techId; pending = techEl; }
