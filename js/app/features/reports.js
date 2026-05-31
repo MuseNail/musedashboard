@@ -797,6 +797,53 @@ export function drillDownGiftcards(kind) {
     ? cards.map(g => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${g.serial ? '#' + g.serial : '(no serial)'}${g.to ? ' · to ' + g.to : ''}</div><div class="text-[11px] font-body text-outline">${fmt(g.datePurchased)}${g.from ? ' · from ' + g.from : ''}</div></div><div class="font-headline font-bold text-on-surface">$${(g.amount || 0).toFixed(2)}</div></div>`).join('')
     : '');
 }
+// Shared simple drill row: customer · optional sub-line · time, with a right-aligned amount.
+const _drillRow = (customer, time, amount, sub, neg) => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${customer}</div>${sub?`<div class="text-xs font-body text-on-surface-variant truncate">${sub}</div>`:''}<div class="text-[11px] font-body text-outline">${time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} · ${time.toLocaleDateString()}</div></div><div class="font-headline font-bold flex-shrink-0 ml-3 ${neg?'text-error':'text-on-surface'}">${neg?'-':''}$${amount.toFixed(2)}</div></div>`;
+const _drillTime = r => new Date(r.completedAt || r.checkinTime);
+// Compact total bar (count + total) shown above the rows so the drill confirms the card's number.
+const _drillSummaryBar = summary => `<div class="bg-primary/10 rounded-xl border border-primary/30 flex divide-x divide-primary/20 mb-2 sticky top-0 z-10">${summary.map(([l,v])=>`<div class="flex-1 px-3 py-2 text-center"><div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest">${l}</div><div class="font-headline font-bold text-on-surface text-base">${v}</div></div>`).join('')}</div>`;
+const _drillBody = (summary, rows, html) => _drillSummaryBar(summary) + (rows.length ? html : '<p class="text-sm font-body text-on-surface-variant text-center py-4 opacity-70">None this period.</p>');
+
+// Tap the "Total Tips" card → every ticket that carried a card tip this period.
+export function drillDownTips() {
+  const d = window._currentReportData; if (!d) return;
+  const rows = d.filtered.filter(r => (r.tip||0) > 0).map(r => ({ customer: r.name||'(no name)', time: _drillTime(r), amount: r.tip||0 })).sort((a,b)=>b.time-a.time);
+  const total = rows.reduce((s,r)=>s+r.amount,0);
+  _drill = { title:'Total Tips — Detail', columns:['Date','Time','Customer','Tip'], rows: rows.map(r=>[r.time.toLocaleDateString(), r.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.customer, '$'+r.amount.toFixed(2)]), summary:[['Tickets with tips', String(rows.length)], ['Total Tips', '$'+total.toFixed(2)]] };
+  showDrillPanel(_drill.title, _drillBody(_drill.summary, rows, rows.map(r=>_drillRow(r.customer, r.time, r.amount)).join('')));
+}
+
+// Tap "Retail Items" → one row per item line (a 2-item ticket shows twice).
+export function drillDownItems() {
+  const d = window._currentReportData; if (!d) return;
+  const rows = [];
+  d.filtered.forEach(r => (r.items||[]).forEach(x => { const qty = x.qty||0; if (qty <= 0) return; const label = cfg().items.find(i=>i.id===x.itemId)?.label || x.itemId || 'Item'; rows.push({ customer: r.name||'(no name)', time: _drillTime(r), label, qty, amount: (x.price||0)*qty }); }));
+  rows.sort((a,b)=>b.time-a.time);
+  const total = rows.reduce((s,r)=>s+r.amount,0), qtyTotal = rows.reduce((s,r)=>s+r.qty,0);
+  _drill = { title:'Retail Items — Detail', columns:['Date','Time','Customer','Item','Qty','Total'], rows: rows.map(r=>[r.time.toLocaleDateString(), r.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.customer, r.label, String(r.qty), '$'+r.amount.toFixed(2)]), summary:[['Items sold', String(qtyTotal)], ['Total', '$'+total.toFixed(2)]] };
+  showDrillPanel(_drill.title, _drillBody(_drill.summary, rows, rows.map(r=>_drillRow(r.customer, r.time, r.amount, `${r.label} × ${r.qty}`)).join('')));
+}
+
+// Tap the "Fees" total → every fee line charged this period (all fee types together).
+export function drillDownFeesAll() {
+  const d = window._currentReportData; if (!d) return;
+  const rows = [];
+  d.filtered.forEach(r => (r.fees||[]).forEach(f => { const amt = f.amount||0; if (!amt) return; const label = cfg().fees.find(x=>x.id===f.feeId)?.label || f.label || 'Fee'; rows.push({ customer: r.name||'(no name)', time: _drillTime(r), label, amount: amt }); }));
+  rows.sort((a,b)=>b.time-a.time);
+  const total = rows.reduce((s,r)=>s+r.amount,0);
+  _drill = { title:'Fees — Detail', columns:['Date','Time','Customer','Fee','Amount'], rows: rows.map(r=>[r.time.toLocaleDateString(), r.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.customer, r.label, '$'+r.amount.toFixed(2)]), summary:[['Fees charged', String(rows.length)], ['Total', '$'+total.toFixed(2)]] };
+  showDrillPanel(_drill.title, _drillBody(_drill.summary, rows, rows.map(r=>_drillRow(r.customer, r.time, r.amount, r.label)).join('')));
+}
+
+// Tap "Discounts" → every ticket with a discount (+ the reason note).
+export function drillDownDiscounts() {
+  const d = window._currentReportData; if (!d) return;
+  const rows = d.filtered.filter(r => (r.discount||0) > 0).map(r => ({ customer: r.name||'(no name)', time: _drillTime(r), sub: r.discountNote||'', amount: r.discount||0 })).sort((a,b)=>b.time-a.time);
+  const total = rows.reduce((s,r)=>s+r.amount,0);
+  _drill = { title:'Discounts — Detail', columns:['Date','Time','Customer','Reason','Discount'], rows: rows.map(r=>[r.time.toLocaleDateString(), r.time.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.customer, r.sub, '-$'+r.amount.toFixed(2)]), summary:[['Discounted tickets', String(rows.length)], ['Total Discounts', '-$'+total.toFixed(2)]] };
+  showDrillPanel(_drill.title, _drillBody(_drill.summary, rows, rows.map(r=>_drillRow(r.customer, r.time, r.amount, r.sub, true)).join('')));
+}
+
 function showDrillPanel(title, html) {
   document.getElementById('rpt-drill-title').textContent = title;
   document.getElementById('rpt-drill-list').innerHTML = html || '<p class="text-sm font-body text-on-surface-variant">No detail available.</p>';

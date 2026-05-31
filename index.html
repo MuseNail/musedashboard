@@ -403,25 +403,29 @@ tailwind.config = {
 
         <!-- Revenue breakdown by type -->
         <div class="grid grid-cols-2 gap-3 mb-3">
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="Card tips collected this period (not salon revenue — paid out to staff)">
+          <div onclick="drillDownTips()" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Card tips collected this period (not salon revenue — paid out to staff). Tap for the tickets behind it.">
             <div class="text-lg font-headline font-extrabold text-primary" id="rpt-total-tips">$0.00</div>
             <span class="rpt-delta" id="rpt-total-tips-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Total Tips</div>
+            <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
           </div>
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
+          <div onclick="drillDownItems()" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Tap to see the retail items sold this period">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-items-total">$0.00</div>
             <span class="rpt-delta" id="rpt-items-total-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Retail Items</div>
+            <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
           </div>
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
+          <div onclick="drillDownFeesAll()" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Tap to see every fee charged this period">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-fees-total">$0.00</div>
             <span class="rpt-delta" id="rpt-fees-total-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Fees</div>
+            <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
           </div>
-          <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
+          <div onclick="drillDownDiscounts()" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Tap to see every discounted ticket this period">
             <div class="text-lg font-headline font-extrabold" style="color:#c53030" id="rpt-discount-total">-$0.00</div>
             <span class="rpt-delta" id="rpt-discount-total-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Discounts</div>
+            <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
           </div>
           <div class="rounded-xl p-4 border text-center" style="background:rgba(42,122,79,0.08);border-color:rgba(42,122,79,0.3)">
             <div class="text-lg font-headline font-extrabold" style="color:#2a7a4f" id="rpt-gc-sold">$0.00</div>
