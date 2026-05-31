@@ -17,7 +17,7 @@ let _pendingPay = null;
 // R6 gift-card-as-recorded-tender (staging for the current pay session). These NEVER change
 // the Square charge — the full ticket total always goes to Square; we only record which cards
 // were used so the app's gift-card balances stay in sync. Committed when the ticket is paid.
-let _payGc = [], _payTicketId = null, _gcPickerOpen = false, _payCash = 0, _payTip = 0;   // _payCash/_payTip in dollars (split-tender cash / card tip — tip is charged ON TOP of the bill, never part of ticketTotal)
+let _payGc = [], _payTicketId = null, _gcPickerOpen = false, _newGcOpen = false, _payCash = 0, _payTip = 0;   // _payCash/_payTip in dollars (split-tender cash / card tip — tip is charged ON TOP of the bill, never part of ticketTotal)
 const _gcBal = g => (g.amount || 0) - (window.gcTotalUsed ? window.gcTotalUsed(g) : 0);
 const _payTotalDollars = () => (_pendingPay?.cents || 0) / 100;
 const _payGiftDollars  = () => _payGc.reduce((s, t) => s + (t.amount || 0), 0);
@@ -85,7 +85,7 @@ export function openSquarePOS(entryId) {
   // tapped earlier but the charge wasn't completed). Balances are only drawn down when paid.
   _payTicketId = String(entryId);
   _payGc = (entry.giftcardRedemptions || []).map(t => ({ giftcardId: t.giftcardId, serial: t.serial, who: t.who, amount: t.amount }));
-  _gcPickerOpen = false; _payCash = 0; _payTip = 0;
+  _gcPickerOpen = false; _newGcOpen = false; _payCash = 0; _payTip = 0;
   renderPayGc();
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
@@ -93,7 +93,7 @@ export function openSquarePOS(entryId) {
 
 export function closeSquareConfirm() {
   _pendingPay = null;
-  _payGc = []; _payTicketId = null; _gcPickerOpen = false; _payCash = 0; _payTip = 0;
+  _payGc = []; _payTicketId = null; _gcPickerOpen = false; _newGcOpen = false; _payCash = 0; _payTip = 0;
   const gs = document.getElementById('square-gc-section'); if (gs) gs.innerHTML = '';
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.add('hidden'); m.style.display = ''; }
@@ -332,6 +332,19 @@ function renderPayGc() {
   }).join('');
   const room = _gcRoom();
   const addBtn = room > 0.001 ? `<button onclick="sqToggleGcPicker()" class="w-full border border-dashed border-primary text-primary rounded-lg py-2 text-xs font-body font-semibold hover:bg-primary/5">+ Apply gift card</button>` : '';
+  // Off-registry gift card (sold before the registry existed): create it in the registry on the
+  // spot + apply it. datePurchased is left blank so the sale isn't counted as income this period
+  // (it came in pre-registry); only the redemption today reduces Total Money Collected — correct.
+  const newGcBtn = room > 0.001 ? `<button onclick="sqToggleNewGc()" class="w-full border border-dashed border-outline-variant text-on-surface-variant rounded-lg py-2 text-xs font-body font-semibold hover:bg-surface-container mt-1.5">+ Gift card not in registry</button>` : '';
+  const newGcForm = _newGcOpen ? `<div class="border border-surface-container-high rounded-lg mt-2 p-3 space-y-2 bg-surface-container/40">
+      <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">New gift card — adds to your registry</div>
+      <div class="flex items-center gap-2">
+        <input id="sq-newgc-serial" type="text" placeholder="Serial (optional)" class="flex-1 border border-surface-container-high rounded-lg px-2 py-1.5 text-sm text-on-surface bg-surface-container-lowest focus:outline-none focus:border-primary">
+        <span class="text-on-surface-variant text-sm">$</span>
+        <input id="sq-newgc-amt" type="text" inputmode="none" placeholder="Balance" onfocus="openNumpad(this,'Gift card balance','cost')" onclick="openNumpad(this,'Gift card balance','cost')" class="w-24 border border-surface-container-high rounded-lg px-2 py-1.5 text-sm text-right text-on-surface bg-surface-container-lowest focus:outline-none focus:border-primary">
+      </div>
+      <button onclick="sqAddOffRegistryGiftcard()" class="w-full bg-primary text-on-primary rounded-lg py-2 text-xs font-headline font-bold">Add &amp; apply</button>
+    </div>` : '';
   const picker = _gcPickerOpen ? `<div class="border border-surface-container-high rounded-lg mt-2 overflow-hidden">
       <div class="px-3 py-2 bg-surface-container"><input id="sq-gc-search" oninput="filterGcPicker()" placeholder="Search serial / name…" class="w-full bg-transparent text-sm focus:outline-none text-on-surface"></div>
       <div id="sq-gc-rows" class="max-h-44 overflow-y-auto">${_gcPickerRows(room)}</div>
@@ -367,7 +380,7 @@ function renderPayGc() {
       <div id="sq-row-change" class="${BIG}" style="${BIGS};display:none"><span class="text-on-surface">Change due</span><span class="text-primary" id="sq-change">$0.00</span></div>
       <div class="${BIG} border-t border-surface-container-high mt-2 pt-2" style="${BIGS}"><span class="text-on-surface">Card on Terminal</span><span class="text-primary" id="sq-card-due">$${(_payCardDueDollars() + _payTip).toFixed(2)}</span></div>
     </div>`;
-  host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}${tipRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${picker}${breakdown}`;
+  host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}${tipRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${newGcBtn}${picker}${newGcForm}${breakdown}`;
   sqUpdatePayBreakdown();
 }
 export function sqCashInput(v) {
@@ -417,7 +430,26 @@ function _gcPickerRows(room) {
   }).join('');
 }
 export function filterGcPicker() { const host = document.getElementById('sq-gc-rows'); if (host) host.innerHTML = _gcPickerRows(_gcRoom()); }
-export function sqToggleGcPicker() { _gcPickerOpen = !_gcPickerOpen; renderPayGc(); }
+export function sqToggleGcPicker() { _gcPickerOpen = !_gcPickerOpen; if (_gcPickerOpen) _newGcOpen = false; renderPayGc(); }
+export function sqToggleNewGc() { _newGcOpen = !_newGcOpen; if (_newGcOpen) _gcPickerOpen = false; renderPayGc(); }
+// Create a gift card that predates the registry, then stage it as payment on this ticket (up to
+// the remaining balance due). The card now lives in the registry — reusable next visit, and the
+// Terminal charge auto-reduces by the gift amount (see _payCardDueDollars). datePurchased blank.
+export function sqAddOffRegistryGiftcard() {
+  commitNumpad();   // flush the balance numpad into its field first
+  const serialRaw = (document.getElementById('sq-newgc-serial')?.value || '').trim();
+  const serial = /^\d+$/.test(serialRaw) ? serialRaw.padStart(8, '0') : serialRaw;
+  const balance = parseFloat(document.getElementById('sq-newgc-amt')?.value) || 0;
+  if (!(balance > 0)) { showToast('Enter the gift card balance.'); return; }
+  const card = { id: 'gc-' + Date.now(), datePurchased: '', serial, amount: +balance.toFixed(2), phone: '', from: '', to: '', redemptions: [], amountUsed: 0, dateUsed: '', notes: 'Added at checkout (pre-registry card)', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  dispatch('giftcard.save', { card });
+  const amt = Math.min(balance, _gcRoom());
+  if (amt > 0.001) _payGc.push({ giftcardId: card.id, serial: card.serial, who: '', amount: +amt.toFixed(2) });
+  _newGcOpen = false; _gcPickerOpen = false;
+  renderPayGc();
+  window.logAudit?.('Gift card', `Off-registry card #${serial || '—'} added ($${balance.toFixed(2)}) · $${amt.toFixed(2)} applied`);
+  showToast(`Gift card added · $${amt.toFixed(2)} applied`);
+}
 export function sqRemoveGiftcard(id) { _payGc = _payGc.filter(t => t.giftcardId !== id); renderPayGc(); }
 export function sqApplyGiftcard(id) {
   const g = (getState().giftcards || []).find(x => x.id === id); if (!g) return;
