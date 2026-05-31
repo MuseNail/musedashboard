@@ -7,7 +7,7 @@ import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
 import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
-import { ui, canDo } from '../session.js';
+import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
@@ -642,9 +642,37 @@ function _staleNames(capturedMap) {
 }
 export function activeGroupEntryId() { return groupAssignEntries[activeGroupTab]; }
 
+// ── Cross-device hard lock on the Assign & Price modal ────────────────────────
+// While a ticket's modal is open on one device, another device opening the SAME ticket
+// (or any member of its party) is blocked with a notice. The lock lives in synced config
+// (edit_locks); it's refreshed by a heartbeat while open and released on close (closing
+// already saves the prices, so the desktop→iPad handoff keeps the work). A lock older than
+// LOCK_TTL is treated as released (covers a device that closed/crashed without releasing).
+const LOCK_TTL = 180000, LOCK_HB = 90000;
+let _lockKey = null, _lockHbTimer = null;
+const editLocks   = () => cfg().edit_locks || {};
+const _lockKeyFor = entry => entry.groupId ? 'grp:' + entry.groupId : String(entry.id);
+function _lockHeldByOther(key) { const l = editLocks()[key]; return (l && l.device !== DEVICE_ID && (Date.now() - (l.at || 0)) < LOCK_TTL) ? l : null; }
+function _acquireLock(key) { dispatch('config.set', { key: 'edit_locks', value: { ...editLocks(), [key]: { device: DEVICE_ID, name: getActiveUser()?.name || '', at: Date.now() } } }); }
+function _releaseLock(key) { const cur = editLocks(); if (!cur[key] || cur[key].device !== DEVICE_ID) return; const next = { ...cur }; delete next[key]; dispatch('config.set', { key: 'edit_locks', value: next }); }
+function _stopLockHb() { if (_lockHbTimer) { clearInterval(_lockHbTimer); _lockHbTimer = null; } }
+function _startLockHb(key) {
+  _stopLockHb();
+  _lockHbTimer = setInterval(() => {
+    const m = document.getElementById('group-assign-modal');
+    if (_lockKey !== key || !m || m.classList.contains('hidden')) { _releaseLock(key); _stopLockHb(); if (_lockKey === key) _lockKey = null; return; }
+    _acquireLock(key);   // refresh the timestamp so a long edit doesn't go stale
+  }, LOCK_HB);
+}
+
 export function showGroupAssignModal(entryId) {
   const entry = q().find(e => String(e.id) === String(entryId));
   if (!entry) return;
+  // Hard lock: if this ticket (or its party) is open on another device, don't open — tell the user.
+  const key = _lockKeyFor(entry);
+  const held = _lockHeldByOther(key);
+  if (held) { window.showWarnModal?.('Ticket open on another device', `This ticket is being edited on ${held.name ? held.name + "'s device" : 'another device'}. Close it there first, then open it here.`, () => {}, 'OK'); return; }
+  _lockKey = key; _acquireLock(key); _startLockHb(key);
   groupAssignEntries = entry.groupId ? q().filter(e => e.groupId === entry.groupId).map(e => String(e.id)) : [String(entry.id)];
   const clicked = groupAssignEntries.indexOf(String(entryId));
   activeGroupTab = clicked >= 0 ? clicked : 0;
@@ -1018,6 +1046,7 @@ export function closeGroupAssignModal() {
   }
   const m = document.getElementById('group-assign-modal'); m.classList.add('hidden'); m.style.display = '';
   groupAssignEntries = []; _custEditedIds.clear();
+  if (_lockKey) { _releaseLock(_lockKey); _stopLockHb(); _lockKey = null; }   // free the ticket for the next device (prices already saved above)
 }
 
 // Split button inside the Assign & Price modal — splits this party from here (saves + closes

@@ -23,6 +23,7 @@ function emptyConfig() {
     svc_time_reset: {},  // per-tech service-time benchmark cutoff { [techId]: ms } — ignore visits before this
     cash_drawer: null,         // the current OPEN cash-drawer shift (or null); see features/cashdrawer.js
     cash_drawer_history: [],   // closed drawer shifts (rolling cap), each with its reconciliation
+    edit_locks: {},            // cross-device Assign&Price hard lock { [lockKey]: {device,name,at} }; see queue.js
   };
 }
 
