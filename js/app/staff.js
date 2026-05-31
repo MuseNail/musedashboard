@@ -11,7 +11,7 @@ import * as store from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr } from './utils.js';
 import { applyEntryStatus, isPaidStatus } from './features/status.js';
-import { VAPID_PUBLIC_KEY, PUSH_PROXY } from './config.js';
+import { VAPID_PUBLIC_KEY, PUSH_PROXY, APP_VERSION } from './config.js';
 
 const cfg     = () => store.getState().config;
 const queue   = () => store.getState().queue;
@@ -21,6 +21,7 @@ const svc     = id => (cfg().services || []).find(s => s.id === id);
 const MY_KEY = 'muse_staff_id';            // device-local: which tech is signed in on THIS device
 let myId = localStorage.getItem(MY_KEY) || null;
 let _view = 'active';                      // 'active' | 'history'
+let _updateVer = null;                     // newer published version detected → show the update banner
 const _priceDraft = {};                    // `${entryId}:${serviceId}` -> typed price (survives re-render)
 
 // ── Pure helpers (exported for unit tests) ───────────────────────────────────
@@ -117,8 +118,13 @@ function renderMain(meStaff) {
       <span class="material-symbols-outlined" style="font-size:18px">notifications_active</span> Turn on assignment alerts
     </button>` : '';
 
+  const updateBanner = _updateVer ? `
+    <button onclick="staffUpdateNow()" class="w-full mb-3 rounded-xl bg-secondary-container text-on-secondary-container py-3.5 font-headline font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm">
+      <span class="material-symbols-outlined" style="font-size:20px">system_update</span> Update available (${_updateVer}) — tap to refresh
+    </button>` : '';
+
   document.getElementById('staff-list').innerHTML = `
-    ${notifBanner}
+    ${updateBanner}${notifBanner}
     <div class="rounded-2xl bg-primary text-on-primary px-5 py-4 mb-3 flex items-end justify-between shadow-sm">
       <div><div class="text-xs font-body uppercase tracking-widest opacity-80">Today</div>
         <div class="font-headline font-extrabold leading-none" style="font-size:40px">$${st.total.toFixed(0)}</div></div>
@@ -442,12 +448,36 @@ async function registerPush() {
   } catch {}
 }
 
+// ── App-update prompt ─────────────────────────────
+// iOS keeps a home-screen PWA suspended in memory, so it rarely cold-reloads to pick
+// up a new deploy. We poll version.json (no-store → bypasses the SW) and, when a newer
+// version is published, show a tap-to-update banner. Tapping clears the cache + SW and
+// reloads to the freshest files (no data touched — all state lives in the Durable Object).
+async function checkStaffVersion() {
+  try {
+    const res = await fetch('/musedashboard/version.json?_=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.version && data.version !== APP_VERSION && _updateVer !== data.version) { _updateVer = data.version; render(); }
+  } catch (e) {}
+}
+window.staffUpdateNow = async () => {
+  showToast('Updating…');
+  try {
+    if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.unregister())); }
+    if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); }
+  } catch (e) {}
+  location.reload();
+};
+
 // ── Boot ──────────────────────────────────────────
 function boot() {
   sync.start();
   store.subscribe(() => render());
   render();   // instant render from cached state; subscribe re-renders on hydrate
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').then(() => registerPush()).catch(() => {});
+  checkStaffVersion();   // on cold start
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkStaffVersion(); });   // re-check each time they reopen the app
 }
 // Only boot inside the real page (the login shell exists); skipped when imported
 // by the Node test runner (the global shim's getElementById returns null).
