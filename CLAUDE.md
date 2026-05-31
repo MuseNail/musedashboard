@@ -95,7 +95,7 @@ The app is **native ES modules** under `js/app/`. `index.html` loads a single en
 
 ### Module layout
 - **Core:** `js/app/main.js` (bootstrap, window glue, navigation, version check), `store.js` (in-memory state + `applyChange` op reducer), `sync.js` (WebSocket/HTTP sync + `dispatch` + offline outbox), `session.js`, `config.js` (`APP_VERSION`, constants), `utils.js`.
-- **Features:** `js/app/features/*.js` — auth, photos, catalog, square-customers, square-catalog, square-pos, staff, checkin, status, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime.
+- **Features:** `js/app/features/*.js` — auth, photos, catalog, square-customers, square-catalog, square-pos, staff, checkin, status, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, appt-reminders, recovery, audit, **cashdrawer** (cash register/drawer), **sms** (httpSMS texting).
 
 ### GitHub Pages only
 No server-side logic in the front end, no dynamic routes, no build artifacts — all client output is static files GitHub Pages serves directly. Backend logic lives in the Cloudflare Worker / Durable Object (`cloudflare/worker.js`).
@@ -126,6 +126,11 @@ No server-side logic in the front end, no dynamic routes, no build artifacts —
 | Turns / rotation | `js/app/features/turns.js` |
 | Reports, transactions, payroll, refunds, historical edit | `js/app/features/reports.js` |
 | Gift cards | `js/app/features/giftcards.js` |
+| Cash register / drawer (open/close count, cash in/out, reconcile, PDF) | `js/app/features/cashdrawer.js` |
+| SMS texting via httpSMS (send + Settings test panel) | `js/app/features/sms.js` (+ `cloudflare/worker.js` `/sms/*`) |
+| Reconciliation report (recorded vs charged) + Reports drill-downs | `js/app/features/reports.js` (`openReconcile`, `drillDown*`) |
+| Stale-write guard (reject older-than-stored writes) | `js/app/store.js` (`isStaleWrite`/`upsertByIdGuarded`) + `cloudflare/worker.js` (DO `applyMutation`) |
+| Assign&Price cross-device hard lock | `js/app/features/queue.js` (`edit_locks` config map) |
 | Google Calendar / appointments | `js/app/features/calendar.js` |
 | Floor plan | `js/app/features/floorplan.js` |
 | Settings panel | `js/app/features/settings.js` |
