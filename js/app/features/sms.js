@@ -66,10 +66,12 @@ function _smsStatusView(status, failureReason, to) {
 // Poll the real phone-side outcome for ~20s, updating the result line live. This is what
 // surfaces "generic failure" (or delivery) right in the dashboard.
 async function _pollTestSmsStatus(id, to, out) {
+  let everRead = false, lastStatus = '';
   for (let i = 0; i < 8; i++) {
     await new Promise(r => setTimeout(r, i === 0 ? 1500 : 2500));
     const s = await getSmsStatus(id);
     if (!s.ok || !s.status) continue;
+    everRead = true; lastStatus = s.status;
     const view = _smsStatusView(s.status, s.failureReason, to);
     if (out) { out.textContent = view.txt; out.style.color = view.color; }
     if (_SMS_TERMINAL[s.status]) {
@@ -79,7 +81,12 @@ async function _pollTestSmsStatus(id, to, out) {
       return;
     }
   }
-  if (out) { out.textContent = 'Handed to httpSMS — still waiting on the phone. Check the httpSMS app for the final status.'; out.style.color = '#9a6a00'; }
+  // Never got a readable status → the lookup endpoint isn't answering (most likely the Worker
+  // hasn't been redeployed with /sms/message). Don't blame the phone for a missing endpoint.
+  if (out) {
+    if (!everRead) { out.textContent = "Sent to httpSMS, but couldn't read the delivery status — the Worker needs `wrangler deploy` for the status check. (The text may still have gone through; check the httpSMS app.)"; out.style.color = '#9a6a00'; }
+    else { out.textContent = `Handed to httpSMS — still "${lastStatus}" after 20s; the phone hasn't completed it. Check the httpSMS app for the final status.`; out.style.color = '#9a6a00'; }
+  }
 }
 
 export async function sendTestSms() {
