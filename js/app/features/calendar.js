@@ -291,7 +291,58 @@ function scheduleCalTokenRefresh(expires) {
   const delay = Math.max(10000, expires - Date.now() - 5 * 60 * 1000);
   _calRefreshTimer = setTimeout(() => { if (_calTokenClient) _calTokenClient.requestAccessToken({ prompt: '' }); }, delay);
 }
+
+// ── On-demand token freshness ─────────────────────
+// The proactive refresh above is a single setTimeout, which desktop browsers THROTTLE in a
+// background tab — so it can fire late and the access token lapses unnoticed. Reads keep
+// showing the last-loaded events (calendar LOOKS fine), but the next WRITE 401s and surfaces
+// as a raw "authentication" error. ensureFreshToken() refreshes silently on demand right
+// before any Google call when the token is expired/near expiry, de-duping concurrent callers,
+// so writes always run on a valid token. The GIS callback settles the waiters.
+let _tokenWaiters = [], _calInitDone = false, _calFocusHooked = false;
+function _settleTokenWaiters(err) { const ws = _tokenWaiters; _tokenWaiters = []; ws.forEach(w => err ? w.reject(err) : w.resolve()); }
+function _tokenFresh(skewMs = 120000) {
+  try { const s = JSON.parse(localStorage.getItem('gcal_token') || 'null'); return !!(s && s.token && Date.now() < s.expires - skewMs); } catch (e) { return false; }
+}
+function ensureFreshToken() {
+  if (_tokenFresh()) return Promise.resolve();
+  if (!_calTokenClient) return Promise.reject(new Error('calendar-not-ready'));
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const settle = err => { if (done) return; done = true; clearTimeout(to); err ? reject(err) : resolve(); };
+    const to = setTimeout(() => settle(new Error('token-refresh-timeout')), 20000);
+    _tokenWaiters.push({ resolve: () => settle(), reject: settle });
+    if (_tokenWaiters.length === 1) { try { _calTokenClient.requestAccessToken({ prompt: '' }); } catch (e) { _settleTokenWaiters(e); } }
+  });
+}
+// First-connect side effects, run once (not on every silent refresh — that would reload the
+// grid and yank the view mid-use).
+function _calInitialLoad() { if (_calInitDone) return; _calInitDone = true; startCalSync(); calLoadAndRender(); loadTaskLists(); }
+// A failed write is "authentication" when the token expired/was revoked or a refresh failed.
+// Drop the stale token, kick a silent reconnect so the NEXT attempt works, and tell the user.
+function _calWriteError(err, verb) {
+  const msg = err?.result?.error?.message || err?.message || '';
+  const auth = err?.status === 401 || err?.result?.error?.status === 'UNAUTHENTICATED'
+    || ['calendar-not-ready', 'token-refresh-timeout'].includes(err?.message) || /auth|credential|invalid.?token/i.test(msg);
+  if (auth) {
+    localStorage.removeItem('gcal_token');
+    document.getElementById('cal-signin-btn')?.classList.remove('hidden');
+    if (_calTokenClient) _calTokenClient.requestAccessToken({ prompt: '' });   // silent reconnect for the retry
+    showToast('Calendar session expired — reconnecting. Please try again in a moment.');
+  } else showToast(verb + ' failed: ' + (msg || 'Unknown error'));
+}
+// Keep the token alive when the desktop tab regains focus (the throttled setTimeout may have
+// missed its window while backgrounded) and refresh the grid. Registered once.
+function _hookCalFocusRefresh() {
+  if (_calFocusHooked) return; _calFocusHooked = true;
+  const onActive = () => { if (!_calInitDone) return; if (!localStorage.getItem('gcal_token') && !cfg().gcal_token) return; ensureFreshToken().then(() => calSilentSync()).catch(() => {}); };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) onActive(); });
+  window.addEventListener('focus', onActive);
+  window.addEventListener('online', onActive);
+}
+
 export function loadGCalScripts() {
+  _hookCalFocusRefresh();
   if (document.getElementById('gapi-script')) return;
   const s1 = document.createElement('script'); s1.id = 'gapi-script'; s1.src = 'https://apis.google.com/js/api.js';
   s1.onload = () => gapi.load('client', async () => { await gapi.client.init({ discoveryDocs: [GCAL_DISCOVERY, GTASK_DISCOVERY] }); _calGapiLoaded = true; _calTryReady(); });
@@ -299,14 +350,15 @@ export function loadGCalScripts() {
   const s2 = document.createElement('script'); s2.id = 'gis-script'; s2.src = 'https://accounts.google.com/gsi/client';
   s2.onload = () => {
     _calTokenClient = google.accounts.oauth2.initTokenClient({ client_id: GCAL_CLIENT_ID, scope: GCAL_SCOPES, callback: (resp) => {
-      if (resp.error) { calSetStatus('Sign-in failed: ' + resp.error); return; }
+      if (resp.error) { calSetStatus('Sign-in failed: ' + resp.error); _settleTokenWaiters(new Error(resp.error)); return; }
       const expires = Date.now() + (resp.expires_in * 1000);
       localStorage.setItem('gcal_token', JSON.stringify({ token: resp.access_token, expires }));
       dispatch('config.set', { key: 'gcal_token', value: { token: resp.access_token, expires } });
       gapi.client.setToken({ access_token: resp.access_token });
       scheduleCalTokenRefresh(expires);
       document.getElementById('cal-signin-btn')?.classList.add('hidden');
-      calSetStatus(''); startCalSync(); calLoadAndRender(); loadTaskLists();
+      calSetStatus(''); _settleTokenWaiters();   // unblock any write awaiting this refresh
+      _calInitialLoad();                          // first connect only — silent refreshes don't reload the grid
     } });
     _calGisLoaded = true; _calTryReady();
   };
@@ -317,7 +369,7 @@ function _useToken(saved) {
   gapi.client.setToken({ access_token: saved.token });
   scheduleCalTokenRefresh(saved.expires);
   document.getElementById('cal-signin-btn')?.classList.add('hidden');
-  calSetStatus(''); startCalSync(); calLoadAndRender(); loadTaskLists();
+  calSetStatus(''); _calInitialLoad();
 }
 function _calTryReady() {
   if (!_calGapiLoaded || !_calGisLoaded) return;
@@ -336,6 +388,7 @@ export function calSignOut() {
   const token = gapi.client.getToken();
   if (token) google.accounts.oauth2.revoke(token.access_token, () => {});
   gapi.client.setToken(null); localStorage.removeItem('gcal_token');
+  _calInitDone = false;   // so a fresh sign-in re-runs the initial load
   _calCalendars = []; _calEvents = {};
   document.getElementById('cal-grid').classList.add('hidden');
   document.getElementById('cal-loading').classList.remove('hidden');
@@ -546,6 +599,9 @@ function calRenderGridPreserveScroll() { const gb = document.getElementById('cal
 // ── Sync ──────────────────────────────────────────
 async function calSilentSync() {
   if (!gapi?.client?.getToken()?.access_token) return;
+  // Keep the token alive on the foreground sync tick too (self-heals the read loop if the
+  // proactive refresh timer was throttled). If it's expired and can't refresh, bail to error.
+  if (!_tokenFresh(0)) { try { await ensureFreshToken(); } catch (e) { setCalSyncIndicator('error'); return; } }
   try {
     setCalSyncIndicator('syncing');
     const dayStart = new Date(_calDate); dayStart.setHours(0,0,0,0);
@@ -760,10 +816,11 @@ export async function calToggleConfirmed(calId, eventId) {
   const refs = _eventGroupRefs(calId, eventId);
   try {
     showToast('Saving…');
+    await ensureFreshToken();
     await Promise.all(refs.map(r => gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museConfirmed: target } } } })));
     showToast(nowConfirmed ? 'Marked unconfirmed' : 'Appointment confirmed ✓');
     await calLoadAndRender(true);
-  } catch (err) { showToast('Update failed: ' + (err.result?.error?.message || 'Unknown error')); }
+  } catch (err) { _calWriteError(err, 'Update'); }
 }
 
 // Mark an appointment "No Show" (museNoShow flag in extendedProperties, synced via
@@ -777,6 +834,7 @@ export async function calMarkNoShow(calId, eventId) {
   const refs = _eventGroupRefs(calId, eventId);
   try {
     showToast('Saving…');
+    await ensureFreshToken();
     await Promise.all(refs.map(r => gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museNoShow: isNoShow ? null : '1' } } } })));
     showToast(isNoShow ? 'No-show cleared' : 'Marked No Show');
     await calLoadAndRender(true);
@@ -787,7 +845,7 @@ export async function calMarkNoShow(calId, eventId) {
     const cust = raw ? customerDirectory.find(c => (c.phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1') === raw) : null;
     if (cust) showEditCustomer(cust.squareId);
     else showToast('No matching customer in directory to note');
-  } catch (err) { showToast('Update failed: ' + (err.result?.error?.message || 'Unknown error')); }
+  } catch (err) { _calWriteError(err, 'Update'); }
 }
 
 // Build a queue entry from one calendar event (returns null if that person is
@@ -1154,6 +1212,7 @@ export async function saveAppt() {
 
   try {
     showToast('Saving…');
+    await ensureFreshToken();
     for (let i = 0; i < people.length; i++) {
       const p = people[i];
       const body = _apptEventBody(p, startDt, endDt, notes, groupId, { name: people[0].name, phone: people[0].phone, isPrimary: i === 0 });
@@ -1184,14 +1243,14 @@ export async function saveAppt() {
     for (const ref of oldGroupRefs) { try { await gapi.client.calendar.events.delete({ calendarId: ref.calId, eventId: ref.id }); } catch {} }
     closeApptModal(); await calLoadAndRender(true);
     showToast(people.length > 1 ? `Appointment saved for ${people.length} guests ✓` : 'Appointment saved ✓');
-  } catch (err) { showToast('Save failed: ' + (err.result?.error?.message || 'Unknown error')); }
+  } catch (err) { _calWriteError(err, 'Save'); }
 }
 export async function deleteAppt(calIdParam, eventIdParam) {
   const calId = calIdParam || document.getElementById('appt-cal-id')?.value, eventId = eventIdParam || document.getElementById('appt-event-id')?.value;
   if (!calId || !eventId) return;
   if (!calIdParam && !confirm('Cancel this appointment?')) return;
-  try { await gapi.client.calendar.events.delete({ calendarId: calId, eventId }); if (!calIdParam) closeApptModal(); await calLoadAndRender(true); showToast('Appointment cancelled'); }
-  catch (err) { showToast('Delete failed: ' + (err.result?.error?.message || 'Unknown error')); }
+  try { await ensureFreshToken(); await gapi.client.calendar.events.delete({ calendarId: calId, eventId }); if (!calIdParam) closeApptModal(); await calLoadAndRender(true); showToast('Appointment cancelled'); }
+  catch (err) { _calWriteError(err, 'Delete'); }
 }
 
 // ── Google Tasks ──────────────────────────────────
