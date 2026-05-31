@@ -251,6 +251,24 @@ export default {
         return json({ sent: true, to, id: j?.data?.id || null });
       } catch (e) { return json({ error: 'SMS service unreachable' }, 502); }
     }
+    // Delivery status for a sent message. httpSMS ACCEPTS a message immediately (the /send
+    // response only means "queued to the phone"); the actual SMS can still FAIL on the phone
+    // afterwards (e.g. Samsung "generic failure"). This lets the dashboard show the real
+    // phone-side outcome (status + failure reason) instead of guessing it succeeded.
+    if (path.startsWith('/sms/message/') && method === 'GET') {
+      if (!env.HTTPSMS_API_KEY) return json({ error: 'SMS not configured' }, 503);
+      const id = decodeURIComponent(path.slice('/sms/message/'.length));
+      if (!id) return json({ error: 'Missing message id' }, 400);
+      try {
+        const r = await fetch('https://api.httpsms.com/v1/messages/' + encodeURIComponent(id), {
+          headers: { 'x-api-key': env.HTTPSMS_API_KEY },
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) return json({ error: j?.message || 'Lookup failed', status: r.status }, r.status);
+        const d = j?.data || {};
+        return json({ id: d.id || id, status: d.status || 'unknown', failureReason: d.failure_reason || d.failed_reason || null, sendAttemptCount: d.send_attempt_count ?? null });
+      } catch (e) { return json({ error: 'SMS service unreachable' }, 502); }
+    }
 
     // ── Square Proxy ──────────────────────────────────────────────────────────
     if (path.startsWith('/square')) {

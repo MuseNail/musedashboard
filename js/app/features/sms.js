@@ -8,7 +8,9 @@
 import { SMS_PROXY } from '../config.js';
 import { showToast } from '../utils.js';
 
-// Low-level send. Resolves { ok, sent, to, error, status } — never throws (callers branch on .ok).
+// Low-level send. Resolves { ok, sent, to, id, error, status } — never throws (callers branch
+// on .ok). NB: ok only means httpSMS ACCEPTED the message (queued to the phone); the phone can
+// still fail to actually send it afterwards — use getSmsStatus(id) to learn the real outcome.
 export async function sendSms(to, content) {
   try {
     const res = await fetch(`${SMS_PROXY}/send`, {
@@ -19,6 +21,18 @@ export async function sendSms(to, content) {
     return { ok: res.ok && !!j.sent, status: res.status, ...j };
   } catch (e) {
     return { ok: false, status: 0, error: 'Could not reach the Worker' };
+  }
+}
+
+// Real phone-side delivery status for a message id from sendSms(). Resolves
+// { ok, status, failureReason }. status ∈ pending|scheduled|sending|sent|delivered|failed|expired.
+export async function getSmsStatus(id) {
+  try {
+    const res = await fetch(`${SMS_PROXY}/message/${encodeURIComponent(id)}`, { cache: 'no-store' });
+    const j = await res.json().catch(() => ({}));
+    return { ok: res.ok, ...j };
+  } catch (e) {
+    return { ok: false, error: 'Could not reach the Worker' };
   }
 }
 
@@ -35,6 +49,39 @@ export async function renderSmsSettings() {
   } catch (e) { st.textContent = 'Could not reach the Worker to check status.'; st.style.color = '#c53030'; }
 }
 
+// Terminal httpSMS states — once reached, stop polling.
+const _SMS_TERMINAL = { delivered: 1, sent: 1, failed: 1, expired: 1 };
+function _smsStatusView(status, failureReason, to) {
+  switch (status) {
+    case 'delivered': return { txt: `✓ Delivered to ${to}`, color: '#2a7a4f' };
+    case 'sent':      return { txt: `✓ The phone sent it to ${to} (handed to the carrier)`, color: '#2a7a4f' };
+    case 'failed':    return { txt: `✗ The phone failed to send it: ${failureReason || 'generic failure'}`, color: '#c53030' };
+    case 'expired':   return { txt: `✗ Expired — the phone never sent it`, color: '#c53030' };
+    case 'sending':   return { txt: 'Phone is sending…', color: '' };
+    case 'scheduled':
+    case 'pending':   return { txt: 'Queued on the phone…', color: '' };
+    default:          return { txt: `Status: ${status || 'unknown'}`, color: '' };
+  }
+}
+// Poll the real phone-side outcome for ~20s, updating the result line live. This is what
+// surfaces "generic failure" (or delivery) right in the dashboard.
+async function _pollTestSmsStatus(id, to, out) {
+  for (let i = 0; i < 8; i++) {
+    await new Promise(r => setTimeout(r, i === 0 ? 1500 : 2500));
+    const s = await getSmsStatus(id);
+    if (!s.ok || !s.status) continue;
+    const view = _smsStatusView(s.status, s.failureReason, to);
+    if (out) { out.textContent = view.txt; out.style.color = view.color; }
+    if (_SMS_TERMINAL[s.status]) {
+      window.logAudit?.('SMS', `Test text to ${to}: ${s.status}${s.failureReason ? ' (' + s.failureReason + ')' : ''}`);
+      if (s.status === 'failed') showToast('Phone failed to send: ' + (s.failureReason || 'generic failure'));
+      else if (s.status === 'expired') showToast('SMS expired — the phone never sent it');
+      return;
+    }
+  }
+  if (out) { out.textContent = 'Handed to httpSMS — still waiting on the phone. Check the httpSMS app for the final status.'; out.style.color = '#9a6a00'; }
+}
+
 export async function sendTestSms() {
   const to = document.getElementById('sms-test-to')?.value || '';
   const content = (document.getElementById('sms-test-msg')?.value || '').trim();
@@ -44,14 +91,15 @@ export async function sendTestSms() {
   if (out) { out.textContent = 'Sending…'; out.style.color = ''; }
   const btn = document.getElementById('sms-test-btn'); if (btn) btn.disabled = true;
   const r = await sendSms(to, content);
-  if (btn) btn.disabled = false;
   if (r.ok) {
-    if (out) { out.textContent = `✓ Sent to ${r.to || to}`; out.style.color = '#2a7a4f'; }
-    showToast('Test text sent ✓');
-    window.logAudit?.('SMS', `Test text sent to ${r.to || to}`);
+    if (out) { out.textContent = 'Accepted by httpSMS — checking the phone…'; out.style.color = ''; }
+    window.logAudit?.('SMS', `Test text queued to ${r.to || to}`);
+    if (r.id) await _pollTestSmsStatus(r.id, r.to || to, out);
+    else if (out) { out.textContent = `✓ Handed to httpSMS (couldn't track delivery) — check the phone`; out.style.color = '#2a7a4f'; }
   } else {
     const msg = r.error || (r.status === 503 ? 'Not configured (set Worker secrets + deploy)' : 'Send failed');
     if (out) { out.textContent = '✗ ' + msg; out.style.color = '#c53030'; }
     showToast('SMS: ' + msg);
   }
+  if (btn) btn.disabled = false;
 }
