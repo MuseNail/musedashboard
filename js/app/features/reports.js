@@ -844,6 +844,66 @@ export function drillDownDiscounts() {
   showDrillPanel(_drill.title, _drillBody(_drill.summary, rows, rows.map(r=>_drillRow(r.customer, r.time, r.amount, r.sub, true)).join('')));
 }
 
+// Tap a Payment Mix box → every ticket collected via that tender this period.
+// card/cash/gift read r.tenders (only a party's primary ticket carries them, so each party
+// shows once); "other" = paid sales with no recorded tender. Each kind's total reconciles to
+// its Payment Mix headline: card includes the card tip (same swipe), other sums totalCost of
+// untracked sales (matching otherMix, refunds included since they carry no tenders).
+export function drillDownPay(kind) {
+  const d = window._currentReportData; if (!d) return;
+  const meta = {
+    card:  { title: 'Card Payments — Detail',        label: 'Card (incl. tips)', col: 'Card' },
+    cash:  { title: 'Cash Payments — Detail',        label: 'Cash',              col: 'Cash' },
+    gift:  { title: 'Gift Card Payments — Detail',   label: 'Gift Card',         col: 'Gift Card' },
+    other: { title: 'Other / Untracked — Detail',    label: 'Other / Untracked', col: 'Amount' },
+  }[kind];
+  if (!meta) return;
+  const rows = [];
+  d.filtered.forEach(r => {
+    let amount = 0, sub = '';
+    if (kind === 'other') {
+      if (r.tenders) return;                                   // matches otherMix: no recorded tender
+      amount = r.totalCost || 0;
+      if (r.status === 'refund') sub = 'refund';
+    } else if (kind === 'card') {
+      if (!r.tenders) return;
+      amount = (r.tenders.card || 0) + (r.tip || 0);           // tip rides on the same card → matches cardMix
+      if (amount <= 0) return;
+      if ((r.tip || 0) > 0) sub = `incl. $${(r.tip).toFixed(2)} tip`;
+    } else {                                                    // cash | gift
+      if (!r.tenders || !(r.tenders[kind] > 0)) return;
+      amount = r.tenders[kind];
+      if (kind === 'cash' && (r.tenders.change || 0) > 0) sub = `received $${(r.tenders.cashReceived || 0).toFixed(2)} · change $${(r.tenders.change).toFixed(2)}`;
+    }
+    rows.push({ customer: r.name || '(no name)', time: _drillTime(r), amount, sub, neg: amount < 0 });
+  });
+  rows.sort((a, b) => b.time - a.time);
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  _drill = {
+    title: meta.title,
+    columns: ['Date', 'Time', 'Customer', 'Note', meta.col],
+    rows: rows.map(r => [r.time.toLocaleDateString(), r.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), r.customer, r.sub, (r.neg ? '-' : '') + '$' + Math.abs(r.amount).toFixed(2)]),
+    summary: [['Tickets', String(rows.length)], [meta.label, '$' + total.toFixed(2)]],
+  };
+  showDrillPanel(_drill.title, _drillBody(_drill.summary, rows, rows.map(r => _drillRow(r.customer, r.time, Math.abs(r.amount), r.sub, r.neg)).join('')));
+}
+
+// Tap "Refunds Issued" → every refund record this period (reason + amount).
+export function drillDownRefunds() {
+  const d = window._currentReportData; if (!d) return;
+  const rows = d.filtered.filter(r => r.status === 'refund')
+    .map(r => ({ customer: r.name || '(no name)', time: _drillTime(r), amount: Math.abs(r.totalCost || 0), sub: r.discountNote || '' }))
+    .sort((a, b) => b.time - a.time);
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  _drill = {
+    title: 'Refunds Issued — Detail',
+    columns: ['Date', 'Time', 'Customer', 'Reason', 'Refund'],
+    rows: rows.map(r => [r.time.toLocaleDateString(), r.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), r.customer, r.sub, '-$' + r.amount.toFixed(2)]),
+    summary: [['Refunds', String(rows.length)], ['Total Refunded', '-$' + total.toFixed(2)]],
+  };
+  showDrillPanel(_drill.title, _drillBody(_drill.summary, rows, rows.map(r => _drillRow(r.customer, r.time, r.amount, r.sub, true)).join('')));
+}
+
 // ── Reconciliation: recorded total vs the amount actually charged ───────────────
 // Flags paid tickets in the current period where the recorded bill ≠ what the customer was
 // charged (tenders card+cash+gift). +diff = charged MORE than recorded (a dropped fee → record
