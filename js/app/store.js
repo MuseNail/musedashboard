@@ -60,6 +60,20 @@ function upsertById(arr, item) {
   const i = arr.findIndex(x => String(x.id) === String(item.id));
   if (i >= 0) arr[i] = item; else arr.push(item);
 }
+// Stale-write guard: an incoming write is REJECTED only when the copy we already hold is
+// strictly NEWER (by updatedAt). This stops a lingering stale device copy (e.g. an old outbox
+// op from before a fee was added) from clobbering a good record. Writes without a timestamp on
+// either side always apply (legacy data isn't guarded). Returns true if applied.
+export function isStaleWrite(prev, next) {
+  return !!(prev && next && typeof prev.updatedAt === 'number' && typeof next.updatedAt === 'number' && prev.updatedAt > next.updatedAt);
+}
+function upsertByIdGuarded(arr, item) {
+  const i = arr.findIndex(x => String(x.id) === String(item.id));
+  if (i < 0) { arr.push(item); return true; }
+  if (isStaleWrite(arr[i], item)) return false;   // keep the newer copy
+  arr[i] = item;
+  return true;
+}
 function removeById(arr, id) {
   const i = arr.findIndex(x => String(x.id) === String(id));
   if (i >= 0) arr.splice(i, 1);
@@ -90,9 +104,9 @@ export function hydrate(snap) {
 export function applyChange(op, payload, seq) {
   switch (op) {
     case 'config.set':    state.config[payload.key] = payload.value; break;
-    case 'queue.upsert':  upsertById(state.queue, payload.entry); break;
+    case 'queue.upsert':  if (!upsertByIdGuarded(state.queue, payload.entry)) return; break;   // stale → ignore (keep newer)
     case 'queue.remove':  removeById(state.queue, payload.id); break;
-    case 'record.save':   upsertById(state.records, payload.record); break;
+    case 'record.save':   if (!upsertByIdGuarded(state.records, payload.record)) return; break; // stale → ignore (keep newer)
     case 'record.delete': {
       const r = state.records.find(x => String(x.id) === String(payload.id));
       if (r) r.status = 'deleted';

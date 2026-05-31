@@ -145,9 +145,11 @@ function reapplyOutbox() { for (const msg of _outbox) { try { applyChange(msg.op
 //   | 'record.save' | 'record.delete' | 'giftcard.save' | 'giftcard.delete'
 export function dispatch(op, payload) {
   const mutationId = DEVICE_ID + '-' + Date.now() + '-' + (++_mutCounter);
-  // Stamp queue writes so the stale-write guard can tell when a ticket was changed on
-  // another device since a modal opened (warn instead of silently clobbering).
-  if (op === 'queue.upsert' && payload && payload.entry) { payload.entry.updatedAt = Date.now(); payload.entry.updatedBy = DEVICE_ID; }
+  // Stamp queue + record writes with a wall-clock version so the stale-write guard (store.js
+  // applyChange + the DO) can reject a write that's OLDER than what's already saved — this is
+  // what stops a lingering stale device copy from clobbering a good record (e.g. dropping a fee).
+  if (op === 'queue.upsert' && payload && payload.entry)  { payload.entry.updatedAt  = Date.now(); payload.entry.updatedBy  = DEVICE_ID; }
+  if (op === 'record.save'  && payload && payload.record) { payload.record.updatedAt = Date.now(); payload.record.updatedBy = DEVICE_ID; }
   applyChange(op, payload);                                  // optimistic
   const msg = { type: 'mutate', op, payload, mutationId, device: DEVICE_ID };
   enqueue(msg);

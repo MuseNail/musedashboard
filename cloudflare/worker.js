@@ -41,6 +41,13 @@ function json(data, status = 200) {
   });
 }
 
+// Stale-write guard: true when the stored copy is strictly NEWER (by updatedAt) than an
+// incoming write — so a lingering stale device copy can't clobber a good queue entry / record
+// (the fee-drop root cause). Writes missing a timestamp on either side are never treated as stale.
+function _isStaleWrite(prev, next) {
+  return !!(prev && next && typeof prev.updatedAt === 'number' && typeof next.updatedAt === 'number' && prev.updatedAt > next.updatedAt);
+}
+
 // Normalize a US phone to E.164 (+1XXXXXXXXXX) for httpSMS. Returns null if it isn't a
 // usable 10/11-digit US number (so we never send to a malformed recipient).
 function toE164(raw) {
@@ -474,6 +481,7 @@ export class MuseSalonDO {
       if (seen) return { applied: true, seq: seen, dedup: true };
     }
 
+    let stale = false;
     try {
       switch (op) {
         case 'config.set':
@@ -482,6 +490,7 @@ export class MuseSalonDO {
         case 'queue.upsert': {
           const qKey = 'queue:' + payload.entry.id;
           const prevEntry = await this.state.storage.get(qKey);
+          if (_isStaleWrite(prevEntry, payload.entry)) { stale = true; break; }   // older copy — don't clobber a newer one
           await this.state.storage.put(qKey, payload.entry);
           this._notifyNewAssignments(prevEntry, payload.entry);   // push to newly-assigned techs (best-effort)
           break;
@@ -489,9 +498,13 @@ export class MuseSalonDO {
         case 'queue.remove':
           await this.state.storage.delete('queue:' + payload.id);
           break;
-        case 'record.save':
-          await this.state.storage.put('record:' + payload.record.id, payload.record);
+        case 'record.save': {
+          const rKey = 'record:' + payload.record.id;
+          const prevRec = await this.state.storage.get(rKey);
+          if (_isStaleWrite(prevRec, payload.record)) { stale = true; break; }   // older copy — keep the newer record (prevents fee-drop)
+          await this.state.storage.put(rKey, payload.record);
           break;
+        }
         case 'record.delete': {
           const existing = await this.state.storage.get('record:' + payload.id);
           if (existing) await this.state.storage.put('record:' + payload.id, { ...existing, status: 'deleted' });
@@ -525,6 +538,14 @@ export class MuseSalonDO {
     } catch (e) {
       console.error('[mutate]', op, 'failed:', (e && e.message) || String(e));
       return { error: 'apply failed: ' + (e && e.message || String(e)) };
+    }
+
+    if (stale) {
+      // Older-than-stored write: don't persist or broadcast it (peers keep the newer value).
+      // Still ack the sender (record the mutationId) so it doesn't retry the stale op forever.
+      const seq = await this.nextSeq();
+      if (mutationId) await this.state.storage.put('mut:' + mutationId, seq);
+      return { applied: true, seq, stale: true };
     }
 
     const seq = await this.nextSeq();
