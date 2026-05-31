@@ -312,6 +312,7 @@ const SETTINGS_NAV = [
   { id:'integrations', title:'Integrations', desc:'Square & Google', items:[
     { label:'Square', sub:'Location, connection & sync', content:'square-section' },
     { label:'Google Calendar', sub:'Connect for appointments', content:'gcal-section', render:'renderGcalSettings' },
+    { label:'Text Messaging', sub:'SMS confirmations & replies (httpSMS)', content:'sms-section', render:'renderSmsSettings', adminOnly:true },
     { label:'Customer Directory', sub:'Browse synced customers', action:'showCustomerDir' },
   ]},
   { id:'business', title:'Business', desc:'Branding', items:[

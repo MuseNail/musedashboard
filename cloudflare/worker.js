@@ -41,6 +41,17 @@ function json(data, status = 200) {
   });
 }
 
+// Normalize a US phone to E.164 (+1XXXXXXXXXX) for httpSMS. Returns null if it isn't a
+// usable 10/11-digit US number (so we never send to a malformed recipient).
+function toE164(raw) {
+  const s = String(raw || '').trim();
+  const d = s.replace(/\D/g, '');
+  if (d.length === 10) return '+1' + d;
+  if (d.length === 11 && d[0] === '1') return '+' + d;
+  if (s.startsWith('+') && d.length >= 11 && d.length <= 15) return '+' + d;
+  return null;
+}
+
 // ── Web Push (VAPID) helpers ────────────────────────────────────────────────────
 // Payload-less push: only a VAPID JWT (ES256) is needed — no aes128gcm body
 // encryption. (Pure helpers exported for unit tests.)
@@ -205,6 +216,33 @@ export default {
         const answer = (gJson.candidates?.[0]?.content?.parts || []).map(p => p.text).join('').trim();
         return json({ answer: answer || 'No answer returned.' });
       } catch (e) { return json({ error: 'AI service unreachable' }, 502); }
+    }
+
+    // ── SMS via httpSMS (Android phone gateway) ─────────────────────────────────
+    // The shop's Android phone runs the httpSMS app; texts are sent through it via the
+    // httpSMS cloud API. Secrets (owner: `wrangler secret put …`, never shipped in the PWA):
+    //   HTTPSMS_API_KEY  — from httpsms.com/settings
+    //   HTTPSMS_FROM     — the phone's number, +1XXXXXXXXXX (the "from" on every text)
+    if (path === '/sms/status' && method === 'GET') {
+      return json({ configured: !!(env.HTTPSMS_API_KEY && env.HTTPSMS_FROM), from: env.HTTPSMS_FROM || null });
+    }
+    if (path === '/sms/send' && method === 'POST') {
+      if (!env.HTTPSMS_API_KEY || !env.HTTPSMS_FROM) return json({ error: 'SMS not configured' }, 503);
+      let body = {}; try { body = await request.json(); } catch {}
+      const to = toE164(body.to);
+      const content = String(body.content || '').replace(/\s+$/,'').slice(0, 1000).trim();
+      if (!to) return json({ error: 'Invalid recipient number' }, 400);
+      if (!content) return json({ error: 'Empty message' }, 400);
+      try {
+        const r = await fetch('https://api.httpsms.com/v1/messages/send', {
+          method: 'POST',
+          headers: { 'x-api-key': env.HTTPSMS_API_KEY, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from: env.HTTPSMS_FROM, to, content }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { console.warn('[sms]', r.status, j?.message || ''); return json({ error: j?.message || 'Send failed', status: r.status }, r.status); }
+        return json({ sent: true, to, id: j?.data?.id || null });
+      } catch (e) { return json({ error: 'SMS service unreachable' }, 502); }
     }
 
     // ── Square Proxy ──────────────────────────────────────────────────────────

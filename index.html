@@ -992,6 +992,28 @@ tailwind.config = {
             <div id="gcal-calendar-list" class="border-t border-surface-container-high pt-3 space-y-0.5"></div>
           </div>
         </div>
+
+        <!-- Leaf: Text Messaging (SMS) -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="sms-section" class="hidden px-5 py-4 space-y-3">
+            <p class="text-sm font-body text-on-surface-variant">Send texts from the shop's Android phone (httpSMS). In the Worker, set <code class="text-xs">HTTPSMS_API_KEY</code> and <code class="text-xs">HTTPSMS_FROM</code> as secrets, then deploy. Send a test below to confirm it works.</p>
+            <div id="sms-status" class="text-xs font-body text-on-surface-variant">Checking…</div>
+            <div>
+              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Send a test text to</label>
+              <input id="sms-test-to" type="tel" placeholder="(555) 000-0000" autocomplete="off" onfocus="openPhoneNumpad(this)" oninput="formatPhone(this)"
+                class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-3 text-base font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+            </div>
+            <div>
+              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Message</label>
+              <textarea id="sms-test-msg" rows="2" maxlength="1000"
+                class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-3 text-sm font-body text-on-surface focus:border-primary transition-colors outline-none resize-none">Muse Nails &amp; Spa — your texts are working! ✦</textarea>
+            </div>
+            <button id="sms-test-btn" onclick="sendTestSms()" class="w-full flex items-center justify-center gap-2 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary-dim">
+              <span class="material-symbols-outlined" style="font-size:18px">sms</span> Send test text
+            </button>
+            <div id="sms-test-result" class="text-xs font-body"></div>
+          </div>
+        </div>
         <!-- Leaf: Data Backup & Restore -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="backup-section" class="hidden px-5 py-4">
