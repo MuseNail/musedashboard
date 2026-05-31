@@ -185,7 +185,11 @@ function lineHtml(entry, a) {
       <span class="text-on-surface-variant font-headline text-2xl">$</span>
       <input type="text" inputmode="decimal" value="${priceVal}" placeholder="${placeholder}"
         oninput="staffPriceInput('${entry.id}','${esc(a.serviceId)}',this.value)"
-        class="w-40 bg-surface-container border-2 border-surface-container-high rounded-xl px-4 py-3 text-3xl font-headline text-right focus:outline-none focus:border-primary">
+        class="flex-1 min-w-0 bg-surface-container border-2 border-surface-container-high rounded-xl px-4 py-3 text-3xl font-headline text-right focus:outline-none focus:border-primary">
+      <button onclick="staffCalc('${entry.id}','${esc(a.serviceId)}')" title="Calculator"
+        class="flex-shrink-0 w-14 h-14 flex items-center justify-center rounded-xl border-2 border-primary text-primary hover:bg-primary/10 active:scale-95 transition-all">
+        <span class="material-symbols-outlined" style="font-size:26px">calculate</span>
+      </button>
     </div>
     <div class="flex gap-2">${start}${reopen}${complete}</div>
   </div>`;
@@ -286,6 +290,93 @@ window.staffReopen = (entryId, serviceId) => {
   showToast('Reopened');
 };
 window.staffTab = (v) => { _view = (v === 'history' ? 'history' : 'active'); render(); };
+
+// ── Inline price calculator ───────────────────────
+// Tap the calc button next to a service's price → a basic calculator. Pressing OK
+// fills that service's price field with the result (via _priceDraft). Lives in a
+// separate modal so the list re-rendering on sync never closes it. No eval(): a tiny
+// tokenizer evaluates + − × ÷ with normal precedence (× ÷ before + −).
+let _calcExpr = '';
+let _calcTarget = null;   // { entryId, serviceId, key }
+const _CALC_OPS = '+−×÷';
+function _calcEval(expr) {
+  if (!expr) return null;
+  const toks = []; let num = '';
+  for (const ch of expr) {
+    if ((ch >= '0' && ch <= '9') || ch === '.') { num += ch; continue; }
+    if (_CALC_OPS.includes(ch)) {
+      if (num !== '') { toks.push(parseFloat(num)); num = ''; }
+      toks.push(ch === '×' ? '*' : ch === '÷' ? '/' : ch === '−' ? '-' : '+');
+    }
+  }
+  if (num !== '') toks.push(parseFloat(num));
+  while (toks.length && typeof toks[toks.length - 1] === 'string') toks.pop();   // drop a trailing operator
+  if (!toks.length) return null;
+  if (typeof toks[0] === 'string') toks.unshift(0);                              // leading − → 0 − x
+  const p1 = [toks[0]];                                                          // first pass: × ÷
+  for (let i = 1; i < toks.length; i += 2) {
+    const op = toks[i], v = toks[i + 1]; if (v == null) break;
+    if (op === '*') p1[p1.length - 1] *= v;
+    else if (op === '/') p1[p1.length - 1] = v === 0 ? NaN : p1[p1.length - 1] / v;
+    else p1.push(op, v);
+  }
+  let res = p1[0];                                                               // second pass: + −
+  for (let i = 1; i < p1.length; i += 2) { const op = p1[i], v = p1[i + 1]; if (op === '+') res += v; else if (op === '-') res -= v; }
+  return isFinite(res) ? res : null;
+}
+function _calcKeysHtml() {
+  const keys = [
+    { k: 'C', t: 'clear' }, { k: '⌫', t: 'op' }, { k: '÷', t: 'op' }, { k: '×', t: 'op' },
+    { k: '7', t: 'n' }, { k: '8', t: 'n' }, { k: '9', t: 'n' }, { k: '−', t: 'op' },
+    { k: '4', t: 'n' }, { k: '5', t: 'n' }, { k: '6', t: 'n' }, { k: '+', t: 'op' },
+    { k: '1', t: 'n' }, { k: '2', t: 'n' }, { k: '3', t: 'n' }, { k: '.', t: 'n' },
+    { k: '0', t: 'n0' },
+  ];
+  const cls = t => t === 'clear' ? 'bg-error-container text-on-primary'
+    : t === 'op' ? 'bg-surface-container-high text-primary'
+    : 'bg-surface-container text-on-surface';
+  return keys.map(({ k, t }) => `<button onclick="staffCalcKey('${k}')" class="${t === 'n0' ? 'col-span-4 ' : ''}${cls(t)} py-4 rounded-xl font-headline font-bold text-2xl active:scale-95 transition-transform">${k}</button>`).join('');
+}
+function _renderCalc() {
+  const exprEl = document.getElementById('staff-calc-expr'), resEl = document.getElementById('staff-calc-res');
+  if (exprEl) exprEl.textContent = _calcExpr || '0';
+  const r = _calcExpr ? _calcEval(_calcExpr) : null;
+  if (resEl) resEl.textContent = r != null ? '= $' + (Math.round(r * 100) / 100).toFixed(2) : '';
+}
+window.staffCalc = (entryId, serviceId) => {
+  const key = entryId + ':' + serviceId;
+  _calcTarget = { entryId, serviceId, key };
+  const cur = (key in _priceDraft) ? _priceDraft[key] : '';
+  _calcExpr = /^\d+(\.\d+)?$/.test(String(cur).trim()) ? String(cur).trim() : '';   // seed with the current price so techs can add to it
+  const keysEl = document.getElementById('staff-calc-keys'); if (keysEl) keysEl.innerHTML = _calcKeysHtml();
+  _renderCalc();
+  const m = document.getElementById('staff-calc-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
+};
+window.staffCalcKey = (k) => {
+  const last = _calcExpr.slice(-1);
+  if (k === 'C') _calcExpr = '';
+  else if (k === '⌫') _calcExpr = _calcExpr.slice(0, -1);
+  else if (_CALC_OPS.includes(k)) {
+    if (!_calcExpr) return;                                          // no leading operator
+    _calcExpr = _CALC_OPS.includes(last) ? _calcExpr.slice(0, -1) + k : _calcExpr + k;   // replace a trailing operator
+  } else if (k === '.') {
+    const curNum = _calcExpr.split(/[+−×÷]/).pop();
+    if (curNum.includes('.')) return;                               // one decimal point per number
+    _calcExpr += (_calcExpr === '' || _CALC_OPS.includes(last)) ? '0.' : '.';
+  } else _calcExpr += k;                                            // digit
+  _renderCalc();
+};
+window.staffCalcOk = () => {
+  const r = _calcEval(_calcExpr);
+  if (r == null) { showToast('Enter an amount'); return; }
+  const val = Math.round(r * 100) / 100;
+  const out = Number.isInteger(val) ? String(val) : val.toFixed(2);
+  if (_calcTarget) _priceDraft[_calcTarget.key] = out;
+  window.staffCalcClose();
+  render();
+  showToast('Amount set to $' + out);
+};
+window.staffCalcClose = () => { const m = document.getElementById('staff-calc-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } };
 
 window.staffPinSubmit = () => {
   const input = document.getElementById('staff-pin-entry');

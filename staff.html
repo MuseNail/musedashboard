@@ -87,6 +87,24 @@ tailwind.config = {
     <main id="staff-list" class="p-3 max-w-md mx-auto"></main>
   </div>
 
+  <!-- ── Inline price calculator ─────────────────── -->
+  <div id="staff-calc-modal" class="hidden fixed inset-0 z-[90] items-end sm:items-center justify-center bg-black/50 p-4" style="display:none" onclick="if(event.target===this)staffCalcClose()">
+    <div class="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-xs p-4 fade-up">
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-headline font-bold text-lg text-on-surface">Calculator</div>
+        <button onclick="staffCalcClose()" class="w-9 h-9 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="bg-surface-container rounded-xl px-4 py-3 mb-3 text-right">
+        <div id="staff-calc-expr" class="font-headline text-3xl text-on-surface min-h-[2.5rem] break-all leading-tight">0</div>
+        <div id="staff-calc-res" class="font-body text-base font-semibold text-primary h-6"></div>
+      </div>
+      <div id="staff-calc-keys" class="grid grid-cols-4 gap-2"></div>
+      <button onclick="staffCalcOk()" class="w-full mt-3 bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold text-lg active:scale-95 transition-all">OK — use this amount</button>
+    </div>
+  </div>
+
   <!-- ── Toast (used by utils.showToast) ─────────── -->
   <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden pointer-events-none">
     <div class="bg-on-surface text-surface px-5 py-3 rounded-xl text-sm font-body font-medium shadow-2xl fade-up" id="toast-text"></div>
