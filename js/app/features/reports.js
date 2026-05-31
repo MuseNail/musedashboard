@@ -844,6 +844,46 @@ export function drillDownDiscounts() {
   showDrillPanel(_drill.title, _drillBody(_drill.summary, rows, rows.map(r=>_drillRow(r.customer, r.time, r.amount, r.sub, true)).join('')));
 }
 
+// ── Reconciliation: recorded total vs the amount actually charged ───────────────
+// Flags paid tickets in the current period where the recorded bill ≠ what the customer was
+// charged (tenders card+cash+gift). +diff = charged MORE than recorded (a dropped fee → record
+// is short → shrinks Total Money Collected). −diff = recorded MORE than charged (e.g. a gift card
+// not captured in the tender split). Tickets paid before tender-tracking (older / direct Mark-
+// Paid) carry no tenders and can't be auto-checked — those are listed as a count to hand-check.
+export function openReconcile() {
+  const dates = getReportDates(); if (!dates) { showToast('Pick a date range first.'); return; }
+  const { from, to } = dates;
+  const recs = buildCombinedRecords().filter(r => {
+    if (r.status === 'deleted' || !isPaidStatus(r.status)) return false;
+    const d = new Date(r.completedAt || r.checkinTime);
+    return d >= from && d <= to;
+  });
+  const groups = {};
+  recs.forEach(r => { const k = r.groupId || ('solo:' + r.id); (groups[k] = groups[k] || []).push(r); });
+  const rows = []; let unchecked = 0;
+  Object.values(groups).forEach(members => {
+    const withT = members.find(m => m.tenders);
+    if (!withT) { unchecked++; return; }
+    const t = withT.tenders;
+    const charged = Math.round(((t.card||0)+(t.cash||0)+(t.gift||0))*100)/100;
+    const recorded = Math.round(members.reduce((s,m)=>s+(m.totalCost||0),0)*100)/100;
+    const diff = Math.round((charged - recorded)*100)/100;
+    if (Math.abs(diff) >= 0.01) rows.push({ id: String(withT.id), names: members.map(m=>m.name).join(' & '), time: new Date(withT.completedAt||withT.checkinTime), recorded, charged, diff });
+  });
+  rows.sort((a,b)=>b.time-a.time);
+  const totalDiff = Math.round(rows.reduce((s,r)=>s+r.diff,0)*100)/100;
+  _drill = { title:'Reconciliation — recorded vs charged', columns:['Date','Customer','Recorded','Charged','Difference'],
+    rows: rows.map(r=>[r.time.toLocaleDateString(), r.names, '$'+r.recorded.toFixed(2), '$'+r.charged.toFixed(2), (r.diff>=0?'+':'-')+'$'+Math.abs(r.diff).toFixed(2)]),
+    summary:[['Mismatches', String(rows.length)], ['Net difference', (totalDiff>=0?'+':'-')+'$'+Math.abs(totalDiff).toFixed(2)]] };
+  const note = unchecked ? `<div class="text-[11px] font-body text-on-surface-variant mb-2 px-1">${unchecked} ticket${unchecked!==1?'s':''} can't be auto-checked (paid before card-tender tracking / direct Mark-Paid) — compare those to Square by hand.</div>` : '';
+  const body = rows.length ? rows.map(r => {
+    const over = r.diff > 0;   // charged > recorded → record short (likely a dropped fee)
+    const col = over ? '#c53030' : '#9a4a00', label = over ? 'record short' : 'record over';
+    return `<div onclick="closeDrillDown(); showHistoricalEntryModal('${r.id}')" class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between cursor-pointer hover:bg-surface-container transition-colors"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${r.names}</div><div class="text-[11px] font-body text-on-surface-variant">recorded $${r.recorded.toFixed(2)} · charged $${r.charged.toFixed(2)}</div><div class="text-[11px] font-body text-outline">${r.time.toLocaleDateString()} · tap to open &amp; fix</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold" style="color:${col}">${over?'+':'−'}$${Math.abs(r.diff).toFixed(2)}</div><div class="text-[10px] font-body" style="color:${col}">${label}</div></div></div>`;
+  }).join('') : '<p class="text-sm font-body text-on-surface-variant text-center py-4">Everything matches what was charged — no mismatches this period. ✓</p>';
+  showDrillPanel(_drill.title, _drillSummaryBar(_drill.summary) + note + body);
+}
+
 function showDrillPanel(title, html) {
   document.getElementById('rpt-drill-title').textContent = title;
   document.getElementById('rpt-drill-list').innerHTML = html || '<p class="text-sm font-body text-on-surface-variant">No detail available.</p>';
