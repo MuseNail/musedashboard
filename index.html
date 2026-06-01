@@ -459,6 +459,12 @@ tailwind.config = {
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Cash</div>
             <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
           </div>
+          <div onclick="drillDownPay('zelle')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Paid via Zelle. Tap for the tickets behind it.">
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-zelle">$0.00</div>
+            <span class="rpt-delta" id="rpt-pay-zelle-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Zelle</div>
+            <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
+          </div>
           <div onclick="drillDownPay('gift')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Gift cards redeemed as payment. Tap for the tickets behind it.">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-gift">$0.00</div>
             <span class="rpt-delta" id="rpt-pay-gift-delta"></span>

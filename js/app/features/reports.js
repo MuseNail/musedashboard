@@ -419,6 +419,7 @@ export function runReport() {
   const cardMix  = filtered.reduce((s,r)=>s+(r.tenders?.card||0),0) + tipsTotal;
   const cashMix  = filtered.reduce((s,r)=>s+(r.tenders?.cash||0),0);
   const giftMix  = filtered.reduce((s,r)=>s+(r.tenders?.gift||0),0);
+  const zelleMix = filtered.reduce((s,r)=>s+(r.tenders?.zelle||0),0);
   const otherMix = filtered.reduce((s,r)=> r.tenders ? s : s+(r.totalCost||0), 0);
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -426,7 +427,7 @@ export function runReport() {
   set('rpt-svc-total', `$${svcTotal.toFixed(2)}`); set('rpt-items-total', `$${itemsTotal.toFixed(2)}`); set('rpt-fees-total', `$${feesTotal.toFixed(2)}`);
   set('rpt-discount-total', discountTotal > 0 ? `-$${discountTotal.toFixed(2)}` : '-$0.00');
   set('rpt-total-tips', `$${tipsTotal.toFixed(2)}`);
-  set('rpt-pay-card', `$${cardMix.toFixed(2)}`); set('rpt-pay-cash', `$${cashMix.toFixed(2)}`); set('rpt-pay-gift', `$${giftMix.toFixed(2)}`); set('rpt-pay-other', `$${otherMix.toFixed(2)}`);
+  set('rpt-pay-card', `$${cardMix.toFixed(2)}`); set('rpt-pay-cash', `$${cashMix.toFixed(2)}`); set('rpt-pay-gift', `$${giftMix.toFixed(2)}`); set('rpt-pay-zelle', `$${zelleMix.toFixed(2)}`); set('rpt-pay-other', `$${otherMix.toFixed(2)}`);
   const refundsTotal = filtered.filter(r => r.status === 'refund').reduce((s,r)=>s+(r.totalCost||0),0);
   document.getElementById('rpt-refunds-row')?.classList.toggle('hidden', refundsTotal === 0);
   if (refundsTotal !== 0) set('rpt-refunds-total', `-$${Math.abs(refundsTotal).toFixed(2)}`);
@@ -543,10 +544,10 @@ export function runReport() {
       row('Outstanding Balance', `$${gcOutstanding.toFixed(2)}`, 'Unredeemed value across all gift cards');
   }
 
-  renderDeltas({ totalIncome, grossIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold: gcSoldValue, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, otherMix });
+  renderDeltas({ totalIncome, grossIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold: gcSoldValue, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix });
   renderPerformance(filtered);
   updateDateButtons();
-  window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding, tipsTotal, cardMix, cashMix, giftMix, otherMix };
+  window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix };
 }
 
 // ── AI analytics: aggregate builder + ask/bridge ──────────────────────────
@@ -623,15 +624,16 @@ function computeMetrics(from, to) {
   const cardMix  = sum(filtered, r => r.tenders?.card||0) + tipsTotal;
   const cashMix  = sum(filtered, r => r.tenders?.cash||0);
   const giftMix  = sum(filtered, r => r.tenders?.gift||0);
+  const zelleMix = sum(filtered, r => r.tenders?.zelle||0);
   const otherMix = filtered.reduce((s,r)=> r.tenders ? s : s+(r.totalCost||0), 0);
-  return { totalIncome, grossIncome: totalIncome + gcSold - gcRedeemed + tipsTotal, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, otherMix };
+  return { totalIncome, grossIncome: totalIncome + gcSold - gcRedeemed + tipsTotal, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix };
 }
 const _DELTA_CARDS = [
   ['rpt-gross-income-delta','grossIncome'], ['rpt-total-tips-delta','tipsTotal'], ['rpt-total-guests-delta','guestCount'], ['rpt-avg-ticket-delta','avgTicket'],
   ['rpt-shop-keeps-delta','shopKeeps'], ['rpt-total-commission-delta','commission'],
   ['rpt-svc-total-delta','svcTotal'], ['rpt-items-total-delta','itemsTotal'], ['rpt-fees-total-delta','feesTotal'],
   ['rpt-discount-total-delta','discountTotal'], ['rpt-gc-sold-delta','gcSold'], ['rpt-gc-redeemed-delta','gcRedeemed'],
-  ['rpt-pay-card-delta','cardMix'], ['rpt-pay-cash-delta','cashMix'], ['rpt-pay-gift-delta','giftMix'], ['rpt-pay-other-delta','otherMix'],
+  ['rpt-pay-card-delta','cardMix'], ['rpt-pay-cash-delta','cashMix'], ['rpt-pay-gift-delta','giftMix'], ['rpt-pay-zelle-delta','zelleMix'], ['rpt-pay-other-delta','otherMix'],
 ];
 function setDelta(id, cur, prev) {
   const el = document.getElementById(id); if (!el) return;
@@ -855,6 +857,7 @@ export function drillDownPay(kind) {
     card:  { title: 'Card Payments — Detail',        label: 'Card (incl. tips)', col: 'Card' },
     cash:  { title: 'Cash Payments — Detail',        label: 'Cash',              col: 'Cash' },
     gift:  { title: 'Gift Card Payments — Detail',   label: 'Gift Card',         col: 'Gift Card' },
+    zelle: { title: 'Zelle Payments — Detail',       label: 'Zelle',             col: 'Zelle' },
     other: { title: 'Other / Untracked — Detail',    label: 'Other / Untracked', col: 'Amount' },
   }[kind];
   if (!meta) return;
@@ -925,7 +928,7 @@ export function openReconcile() {
     const withT = members.find(m => m.tenders);
     if (!withT) { unchecked++; return; }
     const t = withT.tenders;
-    const charged = Math.round(((t.card||0)+(t.cash||0)+(t.gift||0))*100)/100;
+    const charged = Math.round(((t.card||0)+(t.cash||0)+(t.gift||0)+(t.zelle||0))*100)/100;
     const recorded = Math.round(members.reduce((s,m)=>s+(m.totalCost||0),0)*100)/100;
     const diff = Math.round((charged - recorded)*100)/100;
     if (Math.abs(diff) >= 0.01) rows.push({ id: String(withT.id), names: members.map(m=>m.name).join(' & '), time: new Date(withT.completedAt||withT.checkinTime), recorded, charged, diff });
@@ -1531,7 +1534,7 @@ export function exportReportExcel() {
     ['Muse Nails & Spa — Report'], [`Period: ${d.from.toLocaleDateString()} – ${d.to.toLocaleDateString()}`],
     [`Total Billed: $${d.totalIncome.toFixed(2)}`, `Guests Served: ${d.guestCount}`, `Avg Ticket: $${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}`],
     [`Total Money Collected: $${(d.totalIncome+(d.gcSoldValue||0)-(d.gcRedeemed||0)+(d.tipsTotal||0)).toFixed(2)}`, `Total Tips: $${(d.tipsTotal||0).toFixed(2)}`],
-    [`Payment Mix — Card (incl. tips): $${(d.cardMix||0).toFixed(2)}`, `Cash: $${(d.cashMix||0).toFixed(2)}`, `Gift: $${(d.giftMix||0).toFixed(2)}`, `Other: $${(d.otherMix||0).toFixed(2)}`], [],
+    [`Payment Mix — Card (incl. tips): $${(d.cardMix||0).toFixed(2)}`, `Cash: $${(d.cashMix||0).toFixed(2)}`, `Gift: $${(d.giftMix||0).toFixed(2)}`, `Zelle: $${(d.zelleMix||0).toFixed(2)}`, `Other: $${(d.otherMix||0).toFixed(2)}`], [],
     ['CHECK-INS'], ['Date','Time','Name','Phone','Services','Type','Staff','Total','Status'],
     ...d.filtered.map(r => { const dt = new Date(r.checkinTime); const staffNames = (r.assignments||[]).map(a=>staffById(a.techId)?.name).filter(Boolean).join(', '); return [dt.toLocaleDateString(), dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.name, r.phone, r.services.map(sid=>svc(sid)?.label||sid).join(', '), r.isAppointment?'Appointment':'Walk-In', staffNames, r.totalCost?`$${r.totalCost.toFixed(2)}`:'$0.00', r.status]; }),
     [], ['STAFF BREAKDOWN'], ['Technician','Services','Turns','Bonus Turns','Total Billed','Commission %','Commission Earned','Salon Keeps'],
