@@ -74,8 +74,14 @@ export function start() {
 export function resync() {
   if (_resyncTimer) return;
   _resyncTimer = setTimeout(() => { _resyncTimer = null; }, 1500);
-  if (!_ws || (_ws.readyState !== WebSocket.OPEN && _ws.readyState !== WebSocket.CONNECTING)) {
+  // On wake/focus, trust ONLY a genuinely OPEN socket. Anything else — including a zombie stuck
+  // in CONNECTING from a frozen background tab — won't heal on its own, so tear it down and
+  // reconnect now rather than waiting on a throttled reconnect timer (this was the "stays
+  // disconnected until I refresh" bug after tabbing back in on desktop).
+  if (!_ws || _ws.readyState !== WebSocket.OPEN) {
     if (_reconnect) { clearTimeout(_reconnect); _reconnect = null; }
+    const old = _ws; _ws = null;                       // drop our ref first so old's late onclose no-ops
+    if (old) { try { old.close(); } catch {} }
     connect();
   }
   httpSnapshot();   // idempotent: hydrate replaces state, reapplyOutbox preserves pending writes
@@ -83,9 +89,18 @@ export function resync() {
 
 function connect() {
   if (_ws && (_ws.readyState === WebSocket.OPEN || _ws.readyState === WebSocket.CONNECTING)) return;
-  try { _ws = new WebSocket(WS_URL); } catch { scheduleReconnect(); return; }
+  let ws;
+  try { ws = new WebSocket(WS_URL); } catch { scheduleReconnect(); return; }
+  _ws = ws;
+  // A socket stuck in CONNECTING — e.g. created while a desktop tab was frozen/backgrounded —
+  // is a zombie: it never fires open OR close, so it would block every future reconnect (resync
+  // sees "CONNECTING" and leaves it alone). Time it out and force-close so onclose reconnects.
+  // The heartbeat watchdog below only covers an already-OPEN socket.
+  const openTimer = setTimeout(() => { if (ws.readyState === WebSocket.CONNECTING) { try { ws.close(); } catch {} } }, 10000);
 
-  _ws.onopen = () => {
+  ws.onopen = () => {
+    clearTimeout(openTimer);
+    if (_ws !== ws) { try { ws.close(); } catch {} return; }   // superseded by a newer socket
     _connected = true;
     _lastRecv = Date.now();
     setConnection(true, _outbox.length);
@@ -99,8 +114,10 @@ function connect() {
       send({ type: 'ping' });
     }, 20000);
   };
-  _ws.onmessage = ({ data }) => { _lastRecv = Date.now(); let msg; try { msg = JSON.parse(data); } catch { return; } handle(msg); };
-  _ws.onclose = _ws.onerror = () => {
+  ws.onmessage = ({ data }) => { if (_ws !== ws) return; _lastRecv = Date.now(); let msg; try { msg = JSON.parse(data); } catch { return; } handle(msg); };
+  ws.onclose = ws.onerror = () => {
+    clearTimeout(openTimer);
+    if (_ws !== ws) return;   // a stale/abandoned socket firing late — must not clobber the live one
     _connected = false;
     setConnection(false, _outbox.length);
     clearInterval(_ping); _ping = null;
