@@ -29,6 +29,11 @@ These are straight ports (same code, adjusted for TurnDesk's namespacing / multi
 | ☐ | v4.00 | `276e616` | **Roster-wipe fix** — day rollover gated GLOBALLY (synced `last_rollover_date`) not per-device, so a device opened mid-day can't re-clear the turns roster. `utils.rolloverAction()` + test. | `main.js`, `store.js`, `utils.js` |
 | ☐ | v4.01 | `e158883` | **Square Settlement Reconciliation** (pull Square actuals, match by payment id) + **"Party of N — " note** for multi-customer tickets. `reconcileSquareData()` pure + test. | `reports.js`, `square-pos.js`, `index.html` |
 | ☐ | v4.02 | `220f778` | **Customer dedup/cleanup** (findDuplicateGroups by phone+name, merge=delete-extras, no-phone list) + **shared-phone overwrite prevention** (`upsertPartyCustomers`). Pure + tests. | `square-customers.js`, `queue.js`, `checkin.js`, `index.html` |
+| ☐ | v4.03 | `55000b3` | Transaction **"Paid by" chips** (Card/Cash/Gift/Zelle incl. splits) | `reports.js` |
+| ☐ | v4.04 | `e26cadd` | **Refunds total** in the Transactions bar | `reports.js`, `index.html` |
+| ☐ | v4.05–v4.06 | `58494f4`,`54e6f59` | **Refund → Square** (opt-in toggle, default OFF; card+cash+Zelle, card-first, idempotent) + reconciliation app-total = card+cash+Zelle+tips | `reports.js`, `index.html` |
+| ☐ | v4.07 | `7169d52` | **Tap a transaction → full breakdown** (`showTxnDetail`) | `reports.js` |
+| ☐ | v4.08 | `c3d27d7` | **Charge gift-card SALES through Square** (Card/Cash/Zelle/No-charge); reusable `chargeOnTerminal`; reconcile counts gift sales | `giftcards.js`, `square-pos.js`, `reports.js`, `index.html` |
 
 > Earlier-than-v3.90 changes (v3.85 httpSMS, v3.86 off-registry gift cards, v3.87 reconciliation, v3.88
 > stale-write guard, v3.89 Assign&Price lock) may also post-date the fork — verify against TurnDesk's
