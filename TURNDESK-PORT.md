@@ -26,6 +26,7 @@ These are straight ports (same code, adjusted for TurnDesk's namespacing / multi
 | ☐ | v3.96 | `3297941` | Fix **"stays disconnected after tabbing back"** — zombie CONNECTING socket; deterministic reconnect | `sync.js` |
 | ☐ | v3.97 | `572858a` | **Zelle** as a tracked tender (checkout field + Square external payment + Payment Mix box/drill-down + reconciliation) | `square-pos.js`, `reports.js`, `index.html` |
 | ☐ | v3.98 | `9735110` | Remove **stale Google Sheets** code (deleted `.gs`, renamed `sheets-sync` → `conn` indicator) | `index.html`, `main.js`, `styles.css`, `worker.js` |
+| ☐ | v4.00 | `276e616` | **Roster-wipe fix** — day rollover gated GLOBALLY (synced `last_rollover_date`) not per-device, so a device opened mid-day can't re-clear the turns roster. `utils.rolloverAction()` + test. | `main.js`, `store.js`, `utils.js` |
 
 > Earlier-than-v3.90 changes (v3.85 httpSMS, v3.86 off-registry gift cards, v3.87 reconciliation, v3.88
 > stale-write guard, v3.89 Assign&Price lock) may also post-date the fork — verify against TurnDesk's

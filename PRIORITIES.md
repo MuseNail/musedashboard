@@ -5,6 +5,17 @@ public-product fork). Ordered by impact.
 
 ---
 
+## ✅ RESOLVED — Roster wipe / "losing sync" (v4.00, `276e616`)
+
+Selected technicians disappeared mid-day, multiple times. Root cause: the daily rollover clears the
+turns roster and broadcasts that clear to all devices, but it was gated by a **per-device** marker —
+so any device first opened mid-day (its local marker still on yesterday) ran the clear and wiped the
+shared roster. Fixed by gating the once-per-day housekeeping on a **shared synced marker**
+(`config.last_rollover_date`) so it fires once globally; a mid-day device sees "already done today"
+and leaves the roster alone. (`utils.rolloverAction()` + unit test.)
+
+---
+
 ## P0 — Reconcile app totals vs the ACTUALLY-charged transactions ⭐ (current pain)
 
 **Problem (owner, 2026-06-01):** report totals very often don't match Square.
