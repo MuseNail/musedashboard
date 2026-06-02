@@ -985,7 +985,13 @@ export function reconcileSquareData(payments, recs) {
     matchedCount: completed.length - inSquareNotApp.length,
     inSquareNotApp, inAppNotSquare,
     squareTotalCents: completed.reduce((s, p) => s + (p.total || 0), 0),
-    appTotalCents: (recs || []).reduce((s, r) => s + Math.round((r.totalCost || 0) * 100), 0),
+    // App's view of what SHOULD be in Square = card + cash + Zelle + tips (gift-card redemptions
+    // never hit Square, so they're excluded; tips ARE in Square's totals, so they're included). A
+    // tender-less record (older / deep-link era) has no breakdown, so fall back to its full total.
+    appTotalCents: (recs || []).reduce((s, r) => {
+      const sq = r.tenders ? ((r.tenders.card || 0) + (r.tenders.cash || 0) + (r.tenders.zelle || 0)) : (r.totalCost || 0);
+      return s + Math.round((sq + (r.tip || 0)) * 100);
+    }, 0),
   };
 }
 // Paginated List Payments via the Square proxy (amounts already in cents/minor units).
@@ -1032,7 +1038,7 @@ export async function openSquareReconcile() {
   const diff = R.squareTotalCents - R.appTotalCents;
   const summary = [
     ['Square collected', $(R.squareTotalCents)],
-    ['App billed', $(R.appTotalCents)],
+    ['App (card+cash+Zelle+tips)', $(R.appTotalCents)],
     ['Difference', (diff >= 0 ? '+' : '−') + '$' + Math.abs(diff / 100).toFixed(2)],
     ['Matched', `${R.matchedCount}/${R.squareCount}`],
   ];
@@ -1733,9 +1739,13 @@ export async function exportReportLink() {
 
 // ── Refunds ───────────────────────────────────────
 let _refundTxnId = null, _refundTxnRecord = null;
-// A sale can be refunded TO the customer's card in Square only if it carries a Square payment id
-// AND a card portion. (Cash/Zelle/gift are returned by hand — Square has no money to move.)
-const _refundableCard = rec => (rec?.squarePaymentIds?.length && (rec?.tenders?.card || 0) > 0) ? (rec.tenders.card || 0) : 0;
+// A sale can be refunded IN Square for any portion recorded there as a payment — card, cash, or
+// Zelle (external). Card sends money back to the card; cash/Zelle are recorded refunds (the operator
+// returns those by hand). Gift-card portions never hit Square, so they're excluded. A tender-less
+// record (older / deep-link era) falls back to its full total.
+const _squareRefundable = rec => (rec?.squarePaymentIds?.length)
+  ? (((rec?.tenders?.card || 0) + (rec?.tenders?.cash || 0) + (rec?.tenders?.zelle || 0)) || (rec?.totalCost || 0))
+  : 0;
 export function initiateRefund(recordId) {
   if (!canDo('refund')) { showToast('Permission denied'); return; }
   const rec = records().find(r => String(r.id) === String(recordId)) || buildCombinedRecords().find(r => String(r.id) === String(recordId));
@@ -1746,46 +1756,55 @@ export function initiateRefund(recordId) {
   document.getElementById('refund-txn-original').textContent = `$${(rec.totalCost||0).toFixed(2)}`;
   document.getElementById('refund-amount').value = (rec.totalCost||0).toFixed(2);
   document.getElementById('refund-reason').value = '';
-  // Square-refund toggle: shown only when there's a card payment to refund; ALWAYS reset to OFF
-  // (per-refund opt-in, owner decision) so a card never gets refunded without an explicit tap.
-  const card = _refundableCard(rec);
+  // Square-refund toggle: shown only when the sale has a Square payment to refund; ALWAYS reset to
+  // OFF (per-refund opt-in, owner decision) so nothing gets refunded without an explicit tap.
+  const sqAmt = _squareRefundable(rec);
   const row = document.getElementById('refund-square-row'), cb = document.getElementById('refund-to-square');
   if (cb) cb.checked = false;
-  if (row) row.classList.toggle('hidden', card <= 0);
-  if (card > 0) { const a = document.getElementById('refund-square-amt'); if (a) a.textContent = `up to $${card.toFixed(2)} on the card`; }
+  if (row) row.classList.toggle('hidden', sqAmt <= 0);
+  if (sqAmt > 0) { const a = document.getElementById('refund-square-amt'); if (a) a.textContent = `up to $${sqAmt.toFixed(2)} in Square`; }
   const m = document.getElementById('refund-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   setTimeout(() => document.getElementById('refund-reason')?.focus(), 100);
 }
-// Refund the CARD portion of a sale to the customer's card via Square's Refund API. Finds the CARD
-// payment among the sale's Square payments, caps the refund at its refundable balance, idempotent
-// on (record + cents) so a retry can't double-refund. Returns { ok, refundId, refundedCents, error }.
-async function refundCardInSquare(record, amountDollars, reason) {
+// Refund a sale's Square payments — card (money back to the card), cash, and Zelle/external
+// (recorded refunds). Refunds across the sale's payments to cover the amount (CARD first so real
+// money goes back before cash/external records), each capped at its refundable balance, idempotent
+// per (record + payment + cents). Returns { ok, refundIds, refundedCents, error }.
+async function refundInSquare(record, amountDollars, reason) {
   const ids = record?.squarePaymentIds || [];
   if (!ids.length) return { ok: false, error: 'No Square payment on this sale.' };
-  let cardPay = null;
+  const pays = [];
   for (const id of ids) {
     try {
       const r = await fetch(`${SQUARE_PROXY}/v2/payments/${id}`);
       if (!r.ok) continue;
-      const p = (await r.json()).payment;
-      if (p && (p.source_type === 'CARD' || p.card_details)) {
-        const refundable = (p.amount_money?.amount || 0) - (p.refunded_money?.amount || 0);
-        if (refundable > 0) { cardPay = { id, refundable }; break; }
-      }
+      const p = (await r.json()).payment; if (!p) continue;
+      const refundable = (p.amount_money?.amount || 0) - (p.refunded_money?.amount || 0);
+      if (refundable > 0) pays.push({ id, refundable, source: p.source_type || '' });
     } catch (e) {}
   }
-  if (!cardPay) return { ok: false, error: 'No refundable card payment found in Square for this sale.' };
-  const cents = Math.min(Math.round(amountDollars * 100), cardPay.refundable);
-  if (cents <= 0) return { ok: false, error: 'Nothing left to refund on the card.' };
-  try {
-    const res = await fetch(`${SQUARE_PROXY}/v2/refunds`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idempotency_key: `refund-${record.id}-${cents}`, payment_id: cardPay.id, amount_money: { amount: cents, currency: 'USD' }, reason: (reason || 'Refund').slice(0, 192) }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) return { ok: false, error: j.errors?.[0]?.detail || `Square error ${res.status}` };
-    return { ok: true, refundId: j.refund?.id || null, refundedCents: cents };
-  } catch (e) { return { ok: false, error: 'Could not reach Square' }; }
+  if (!pays.length) return { ok: false, error: 'No refundable Square payment found for this sale.' };
+  const rank = s => (s === 'CARD' ? 0 : s === 'CASH' ? 1 : 2);
+  pays.sort((a, b) => rank(a.source) - rank(b.source));
+  const wantCents = Math.round(amountDollars * 100);
+  let remaining = wantCents; const refundIds = [];
+  for (const p of pays) {
+    if (remaining <= 0) break;
+    const cents = Math.min(remaining, p.refundable);
+    if (cents <= 0) continue;
+    try {
+      const res = await fetch(`${SQUARE_PROXY}/v2/refunds`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idempotency_key: `refund-${record.id}-${p.id}-${cents}`, payment_id: p.id, amount_money: { amount: cents, currency: 'USD' }, reason: (reason || 'Refund').slice(0, 192) }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: j.errors?.[0]?.detail || `Square error ${res.status}`, refundIds, refundedCents: wantCents - remaining };
+      if (j.refund?.id) refundIds.push(j.refund.id);
+      remaining -= cents;
+    } catch (e) { return { ok: false, error: 'Could not reach Square', refundIds, refundedCents: wantCents - remaining }; }
+  }
+  if (remaining > 0) return { ok: false, error: `Only $${((wantCents - remaining) / 100).toFixed(2)} was refundable in Square (the rest is gift-card or already refunded).`, refundIds, refundedCents: wantCents - remaining };
+  return { ok: true, refundIds, refundedCents: wantCents };
 }
 export function closeRefundModal() { const m = document.getElementById('refund-modal'); m.classList.add('hidden'); m.style.display = ''; _refundTxnId = null; _refundTxnRecord = null; }
 
@@ -1835,18 +1854,18 @@ export async function confirmRefund() {
   if (amount <= 0) { showToast('Refund amount must be greater than zero.'); return; }
   if (amount > (_refundTxnRecord?.totalCost || 0)) { showToast('Refund cannot exceed the original total.'); return; }
   const o = _refundTxnRecord, refundOfId = _refundTxnId, now = new Date().toISOString();
-  // Optional: push the card portion back through Square FIRST (opt-in toggle, default off). If the
-  // operator asked for it but it fails, stop and surface the error — don't record an app refund that
-  // implies Square sent the money when it didn't.
+  // Optional: push the refund through Square FIRST (opt-in toggle, default off) across the sale's
+  // card / cash / Zelle payments. If the operator asked for it but it fails, stop and surface the
+  // error — don't record an app refund that implies Square sent the money when it didn't.
   const wantSquare = !!document.getElementById('refund-to-square')?.checked;
-  let squareRefundId = null;
-  if (wantSquare && _refundableCard(o) > 0) {
-    const btn = document.querySelector('#refund-modal button[onclick="confirmRefund()"]'); if (btn) { btn.disabled = true; btn.textContent = 'Refunding card…'; }
-    const r = await refundCardInSquare(o, amount, reason);
+  let squareRefundIds = null;
+  if (wantSquare && _squareRefundable(o) > 0) {
+    const btn = document.querySelector('#refund-modal button[onclick="confirmRefund()"]'); if (btn) { btn.disabled = true; btn.textContent = 'Refunding in Square…'; }
+    const r = await refundInSquare(o, amount, reason);
     if (btn) { btn.disabled = false; btn.textContent = 'Confirm Refund'; }
     if (!r.ok) { showToast('Square refund failed: ' + (r.error || 'error') + ' — nothing recorded.'); return; }
-    squareRefundId = r.refundId;
-    showToast(`Card refunded $${(r.refundedCents / 100).toFixed(2)} in Square ✓`);
+    squareRefundIds = (r.refundIds || []).filter(Boolean);
+    showToast(`Refunded $${(r.refundedCents / 100).toFixed(2)} in Square ✓`);
   }
   // Refunds are dated to when they're issued (checkinTime = now) so they land in the
   // CURRENT period's totals in Reports/Payroll. refundTechBilled carries the original's
@@ -1857,9 +1876,9 @@ export async function confirmRefund() {
   const refundTechBilled = (o.assignments || [])
     .filter(a => a.techId)
     .map(a => ({ techId: a.techId, billed: -((a.cost || 0) * ratio) }));
-  const record = { id: newEntryId(), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -amount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: refundOfId, refundTechBilled, loggedBy: getActiveUser()?.name || '', ...(squareRefundId ? { squareRefundIds: [squareRefundId] } : {}) };
+  const record = { id: newEntryId(), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -amount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: refundOfId, refundTechBilled, loggedBy: getActiveUser()?.name || '', ...(squareRefundIds && squareRefundIds.length ? { squareRefundIds } : {}) };
   dispatch('record.save', { record });
-  window.logAudit?.('Refund', `${o.name || '—'} · $${amount.toFixed(2)}${squareRefundId ? ' · card refunded in Square' : ''}${reason ? ' · ' + reason : ''}`);
+  window.logAudit?.('Refund', `${o.name || '—'} · $${amount.toFixed(2)}${squareRefundIds && squareRefundIds.length ? ' · refunded in Square' : ''}${reason ? ' · ' + reason : ''}`);
   closeRefundModal();
   renderTransactions();
   if (document.getElementById('panel-reports')?.classList.contains('active')) runReport();

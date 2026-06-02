@@ -69,3 +69,13 @@ test('reconcileSquareData: matches Square payments to records by payment id', ()
   assert.equal(R.squareTotalCents, 6500 + 4800);
   assert.equal(R.appTotalCents, 6500 + 5000 + 3000);
 });
+
+test('reconcileSquareData: app total = card+cash+Zelle+tips, excludes gift; tender-less falls back to total', () => {
+  const payments = [{ id: 'p1', total: 4500, status: 'COMPLETED' }];
+  const recs = [
+    { name: 'A', totalCost: 65, status: 'paid', squarePaymentIds: ['p1'], tenders: { card: 40, cash: 0, gift: 25, zelle: 0 }, tip: 5 }, // square-bound 40 + tip 5 = 45 (gift 25 excluded)
+    { name: 'B', totalCost: 30, status: 'paid', squarePaymentIds: [] },   // tender-less → fall back to 30
+  ];
+  const R = reconcileSquareData(payments, recs);
+  assert.equal(R.appTotalCents, 4500 + 3000);
+});
