@@ -5,7 +5,7 @@ import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMa
 import { GROUP_COLORS } from '../config.js';
 import { canDo } from '../session.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus } from './status.js';
-import { renderQueue, updateStats, showGroupAssignModal, switchGroupTab } from './queue.js';
+import { renderQueue, showGroupAssignModal } from './queue.js';
 import { serviceTimeInfo } from './servicetime.js';
 
 const cfg = () => getState().config;
@@ -615,7 +615,6 @@ function onTechReorderEnd(e) {
   _reorderDragging = null; _reorderList = null;
 }
 
-export function saveTurnsAndSync() { renderTurns(); showToast('Turns saved & synced ✓'); }
 
 // ── History (device-local archive) ────────────────
 // Archive one day's turns snapshot into the device-local history (a fallback for the
@@ -635,7 +634,6 @@ export function archiveTurnsForDay(dateStr) {
 // Close out a finished day during the daily rollover: archive it, then clear the rotation
 // so the new day starts fresh.
 export function rolloverTurns(closedDateStr) { archiveTurnsForDay(closedDateStr); setOrder([]); setOff([]); }
-export function archiveTurnsForToday() { rolloverTurns(todayStr()); }
 export function openTurnsHistoryPicker(ev) {
   const today = new Date();
   const presets = [0, 1, 2, 3, 4, 5, 6].map(n => {

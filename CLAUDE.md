@@ -153,6 +153,7 @@ The durable source of truth is the **Cloudflare Durable Object** (`MuseSalonDO`)
 | `muse_state_cache` | Mirror of the last DO snapshot — restores state instantly on reload before the WebSocket reconnects |
 | `muse_outbox` | Offline outbox of pending `dispatch` ops; replayed on reconnect (durable across reloads) |
 | `muse_device_id` | Unique ID per browser/device for sync echo-suppression / conflict resolution |
+| `muse_failed_ops` | Dead-letter log (last 200) of writes the server REJECTED — holds recoverable customer/financial writes; surfaced in Settings → Data Recovery. Do NOT clear blindly |
 
 **Still device-local in localStorage (read + written directly):**
 | Key | Purpose |
@@ -188,7 +189,7 @@ Treat these with extra care — bugs here affect real financial data or break th
 - **`muse_deletion_log` + DO `deletion:` markers** — cross-device delete sync; if broken, deleted records can reappear
 - **Queue persistence** (`queue.js` + DO + `muse_state_cache`) — losing the queue during business hours is a critical failure
 - **`ticketTotal`** (`utils.js`) — single source of truth for a ticket's money (services + items×qty + fees − discount); reports, pay-time, and payroll all derive from it (never trust a cached `totalCost`)
-- **`checkAppVersion`** (`main.js`) — on version mismatch unregisters the SW (so the next load fetches fresh) and reloads once; a `sessionStorage` guard prevents reload loops. If the `↻` badge persists, hard refresh (`Ctrl+Shift+R`)
+- **`checkAppVersion`** (`main.js`) — on version mismatch it appends a `↻` to the version badge, which is a **manual** hard-reload button (tap → unregister SW + clear caches + `location.reload()`). There is **no auto-reload and no `sessionStorage` guard** (a reload loop is impossible by design). Re-checked at boot and on tab-focus. If the `↻` persists after tapping it, hard refresh (`Ctrl+Shift+R`)
 - **Version bump** — always bump `js/app/config.js` (APP_VERSION), `version.json`, and `sw.js` (CACHE_NAME) together; a config.js/version.json mismatch causes reload loops; a stale CACHE_NAME means the old SW cache is never purged
 
 ---
@@ -211,8 +212,8 @@ The `FEES` array is separate from `SERVICES` and `ITEMS`. Fees have their own UI
 
 ## Deployment Rules
 
-1. **Always bump all three version files together:** `js/config.js` (APP_VERSION), `version.json`, and `sw.js` (CACHE_NAME). A mismatch causes reload loops. A stale CACHE_NAME means users get stale cached files.
-2. GitHub Pages auto-deploys on push to `main`. On next page load each session detects the new version via `checkAppVersion()`, unregisters the SW, and reloads once so all files come fresh from the network. If the `↻` badge appears after the auto-reload, hard refresh (`Ctrl+Shift+R`) is the reliable fallback. Known limitation: on some devices/browsers the first reload after a version bump may still serve stale files; hard refresh always resolves it.
+1. **Always bump all three version files together:** `js/app/config.js` (APP_VERSION), `version.json`, and `sw.js` (CACHE_NAME). A mismatch causes a persistent `↻` badge. A stale CACHE_NAME means users get stale cached files.
+2. GitHub Pages auto-deploys on push to `main`. On next page load (and on tab-focus) each session detects the new version via `checkAppVersion()` and shows the `↻` badge; **tapping the badge** unregisters the SW, clears caches, and reloads so all files come fresh from the network (there is no auto-reload). If the `↻` persists after tapping it, hard refresh (`Ctrl+Shift+R`) is the reliable fallback. Known limitation: on some devices/browsers the first reload after a version bump may still serve stale files; hard refresh always resolves it.
 3. **Cloudflare Worker changes** require a separate `wrangler deploy` from the `cloudflare/` directory — they are not deployed by GitHub Pages.
 4. Never push a breaking change without a tested rollback path.
 

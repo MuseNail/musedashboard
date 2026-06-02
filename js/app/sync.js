@@ -160,8 +160,8 @@ function replayOutbox() { for (const msg of _outbox) send(msg); } // DO dedupes 
 function reapplyOutbox() { for (const msg of _outbox) { try { applyChange(msg.op, msg.payload); } catch {} } }
 
 // ── Public: dispatch a mutation (optimistic local apply + queued send) ──────────
-// op: 'config.set' | 'turns.order' | 'queue.upsert' | 'queue.remove'
-//   | 'record.save' | 'record.delete' | 'giftcard.save' | 'giftcard.delete'
+// op: 'config.set' | 'queue.upsert' | 'queue.remove' | 'record.save'
+//   | 'record.delete' | 'giftcard.save' | 'giftcard.delete' | 'audit.log'
 export function dispatch(op, payload) {
   const mutationId = DEVICE_ID + '-' + Date.now() + '-' + (++_mutCounter);
   // Stamp queue + record writes with a wall-clock version so the stale-write guard (store.js

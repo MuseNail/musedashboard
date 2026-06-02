@@ -89,7 +89,7 @@ index.html                — Shell HTML only; references css/styles.css and all
 version.json              — { "version": "vX.XX" } — checked by all clients to detect new deploys
 ```
 
-**Critical load-order constraint:** `utils.js` must load before `config.js` because it declares `_configWriteTime` and `dedupByLabel()` used at parse time. Everything else is function-body-only.
+**Module load order:** handled by native ES-module imports (each module `import`s what it needs); there is no parse-time cross-module dependency. (Historical note: earlier docs claimed `config.js` called `dedupByLabel()`/`_configWriteTime` at parse time — that coupling does not exist in the current code.)
 
 ---
 

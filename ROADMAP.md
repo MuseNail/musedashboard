@@ -241,7 +241,7 @@ All 18 JS files share one global scope. Variables like `SERVICES`, `STAFF`, `que
 **Recommendation:** Leave as-is. The single-scope model is a deliberate architectural constraint, not an accident.
 
 ### Implicit Load-Order Dependencies
-`dedupByLabel` (utils.js) is called at parse time in config.js. Adding new parse-time dependencies could silently break startup if load order isn't maintained.
+None in the current ES-module code — modules `import` what they need, so load order is resolved by the module graph. (Historical note: this previously claimed `config.js` calls `dedupByLabel` at parse time; that coupling does not exist.)
 
 **Risk:** Low — only one parse-time dependency currently exists.
 **Recommendation:** Document carefully; never add new parse-time cross-file calls without updating CLAUDE.md.

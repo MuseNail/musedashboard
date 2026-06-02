@@ -322,7 +322,6 @@ function runDayRolloverIfNeeded() {
     utils.showToast("New day — yesterday's history saved");
     didRollover = true;
   }
-  try { localStorage.setItem('muse_last_reset_date', today); } catch (e) {}      // keep the legacy per-device marker current (harmless)
   // Safe board cleanup — runs every time (idempotent); also self-heals a stale entry that a
   // still-connected device re-pushed from its outbox after a clear.
   if (stale.length) {

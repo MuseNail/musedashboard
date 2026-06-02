@@ -181,7 +181,7 @@ export function formatPhone(input) {
 }
 
 // ── Numeric Keypad ────────────────────────────────
-let _numpadTarget = null, _numpadRaw = '', _numpadCallback = null, _numpadMode = 'cost';
+let _numpadTarget = null, _numpadRaw = '', _numpadMode = 'cost';
 let _numpadHostObs = null;
 // Auto-close the numpad if the modal/popup that owns the field it's editing closes
 // (gets `hidden`, display:none, or removed) — so closing a modal also dismisses the
@@ -200,7 +200,7 @@ function _watchNumpadHost(inputEl) {
 
 export function openNumpad(inputEl, label, mode) {
   if (window.matchMedia('(pointer: fine)').matches) return;
-  _numpadMode = mode === 'percent' ? 'percent' : (mode === 'int' ? 'int' : 'cost'); _numpadTarget = inputEl; _numpadCallback = null;
+  _numpadMode = mode === 'percent' ? 'percent' : (mode === 'int' ? 'int' : 'cost'); _numpadTarget = inputEl;
   const existing = (inputEl.value || '').replace(/[^0-9.]/g, '');
   if (_numpadMode === 'percent') {
     // A percent is a plain whole/decimal value (20 → 20%), NOT a cents accumulator.
@@ -234,7 +234,7 @@ export function openNumpad(inputEl, label, mode) {
 // it. iPad's native "tel" keyboard is the full QWERTY, so this gives a clean numpad.
 export function openPhoneNumpad(inputEl, label) {
   if (window.matchMedia('(pointer: fine)').matches) return;
-  _numpadMode = 'phone'; _numpadTarget = inputEl; _numpadCallback = null;
+  _numpadMode = 'phone'; _numpadTarget = inputEl;
   _numpadRaw = (inputEl.value || '').replace(/\D/g, '').slice(0, 10);
   document.getElementById('numpad-label').textContent = label || 'Phone Number';
   document.getElementById('numpad-dot-key').textContent  = '';
@@ -394,7 +394,6 @@ export function numpadConfirm() {
     }
     _numpadTarget.dispatchEvent(new Event('input', { bubbles: true }));
   }
-  if (_numpadCallback) _numpadCallback();
   _closeNumpadModal();
 }
 export function closeNumpad() { numpadConfirm(); }
