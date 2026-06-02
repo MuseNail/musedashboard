@@ -16,7 +16,23 @@ and leaves the roster alone. (`utils.rolloverAction()` + unit test.)
 
 ---
 
-## P0 — Reconcile app totals vs the ACTUALLY-charged transactions ⭐ (current pain)
+## ✅ P0 BUILT — Square Settlement Reconciliation (v4.01, `e158883`) — pending live verification
+
+"Reconcile w/ Square" button in Reports pulls Square's actual payments (List Payments) for the date
+range and matches them to records by `squarePaymentId`: shows Square-collected vs App-billed +
+Matched N/total, then "In Square, not in app" and "In app, not matched to Square". Pure
+`reconcileSquareData()` + unit test; validated against 4 real days (109/147 matched; gaps = records
+with no payment id + a couple double-charges). Also: multi-customer Square note now prefixed
+"Party of N — ". ⚠️ Live Square pull needs owner verification (preview can't reach Square).
+
+Audit takeaways (2026-05-29..06-01): tax & tips were $0 (not the cause). Mismatch drivers = (1)
+"no-tender" app records marked paid without a captured Square payment id, (2) a few double-records
+(Tea Wolf $66 ×2 on 5/31; Bree Zeitz $46 charged+refunded 6/01), (3) the 5/29 deep-link era had no
+payment ids at all.
+
+---
+
+## P0 — Reconcile app totals vs the ACTUALLY-charged transactions (original notes)
 
 **Problem (owner, 2026-06-01):** report totals very often don't match Square.
 
