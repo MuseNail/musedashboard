@@ -82,7 +82,12 @@ export function openSquarePOS(entryId) {
   if (body) body.innerHTML = party.map(payCustomerBlock).join('');
   const totalEl = document.getElementById('square-confirm-total');
   if (totalEl) totalEl.textContent = `$${(cents / 100).toFixed(2)}`;
-  _pendingPay = { cents, ids: party.map(e => String(e.id)), names: party.map(e => e.name).filter(Boolean).join(', ').slice(0, 120) };
+  // Names for the Square note/Description. For a multi-person party, prefix with "Party of N — "
+  // so a group is obvious in Square's Transactions report (the customer field there links only one
+  // person — often not even the first — making groups hard to recognize/match).
+  const nameList = party.map(e => e.name).filter(Boolean);
+  const payNames = (party.length > 1 ? `Party of ${party.length} — ` : '') + nameList.join(', ');
+  _pendingPay = { cents, ids: party.map(e => String(e.id)), names: payNames.slice(0, 120) };
   // R6: tie recorded gift cards to the tapped entry; preload any already staged (e.g. Pay was
   // tapped earlier but the charge wasn't completed). Balances are only drawn down when paid.
   _payTicketId = String(entryId);

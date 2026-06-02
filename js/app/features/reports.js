@@ -9,7 +9,7 @@ import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
 import { squareUpsertCustomer } from './square-customers.js';
 import { avgServiceTime, fmtDur } from './servicetime.js';
-import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS } from '../config.js';
+import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS, SQUARE_PROXY } from '../config.js';
 import { gcRedemptions, gcTotalUsed } from './giftcards.js';
 
 const cfg = () => getState().config;
@@ -964,6 +964,102 @@ export function openReconcile() {
     return `<div onclick="closeDrillDown(); showHistoricalEntryModal('${r.id}')" class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between cursor-pointer hover:bg-surface-container transition-colors"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${r.names}</div><div class="text-[11px] font-body text-on-surface-variant">recorded $${r.recorded.toFixed(2)} · charged $${r.charged.toFixed(2)}</div><div class="text-[11px] font-body text-outline">${r.time.toLocaleDateString()} · tap to open &amp; fix</div></div><div class="text-right flex-shrink-0 ml-3"><div class="font-headline font-bold" style="color:${col}">${over?'+':'−'}$${Math.abs(r.diff).toFixed(2)}</div><div class="text-[10px] font-body" style="color:${col}">${label}</div></div></div>`;
   }).join('') : '<p class="text-sm font-body text-on-surface-variant text-center py-4">Everything matches what was charged — no mismatches this period. ✓</p>';
   showDrillPanel(_drill.title, _drillSummaryBar(_drill.summary) + note + body);
+}
+
+// ── Square Settlement Reconciliation: app records vs Square's ACTUAL payments ────────
+// The other reconcile (openReconcile) checks the app against its OWN recorded tenders. This one
+// pulls the REAL payments from Square (List Payments) and matches them to records by the stored
+// squarePaymentId, so you see the true charged total and exactly which transactions don't line up:
+//   • in Square, not in the app  → charged but unrecorded (or recorded without the payment id)
+//   • in the app, not in Square  → recorded/marked-paid with no matching Square charge
+// Pure matcher (testable). payments: [{id,total,tip,status,sourceType,last4,note,createdAt}] (cents).
+export function reconcileSquareData(payments, recs) {
+  const completed = (payments || []).filter(p => p.status === 'COMPLETED' || p.status === 'APPROVED');
+  const appIds = new Set();
+  (recs || []).forEach(r => (r.squarePaymentIds || []).forEach(id => appIds.add(id)));
+  const sqIds = new Set(completed.map(p => p.id));
+  const inSquareNotApp = completed.filter(p => !appIds.has(p.id));
+  const inAppNotSquare = (recs || []).filter(r => !(r.squarePaymentIds || []).some(id => sqIds.has(id)));
+  return {
+    squareCount: completed.length,
+    matchedCount: completed.length - inSquareNotApp.length,
+    inSquareNotApp, inAppNotSquare,
+    squareTotalCents: completed.reduce((s, p) => s + (p.total || 0), 0),
+    appTotalCents: (recs || []).reduce((s, r) => s + Math.round((r.totalCost || 0) * 100), 0),
+  };
+}
+// Paginated List Payments via the Square proxy (amounts already in cents/minor units).
+async function fetchSquarePayments(beginISO, endISO, locationId) {
+  const out = [];
+  let cursor = '';
+  for (let page = 0; page < 12; page++) {   // safety cap ~1200 payments
+    const params = new URLSearchParams({ begin_time: beginISO, end_time: endISO, location_id: locationId, sort_order: 'ASC', limit: '100' });
+    if (cursor) params.set('cursor', cursor);
+    const res = await fetch(`${SQUARE_PROXY}/v2/payments?${params.toString()}`);
+    if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.errors?.[0]?.detail || `Square error ${res.status}`); }
+    const j = await res.json();
+    (j.payments || []).forEach(p => out.push({
+      id: p.id,
+      total: p.total_money?.amount || 0,
+      tip: p.tip_money?.amount || 0,
+      status: p.status || '',
+      sourceType: p.source_type || '',
+      last4: p.card_details?.card?.last_4 || '',
+      note: p.note || '',
+      createdAt: p.created_at || '',
+    }));
+    cursor = j.cursor || '';
+    if (!cursor) break;
+  }
+  return out;
+}
+export async function openSquareReconcile() {
+  const dates = getReportDates(); if (!dates) { showToast('Pick a date range first.'); return; }
+  const sc = cfg().square_config;
+  if (!sc?.locationId) { showToast('Add your Square Location ID in Settings → Square first.'); return; }
+  const { from, to } = dates;
+  showDrillPanel('Square Reconciliation', '<p class="text-sm font-body text-on-surface-variant text-center py-6">Pulling transactions from Square…</p>');
+  let payments;
+  try { payments = await fetchSquarePayments(from.toISOString(), to.toISOString(), sc.locationId); }
+  catch (e) { showDrillPanel('Square Reconciliation', `<p class="text-sm font-body text-error text-center py-6">Couldn't load Square payments: ${(e.message || 'error')}</p>`); return; }
+  const recs = buildCombinedRecords().filter(r => {
+    if (r.status === 'deleted' || !isPaidStatus(r.status)) return false;
+    const d = new Date(r.completedAt || r.checkinTime);
+    return d >= from && d <= to;
+  });
+  const R = reconcileSquareData(payments, recs);
+  const $ = c => '$' + (c / 100).toFixed(2);
+  const diff = R.squareTotalCents - R.appTotalCents;
+  const summary = [
+    ['Square collected', $(R.squareTotalCents)],
+    ['App billed', $(R.appTotalCents)],
+    ['Difference', (diff >= 0 ? '+' : '−') + '$' + Math.abs(diff / 100).toFixed(2)],
+    ['Matched', `${R.matchedCount}/${R.squareCount}`],
+  ];
+  const fmtTime = iso => { try { return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch { return ''; } };
+  const sqRows = R.inSquareNotApp.length ? R.inSquareNotApp.map(p => {
+    const label = (p.note || '(no note)').replace(/^Custom Amount - /, '');
+    const src = p.sourceType === 'CARD' ? (p.last4 ? 'Card ••' + p.last4 : 'Card') : (p.sourceType === 'EXTERNAL' ? 'External' : p.sourceType === 'CASH' ? 'Cash' : p.sourceType || '');
+    return `<div class="bg-surface-container-lowest rounded-xl px-4 py-2.5 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${_eTxn(label)}</div><div class="text-[11px] font-body text-outline">${fmtTime(p.createdAt)} · ${src}</div></div><div class="font-headline font-bold text-on-surface flex-shrink-0 ml-3">${$(p.total)}</div></div>`;
+  }).join('') : '<p class="text-xs font-body text-on-surface-variant py-2 px-1 opacity-70">None — every Square charge is tied to an app record. ✓</p>';
+  const appRows = R.inAppNotSquare.length ? R.inAppNotSquare.map(r => {
+    const tnd = r.tenders ? Object.entries({ card: r.tenders.card, cash: r.tenders.cash, gift: r.tenders.gift, zelle: r.tenders.zelle }).filter(([, v]) => v > 0).map(([k]) => k).join('+') : 'no tender';
+    return `<div class="bg-surface-container-lowest rounded-xl px-4 py-2.5 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${_eTxn(r.name || '(no name)')}</div><div class="text-[11px] font-body text-outline">${new Date(r.completedAt || r.checkinTime).toLocaleDateString()} · ${tnd}</div></div><div class="font-headline font-bold text-on-surface flex-shrink-0 ml-3">$${(r.totalCost || 0).toFixed(2)}</div></div>`;
+  }).join('') : '<p class="text-xs font-body text-on-surface-variant py-2 px-1 opacity-70">None — every app sale matches a Square charge. ✓</p>';
+  const section = (title, n, rows, hint) => `<div class="text-xs font-headline font-bold text-on-surface uppercase tracking-widest mt-3 mb-1.5">${title} <span class="text-on-surface-variant">(${n})</span></div><div class="text-[11px] font-body text-on-surface-variant mb-2 px-1">${hint}</div><div class="space-y-1.5">${rows}</div>`;
+  _drill = {
+    title: 'Square Reconciliation',
+    columns: ['Side', 'When', 'Who', 'Source / Tender', 'Amount'],
+    rows: [
+      ...R.inSquareNotApp.map(p => ['In Square, not app', fmtTime(p.createdAt), (p.note || '').replace(/^Custom Amount - /, ''), p.sourceType + (p.last4 ? ' ••' + p.last4 : ''), $(p.total)]),
+      ...R.inAppNotSquare.map(r => ['In app, not Square', new Date(r.completedAt || r.checkinTime).toLocaleDateString(), r.name || '', r.tenders ? 'tender' : 'no tender', '$' + (r.totalCost || 0).toFixed(2)]),
+    ],
+    summary,
+  };
+  showDrillPanel('Square Reconciliation',
+    _drillSummaryBar(summary)
+    + section('In Square, not in the app', R.inSquareNotApp.length, sqRows, 'Charged in Square but no app record carries this payment — charged-but-unrecorded, or recorded before payment-ID tracking.')
+    + section('In the app, not matched to Square', R.inAppNotSquare.length, appRows, 'Marked paid in the app with no matching Square charge — older Mark-Paid / deep-link sales, or a possible double-record.'));
 }
 
 function showDrillPanel(title, html) {

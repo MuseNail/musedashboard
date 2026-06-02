@@ -583,6 +583,10 @@ tailwind.config = {
               class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">rule</span> Reconcile
             </button>
+            <button onclick="openSquareReconcile()" title="Pull the actual payments from Square for this date range and match them to your records by payment ID"
+              class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors">
+              <span class="material-symbols-outlined" style="font-size:16px">sync_alt</span> Reconcile w/ Square
+            </button>
             <button id="add-historical-btn" onclick="showHistoricalEntryModal()"
               class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical
