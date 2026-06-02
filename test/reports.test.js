@@ -92,3 +92,19 @@ test('reconcileSquareData: gift-card-sale payments are matched + counted in the 
   assert.equal(R.matchedCount, 2);
   assert.equal(R.appTotalCents, 5000 + 5000);   // record (card $50) + gift sale ($50)
 });
+
+test('reconcileSquareData: fully-refunded payments are not flagged; refunds net both sides', () => {
+  const payments = [
+    { id: 'p1', total: 4600, refunded: 4600, status: 'COMPLETED' },   // fully refunded → net 0, NOT flagged
+    { id: 'p2', total: 5000, refunded: 0,    status: 'COMPLETED' },   // live, matched to a record
+    { id: 'p3', total: 3000, refunded: 0,    status: 'COMPLETED' },   // live, unmatched
+  ];
+  const recs = [{ name: 'A', totalCost: 50, status: 'paid', squarePaymentIds: ['p2'], tenders: { card: 50 } }];
+  const refunds = [{ status: 'refund', totalCost: -46 }];   // the app's $46 refund
+  const R = reconcileSquareData(payments, recs, [], refunds);
+  assert.equal(R.squareCount, 2);                       // p1 (fully refunded) excluded
+  assert.equal(R.inSquareNotApp.length, 1);             // only p3
+  assert.equal(R.inSquareNotApp[0].id, 'p3');
+  assert.equal(R.squareTotalCents, 0 + 5000 + 3000);    // net: p1=0, p2=5000, p3=3000
+  assert.equal(R.appTotalCents, 5000 - 4600);           // record $50 − refund $46
+});

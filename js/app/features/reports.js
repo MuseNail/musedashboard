@@ -973,30 +973,36 @@ export function openReconcile() {
 //   • in Square, not in the app  → charged but unrecorded (or recorded without the payment id)
 //   • in the app, not in Square  → recorded/marked-paid with no matching Square charge
 // Pure matcher (testable). payments: [{id,total,tip,status,sourceType,last4,note,createdAt}] (cents).
-export function reconcileSquareData(payments, recs, giftSales) {
+export function reconcileSquareData(payments, recs, giftSales, refunds) {
   const completed = (payments || []).filter(p => p.status === 'COMPLETED' || p.status === 'APPROVED');
+  const net = p => (p.total || 0) - (p.refunded || 0);
+  // A FULLY-refunded payment is net zero (money came in and went back out) — it's resolved, so it's
+  // not a reconciliation discrepancy: exclude it from the counts + the "not in app" list.
+  const live = completed.filter(p => net(p) > 0);
   const appIds = new Set();
   (recs || []).forEach(r => (r.squarePaymentIds || []).forEach(id => appIds.add(id)));
-  // Gift-card SALES are also charged through Square now, so their payments are legitimately in
-  // Square — count them as matched (not "in Square, not app") and toward the app total.
+  // Gift-card SALES are charged through Square too, so their payments are legitimately in Square —
+  // count them as matched (not "in Square, not app") and toward the app total.
   (giftSales || []).forEach(g => (g.squarePaymentIds || []).forEach(id => appIds.add(id)));
   const sqIds = new Set(completed.map(p => p.id));
-  const inSquareNotApp = completed.filter(p => !appIds.has(p.id));
+  const inSquareNotApp = live.filter(p => !appIds.has(p.id));
   const inAppNotSquare = (recs || []).filter(r => !(r.squarePaymentIds || []).some(id => sqIds.has(id)));
   // App's view of what SHOULD be in Square = card + cash + Zelle + tips (gift-card REDEMPTIONS never
-  // hit Square, so excluded; tips ARE in Square; gift-card SALES paid via Square are added). A
-  // tender-less record (older / deep-link era) has no breakdown, so fall back to its full total.
+  // hit Square, so excluded; tips ARE in Square; gift-card SALES paid via Square are added; refunds
+  // are subtracted to match Square's net). A tender-less record (older / deep-link era) has no
+  // breakdown, so fall back to its full total.
   const recCents = (recs || []).reduce((s, r) => {
     const sq = r.tenders ? ((r.tenders.card || 0) + (r.tenders.cash || 0) + (r.tenders.zelle || 0)) : (r.totalCost || 0);
     return s + Math.round((sq + (r.tip || 0)) * 100);
   }, 0);
   const giftCents = (giftSales || []).reduce((s, g) => s + Math.round((g.amount || 0) * 100), 0);
+  const refundCents = (refunds || []).reduce((s, r) => s + Math.round(Math.abs(r.totalCost || 0) * 100), 0);
   return {
-    squareCount: completed.length,
-    matchedCount: completed.length - inSquareNotApp.length,
+    squareCount: live.length,
+    matchedCount: live.length - inSquareNotApp.length,
     inSquareNotApp, inAppNotSquare,
-    squareTotalCents: completed.reduce((s, p) => s + (p.total || 0), 0),
-    appTotalCents: recCents + giftCents,
+    squareTotalCents: completed.reduce((s, p) => s + net(p), 0),   // net of refunds (matches the deposit)
+    appTotalCents: recCents + giftCents - refundCents,
   };
 }
 // Paginated List Payments via the Square proxy (amounts already in cents/minor units).
@@ -1012,6 +1018,7 @@ async function fetchSquarePayments(beginISO, endISO, locationId) {
     (j.payments || []).forEach(p => out.push({
       id: p.id,
       total: p.total_money?.amount || 0,
+      refunded: p.refunded_money?.amount || 0,   // how much of this payment has been refunded
       tip: p.tip_money?.amount || 0,
       status: p.status || '',
       sourceType: p.source_type || '',
@@ -1040,7 +1047,9 @@ export async function openSquareReconcile() {
   });
   // Gift-card SALES paid through Square in this period (their payment ids match Square's payments).
   const giftSales = giftCards().filter(g => (g.squarePaymentIds || []).length && g.datePurchased && g.datePurchased >= localDateStr(from) && g.datePurchased <= localDateStr(to));
-  const R = reconcileSquareData(payments, recs, giftSales);
+  // Refunds in this period — subtracted from the app side so it nets like Square's deposit.
+  const refundRecs = buildCombinedRecords().filter(r => { if (r.status !== 'refund') return false; const d = new Date(r.completedAt || r.checkinTime); return d >= from && d <= to; });
+  const R = reconcileSquareData(payments, recs, giftSales, refundRecs);
   const $ = c => '$' + (c / 100).toFixed(2);
   const diff = R.squareTotalCents - R.appTotalCents;
   const summary = [
