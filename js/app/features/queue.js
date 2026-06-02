@@ -155,7 +155,12 @@ const upsert = entry => { dispatch('queue.upsert', { entry }); if (isPaidStatus(
 let queueViewingHistory = null;
 
 export function openQueueHistoryPicker(ev) {
-  window.openDayPicker?.(ev, { value: (queueViewingHistory && queueViewingHistory.date) || todayStr(), onPick: loadQueueHistory });
+  const today = new Date();
+  const presets = [0, 1, 2, 3, 4, 5, 6].map(n => {
+    const d = new Date(today); d.setDate(d.getDate() - n);
+    return { label: n === 0 ? 'Today' : n === 1 ? 'Yesterday' : `${n} days ago`, date: localDateStr(d) };
+  });
+  window.openDayPicker?.(ev, { value: (queueViewingHistory && queueViewingHistory.date) || todayStr(), onPick: loadQueueHistory, presets });
 }
 export function loadQueueHistory(dateStr) {
   if (!dateStr || dateStr === todayStr()) { clearQueueHistory(); return; }

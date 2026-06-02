@@ -19,6 +19,26 @@ export function ticketTotal(r) {
   return Math.max(0, svc + items + fees - (r.discount || 0));
 }
 
+// ── Pill switch in-place flip ────────────────────
+// Flip a single .mswitch toggle's visual state WITHOUT re-rendering its whole list.
+// Rebuilding a list on every tap recreated the row + button under the user's finger —
+// which on a touchscreen drops taps (feels slow / "doesn't work") and snaps the :active
+// press + the knob's slide into a visible "bounce." `el` is the control passed as `this`
+// from the inline onclick: either the .mswitch track itself (role-permission toggles) or a
+// wrapper that contains it (services / staff / calendar). An optional label <span> inside
+// the wrapper recolors with the state.
+export function setSwitchVisual(el, on) {
+  if (!el) return;
+  const track = el.classList?.contains('mswitch') ? el : el.querySelector('.mswitch');
+  if (!track) return;
+  const knob = track.firstElementChild, label = el.querySelector('span');
+  if (label) { label.classList.toggle('text-primary', on); label.classList.toggle('text-outline-variant', !on); }
+  track.classList.toggle('bg-primary', on);
+  track.classList.toggle('bg-surface-container-high', !on);
+  knob?.classList.toggle('left-7', on);
+  knob?.classList.toggle('left-0.5', !on);
+}
+
 // ── Clock ────────────────────────────────────────
 export function startClock() {
   function tick() {

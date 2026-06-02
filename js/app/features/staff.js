@@ -1,7 +1,7 @@
 // ── Staff CRUD + weekly schedule ────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, byName } from '../utils.js';
+import { showToast, localDateStr, byName, setSwitchVisual } from '../utils.js';
 import { SCHEDULE_COLORS } from '../config.js';
 
 const cfg = () => getState().config;
@@ -9,10 +9,16 @@ const setStaff = (staff) => dispatch('config.set', { key: 'staff', value: staff 
 
 // ── Active staff (config.inactive_staff) ──────────
 export function isStaffActive(id) { return !cfg().inactive_staff.includes(id); }
-export function toggleActiveStaff(id) {
+export function toggleActiveStaff(id, btn) {
   const inactive = cfg().inactive_staff;
+  const nowActive = inactive.includes(id);   // currently inactive → toggling activates
   dispatch('config.set', { key: 'inactive_staff', value: inactive.includes(id) ? inactive.filter(x => x !== id) : [...inactive, id] });
-  renderStaffList();
+  if (!btn) { renderStaffList(); return; }
+  setSwitchVisual(btn, nowActive);
+  btn.title = nowActive ? 'Active — shown in menus' : 'Inactive — hidden from menus';
+  // Reflect the same active/inactive state on the technician's name (struck-through when off).
+  const name = btn.closest('div[onclick]')?.querySelector('.font-headline.font-semibold');
+  if (name) { name.classList.toggle('line-through', !nowActive); name.classList.toggle('text-outline-variant', !nowActive); }
 }
 export function toggleAllActiveStaff() {
   dispatch('config.set', { key: 'inactive_staff', value: cfg().inactive_staff.length === 0 ? cfg().staff.map(s => s.id) : [] });
@@ -47,7 +53,7 @@ export function renderStaffList() {
         </div>
       </div>
       <div class="flex items-center gap-2 flex-shrink-0">
-        <button onclick="event.stopPropagation();toggleActiveStaff('${st.id}')" title="${active ? 'Active — shown in menus' : 'Inactive — hidden from menus'}" class="flex flex-col items-center gap-1 px-1 py-1">
+        <button onclick="event.stopPropagation();toggleActiveStaff('${st.id}',this)" title="${active ? 'Active — shown in menus' : 'Inactive — hidden from menus'}" class="flex flex-col items-center gap-1 px-1 py-1">
           <span class="text-[9px] font-body uppercase tracking-wider ${active ? 'text-primary' : 'text-outline-variant'}">Active</span>
           <div class="mswitch relative w-14 h-7 rounded-full transition-colors ${active ? 'bg-primary' : 'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${active ? 'left-7' : 'left-0.5'}"></div></div>
         </button>

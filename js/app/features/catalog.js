@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast } from '../utils.js';
+import { showToast, setSwitchVisual } from '../utils.js';
 
 const cfg = () => getState().config;
 
@@ -21,7 +21,7 @@ export function renderServicesMerged() {
     const checkin = isServiceVisibleOnCheckin(s.id);
     const dash    = isServiceVisibleOnDash(s.id);
     const toggle = (on, label, fn, title) => `
-      <button onclick="event.stopPropagation();${fn}('${s.id}')" title="${title}" class="flex flex-col items-center gap-1 flex-shrink-0 px-1 py-1">
+      <button onclick="event.stopPropagation();${fn}('${s.id}',this)" title="${title}" class="flex flex-col items-center gap-1 flex-shrink-0 px-1 py-1">
         <span class="text-[9px] font-body uppercase tracking-wider ${on ? 'text-primary' : 'text-outline-variant'}">${label}</span>
         <div class="mswitch relative w-14 h-7 rounded-full transition-colors ${on ? 'bg-primary' : 'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${on ? 'left-7' : 'left-0.5'}"></div></div>
       </button>`;
@@ -51,10 +51,11 @@ export function renderServicesMerged() {
 
 // ── Customer check-in service visibility (config.hidden_services) ─────────────
 export function isServiceVisibleOnCheckin(id) { return !cfg().hidden_services.includes(id); }
-export function toggleCheckinService(id) {
+export function toggleCheckinService(id, btn) {
   const hidden = cfg().hidden_services;
+  const nowVisible = hidden.includes(id);   // currently hidden → toggling turns it on
   dispatch('config.set', { key: 'hidden_services', value: hidden.includes(id) ? hidden.filter(x => x !== id) : [...hidden, id] });
-  renderServicesMerged();
+  if (btn) setSwitchVisual(btn, nowVisible); else renderServicesMerged();
 }
 export function toggleAllCheckinServices() {
   dispatch('config.set', { key: 'hidden_services', value: cfg().hidden_services.length === 0 ? cfg().services.map(s => s.id) : [] });
@@ -128,11 +129,12 @@ export function deleteService(id) {
 // ── Dashboard service visibility (config.hidden_dash_services) ────────────────
 export function isServiceVisibleOnDash(id) { return !cfg().hidden_dash_services.includes(id); }
 
-export function toggleDashService(id) {
+export function toggleDashService(id, btn) {
   const hidden = cfg().hidden_dash_services;
+  const nowVisible = hidden.includes(id);   // currently hidden → toggling turns it on
   const next = hidden.includes(id) ? hidden.filter(x => x !== id) : [...hidden, id];
   dispatch('config.set', { key: 'hidden_dash_services', value: next });
-  renderServicesMerged();
+  if (btn) setSwitchVisual(btn, nowVisible); else renderServicesMerged();
 }
 
 export function toggleAllDashServices() {

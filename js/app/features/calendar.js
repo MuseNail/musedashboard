@@ -1,7 +1,7 @@
 // ── Google Calendar + Tasks ─────────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, formatPhone, byName, newEntryId } from '../utils.js';
+import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer } from './square-customers.js';
 import { squarePushBooking } from './square-pos.js';
 
@@ -73,13 +73,14 @@ export function renderCalAutoHideSetting() {
     + `<div class="flex items-start justify-between gap-4">`
     + `<div class="min-w-0"><p class="text-sm font-body font-semibold text-on-surface">Auto-hide off-duty staff</p>`
     + `<p class="text-xs font-body text-on-surface-variant mt-0.5">Show only staff scheduled to work each day. Staff marked off, sick, or vacation are hidden automatically. Open the Calendars filter to peek at one — it re-hides when you change days.</p></div>`
-    + `<button onclick="toggleCalAutoHide()" class="flex-shrink-0 mt-0.5" aria-label="Auto-hide off-duty staff">`
+    + `<button onclick="toggleCalAutoHide(this)" class="flex-shrink-0 mt-0.5" aria-label="Auto-hide off-duty staff">`
     + `<div class="mswitch relative w-14 h-7 rounded-full transition-colors ${on?'bg-primary':'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${on?'left-7':'left-0.5'}"></div></div>`
     + `</button></div>`;
 }
-export function toggleCalAutoHide() {
-  dispatch('config.set', { key: 'cal_autohide_offduty', value: !calAutoHideOn() });
-  renderCalAutoHideSetting();
+export function toggleCalAutoHide(btn) {
+  const on = !calAutoHideOn();
+  dispatch('config.set', { key: 'cal_autohide_offduty', value: on });
+  if (btn) setSwitchVisual(btn, on); else renderCalAutoHideSetting();
   _calOffPeek = new Set();
   if (document.getElementById('cal-grid')) { calRenderGridPreserveScroll(); renderCalSelectorList(); }
 }

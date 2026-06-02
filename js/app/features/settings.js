@@ -1,7 +1,7 @@
 // ── Settings panel ──────────────────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast } from '../utils.js';
+import { showToast, setSwitchVisual } from '../utils.js';
 import { canDo, getActiveUser, ui } from '../session.js';
 import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION, STATE_PROXY } from '../config.js';
 import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
@@ -39,15 +39,15 @@ export function renderRolePermissions() {
   el.innerHTML = roles.length === 0 ? '<p class="text-sm font-body text-on-surface-variant">No configurable roles found.</p>'
     : roles.map(role => `<div class="mb-5 last:mb-0"><div class="font-headline font-semibold text-on-surface text-sm mb-2 capitalize">${role}</div>
       <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high overflow-hidden">
-        ${Object.entries(_PERM_LABELS).map(([perm,label]) => { const enabled = rp[role]?.[perm] ?? false; return `<div class="flex items-center justify-between px-4 py-2.5 border-b border-surface-container-high last:border-0"><span class="text-sm font-body text-on-surface">${label}</span><button onclick="toggleRolePermission('${role}','${perm}')" class="mswitch relative w-14 h-7 rounded-full transition-colors flex-shrink-0 ml-4 ${enabled?'bg-primary':'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${enabled?'left-7':'left-0.5'}"></div></button></div>`; }).join('')}
+        ${Object.entries(_PERM_LABELS).map(([perm,label]) => { const enabled = rp[role]?.[perm] ?? false; return `<div class="flex items-center justify-between px-4 py-2.5 border-b border-surface-container-high last:border-0"><span class="text-sm font-body text-on-surface">${label}</span><button onclick="toggleRolePermission('${role}','${perm}',this)" class="mswitch relative w-14 h-7 rounded-full transition-colors flex-shrink-0 ml-4 ${enabled?'bg-primary':'bg-surface-container-high'}"><div class="absolute top-0.5 w-6 h-6 rounded-full bg-white shadow transition-all ${enabled?'left-7':'left-0.5'}"></div></button></div>`; }).join('')}
       </div></div>`).join('');
 }
-export function toggleRolePermission(role, perm) {
+export function toggleRolePermission(role, perm, btn) {
   const rp = JSON.parse(JSON.stringify(rolePerms()));
   if (!rp[role]) rp[role] = {};
   rp[role][perm] = !rp[role][perm];
   dispatch('config.set', { key: 'role_permissions', value: rp });
-  renderRolePermissions();
+  if (btn) setSwitchVisual(btn, rp[role][perm]); else renderRolePermissions();
   showToast('Permission updated ✓');
 }
 

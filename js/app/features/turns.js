@@ -637,7 +637,12 @@ export function archiveTurnsForDay(dateStr) {
 export function rolloverTurns(closedDateStr) { archiveTurnsForDay(closedDateStr); setOrder([]); }
 export function archiveTurnsForToday() { rolloverTurns(todayStr()); }
 export function openTurnsHistoryPicker(ev) {
-  window.openDayPicker?.(ev, { value: turnsViewingHistory || todayStr(), onPick: loadTurnsHistory });
+  const today = new Date();
+  const presets = [0, 1, 2, 3, 4, 5, 6].map(n => {
+    const d = new Date(today); d.setDate(d.getDate() - n);
+    return { label: n === 0 ? 'Today' : n === 1 ? 'Yesterday' : `${n} days ago`, date: localDateStr(d) };
+  });
+  window.openDayPicker?.(ev, { value: turnsViewingHistory || todayStr(), onPick: loadTurnsHistory, presets });
 }
 export function loadTurnsHistory(dateStr) {
   const today = todayStr();
