@@ -10,7 +10,7 @@ import { isPaidStatus } from './status.js';
 import { squareUpsertCustomer } from './square-customers.js';
 import { avgServiceTime, fmtDur } from './servicetime.js';
 import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS } from '../config.js';
-import { gcRedemptions } from './giftcards.js';
+import { gcRedemptions, gcTotalUsed } from './giftcards.js';
 
 const cfg = () => getState().config;
 const records = () => getState().records;
@@ -549,7 +549,7 @@ export function runReport() {
   const gcSold = giftCards().filter(g => inPeriod(g.datePurchased));
   const gcSoldValue = gcSold.reduce((s,g)=>s+(g.amount||0),0);
   const gcRedeemed = giftCards().reduce((s,g)=> s + gcRedemptions(g).reduce((a,r)=> a + (inPeriod(r.date) ? (r.amount||0) : 0), 0), 0);
-  const gcOutstanding = giftCards().reduce((s,g)=>s+((g.amount||0)-(g.amountUsed||0)),0);
+  const gcOutstanding = giftCards().reduce((s,g)=>s+Math.max(0,(g.amount||0)-gcTotalUsed(g)),0);   // authoritative redemption sum, floored at 0
   // Gross income = true new cash collected: billed work + new gift-card cash, minus
   // redemptions (those tickets are already in totalBilled but were paid from cards
   // sold earlier, so the redeemed portion isn't new cash this period).

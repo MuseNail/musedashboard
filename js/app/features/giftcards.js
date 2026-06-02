@@ -41,7 +41,11 @@ export function gcSyncTicket(ticketId, items) {
   (items || []).forEach(it => {
     if (!(it.amount > 0)) return;
     const g = giftCards().find(x => x.id === it.giftcardId); if (!g) return;
-    _gcCommit({ ...g, redemptions: [...gcRedemptions(g), { date: todayStr(), amount: +it.amount, ticketId }] });
+    // Hard clamp at the remaining balance (this ticket's prior draws were just reversed above) so
+    // a stale picker amount or a concurrent redemption on another device can't overdraw the card.
+    const amt = Math.min(+it.amount, Math.max(0, (g.amount || 0) - gcTotalUsed(g)));
+    if (amt <= 0) return;
+    _gcCommit({ ...g, redemptions: [...gcRedemptions(g), { date: todayStr(), amount: amt, ticketId }] });
   });
 }
 
@@ -128,11 +132,15 @@ export function saveGiftCard() {
   const redemptions = _gcRedeem.filter(r => (r.amount || 0) > 0 || r.date).map(r => ({ date: r.date || '', amount: parseFloat(r.amount) || 0 }));
   const amountUsed = redemptions.reduce((s, r) => s + (r.amount || 0), 0);
   const lastDate = redemptions.map(r => r.date).filter(Boolean).sort().pop() || '';
+  const amount = parseFloat(document.getElementById('gc-amount').value) || 0;
+  // A card can never be redeemed for more than its value — reject so a typo can't drive a
+  // negative balance / wrong outstanding-liability figure.
+  if (amountUsed > amount + 0.005) { showToast(`Redemptions ($${amountUsed.toFixed(2)}) exceed the card value ($${amount.toFixed(2)}).`); return; }
   const card = {
     id: editId || 'gc-' + Date.now(),
     datePurchased: document.getElementById('gc-date').value,
     serial,
-    amount: parseFloat(document.getElementById('gc-amount').value) || 0,
+    amount,
     phone: document.getElementById('gc-phone').value.trim(),
     from: document.getElementById('gc-from').value.trim(),
     to: document.getElementById('gc-to').value.trim(),
@@ -199,9 +207,10 @@ export function renderGiftCards() {
   list.innerHTML = filtered.map(g => {
     const used = gcTotalUsed(g);
     const balance = (g.amount||0) - used;
-    const isRedeemed = balance <= 0 && used > 0;
-    const isPartial = used > 0 && balance > 0;
-    const sc = isRedeemed ? { bg:'rgba(200,230,197,0.2)', border:'#2a7a4f', label:'Redeemed', lc:'#2a7a4f' } : isPartial ? { bg:'rgba(255,224,178,0.2)', border:'#d4860a', label:'Partial', lc:'#a05000' } : { bg:'', border:'#c8d4d8', label:'Active', lc:'#1a5252' };
+    const isOverdrawn = balance < -0.005;   // redeemed for more than its value — surface it, don't hide
+    const isRedeemed = !isOverdrawn && balance <= 0.005 && used > 0;
+    const isPartial = used > 0 && balance > 0.005;
+    const sc = isOverdrawn ? { bg:'rgba(229,90,87,0.12)', border:'#c53030', label:'Overdrawn', lc:'#c53030' } : isRedeemed ? { bg:'rgba(200,230,197,0.2)', border:'#2a7a4f', label:'Redeemed', lc:'#2a7a4f' } : isPartial ? { bg:'rgba(255,224,178,0.2)', border:'#d4860a', label:'Partial', lc:'#a05000' } : { bg:'', border:'#c8d4d8', label:'Active', lc:'#1a5252' };
     return `<div onclick="showEditGiftCard('${g.id}')" title="Edit gift card" class="rounded-xl border flex items-center gap-0 overflow-hidden cursor-pointer hover:shadow-md transition-shadow" style="background:${sc.bg};border-color:${sc.border}">
       <div class="flex-shrink-0 flex items-center justify-center font-headline font-extrabold text-xl px-4 self-stretch" style="width:88px;background:${sc.border}22;border-right:1px solid ${sc.border}40;color:${sc.lc}">$${(g.amount||0).toFixed(0)}</div>
       <div class="flex-shrink-0 flex items-center justify-center px-3" style="width:96px"><span class="text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap" style="background:${sc.border}20;color:${sc.lc}">${sc.label}</span></div>
@@ -211,7 +220,7 @@ export function renderGiftCards() {
       <div class="flex-shrink-0 text-xs font-body px-2 truncate" style="width:110px">${g.to ? `<span class="text-on-surface">${g.to}</span>` : '<span class="text-outline-variant">—</span>'}</div>
       <div class="flex-shrink-0 text-xs font-body text-on-surface-variant px-2" style="width:110px">${g.phone || '—'}</div>
       <div class="flex-grow min-w-0 text-xs font-body text-on-surface-variant italic truncate px-2">${g.notes || ''}</div>
-      <div class="flex-shrink-0 text-right px-4 py-3" style="width:96px"><div class="text-[10px] text-on-surface-variant leading-none mb-0.5">Balance</div><div class="text-base font-headline font-extrabold leading-none" style="color:${balance>0?'#1a5252':'#aaa'}">$${balance.toFixed(2)}</div>${used>0?`<div class="text-[10px] text-on-surface-variant mt-0.5">$${used.toFixed(2)} used</div>`:''}</div>
+      <div class="flex-shrink-0 text-right px-4 py-3" style="width:96px"><div class="text-[10px] text-on-surface-variant leading-none mb-0.5">Balance</div><div class="text-base font-headline font-extrabold leading-none" style="color:${isOverdrawn?'#c53030':balance>0?'#1a5252':'#aaa'}">$${balance.toFixed(2)}</div>${used>0?`<div class="text-[10px] text-on-surface-variant mt-0.5">$${used.toFixed(2)} used</div>`:''}</div>
     </div>`;
   }).join('');
 }
