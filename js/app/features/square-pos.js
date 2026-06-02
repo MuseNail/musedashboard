@@ -17,19 +17,23 @@ let _pendingPay = null;
 // R6 gift-card-as-recorded-tender (staging for the current pay session). These NEVER change
 // the Square charge — the full ticket total always goes to Square; we only record which cards
 // were used so the app's gift-card balances stay in sync. Committed when the ticket is paid.
-let _payGc = [], _payTicketId = null, _gcPickerOpen = false, _newGcOpen = false, _payCash = 0, _payTip = 0, _payZelle = 0;   // _payCash/_payTip/_payZelle in dollars (split-tender cash / Zelle / card tip — tip is charged ON TOP of the bill, never part of ticketTotal)
+let _payGc = [], _payTicketId = null, _gcPickerOpen = false, _newGcOpen = false, _payCash = 0, _payTip = 0, _payZelle = 0;   // _payCash/_payTip/_payZelle in dollars (split-tender cash / Zelle / tip). The tip is collected ON TOP of the bill by whatever tender covers it (cash/Zelle/card) — never part of ticketTotal.
 const _gcBal = g => (g.amount || 0) - (window.gcTotalUsed ? window.gcTotalUsed(g) : 0);
-const _payTotalDollars = () => (_pendingPay?.cents || 0) / 100;
+const _payTotalDollars = () => (_pendingPay?.cents || 0) / 100;                 // the BILL (svc + items + fees − discount); tip NOT included
+const _payTipDollars   = () => Math.max(0, _payTip || 0);
+// What must actually be collected = the bill PLUS the tip. Gift cards pay the bill only; cash,
+// Zelle, then the card fill the rest (bill + tip) in that order, so a tip can be paid by any tender.
+const _payCollectDollars = () => _payTotalDollars() + _payTipDollars();
 const _payGiftDollars  = () => _payGc.reduce((s, t) => s + (t.amount || 0), 0);
-// Cash actually applied to the ticket (anything beyond is change the front desk gives back).
-const _payCashAppliedDollars = () => Math.max(0, Math.min(_payCash, _payTotalDollars() - _payGiftDollars()));
-// Zelle applied: a bank transfer of an exact amount (no change), applied AFTER gift + cash.
-const _payZelleAppliedDollars = () => Math.max(0, Math.min(_payZelle, _payTotalDollars() - _payGiftDollars() - _payCashAppliedDollars()));
-// Change owed back to the customer when they hand over more cash than the balance.
-const _payChangeDollars = () => Math.max(0, _payCash - Math.max(0, _payTotalDollars() - _payGiftDollars()));
-// What's charged on the Terminal after gift cards + cash + Zelle are applied.
-const _payCardDueDollars = () => Math.max(0, _payTotalDollars() - _payGiftDollars() - _payCashAppliedDollars() - _payZelleAppliedDollars());
-const _gcRoom = () => Math.max(0, _payTotalDollars() - _payCash - _payGiftDollars() - _payZelle);
+// Cash actually applied (toward bill + tip); anything beyond is change the front desk gives back.
+const _payCashAppliedDollars = () => Math.max(0, Math.min(_payCash, _payCollectDollars() - _payGiftDollars()));
+// Zelle applied: an exact bank transfer (no change), applied AFTER gift + cash, toward bill + tip.
+const _payZelleAppliedDollars = () => Math.max(0, Math.min(_payZelle, _payCollectDollars() - _payGiftDollars() - _payCashAppliedDollars()));
+// Change owed back to the customer when they hand over more cash than the bill + tip.
+const _payChangeDollars = () => Math.max(0, _payCash - Math.max(0, _payCollectDollars() - _payGiftDollars()));
+// What's charged on the Terminal after gift + cash + Zelle — the card balance PLUS any tip those didn't cover.
+const _payCardDueDollars = () => Math.max(0, _payCollectDollars() - _payGiftDollars() - _payCashAppliedDollars() - _payZelleAppliedDollars());
+const _gcRoom = () => Math.max(0, _payTotalDollars() - _payCash - _payGiftDollars() - _payZelle);   // gift cards fill the BILL only (never a tip)
 const _gcStagedFor = id => _payGc.filter(t => t.giftcardId === id).reduce((s, t) => s + (t.amount || 0), 0);
 // Bill components across the party, for the Confirm Payment summary. Sales Total = the bill =
 // svc + items + fees − discount = _payTotalDollars(); the tip is separate (added to the card).
@@ -165,15 +169,22 @@ export async function proceedTerminalPayment() {
   const party = (_pendingPay.ids || []).map(id => queue().find(x => String(x.id) === String(id))).filter(Boolean);
   if (!party.length) { showToast('Ticket not found.'); return; }
   // Split tender: cash + gift cards reduce what's charged on the card.
-  const total         = _pendingPay.cents;
+  const total         = _pendingPay.cents;              // the BILL in cents (tip NOT included)
+  const tipCents       = Math.round(_payTipDollars() * 100);   // tip — collected on top of the bill, recorded separately (never part of `total`)
   const giftCents      = Math.round(_payGiftDollars() * 100);
+  // Amounts each tender actually COLLECTS (toward bill + tip) — what we charge/record in Square.
   const cashAppliedC   = Math.round(_payCashAppliedDollars() * 100);
   const cashReceivedC  = Math.round(_payCash * 100);
   const changeCents    = Math.round(_payChangeDollars() * 100);
-  const zelleC         = Math.round(_payZelleAppliedDollars() * 100);   // Zelle applied (bank transfer, no change)
-  const cardCents      = Math.max(0, total - giftCents - cashAppliedC - zelleC);
-  const tipCents       = Math.round(_payTip * 100);   // card tip, charged ON TOP of the bill — never part of `total`
-  const termCharge     = cardCents + tipCents;          // what actually goes on the Terminal
+  const zelleC         = Math.round(_payZelleAppliedDollars() * 100);   // Zelle collected incl. its share of the tip (no change)
+  const termCharge     = Math.max(0, (total + tipCents) - giftCents - cashAppliedC - zelleC);   // card balance + any tip cash/Zelle didn't cover
+  // BILL-portion of each tender (cash → Zelle → card, capped at the bill after gift) for the
+  // recorded `tenders` map — so it always sums to the BILL and the tip stays a separate field.
+  // Reports/reconcile add the tip on top, and every historical record uses this same shape.
+  const billAfterGiftC = Math.max(0, total - giftCents);
+  const cashBillC      = Math.min(cashAppliedC, billAfterGiftC);
+  const zelleBillC     = Math.min(zelleC, billAfterGiftC - cashBillC);
+  const cardBillC      = Math.max(0, billAfterGiftC - cashBillC - zelleBillC);
   // Cash-drawer gate: non-Admin users must open a cash drawer before taking cash, so the
   // cash lands in a reconciled shift. Admin (Manager PIN) is exempt. See features/cashdrawer.js.
   if (cashAppliedC > 0 && !getState().config.cash_drawer && getActiveUser()?.role !== 'admin') {
@@ -184,7 +195,7 @@ export async function proceedTerminalPayment() {
   if (termCharge > 0 && !sc.terminalDeviceId) { showToast('Pair your Square Terminal in Settings → Square first.'); return; }
   // Capture BEFORE closeSquareConfirm() — it nulls _pendingPay / _payTicketId / _payCash / _payTip.
   const payNames = _pendingPay.names || '', ticketId = _payTicketId, partyIds = party.map(e => String(e.id));
-  const tenders  = { cash: cashAppliedC / 100, card: cardCents / 100, gift: giftCents / 100, zelle: zelleC / 100, cashReceived: cashReceivedC / 100, change: changeCents / 100 };
+  const tenders  = { cash: cashBillC / 100, card: cardBillC / 100, gift: giftCents / 100, zelle: zelleBillC / 100, cashReceived: cashReceivedC / 100, change: changeCents / 100 };
   // Stash recorded gift cards on the ticket so they're drawn down when marked Paid.
   if (ticketId) {
     const ge = queue().find(x => String(x.id) === ticketId);
@@ -426,10 +437,11 @@ function renderPayGc() {
       <span class="flex items-center gap-1"><span class="text-on-surface-variant text-sm">$</span>
       <input id="sq-zelle-amt" type="text" inputmode="none" value="${_payZelle > 0 ? _payZelle.toFixed(2) : ''}" placeholder="0.00" onfocus="openNumpad(this,'Zelle received','cost')" onclick="openNumpad(this,'Zelle received','cost')" oninput="sqZelleInput(this.value)" class="w-24 border border-surface-container-high rounded-lg px-2 py-1.5 text-sm text-right text-on-surface bg-surface-container-lowest focus:outline-none focus:border-primary"></span>
     </div>`;
-  // Tip is charged ON TOP of the card on the Terminal (card-only). It is NOT part of the bill/
-  // ticketTotal — it's added to the Terminal charge and tracked separately in Reports.
+  // Tip is collected ON TOP of the bill. It's NOT part of the bill/ticketTotal — it's added to
+  // what must be collected, paid by whatever tender covers it (cash/Zelle absorb it first, then
+  // the card takes any remainder), and tracked separately in Reports.
   const tipRow = `<div class="flex items-center justify-between mb-3">
-      <span class="text-sm font-body text-on-surface">Tip <span class="text-on-surface-variant text-xs">(added to card)</span></span>
+      <span class="text-sm font-body text-on-surface">Tip <span class="text-on-surface-variant text-xs">(added to the total)</span></span>
       <span class="flex items-center gap-1"><span class="text-on-surface-variant text-sm">$</span>
       <input id="sq-tip-amt" type="text" inputmode="none" value="${_payTip > 0 ? _payTip.toFixed(2) : ''}" placeholder="0.00" onfocus="openNumpad(this,'Tip','cost')" onclick="openNumpad(this,'Tip','cost')" oninput="sqTipInput(this.value)" class="w-24 border border-surface-container-high rounded-lg px-2 py-1.5 text-sm text-right text-on-surface bg-surface-container-lowest focus:outline-none focus:border-primary"></span>
     </div>`;
@@ -451,7 +463,7 @@ function renderPayGc() {
       <div id="sq-row-zelle" class="flex justify-between text-on-surface-variant" style="display:none"><span>Zelle received</span><span id="sq-zelle-rcv">$0.00</span></div>
       <div class="${BIG} mt-1.5" style="${BIGS}"><span class="text-on-surface">Sales Total</span><span class="text-primary">$${_payTotalDollars().toFixed(2)}</span></div>
       <div id="sq-row-change" class="${BIG}" style="${BIGS};display:none"><span class="text-on-surface">Change due</span><span class="text-primary" id="sq-change">$0.00</span></div>
-      <div class="${BIG} border-t border-surface-container-high mt-2 pt-2" style="${BIGS}"><span class="text-on-surface">Card on Terminal</span><span class="text-primary" id="sq-card-due">$${(_payCardDueDollars() + _payTip).toFixed(2)}</span></div>
+      <div class="${BIG} border-t border-surface-container-high mt-2 pt-2" style="${BIGS}"><span class="text-on-surface">Card on Terminal</span><span class="text-primary" id="sq-card-due">$${_payCardDueDollars().toFixed(2)}</span></div>
     </div>`;
   host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}${zelleRow}${tipRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${newGcBtn}${picker}${newGcForm}${breakdown}`;
   sqUpdatePayBreakdown();
@@ -475,7 +487,7 @@ export function sqZelleInput(v) {
 // re-rendering the section (which would yank the numpad's target input mid-entry).
 export function sqUpdatePayBreakdown() {
   const cardDue = _payCardDueDollars(), change = _payChangeDollars(), cash = _payCash, tip = _payTip, zelle = _payZelleAppliedDollars();
-  const termCharge = cardDue + tip;   // tip rides on top of the card portion of the bill
+  const termCharge = cardDue;   // tip is already folded into cardDue (only the portion cash/Zelle didn't cover)
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = '$' + v.toFixed(2); };
   set('sq-card-due', termCharge); set('sq-cash-rcv', cash); set('sq-change', change); set('sq-tip', tip); set('sq-zelle-rcv', zelle);
   const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? 'flex' : 'none'; };
