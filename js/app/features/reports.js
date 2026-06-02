@@ -1424,6 +1424,10 @@ export function renderTransactions() {
   // Day/range total bar (always shown): net = paid tickets minus refunds (refunds store a
   // negative totalCost). Count is transactions as shown — a party counts once, not per guest.
   const net = combined.reduce((s,r)=>s+(r.totalCost||0),0);
+  const refundsTotal = combined.filter(r => r.status === 'refund').reduce((s,r)=>s+Math.abs(r.totalCost||0),0);
+  const rfWrap = document.getElementById('txn-total-refunds-wrap'), rfEl = document.getElementById('txn-total-refunds');
+  if (rfWrap) rfWrap.classList.toggle('hidden', refundsTotal === 0);
+  if (rfEl && refundsTotal > 0) rfEl.textContent = `-$${refundsTotal.toFixed(2)}`;
   const seenParties = new Set(); let txnCount = 0;
   combined.forEach(r => { if (r.groupId && r.status !== 'refund') { if (!seenParties.has(r.groupId)) { seenParties.add(r.groupId); txnCount++; } } else txnCount++; });
   const rngEl = document.getElementById('txn-total-range'); if (rngEl) rngEl.textContent = rangeLabel();

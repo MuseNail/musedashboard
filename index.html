@@ -608,9 +608,15 @@ tailwind.config = {
             <span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:18px">receipt_long</span>
             <span class="truncate">Showing <strong id="txn-total-range">Today</strong> · <span id="txn-total-count">0</span> ticket<span id="txn-total-count-s">s</span></span>
           </div>
-          <div class="text-right flex-shrink-0">
-            <div class="font-headline font-extrabold text-primary text-xl leading-none" id="txn-total-net">$0.00</div>
-            <div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest mt-0.5">Net Total</div>
+          <div class="flex items-center gap-5 flex-shrink-0">
+            <div id="txn-total-refunds-wrap" class="text-right hidden">
+              <div class="font-headline font-extrabold text-xl leading-none" style="color:#c53030" id="txn-total-refunds">-$0.00</div>
+              <div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest mt-0.5">Refunds</div>
+            </div>
+            <div class="text-right">
+              <div class="font-headline font-extrabold text-primary text-xl leading-none" id="txn-total-net">$0.00</div>
+              <div class="text-[10px] font-body text-on-surface-variant uppercase tracking-widest mt-0.5">Net Total</div>
+            </div>
           </div>
         </div>
         <div id="txn-list" class="space-y-2"></div>
