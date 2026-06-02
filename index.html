@@ -2136,6 +2136,9 @@ tailwind.config = {
       <button onclick="syncSquareCustomers()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary text-sm font-body font-semibold hover:bg-primary/5 transition-colors">
         <span class="material-symbols-outlined" style="font-size:16px">sync</span> Sync Square
       </button>
+      <button onclick="openCustomerCleanup()" title="Find &amp; merge duplicate / junk customers" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-container-high text-on-surface text-sm font-body font-semibold hover:bg-surface-container transition-colors">
+        <span class="material-symbols-outlined" style="font-size:16px">cleaning_services</span> Clean up
+      </button>
     </div>
     <div id="customer-dir-list" class="overflow-y-auto flex-1" style="scrollbar-width:thin"></div>
   </div>

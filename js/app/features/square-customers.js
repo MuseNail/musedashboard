@@ -309,6 +309,84 @@ export function renderCustomerDir(query) {
   }).join('');
 }
 
+// ── Customer cleanup / dedup ────────────────────────────────────────────────────
+const _custPhoneKey = c => (c.phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+const _custNameKey  = c => [c.firstName, c.lastName].filter(Boolean).join(' ').trim().toLowerCase().replace(/\s+/g, ' ');
+// Pure: group directory customers into review sets — profiles sharing a phone, and profiles
+// sharing an identical name. Only sets with 2+ members are returned (sorted largest first).
+// Notes/visit history are phone-keyed app-side, so merging by deleting extra profiles loses nothing.
+export function findDuplicateGroups(directory) {
+  const group = keyFn => {
+    const m = new Map();
+    (directory || []).forEach(c => { const k = keyFn(c); if (!k) return; if (!m.has(k)) m.set(k, []); m.get(k).push(c); });
+    return [...m.entries()].filter(([, a]) => a.length > 1).map(([key, customers]) => ({ key, customers }))
+      .sort((a, b) => b.customers.length - a.customers.length);
+  };
+  return { byPhone: group(_custPhoneKey), byName: group(_custNameKey) };
+}
+// Delete one Square customer + drop it from the local caches. 404 (already gone) counts as success.
+export async function deleteSquareCustomer(squareId) {
+  if (!squareId) return false;
+  try {
+    const res = await fetch(`${SQUARE_PROXY}/v2/customers/${squareId}`, { method: 'DELETE' });
+    if (!res.ok && res.status !== 404) { const j = await res.json().catch(() => ({})); showToast('Delete failed: ' + (j.errors?.[0]?.detail || ('HTTP ' + res.status))); return false; }
+    const di = customerDirectory.findIndex(c => c.squareId === squareId); if (di >= 0) customerDirectory.splice(di, 1);
+    const si = squareCustomers.findIndex(c => c.id === squareId); if (si >= 0) squareCustomers.splice(si, 1);
+    try { localStorage.setItem('muse_customers', JSON.stringify(customerDirectory)); } catch (e) {}
+    return true;
+  } catch (e) { showToast('Could not reach Square'); return false; }
+}
+// Merge = keep one profile, delete the rest. (Square has no merge API; notes/history are phone-keyed
+// so the surviving profile keeps everything.) Returns the count successfully removed.
+export async function mergeCustomers(keepId, removeIds) {
+  let removed = 0;
+  for (const id of (removeIds || [])) { if (id && id !== keepId && await deleteSquareCustomer(id)) removed++; }
+  return removed;
+}
+
+// ── Cleanup UI (rendered into the directory modal's list) ───────────────────────
+const _cEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const _cName = c => _cEsc([c.firstName, c.lastName].filter(Boolean).join(' ') || '(no name)');
+export function openCustomerCleanup() { renderCustomerCleanup(); }
+export function renderCustomerCleanup() {
+  const list = document.getElementById('customer-dir-list'); if (!list) return;
+  const { byPhone, byName } = findDuplicateGroups(customerDirectory);
+  const noPhone = customerDirectory.filter(c => !_custPhoneKey(c));
+  const memberRow = (c, ids) => `<div class="flex items-center justify-between gap-2 px-3 py-2 border-t border-surface-container first:border-t-0">
+      <div class="min-w-0"><div class="text-sm font-body font-semibold text-on-surface truncate">${_cName(c)}</div><div class="text-[11px] text-on-surface-variant truncate">${_cEsc(c.phone || 'no phone')}${c.email ? ' · ' + _cEsc(c.email) : ''}</div></div>
+      <span class="flex gap-1.5 flex-shrink-0 items-center">
+        <button onclick="cleanupMergeGroup('${c.squareId}','${ids}')" class="text-[11px] font-body font-bold text-on-primary bg-primary rounded-lg px-2.5 py-1">Keep, merge rest</button>
+        <button onclick="cleanupDeleteCustomer('${c.squareId}')" title="Delete just this one" class="text-on-surface-variant hover:text-error flex items-center"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
+      </span></div>`;
+  const groupCard = g => { const ids = g.customers.map(c => c.squareId).join(','); return `<div class="rounded-xl border border-surface-container-high mb-2 overflow-hidden"><div class="px-3 py-1.5 bg-surface-container text-[11px] font-body font-semibold text-on-surface-variant">${_cEsc(g.key)} · ${g.customers.length} profiles</div>${g.customers.map(c => memberRow(c, ids)).join('')}</div>`; };
+  const section = (title, hint, html, n) => `<div class="text-xs font-headline font-bold text-on-surface uppercase tracking-widest mt-3 mb-1">${title} <span class="text-on-surface-variant">(${n})</span></div><div class="text-[11px] text-on-surface-variant mb-2">${hint}</div>${html || '<div class="text-xs text-on-surface-variant italic py-1">None. ✓</div>'}`;
+  const noPhoneHtml = noPhone.slice(0, 300).map(c => `<div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-surface-container-high mb-1"><div class="min-w-0"><div class="text-sm font-body font-semibold text-on-surface truncate">${_cName(c)}</div><div class="text-[11px] text-on-surface-variant truncate">no phone${c.email ? ' · ' + _cEsc(c.email) : ''}</div></div><button onclick="cleanupDeleteCustomer('${c.squareId}')" title="Delete" class="text-on-surface-variant hover:text-error flex items-center flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button></div>`).join('');
+  list.innerHTML = `
+    <div class="flex items-center justify-between mb-2"><button onclick="renderCustomerDir('')" class="flex items-center gap-1 text-sm font-body font-semibold text-primary"><span class="material-symbols-outlined" style="font-size:18px">arrow_back</span> All customers</button><span class="text-[11px] text-on-surface-variant">${customerDirectory.length} total</span></div>
+    ${section('Same phone', 'Profiles sharing a phone — usually one person (or family on one number). Tap "Keep, merge rest" on the right profile; the others are deleted (notes &amp; history stay, since they’re phone-keyed).', byPhone.map(groupCard).join(''), byPhone.length)}
+    ${section('Same name', 'Identical name — could be the same person twice, or two different people. Review before merging.', byName.map(groupCard).join(''), byName.length)}
+    ${section('No phone', 'No phone on file. Delete placeholder/junk entries.', noPhoneHtml, noPhone.length)}`;
+}
+export async function cleanupMergeGroup(keepId, idsCsv) {
+  const ids = (idsCsv || '').split(',').filter(Boolean);
+  const removeIds = ids.filter(id => id !== keepId);
+  if (!removeIds.length) return;
+  const keep = customerDirectory.find(c => c.squareId === keepId);
+  const keepName = keep ? ([keep.firstName, keep.lastName].filter(Boolean).join(' ') || 'this customer') : 'this customer';
+  if (!confirm(`Keep "${keepName}" and permanently delete the other ${removeIds.length} profile${removeIds.length !== 1 ? 's' : ''} in Square?\n\nNotes & visit history stay with the kept profile. Past sales are not deleted.`)) return;
+  showToast('Merging…');
+  const n = await mergeCustomers(keepId, removeIds);
+  showToast(`Merged — removed ${n} duplicate${n !== 1 ? 's' : ''}`);
+  window.logAudit?.('Customer merge', `kept ${keepName}, removed ${n}`);
+  renderCustomerCleanup();
+}
+export async function cleanupDeleteCustomer(id) {
+  const c = customerDirectory.find(x => x.squareId === id);
+  const nm = c ? ([c.firstName, c.lastName].filter(Boolean).join(' ') || '(no name)') : 'this customer';
+  if (!confirm(`Delete "${nm}" from Square? This is permanent.\n\nPast sales are not deleted — the profile is just unlinked.`)) return;
+  if (await deleteSquareCustomer(id)) { showToast('Customer deleted'); window.logAudit?.('Customer delete', nm); renderCustomerCleanup(); }
+}
+
 export function showEditCustomer(squareId) {
   const c = customerDirectory.find(x => x.squareId === squareId);
   if (!c) return;
@@ -419,6 +497,20 @@ export async function squarePullStaff() {
 // Returns the Square customer id (existing or newly created), or null when there's nothing to
 // link (no name / no phone / Square not reachable). The pay flow uses the returned id to attach
 // the sale to the customer in Square (customer_id on the checkout + payment).
+// On a GROUP check-in, party guests often share ONE phone (e.g. a mom's number entered for her
+// daughter too). Upserting each member would repeatedly update the SAME Square profile, so its
+// name flip-flops between the party members (the "Patti → Patti Daughter", "Abby 1" mess). Upsert
+// only the FIRST member per distinct phone, so a shared phone yields one stable customer.
+export function upsertPartyCustomers(entries) {
+  const seen = new Set();
+  (entries || []).forEach(e => {
+    if (e.skipSquare) return;
+    const key = (e.phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+    if (key) { if (seen.has(key)) return; seen.add(key); }
+    squareUpsertCustomer(e);
+  });
+}
+
 export async function squareUpsertCustomer(entry) {
   if (!entry.name || entry.name.trim() === '-') return null;
   const parts = entry.name.trim().split(/\s+/);

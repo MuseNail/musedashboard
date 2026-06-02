@@ -11,7 +11,7 @@ import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
-import { squareUpsertCustomer, showEditCustomer, customerDirectory, closeCustomerNote } from './square-customers.js';
+import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote } from './square-customers.js';
 
 const cfg   = () => getState().config;
 const q     = () => getState().queue;
@@ -559,7 +559,7 @@ export function submitManualAdd() {
     newEntries.forEach((e, i) => { e.groupId = groupId; e.groupColor = groupColor; e.groupLabel = i === 0 ? `${e.name} (primary)` : `${primaryName} — ${e.name}`; });
   }
   newEntries.forEach(e => upsert(e));
-  newEntries.forEach(e => { if (!e.skipSquare) squareUpsertCustomer(e); });
+  upsertPartyCustomers(newEntries);   // one Square profile per distinct phone (no shared-phone flip-flop)
   window.logAudit?.('Check-in', `${newEntries.map(e => e.name).join(' & ')} added (manual)`);
   renderQueue(); updateStats(); window.renderTurns?.();
   closeManualAdd();

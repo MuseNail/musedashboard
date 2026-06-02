@@ -4,7 +4,7 @@ import { dispatch } from '../sync.js';
 import { showToast, newEntryId } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui } from '../session.js';
-import { squareUpsertCustomer } from './square-customers.js';
+import { upsertPartyCustomers } from './square-customers.js';
 
 const cfg = () => getState().config;
 const isServiceVisibleOnCheckin = id => !cfg().hidden_services.includes(id);
@@ -226,7 +226,7 @@ export function submitCheckin() {
   }
 
   newEntries.forEach(e => dispatch('queue.upsert', { entry: e }));
-  newEntries.forEach(e => { if (!e.skipSquare) squareUpsertCustomer(e); });
+  upsertPartyCustomers(newEntries);   // one Square profile per distinct phone (no shared-phone flip-flop)
   window.logAudit?.('Check-in', `${newEntries.map(e => e.name).join(' & ')} checked in`);
 
   document.getElementById('confirm-name').textContent = newEntries.map(e => e.name).join(' & ');
