@@ -73,6 +73,34 @@ export function buildCombinedRecords() {
   });
 }
 
+// Group ids that have at least one member carrying tenders. A multi-person party records the
+// WHOLE group's tender split on its primary member only (square-pos.js _finalizeTerminalPaid),
+// so the other members have their own totalCost but no tenders — they must NOT be treated as
+// "untracked" sales (that double-counted them against the primary's full-group tender).
+function tenderedGroupIds(filtered) {
+  const s = new Set();
+  filtered.forEach(r => { if (r.tenders && r.groupId) s.add(r.groupId); });
+  return s;
+}
+// A tenderless row counts as "Other / Untracked" ONLY if it isn't a non-primary member of a
+// tendered party. Shared by runReport, computeMetrics, and drillDownPay('other') so all three
+// agree (and so card+cash+gift+zelle+other === totalIncome + tipsTotal).
+function isOtherTender(r, tenderedGroups) {
+  return !r.tenders && !(r.groupId && tenderedGroups.has(r.groupId));
+}
+// Payment Mix totals from a filtered record set. Tips ride on the card (Square deposits card +
+// tips together). Single source of truth for the four+one mix figures.
+function paymentMix(filtered, tipsTotal) {
+  const tg = tenderedGroupIds(filtered);
+  return {
+    cardMix:  filtered.reduce((s,r)=>s+(r.tenders?.card||0),0) + tipsTotal,
+    cashMix:  filtered.reduce((s,r)=>s+(r.tenders?.cash||0),0),
+    giftMix:  filtered.reduce((s,r)=>s+(r.tenders?.gift||0),0),
+    zelleMix: filtered.reduce((s,r)=>s+(r.tenders?.zelle||0),0),
+    otherMix: filtered.reduce((s,r)=> isOtherTender(r, tg) ? s+(r.totalCost||0) : s, 0),
+  };
+}
+
 // Per-customer visit history, derived from transaction records (local — no Square sync).
 // Matched by phone (last-10-digits), falling back to an exact name match when there's no
 // phone. Rendered into the Edit Customer modal. Called from showEditCustomer via window.
@@ -413,14 +441,8 @@ export function runReport() {
   const guestCount = filtered.filter(r => isPaidStatus(r.status)).length;
   const avgTicket = guestCount > 0 ? totalIncome / guestCount : 0;
   const tipsTotal = filtered.reduce((s,r)=>s+(r.tip||0),0);
-  // Payment Mix — how the money was actually collected. Tips ride on the card (Square deposits
-  // card + tips together). "Other" = paid sales with no recorded tender (older / direct Mark-Paid /
-  // historical) so card+cash+gift+other === totalIncome (billed) + tipsTotal — nothing disappears.
-  const cardMix  = filtered.reduce((s,r)=>s+(r.tenders?.card||0),0) + tipsTotal;
-  const cashMix  = filtered.reduce((s,r)=>s+(r.tenders?.cash||0),0);
-  const giftMix  = filtered.reduce((s,r)=>s+(r.tenders?.gift||0),0);
-  const zelleMix = filtered.reduce((s,r)=>s+(r.tenders?.zelle||0),0);
-  const otherMix = filtered.reduce((s,r)=> r.tenders ? s : s+(r.totalCost||0), 0);
+  // Payment Mix — how the money was actually collected (single source: paymentMix()).
+  const { cardMix, cashMix, giftMix, zelleMix, otherMix } = paymentMix(filtered, tipsTotal);
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   set('rpt-total-guests', guestCount); set('rpt-avg-ticket', `$${avgTicket.toFixed(2)}`);
@@ -621,11 +643,7 @@ function computeMetrics(from, to) {
   const gcSold = giftCards().filter(g => inPeriod(g.datePurchased)).reduce((s,g)=>s+(g.amount||0),0);
   const gcRedeemed = giftCards().reduce((s,g)=> s + gcRedemptions(g).reduce((a,r)=> a + (inPeriod(r.date) ? (r.amount||0) : 0), 0), 0);
   const tipsTotal = sum(filtered, r => r.tip||0);
-  const cardMix  = sum(filtered, r => r.tenders?.card||0) + tipsTotal;
-  const cashMix  = sum(filtered, r => r.tenders?.cash||0);
-  const giftMix  = sum(filtered, r => r.tenders?.gift||0);
-  const zelleMix = sum(filtered, r => r.tenders?.zelle||0);
-  const otherMix = filtered.reduce((s,r)=> r.tenders ? s : s+(r.totalCost||0), 0);
+  const { cardMix, cashMix, giftMix, zelleMix, otherMix } = paymentMix(filtered, tipsTotal);
   return { totalIncome, grossIncome: totalIncome + gcSold - gcRedeemed + tipsTotal, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix };
 }
 const _DELTA_CARDS = [
@@ -861,11 +879,12 @@ export function drillDownPay(kind) {
     other: { title: 'Other / Untracked — Detail',    label: 'Other / Untracked', col: 'Amount' },
   }[kind];
   if (!meta) return;
+  const otherGroups = kind === 'other' ? tenderedGroupIds(d.filtered) : null;
   const rows = [];
   d.filtered.forEach(r => {
     let amount = 0, sub = '';
     if (kind === 'other') {
-      if (r.tenders) return;                                   // matches otherMix: no recorded tender
+      if (!isOtherTender(r, otherGroups)) return;              // matches otherMix (excludes tendered-party members)
       amount = r.totalCost || 0;
       if (r.status === 'refund') sub = 'refund';
     } else if (kind === 'card') {
