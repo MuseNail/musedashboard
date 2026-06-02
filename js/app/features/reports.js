@@ -1396,6 +1396,23 @@ export function payrollExportStaffPDF() {
 
 // ── Transactions list ─────────────────────────────
 export function txnToday() { setReportRange('today'); }
+// "Paid by" chips for a transaction card — shows every tender that contributed, so a split
+// (e.g. Card + Cash + Gift + Zelle) is obvious at a glance. Refunds and tender-less rows (older /
+// direct Mark-Paid / deep-link) render nothing here.
+function _paidByHtml(r) {
+  if (r.status === 'refund' || !r.tenders) return '';
+  const t = r.tenders;
+  const chip = (label, amt, bg, fg) => `<span class="text-[10px] font-body font-bold px-2 py-0.5 rounded-full whitespace-nowrap" style="background:${bg};color:${fg}">${label} $${amt.toFixed(2)}</span>`;
+  const chips = [];
+  if (t.card  > 0) chips.push(chip('Card',  t.card,  'rgba(26,82,82,0.10)',  '#1a5252'));
+  if (t.cash  > 0) chips.push(chip('Cash',  t.cash,  'rgba(42,122,79,0.12)', '#2a7a4f'));
+  if (t.gift  > 0) chips.push(chip('Gift',  t.gift,  'rgba(212,134,10,0.16)','#a05000'));
+  if (t.zelle > 0) chips.push(chip('Zelle', t.zelle, 'rgba(91,63,176,0.12)', '#5b3fb0'));
+  if (!chips.length) return '';
+  const split = chips.length > 1 ? '<span class="text-[9px] font-body font-semibold text-on-surface-variant uppercase tracking-wide">split</span>' : '';
+  return `<div class="flex items-center gap-1.5 flex-wrap mt-1"><span class="text-[10px] font-body text-on-surface-variant uppercase tracking-wide">Paid</span>${chips.join('')}${split}</div>`;
+}
+
 export function renderTransactions() {
   const list = document.getElementById('txn-list'), empty = document.getElementById('txn-empty');
   if (!list) return;
@@ -1431,7 +1448,7 @@ export function renderTransactions() {
       <div class="flex items-start justify-between"><div class="flex-grow min-w-0">
         <div class="flex items-center gap-2 flex-wrap mb-1"><span class="font-headline font-bold text-on-surface">${r.name}</span><span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badgeClass}">${isRefund?'refund':r.status}</span>${!isRefund&&r.isAppointment?'<span class="badge-appointment text-[11px] px-2 py-0.5 rounded-full font-body font-semibold">Appt</span>':''}</div>
         <div class="text-xs font-body text-on-surface-variant mb-1">${serviceLabels}</div>${assignRows||''}${refundNote}
-        <div class="text-[11px] font-body text-outline mt-1">${dateStr} · ${timeStr}${r.phone?' · '+r.phone:''}</div>${r.tenders ? `<div class="text-[11px] font-body text-on-surface-variant mt-0.5">${[r.tenders.cash?'Cash $'+r.tenders.cash.toFixed(2):'',r.tenders.card?'Card $'+r.tenders.card.toFixed(2):'',r.tenders.gift?'Gift $'+r.tenders.gift.toFixed(2):''].filter(Boolean).join(' · ')}</div>` : ''}${r.tip ? `<div class="text-[11px] font-body text-primary font-semibold mt-0.5">Tip $${r.tip.toFixed(2)}</div>` : ''}</div>
+        <div class="text-[11px] font-body text-outline mt-1">${dateStr} · ${timeStr}${r.phone?' · '+r.phone:''}</div>${_paidByHtml(r)}${r.tip ? `<div class="text-[11px] font-body text-primary font-semibold mt-0.5">Tip $${r.tip.toFixed(2)}</div>` : ''}</div>
         <div class="ml-4 flex-shrink-0 flex items-center gap-2">
           <div class="flex items-center gap-1">
             ${!isRefund?`<button onclick="event.stopPropagation();reprintTerminalReceipt('${r.id}')" title="Reprint receipt on the Square Terminal" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"><span class="material-symbols-outlined" style="font-size:14px">receipt_long</span> Receipt</button>`:''}
