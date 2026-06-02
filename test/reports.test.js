@@ -79,3 +79,16 @@ test('reconcileSquareData: app total = card+cash+Zelle+tips, excludes gift; tend
   const R = reconcileSquareData(payments, recs);
   assert.equal(R.appTotalCents, 4500 + 3000);
 });
+
+test('reconcileSquareData: gift-card-sale payments are matched + counted in the app total', () => {
+  const payments = [
+    { id: 'rec_p', total: 5000, status: 'COMPLETED' },   // a regular sale → matched to a record
+    { id: 'gc_p',  total: 5000, status: 'COMPLETED' },   // a gift-card sale → matched to a gift card
+  ];
+  const recs = [{ name: 'A', totalCost: 50, status: 'paid', squarePaymentIds: ['rec_p'], tenders: { card: 50 } }];
+  const giftSales = [{ amount: 50, squarePaymentIds: ['gc_p'] }];
+  const R = reconcileSquareData(payments, recs, giftSales);
+  assert.equal(R.inSquareNotApp.length, 0);     // gift-card-sale payment is NOT flagged as unmatched
+  assert.equal(R.matchedCount, 2);
+  assert.equal(R.appTotalCents, 5000 + 5000);   // record (card $50) + gift sale ($50)
+});

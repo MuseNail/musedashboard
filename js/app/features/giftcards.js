@@ -4,8 +4,11 @@ import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr } from '../utils.js';
 import { APP_NAME, APP_VERSION } from '../config.js';
 import { customerDirectory } from './square-customers.js';
+import { chargeOnTerminal, recordCashPayment, recordExternalPayment } from './square-pos.js';
+import { getActiveUser } from '../session.js';
 
 const giftCards = () => getState().giftcards;
+const cfg = () => getState().config;
 
 // A card's redemptions = explicit [{date,amount}] array, or a legacy single
 // dateUsed/amountUsed migrated to one entry. gcTotalUsed = sum of all redemptions.
@@ -58,6 +61,8 @@ export function showAddGiftCard() {
   ['gc-edit-id','gc-serial','gc-amount','gc-phone','gc-from','gc-to','gc-notes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('gc-date').value = todayStr();
   _gcRedeem = []; renderGcRedemptions(); _gcShowDelete(false);
+  const pm = document.getElementById('gc-paymethod'); if (pm) pm.value = 'none';   // default: no charge
+  document.getElementById('gc-paymethod-row')?.classList.remove('hidden');         // payment offered on NEW only
   document.getElementById('gc-to-ac')?.classList.add('hidden');
   const m = document.getElementById('gc-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   setTimeout(() => document.getElementById('gc-serial').focus(), 100);
@@ -76,6 +81,7 @@ export function showEditGiftCard(id) {
   document.getElementById('gc-notes').value = gc.notes || '';
   _gcRedeem = gcRedemptions(gc).map(r => ({ date: r.date || '', amount: r.amount || 0 }));
   renderGcRedemptions(); _gcShowDelete(true);
+  document.getElementById('gc-paymethod-row')?.classList.add('hidden');   // no re-charge when editing an existing card
   document.getElementById('gc-to-ac')?.classList.add('hidden');
   const m = document.getElementById('gc-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
@@ -124,7 +130,7 @@ export function gcPickRecipient(i) {
 }
 export function gcHideRecipientAc() { setTimeout(() => document.getElementById('gc-to-ac')?.classList.add('hidden'), 150); }
 
-export function saveGiftCard() {
+export async function saveGiftCard() {
   const editId = document.getElementById('gc-edit-id').value;
   const existing = editId ? giftCards().find(g => g.id === editId) : null;
   const rawSerial = document.getElementById('gc-serial').value.trim();
@@ -133,23 +139,49 @@ export function saveGiftCard() {
   const amountUsed = redemptions.reduce((s, r) => s + (r.amount || 0), 0);
   const lastDate = redemptions.map(r => r.date).filter(Boolean).sort().pop() || '';
   const amount = parseFloat(document.getElementById('gc-amount').value) || 0;
+  const datePurchased = document.getElementById('gc-date').value;
+  const phone = document.getElementById('gc-phone').value.trim();
+  const from = document.getElementById('gc-from').value.trim();
+  const to = document.getElementById('gc-to').value.trim();
+  const notes = document.getElementById('gc-notes').value.trim();
   // A card can never be redeemed for more than its value — reject so a typo can't drive a
   // negative balance / wrong outstanding-liability figure.
   if (amountUsed > amount + 0.005) { showToast(`Redemptions ($${amountUsed.toFixed(2)}) exceed the card value ($${amount.toFixed(2)}).`); return; }
+
+  // NEW card sold with a payment method → charge the purchase amount through Square FIRST, and
+  // only register the card if it succeeds (so the registry never shows a card that wasn't paid).
+  let squarePaymentIds = existing?.squarePaymentIds || null, salePaidBy = existing?.salePaidBy || null;
+  const payMethod = editId ? 'none' : (document.getElementById('gc-paymethod')?.value || 'none');
+  if (!editId && payMethod !== 'none') {
+    if (!(amount > 0)) { showToast('Enter a purchase amount to charge.'); return; }
+    const cents = Math.round(amount * 100);
+    const loc = cfg().square_config?.locationId;
+    const note = `Gift card${serial ? ' #' + serial : ''}${to ? ' · ' + to : ''}`;
+    const idem = `gcsale-${(serial || from || to || 'x')}-${cents}-${datePurchased}-${payMethod}`;   // stable so a retry can't double-charge
+    const btn = document.querySelector('#gc-modal button[onclick="saveGiftCard()"]'); if (btn) { btn.disabled = true; btn.textContent = 'Charging…'; }
+    let res;
+    if (payMethod === 'card') res = await chargeOnTerminal(cents, note, idem);
+    else if (!loc) res = { ok: false, error: 'Add your Square Location ID in Settings → Square first.' };
+    else if (payMethod === 'cash') { const id = await recordCashPayment(cents, cents, loc, idem, null); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square cash record failed.' }; }
+    else { const id = await recordExternalPayment(cents, 'Zelle', loc, idem, null); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square Zelle record failed.' }; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Save Gift Card'; }
+    if (!res.ok) { showToast('Gift-card payment failed: ' + (res.error || 'error') + ' — card not created.'); return; }
+    squarePaymentIds = res.paymentId ? [res.paymentId] : null;
+    salePaidBy = payMethod;
+    showToast(`Gift card charged $${amount.toFixed(2)} (${payMethod}) in Square ✓`);
+  }
+
   const card = {
     id: editId || 'gc-' + Date.now(),
-    datePurchased: document.getElementById('gc-date').value,
-    serial,
-    amount,
-    phone: document.getElementById('gc-phone').value.trim(),
-    from: document.getElementById('gc-from').value.trim(),
-    to: document.getElementById('gc-to').value.trim(),
+    datePurchased, serial, amount, phone, from, to,
     redemptions,
     amountUsed,          // running total — kept for display + report/back-compat
     dateUsed: lastDate,  // last redemption date — legacy compat
-    notes: document.getElementById('gc-notes').value.trim(),
+    notes,
     createdAt: existing?.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    ...(squarePaymentIds ? { squarePaymentIds } : {}),
+    ...(salePaidBy ? { salePaidBy } : {}),
   };
   dispatch('giftcard.save', { card });
   closeGcModal();

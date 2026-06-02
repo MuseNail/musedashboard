@@ -973,25 +973,30 @@ export function openReconcile() {
 //   • in Square, not in the app  → charged but unrecorded (or recorded without the payment id)
 //   • in the app, not in Square  → recorded/marked-paid with no matching Square charge
 // Pure matcher (testable). payments: [{id,total,tip,status,sourceType,last4,note,createdAt}] (cents).
-export function reconcileSquareData(payments, recs) {
+export function reconcileSquareData(payments, recs, giftSales) {
   const completed = (payments || []).filter(p => p.status === 'COMPLETED' || p.status === 'APPROVED');
   const appIds = new Set();
   (recs || []).forEach(r => (r.squarePaymentIds || []).forEach(id => appIds.add(id)));
+  // Gift-card SALES are also charged through Square now, so their payments are legitimately in
+  // Square — count them as matched (not "in Square, not app") and toward the app total.
+  (giftSales || []).forEach(g => (g.squarePaymentIds || []).forEach(id => appIds.add(id)));
   const sqIds = new Set(completed.map(p => p.id));
   const inSquareNotApp = completed.filter(p => !appIds.has(p.id));
   const inAppNotSquare = (recs || []).filter(r => !(r.squarePaymentIds || []).some(id => sqIds.has(id)));
+  // App's view of what SHOULD be in Square = card + cash + Zelle + tips (gift-card REDEMPTIONS never
+  // hit Square, so excluded; tips ARE in Square; gift-card SALES paid via Square are added). A
+  // tender-less record (older / deep-link era) has no breakdown, so fall back to its full total.
+  const recCents = (recs || []).reduce((s, r) => {
+    const sq = r.tenders ? ((r.tenders.card || 0) + (r.tenders.cash || 0) + (r.tenders.zelle || 0)) : (r.totalCost || 0);
+    return s + Math.round((sq + (r.tip || 0)) * 100);
+  }, 0);
+  const giftCents = (giftSales || []).reduce((s, g) => s + Math.round((g.amount || 0) * 100), 0);
   return {
     squareCount: completed.length,
     matchedCount: completed.length - inSquareNotApp.length,
     inSquareNotApp, inAppNotSquare,
     squareTotalCents: completed.reduce((s, p) => s + (p.total || 0), 0),
-    // App's view of what SHOULD be in Square = card + cash + Zelle + tips (gift-card redemptions
-    // never hit Square, so they're excluded; tips ARE in Square's totals, so they're included). A
-    // tender-less record (older / deep-link era) has no breakdown, so fall back to its full total.
-    appTotalCents: (recs || []).reduce((s, r) => {
-      const sq = r.tenders ? ((r.tenders.card || 0) + (r.tenders.cash || 0) + (r.tenders.zelle || 0)) : (r.totalCost || 0);
-      return s + Math.round((sq + (r.tip || 0)) * 100);
-    }, 0),
+    appTotalCents: recCents + giftCents,
   };
 }
 // Paginated List Payments via the Square proxy (amounts already in cents/minor units).
@@ -1033,7 +1038,9 @@ export async function openSquareReconcile() {
     const d = new Date(r.completedAt || r.checkinTime);
     return d >= from && d <= to;
   });
-  const R = reconcileSquareData(payments, recs);
+  // Gift-card SALES paid through Square in this period (their payment ids match Square's payments).
+  const giftSales = giftCards().filter(g => (g.squarePaymentIds || []).length && g.datePurchased && g.datePurchased >= localDateStr(from) && g.datePurchased <= localDateStr(to));
+  const R = reconcileSquareData(payments, recs, giftSales);
   const $ = c => '$' + (c / 100).toFixed(2);
   const diff = R.squareTotalCents - R.appTotalCents;
   const summary = [

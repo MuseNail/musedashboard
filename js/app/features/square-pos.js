@@ -247,9 +247,32 @@ export async function proceedTerminalPayment() {
   } catch (e) { hideTerminalModal(); showToast('Square: ' + (e.message || 'error')); }
 }
 
+// Reusable one-off Terminal charge (e.g. a gift-card sale) — NOT tied to a queue ticket. Shows the
+// Terminal modal, starts a checkout, polls to a terminal state. Returns { ok, paymentId, error }.
+export async function chargeOnTerminal(amountCents, note, idemKey) {
+  const sc = sqConfig();
+  if (!sc?.locationId) return { ok: false, error: 'Add your Square Location ID in Settings → Square first.' };
+  if (!sc.terminalDeviceId) return { ok: false, error: 'Pair your Square Terminal in Settings → Square first.' };
+  if (!(amountCents > 0)) return { ok: false, error: 'Amount must be greater than zero.' };
+  try {
+    showTerminalModal(`Charging $${(amountCents / 100).toFixed(2)} on the Terminal — finish on the device…`);
+    const coRes = await fetch(`${SQUARE_PROXY}/v2/terminals/checkouts`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idempotency_key: idemKey, checkout: { amount_money: { amount: amountCents, currency: 'USD' }, device_options: { device_id: sc.terminalDeviceId }, note: (note || '').slice(0, 500) } }),
+    });
+    const coJson = await coRes.json();
+    if (!coRes.ok) { hideTerminalModal(); return { ok: false, error: coJson.errors?.[0]?.detail || 'Could not start the Terminal checkout' }; }
+    const co = await _pollTerminalCheckout(coJson.checkout?.id);
+    hideTerminalModal();
+    if (co.status === 'TIMEOUT') return { ok: false, error: 'Terminal timed out — check the device, then try again.' };
+    if (co.status === 'CANCELED') return { ok: false, error: 'Payment canceled on the Terminal.' };
+    return { ok: true, paymentId: (co.payment_ids || [])[0] || null };
+  } catch (e) { hideTerminalModal(); return { ok: false, error: e.message || 'Terminal error' }; }
+}
+
 // Record the cash portion as a CASH payment in Square (so Square's totals include it).
 // A failure here does NOT block marking the ticket Paid — the cash was physically received.
-async function recordCashPayment(appliedCents, receivedCents, locationId, idemKey, customerId) {
+export async function recordCashPayment(appliedCents, receivedCents, locationId, idemKey, customerId) {
   try {
     const r = await fetch(`${SQUARE_PROXY}/v2/payments`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -271,7 +294,7 @@ async function recordCashPayment(appliedCents, receivedCents, locationId, idemKe
 // Record an EXTERNAL (non-card, non-cash) payment in Square — e.g. Zelle — so Square's totals
 // include it. Uses source_id 'EXTERNAL' with external_details. A failure here does NOT block
 // marking the ticket Paid (the money was received out-of-band); it's tracked in the app either way.
-async function recordExternalPayment(appliedCents, label, locationId, idemKey, customerId) {
+export async function recordExternalPayment(appliedCents, label, locationId, idemKey, customerId) {
   try {
     const r = await fetch(`${SQUARE_PROXY}/v2/payments`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
