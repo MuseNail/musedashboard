@@ -21,7 +21,7 @@ const setOff   = arr   => dispatch('config.set', { key: 'turns_off',   value: ar
 
 let turnsViewingHistory = null;
 let turnsHistory = JSON.parse(localStorage.getItem('muse_turns_history') || '{}');
-function saveTurnsHistory() { localStorage.setItem('muse_turns_history', JSON.stringify(turnsHistory)); }
+function saveTurnsHistory() { try { localStorage.setItem('muse_turns_history', JSON.stringify(turnsHistory)); } catch (e) { console.warn('[turns] history save failed (quota?)', e); } }
 
 // ── Turn config + classification (formerly in app.js) ─────────────────────────
 export function getTurnConfig() {

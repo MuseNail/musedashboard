@@ -171,7 +171,7 @@ window.addEventListener('storage', e => { if (e.key === 'muse_sq_paid' && e.newV
 // on stale cached config before a resync lands (and could wrongly clear the roster). The resync
 // fired on tab-visible pulls a fresh snapshot whose hydrate runs runDayRolloverIfNeeded with
 // server-confirmed state (see onStateChange 'hydrate').
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); checkAppVersion(); } });
 
 // Installed-PWA fallback for the Square charge. On iOS a Home-Screen app is resumed
 // after the Square hand-off WITHOUT the callback data, so the muse_sq_paid handoff
@@ -200,6 +200,9 @@ function checkSquarePending() {
 function updateSyncIndicator(state) {
   const dot = document.getElementById('conn-dot'), text = document.getElementById('conn-text');
   if (!dot) return;
+  // A server-rejected/dead-lettered write is the most urgent state — surface it instead of a green "Synced".
+  const failed = (sync.failedOps?.() || []).length;
+  if (failed > 0) { dot.style.background = '#fa746f'; if (text) text.textContent = `Failed ${failed}`; dot.parentElement && (dot.parentElement.title = 'A change failed to save — open Settings → Data Recovery'); return; }
   if (state.connected) { dot.style.background = state.pendingCount > 0 ? '#f5c870' : '#2a7a4f'; if (text) text.textContent = state.pendingCount > 0 ? `Sync ${state.pendingCount}` : 'Synced'; }
   else { dot.style.background = '#fa746f'; if (text) text.textContent = state.pendingCount > 0 ? `Offline ${state.pendingCount}` : 'Offline'; }
 }
@@ -398,6 +401,19 @@ function handleSquarePosReturn() {
   setTimeout(() => { try { window.close(); } catch (e) {} }, 300);
   return true;
 }
+
+// ── Global error surface ──────────────────────────
+// On a headless front-desk iPad nobody watches the console — an uncaught error/rejection
+// would otherwise leave a frozen screen with no signal. Best-effort: log + a throttled toast.
+let _lastErrToast = 0;
+function _errToast() {
+  const now = Date.now();
+  if (now - _lastErrToast < 15000) return;   // don't spam if errors cascade
+  _lastErrToast = now;
+  try { utils.showToast('Something went wrong. If the screen seems stuck, tap the version badge to reload.'); } catch (e) {}
+}
+window.addEventListener('error', e => { try { console.warn('[error]', e?.error || e?.message); _errToast(); } catch (x) {} });
+window.addEventListener('unhandledrejection', e => { try { console.warn('[unhandledrejection]', e?.reason); } catch (x) {} });
 
 // ── Boot ──────────────────────────────────────────
 function boot() {
