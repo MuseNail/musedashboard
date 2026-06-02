@@ -24,6 +24,7 @@ function emptyConfig() {
     cash_drawer: null,         // the current OPEN cash-drawer shift (or null); see features/cashdrawer.js
     cash_drawer_history: [],   // closed drawer shifts (rolling cap), each with its reconciliation
     edit_locks: {},            // cross-device Assign&Price hard lock { [lockKey]: {device,name,at} }; see queue.js
+    last_rollover_date: '',    // SHARED day-rollover marker (localDateStr). Gates the once-per-day housekeeping globally so a device first opened mid-day can't re-clear the roster — see main.js runDayRolloverIfNeeded
   };
 }
 

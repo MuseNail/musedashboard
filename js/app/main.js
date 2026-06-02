@@ -167,7 +167,11 @@ function applySquarePaidFlag() {
   else localStorage.removeItem('muse_sq_paid');
 }
 window.addEventListener('storage', e => { if (e.key === 'muse_sq_paid' && e.newValue) applySquarePaidFlag(); });
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); runDayRolloverIfNeeded(); } });
+// NB: the day rollover is intentionally NOT triggered straight off visibilitychange — it would run
+// on stale cached config before a resync lands (and could wrongly clear the roster). The resync
+// fired on tab-visible pulls a fresh snapshot whose hydrate runs runDayRolloverIfNeeded with
+// server-confirmed state (see onStateChange 'hydrate').
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); } });
 
 // Installed-PWA fallback for the Square charge. On iOS a Home-Screen app is resumed
 // after the Square hand-off WITHOUT the callback data, so the muse_sq_paid handoff
@@ -282,7 +286,6 @@ function registerServiceWorker() {
 // armed to the next local midnight; idempotent, so running it repeatedly is safe.
 function runDayRolloverIfNeeded() {
   const today = utils.todayStr();
-  const last  = localStorage.getItem('muse_last_reset_date');
   const st = store.getState();
   const recIds = new Set((st.records || []).filter(r => r.status !== 'deleted').map(r => String(r.id)));
   // Finished tickets from a previous day that are ALREADY saved as a record — safe to drop
@@ -292,24 +295,38 @@ function runDayRolloverIfNeeded() {
     (e.status === 'paid' || e.status === 'done') &&
     recIds.has(String(e.id)) &&
     utils.localDateStr(new Date(e.checkinTime)) < today);
-  // New-day housekeeping — once per device per day (marker-gated). Done before the clear so
-  // `rolloverTurns` archives the closed day while its entries are still in the queue.
-  if (last !== today) {
-    if (last) {   // skip on the very first run so a fresh mid-day boot isn't wiped
-      try { turns.rolloverTurns(last); } catch (e) {}   // archive closed day + clear the rotation
-      sync.dispatch('config.set', { key: 'turns_break', value: [] });
-      sync.dispatch('config.set', { key: 'chat_log', value: [] });   // staff chat starts fresh each day
-      utils.showToast("New day — yesterday's history saved");
-    }
-    localStorage.setItem('muse_last_reset_date', today);
+  // New-day housekeeping — once per day GLOBALLY (gated on the SHARED, synced last_rollover_date,
+  // not a per-device marker). This is the fix for "my selected technicians disappeared mid-day":
+  // the housekeeping CLEARS the roster (rolloverTurns → setOrder([])), and that clear broadcasts to
+  // every device. With the old per-device gate, any device first opened mid-day (its local marker
+  // still on yesterday) would think it was a new day, run the clear, and wipe the roster everyone
+  // was using. Reading the marker from synced config means a device that shows up mid-day sees
+  // "already rolled over today" and leaves the roster alone. Only callers with FRESH server state
+  // run this (hydrate + the midnight timer) — NOT the raw visibilitychange path, which can fire on
+  // stale cached config before a resync lands.
+  const globalLast = st.config?.last_rollover_date || '';
+  const action = utils.rolloverAction(globalLast, today);
+  let didRollover = false;
+  if (action === 'seed') {
+    // Marker absent (fresh DO, or upgrading from the per-device scheme): seed to today WITHOUT
+    // clearing anything, so the upgrade itself can never wipe a live roster.
+    sync.dispatch('config.set', { key: 'last_rollover_date', value: today });
+  } else if (action === 'rollover') {
+    sync.dispatch('config.set', { key: 'last_rollover_date', value: today });   // claim first (synced) so other devices skip
+    try { turns.rolloverTurns(globalLast); } catch (e) {}                        // archive closed day + clear the rotation
+    sync.dispatch('config.set', { key: 'turns_break', value: [] });
+    sync.dispatch('config.set', { key: 'chat_log', value: [] });                 // staff chat starts fresh each day
+    utils.showToast("New day — yesterday's history saved");
+    didRollover = true;
   }
+  try { localStorage.setItem('muse_last_reset_date', today); } catch (e) {}      // keep the legacy per-device marker current (harmless)
   // Safe board cleanup — runs every time (idempotent); also self-heals a stale entry that a
   // still-connected device re-pushed from its outbox after a clear.
   if (stale.length) {
     stale.forEach(e => sync.dispatch('queue.remove', { id: e.id }));
     window.logAudit?.('Day rollover', `Cleared ${stale.length} finished ticket(s) from a prior day`);
   }
-  if (stale.length || last !== today) { queue.renderQueue(); queue.updateStats(); turns.renderTurns(); chat.renderChat(); chat.updateChatBadge(); }
+  if (stale.length || didRollover) { queue.renderQueue(); queue.updateStats(); turns.renderTurns(); chat.renderChat(); chat.updateChatBadge(); }
 }
 // Arm a one-shot timer to the next local midnight (+30s); it re-arms itself after firing.
 // Hydrate + visibilitychange are the real safety net (cover device sleep / clock changes);

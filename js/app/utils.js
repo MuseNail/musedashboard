@@ -62,6 +62,19 @@ export function localDateStr(date) {
 }
 export function todayStr() { return localDateStr(new Date()); }
 
+// Day-rollover gate decision (pure, testable). Given the SHARED last-rollover marker (a localDateStr
+// from synced config) and today's date string, returns what the rollover should do:
+//   'seed'     — marker absent → set it to today, clear NOTHING (so first run / upgrade never wipes)
+//   'rollover' — a genuinely new day across all devices → archive + clear the roster ONCE
+//   'skip'     — already rolled over today → leave the roster/breaks/chat alone
+// Reading the marker from synced state (not a per-device flag) is what stops a device first opened
+// mid-day from re-clearing the technicians the front desk already set up. See main.js.
+export function rolloverAction(globalLast, today) {
+  if (!globalLast) return 'seed';
+  if (globalLast !== today) return 'rollover';
+  return 'skip';
+}
+
 // ── Deduplication helper ──────────────────────────
 export function dedupByLabel(arr) {
   const seen = new Set();
