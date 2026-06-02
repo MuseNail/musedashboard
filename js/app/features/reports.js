@@ -1419,6 +1419,38 @@ function _paidByHtml(r) {
   return `<div class="flex items-center gap-1.5 flex-wrap mt-1"><span class="text-[10px] font-body text-on-surface-variant uppercase tracking-wide">Paid</span>${chips.join('')}${split}</div>`;
 }
 
+// Read-only breakdown of a transaction (every service + its tech/cost, items, fees, discount,
+// total, tip, and how it was paid). Opens in the drill panel; offers Edit when the row is editable.
+export function showTxnDetail(recordId) {
+  const all = buildCombinedRecords();
+  const r = all.find(x => String(x.id) === String(recordId));
+  if (!r) { showToast('Transaction not found.'); return; }
+  const isRefund = r.status === 'refund', dt = new Date(r.checkinTime);
+  const money = n => '$' + Math.abs(n || 0).toFixed(2);
+  const line = (label, val, o = {}) => `<div class="flex justify-between items-baseline gap-3 py-1.5 ${o.border ? 'border-t border-surface-container-high mt-1 pt-2' : ''}"><span class="text-sm font-body ${o.strong ? 'font-headline font-bold text-on-surface' : 'text-on-surface-variant'} min-w-0">${_eTxn(label)}</span><span class="text-sm font-body whitespace-nowrap ${o.neg ? 'text-error' : o.strong ? 'font-headline font-bold text-on-surface' : 'text-on-surface'}">${o.neg ? '-' : ''}${money(val)}</span></div>`;
+  const rows = [], drillRows = [];
+  const add = (label, val, o) => { rows.push(line(label, val, o)); drillRows.push([label, (o?.neg ? '-' : '') + money(val)]); };
+  (r.assignments || []).forEach(a => add(`${svc(a.serviceId)?.label || a.serviceId || 'Service'}${a.techId ? ' · ' + (staffById(a.techId)?.name || '—') : ''}${a.station ? ' @ ' + a.station : ''}`, a.cost || 0));
+  if (!(r.assignments || []).length && !isRefund) (r.services || []).forEach(sid => add(svc(sid)?.label || sid, 0));
+  (r.items || []).forEach(it => add(`${cfg().items.find(i => i.id === it.itemId)?.label || 'Item'} × ${it.qty || 1}`, (it.price || 0) * (it.qty || 0)));
+  (r.fees || []).forEach(f => add(cfg().fees.find(x => x.id === f.feeId)?.label || 'Fee', f.amount || 0));
+  if ((r.discount || 0) > 0) add(`Discount${r.discountNote ? ' (' + r.discountNote + ')' : ''}`, r.discount, { neg: true });
+  rows.push(line(isRefund ? 'Refund total' : 'Sales Total', r.totalCost || 0, { strong: true, border: true, neg: isRefund }));
+  drillRows.push([isRefund ? 'Refund total' : 'Sales Total', (isRefund ? '-' : '') + money(r.totalCost)]);
+  if ((r.tip || 0) > 0) { rows.push(line('Tip (on card)', r.tip)); drillRows.push(['Tip', money(r.tip)]); }
+  // Paid by — this record's tenders, or its party's primary (tenders live on the primary only).
+  let tenders = r.tenders;
+  if (!tenders && r.groupId) tenders = all.find(x => x.groupId === r.groupId && x.tenders)?.tenders;
+  let paid = '';
+  if (tenders) ['card', 'cash', 'gift', 'zelle'].forEach(k => { if (tenders[k] > 0) { const lbl = { card: 'Card', cash: 'Cash', gift: 'Gift card', zelle: 'Zelle' }[k]; paid += line('Paid · ' + lbl, tenders[k]); drillRows.push(['Paid ' + lbl, money(tenders[k])]); } });
+  const isPast = dt < new Date(new Date().setHours(0, 0, 0, 0));
+  const editBtn = (!isRefund && canDo('historicalEntry') && isPast)
+    ? `<button onclick="closeDrillDown(); showHistoricalEntryModal('${r.id}')" class="w-full mt-3 py-2.5 rounded-xl border border-primary text-primary font-headline font-bold text-sm hover:bg-primary/5 transition-colors">Edit this transaction</button>` : '';
+  _drill = { title: `${r.name || 'Transaction'} — Detail`, columns: ['Line', 'Amount'], rows: drillRows, summary: [[isRefund ? 'Refund' : 'Total', money(r.totalCost)], ...((r.tip || 0) > 0 ? [['Tip', money(r.tip)]] : [])] };
+  showDrillPanel(`${_eTxn(r.name || 'Transaction')} — Detail`,
+    `<div class="text-[11px] font-body text-outline mb-2">${dt.toLocaleDateString()} · ${dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${r.phone ? ' · ' + _eTxn(r.phone) : ''} · ${isRefund ? 'Refund' : (r.status || 'paid')}${isRefund && r.discountNote ? ' · ' + _eTxn(r.discountNote) : ''}</div>${rows.join('')}${paid ? `<div class="mt-2 pt-2 border-t border-surface-container-high">${paid}</div>` : ''}${editBtn}`);
+}
+
 export function renderTransactions() {
   const list = document.getElementById('txn-list'), empty = document.getElementById('txn-empty');
   if (!list) return;
@@ -1454,7 +1486,7 @@ export function renderTransactions() {
     const isPast = new Date(r.checkinTime) < new Date(new Date().setHours(0,0,0,0));
     const editable = !isRefund && canDo('historicalEntry') && isPast;   // whole card opens the edit modal
     const totalDisplay = isRefund ? `<div class="text-lg font-headline font-extrabold text-error">-$${Math.abs(r.totalCost||0).toFixed(2)}</div>` : `<div class="text-lg font-headline font-extrabold text-primary">$${(r.totalCost||0).toFixed(2)}</div>`;
-    return `<div ${editable ? `onclick="showHistoricalEntryModal('${r.id}')" title="Edit transaction"` : ''} class="bg-surface-container-lowest rounded-xl px-5 py-4 border ${isRefund?'border-error/30':'border-surface-container-high'}${editable?' cursor-pointer hover:shadow-md transition-shadow':''}">
+    return `<div onclick="showTxnDetail('${r.id}')" title="Tap for the full breakdown" class="bg-surface-container-lowest rounded-xl px-5 py-4 border ${isRefund?'border-error/30':'border-surface-container-high'} cursor-pointer hover:shadow-md transition-shadow">
       <div class="flex items-start justify-between"><div class="flex-grow min-w-0">
         <div class="flex items-center gap-2 flex-wrap mb-1"><span class="font-headline font-bold text-on-surface">${r.name}</span><span class="text-[11px] px-2 py-0.5 rounded-full font-body font-semibold ${badgeClass}">${isRefund?'refund':r.status}</span>${!isRefund&&r.isAppointment?'<span class="badge-appointment text-[11px] px-2 py-0.5 rounded-full font-body font-semibold">Appt</span>':''}</div>
         <div class="text-xs font-body text-on-surface-variant mb-1">${serviceLabels}</div>${assignRows||''}${refundNote}
