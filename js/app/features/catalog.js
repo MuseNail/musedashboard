@@ -183,6 +183,8 @@ export function addItemRow() {
   renderSettingsItems();
 }
 export function removeItem(i) {
+  const it = cfg().items[i];
+  if (it && (it.label || it.price) && !confirm(`Remove "${it.label || 'this item'}"?`)) return;
   setItems(cfg().items.filter((_, idx) => idx !== i));
   renderSettingsItems();
 }
@@ -221,6 +223,8 @@ export function addFeeRow() {
   renderSettingsFees();
 }
 export function removeFee(i) {
+  const f = cfg().fees[i];
+  if (f && (f.label || f.value) && !confirm(`Remove "${f.label || 'this fee'}"?`)) return;
   setFees(cfg().fees.filter((_, idx) => idx !== i));
   renderSettingsFees();
 }

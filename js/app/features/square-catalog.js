@@ -180,6 +180,12 @@ export async function squarePullServices() {
   } catch (e) { console.warn('Could not pull Square catalog:', e); }
 }
 
+// Pull a human-readable error detail out of a failed Square response (for a toast).
+async function _sqErr(res, fallback) {
+  try { const d = (await res.json())?.errors?.[0]?.detail; if (d) return d; } catch (e) {}
+  return fallback;
+}
+
 // Push a service to the Square catalog (create or update). Updates config.services
 // with the returned Square ids on create.
 export async function squarePushService(svc) {
@@ -198,11 +204,12 @@ export async function squarePushService(svc) {
       }
       const res = await fetch(`${SQUARE_PROXY}/v2/catalog/object`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotency_key: `muse-svc-upd-${svc.id}-${Date.now()}`, object: obj }) });
       if (res.ok) showToast(`"${svc.label}" updated in Square ✓`);
+      else showToast('Square: ' + await _sqErr(res, 'could not update service.'));
     } else {
       const tempId = `#muse-${svc.id}`;
       const res = await fetch(`${SQUARE_PROXY}/v2/catalog/batch-upsert`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idempotency_key: `muse-svc-${svc.id}-${Date.now()}`, batches: [{ objects: [{
+        body: JSON.stringify({ idempotency_key: `muse-svc-create-${svc.id}`, batches: [{ objects: [{
           type: 'ITEM', id: tempId,
           item_data: { name: svc.label, product_type: 'APPOINTMENTS_SERVICE', variations: [{ type: 'ITEM_VARIATION', id: `${tempId}-var`, item_variation_data: { item_id: tempId, name: 'Regular', pricing_type: svc.baseCost > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING', ...(svc.baseCost > 0 ? { price_money: { amount: Math.round(svc.baseCost * 100), currency: 'USD' } } : {}) } }] },
         }] }] }),
@@ -216,9 +223,9 @@ export async function squarePushService(svc) {
           dispatch('config.set', { key: 'services', value: services });
         }
         showToast(`"${svc.label}" added to Square ✓`);
-      }
+      } else showToast('Square: ' + await _sqErr(res, 'could not add service.'));
     }
-  } catch (e) { console.warn('[Square] Catalog push failed:', e); }
+  } catch (e) { console.warn('[Square] Catalog push failed:', e); showToast('Square: catalog push failed (network).'); }
 }
 
 // Push a retail item to Square (create or update). itemIndex is the index in config.items.
@@ -239,11 +246,12 @@ export async function squarePushItem(itemIndex) {
       }
       const res = await fetch(`${SQUARE_PROXY}/v2/catalog/object`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotency_key: `muse-item-upd-${item.id}-${Date.now()}`, object: obj }) });
       if (res.ok) showToast(`"${item.label}" updated in Square ✓`);
+      else showToast('Square: ' + await _sqErr(res, 'could not update item.'));
     } else {
       const tempId = `#muse-${item.id}`;
       const res = await fetch(`${SQUARE_PROXY}/v2/catalog/batch-upsert`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idempotency_key: `muse-item-${item.id}-${Date.now()}`, batches: [{ objects: [{
+        body: JSON.stringify({ idempotency_key: `muse-item-create-${item.id}`, batches: [{ objects: [{
           type: 'ITEM', id: tempId,
           item_data: { name: item.label, variations: [{ type: 'ITEM_VARIATION', id: `${tempId}-var`, item_variation_data: { item_id: tempId, name: 'Regular', pricing_type: item.price > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING', ...(item.price > 0 ? { price_money: { amount: Math.round(item.price * 100), currency: 'USD' } } : {}) } }] },
         }] }] }),
@@ -256,9 +264,9 @@ export async function squarePushItem(itemIndex) {
           dispatch('config.set', { key: 'items', value: items });
         }
         showToast(`"${item.label}" added to Square ✓`);
-      }
+      } else showToast('Square: ' + await _sqErr(res, 'could not add item.'));
     }
-  } catch (e) { console.warn('[Square] Catalog push failed:', e); }
+  } catch (e) { console.warn('[Square] Catalog push failed:', e); showToast('Square: catalog push failed (network).'); }
 }
 
 // Load bookings-eligible team members into the Square modal picker.

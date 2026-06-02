@@ -361,10 +361,11 @@ export function numpadKey(key) {
     return;
   }
   if (key === '.') return;
-  if (key === '00') { if (_numpadRaw === '' || _numpadRaw === '0') return; _numpadRaw += '00'; }
-  else { if (_numpadRaw === '0') _numpadRaw = key; else _numpadRaw += key; }
-  if (_numpadRaw.length > 6) _numpadRaw = _numpadRaw.slice(0, 6);
-  _numpadUpdateDisplay(); _numpadSyncAmount();
+  let raw = _numpadRaw;
+  if (key === '00') { if (raw === '' || raw === '0') return; raw += '00'; }
+  else { raw = raw === '0' ? key : raw + key; }
+  if (raw.length > 6) return;   // reject an over-length keystroke (don't truncate, which would jump to a wrong amount)
+  _numpadRaw = raw; _numpadUpdateDisplay(); _numpadSyncAmount();
 }
 export function numpadClear() { _numpadRaw = ''; _numpadUpdateDisplay(); if (_numpadMode === 'phone') _numpadSyncPhone(); else _numpadSyncAmount(); }
 

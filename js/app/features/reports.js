@@ -29,7 +29,7 @@ export function saveRecord(entry) {
   const record = {
     id: String(entry.id), name: entry.name, phone: entry.phone || '',
     services: entry.services, assignments: entry.assignments || [], items: entry.items || [], fees: entry.fees || [],
-    discount: entry.discount || 0, discountNote: entry.discountNote || '', txnNote: entry.txnNote || '', totalCost: entry.totalCost || 0,
+    discount: entry.discount || 0, discountNote: entry.discountNote || '', txnNote: entry.txnNote || '', totalCost: entry.status === 'refund' ? (entry.totalCost || 0) : ticketTotal(entry),
     groupId: entry.groupId || '', groupColor: entry.groupColor || '', groupLabel: entry.groupLabel || '',
     checkinTime: typeof entry.checkinTime === 'string' ? entry.checkinTime : new Date(entry.checkinTime).toISOString(),
     completedAt: entry.completedAt, status: entry.status, isAppointment: entry.isAppointment || false,
@@ -2054,8 +2054,9 @@ function _computeHistTotal() {
   const svcTotal = _histSelectedSvcs.reduce((s,sid)=>s+(parseFloat(_histAssignments[sid]?.cost)||0),0);
   const itemsTotal = _histItems.reduce((s,i)=>s+(i.qty||0)*(i.price||0),0);
   const feesTotal = _histFees.reduce((s,f)=>s+(parseFloat(f.amount)||0),0);
-  const discount = parseFloat(document.getElementById('hist-discount')?.value) || 0;
-  const total = Math.max(0, svcTotal + itemsTotal + feesTotal - discount);
+  const base = svcTotal + itemsTotal + feesTotal;
+  const discount = Math.min(parseFloat(document.getElementById('hist-discount')?.value) || 0, base);   // can't discount below $0
+  const total = Math.max(0, base - discount);
   const el = document.getElementById('hist-total-display'); if (el) el.textContent = `$${total.toFixed(2)}`;
   return total;
 }
@@ -2065,13 +2066,20 @@ export function saveHistoricalTransaction() {
   const phone = document.getElementById('hist-phone').value.trim();
   const dateVal = document.getElementById('hist-date').value;
   const timeVal = document.getElementById('hist-time').value || '12:00';
-  const discount = parseFloat(document.getElementById('hist-discount').value) || 0;
   const discountNote = document.getElementById('hist-discount-note').value.trim();
   const tip = parseFloat(document.getElementById('hist-tip')?.value) || 0;   // card tip — recorded only; NOT part of totalCost (no re-charge)
   if (!name) { showToast('Customer name is required'); return; }
   if (!dateVal) { showToast('Date is required'); return; }
   if (dateVal >= todayStr()) { showToast('Date must be before today'); return; }
   const checkinTime = new Date(`${dateVal}T${timeVal}:00`);
+  // Cap the discount against the ticket base (mirrors the live Assign & Price path) so an
+  // over-discount can't silently persist a $0 record with a discount larger than the bill.
+  const _histBase = _histSelectedSvcs.reduce((s,sid)=>s+(parseFloat(_histAssignments[sid]?.cost)||0),0)
+    + _histItems.reduce((s,i)=>s+(i.qty||0)*(i.price||0),0)
+    + _histFees.reduce((s,f)=>s+(parseFloat(f.amount)||0),0);
+  const _rawDiscount = parseFloat(document.getElementById('hist-discount').value) || 0;
+  const discount = Math.min(_rawDiscount, _histBase);
+  if (_rawDiscount > _histBase) showToast(`Discount capped at $${_histBase.toFixed(2)}`);
   const total = _computeHistTotal();
   const assignments = _histSelectedSvcs.map(sid => ({ serviceId: sid, techId: _histAssignments[sid]?.techId||'', station: _histAssignments[sid]?.station||'', cost: parseFloat(_histAssignments[sid]?.cost)||0, status: 'paid', assignedAt: checkinTime.getTime() }));
   if (assignments.length === 0 && total > 0) assignments.push({ serviceId:'', techId:'', station:'', cost: total, status:'paid', assignedAt: checkinTime.getTime() });

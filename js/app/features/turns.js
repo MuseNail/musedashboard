@@ -634,7 +634,7 @@ export function archiveTurnsForDay(dateStr) {
 }
 // Close out a finished day during the daily rollover: archive it, then clear the rotation
 // so the new day starts fresh.
-export function rolloverTurns(closedDateStr) { archiveTurnsForDay(closedDateStr); setOrder([]); }
+export function rolloverTurns(closedDateStr) { archiveTurnsForDay(closedDateStr); setOrder([]); setOff([]); }
 export function archiveTurnsForToday() { rolloverTurns(todayStr()); }
 export function openTurnsHistoryPicker(ev) {
   const today = new Date();
