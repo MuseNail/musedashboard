@@ -8,7 +8,6 @@
 //   /ws, /state/*           — Durable Object sync (source of truth)
 //
 // Backups: the Durable Object periodically snapshots full state to R2 (see alarm()).
-// (The old write-only Google Sheets daily export + its cron were retired and removed.)
 //
 // Required secrets (set via: wrangler secret put <NAME>)
 //   SQUARE_TOKEN         Square access token

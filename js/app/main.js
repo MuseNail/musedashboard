@@ -194,7 +194,7 @@ function checkSquarePending() {
 
 // ── Store subscription → re-render the active panel on (remote) changes ───────
 function updateSyncIndicator(state) {
-  const dot = document.getElementById('sheets-sync-dot'), text = document.getElementById('sheets-sync-text');
+  const dot = document.getElementById('conn-dot'), text = document.getElementById('conn-text');
   if (!dot) return;
   if (state.connected) { dot.style.background = state.pendingCount > 0 ? '#f5c870' : '#2a7a4f'; if (text) text.textContent = state.pendingCount > 0 ? `Sync ${state.pendingCount}` : 'Synced'; }
   else { dot.style.background = '#fa746f'; if (text) text.textContent = state.pendingCount > 0 ? `Offline ${state.pendingCount}` : 'Offline'; }

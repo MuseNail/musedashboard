@@ -239,6 +239,5 @@ These markers use Unicode box-drawing characters (U+2500 `─`). If you add a ne
 | `sw.js` | Service worker — precache + offline fallback; CACHE_NAME must match APP_VERSION |
 | `icons/` | PWA launcher icons (192px + 512px PNG) |
 | `cloudflare/worker.js` | Cloudflare Worker — Square proxy, R2 photos, KV config cache, DO WebSocket, R2-snapshot backups |
-| `cloudflare/wrangler.toml` | Worker configuration + bindings (the daily-backup cron trigger was removed) |
+| `cloudflare/wrangler.toml` | Worker configuration + bindings |
 | `split.ps1` / `split.js` | One-time extraction scripts (original monolith → modules); committed for historical reference only |
-| `muse-sheets-script.gs` | Google Apps Script — **retired** (the Sheets backup was removed); not in this repo |

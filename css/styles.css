@@ -126,7 +126,7 @@
     /* Service buttons in check-in: 3-col → 2-col */
     #guests-container .grid-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
     /* Sync indicators: hide both text labels */
-    #sheets-sync-text { display: none !important; }
+    #conn-text { display: none !important; }
   }
   @media (max-width: 768px) {
     #panel-turns .flex-shrink-0[style*="width:380px"] { width: 260px !important; }
