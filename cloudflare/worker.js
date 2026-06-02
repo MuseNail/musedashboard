@@ -517,6 +517,10 @@ export class MuseSalonDO {
           break;
         case 'record.save': {
           const rKey = 'record:' + payload.record.id;
+          // Never revive a deleted transaction: a stale paid queue copy on another device can
+          // re-fire saveRecord with a fresh updatedAt that passes the stale-write guard. Reject if
+          // a deletion marker exists, so a restore from R2 can't bring the deleted sale back.
+          if (await this.state.storage.get('deletion:' + payload.record.id)) { stale = true; break; }
           const prevRec = await this.state.storage.get(rKey);
           if (_isStaleWrite(prevRec, payload.record)) { stale = true; break; }   // older copy — keep the newer record (prevents fee-drop)
           await this.state.storage.put(rKey, payload.record);

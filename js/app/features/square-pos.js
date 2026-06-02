@@ -185,12 +185,18 @@ export async function proceedTerminalPayment() {
     const ge = queue().find(x => String(x.id) === ticketId);
     if (ge) { ge.giftcardRedemptions = _payGc.map(t => ({ giftcardId: t.giftcardId, serial: t.serial, who: t.who, amount: t.amount })); dispatch('queue.upsert', { entry: ge }); }
   }
-  // Stable idempotency keys for THIS charge, persisted so a retry never double-charges.
-  let pend; try { pend = JSON.parse(localStorage.getItem('muse_term_pending') || 'null'); } catch (e) {}
-  if (!pend || pend.ticketId !== ticketId || (Date.now() - (pend.at || 0)) > 15 * 60 * 1000) {
-    pend = { ticketId, checkoutKey: 'chk-' + ticketId + '-' + Date.now(), cashKey: 'cash-' + ticketId + '-' + Date.now(), zelleKey: 'zelle-' + ticketId + '-' + Date.now(), at: Date.now() };
-    try { localStorage.setItem('muse_term_pending', JSON.stringify(pend)); } catch (e) {}
-  }
+  // DETERMINISTIC idempotency keys (ticket + cents amount). A retry of the SAME charge produces
+  // the SAME key, so Square dedupes it within its 24h idempotency window — no double-charge.
+  // (The old keys embedded Date.now() and were regenerated after a 15-min TTL, so a retry after a
+  // poll timeout minted a NEW key and could charge the card twice.)
+  const idemBase = String(ticketId || ('t-' + total));
+  const pend = {
+    ticketId,
+    checkoutKey: `chk-${idemBase}-${termCharge}`,
+    cashKey:     `cash-${idemBase}-${cashAppliedC}`,
+    zelleKey:    `zelle-${idemBase}-${zelleC}`,
+  };
+  try { localStorage.setItem('muse_term_pending', JSON.stringify({ ...pend, at: Date.now() })); } catch (e) {}
   // Resolve/create the Square customer for this ticket (by the primary guest's phone) so the
   // sale is ATTACHED to them in Square via customer_id — not just a free-text name note.
   // Best-effort: never blocks the charge (no phone / Square unreachable → stays unlinked).
@@ -308,7 +314,7 @@ function _finalizeTerminalPaid(partyIds, tenders, paymentIds, tipDollars) {
     window.updateStatus?.(String(id), 'paid');   // → saveRecord (records tenders/tip/squarePaymentIds) + gift-card draw-down + audit
   });
   try { localStorage.removeItem('muse_term_pending'); } catch (e) {}
-  _pendingPay = null; _payGc = []; _payTicketId = null; _payCash = 0; _payTip = 0;
+  _pendingPay = null; _payGc = []; _payTicketId = null; _payCash = 0; _payTip = 0; _payZelle = 0;
   showToast('Paid ✓');
 }
 

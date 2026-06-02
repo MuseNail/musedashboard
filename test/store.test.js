@@ -31,6 +31,16 @@ test('record.save guard: an older record cannot overwrite a newer one', () => {
   assert.ok(getState().records.find(x => x.id === 'r2'));
 });
 
+test('record.save guard: a deleted record cannot be revived by a later save', () => {
+  hydrate({ state: { records: [{ id: 'd1', totalCost: 40, updatedAt: 100 }], deletions: [] }, seq: 1 });
+  applyChange('record.delete', { id: 'd1' });
+  assert.equal(getState().records.find(x => x.id === 'd1').status, 'deleted');
+  assert.ok(getState().deletions.includes('d1'));
+  // a stale paid queue copy re-fires saveRecord with a FRESH updatedAt — must NOT un-delete it
+  applyChange('record.save', { record: { id: 'd1', totalCost: 40, status: 'paid', updatedAt: 999 } });
+  assert.equal(getState().records.find(x => x.id === 'd1').status, 'deleted');
+});
+
 test('queue.upsert guard: an older entry cannot overwrite a newer one', () => {
   hydrate({ state: { queue: [{ id: 'q1', totalCost: 80, updatedAt: 200 }] }, seq: 1 });
   applyChange('queue.upsert', { entry: { id: 'q1', totalCost: 78, updatedAt: 100 } });   // stale

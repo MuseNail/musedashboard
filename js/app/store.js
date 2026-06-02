@@ -107,7 +107,13 @@ export function applyChange(op, payload, seq) {
     case 'config.set':    state.config[payload.key] = payload.value; break;
     case 'queue.upsert':  if (!upsertByIdGuarded(state.queue, payload.entry)) return; break;   // stale → ignore (keep newer)
     case 'queue.remove':  removeById(state.queue, payload.id); break;
-    case 'record.save':   if (!upsertByIdGuarded(state.records, payload.record)) return; break; // stale → ignore (keep newer)
+    case 'record.save':
+      // Never revive a deleted transaction: a stale paid queue copy on another device can re-fire
+      // saveRecord with a fresh updatedAt that would pass the stale-write guard and un-delete the
+      // record at the storage layer (invisible in the dashboard, but a backup restore brings it back).
+      if (state.deletions.includes(String(payload.record && payload.record.id))) return;
+      if (!upsertByIdGuarded(state.records, payload.record)) return;   // stale → ignore (keep newer)
+      break;
     case 'record.delete': {
       const r = state.records.find(x => String(x.id) === String(payload.id));
       if (r) r.status = 'deleted';
