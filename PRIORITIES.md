@@ -73,9 +73,14 @@ why it wasn't shipped blind.
 
 ---
 
-## P2 — Processor-agnostic payment recording (GoDaddy / manual-terminal readiness)
+## P2 — Processor-agnostic payment recording (likely **Helcim**; GoDaddy on hold)
 
-Owner may switch to **GoDaddy** (standalone terminal, amounts typed in **manually** — no API charge).
+**2026-06-01: GoDaddy on hold — owner leaning toward Helcim.** Helcim has a real API + virtual
+terminal, so it could be more than manual-entry (unlike the GoDaddy assumption). Ties into TurnDesk's
+locked processor-adapter (Square/Stripe/**Helcim**). Revisit the build shape once the processor is
+decided.
+
+Owner may otherwise switch to a standalone terminal with amounts typed in **manually** — no API charge.
 In that model the **app is the system of record**:
 - App computes the total → operator records the **tender type + actual amount keyed** (+ optional
   confirmation/transaction # for audit).
