@@ -17,7 +17,12 @@ let _pendingPay = null;
 // R6 gift-card-as-recorded-tender (staging for the current pay session). These NEVER change
 // the Square charge — the full ticket total always goes to Square; we only record which cards
 // were used so the app's gift-card balances stay in sync. Committed when the ticket is paid.
-let _payGc = [], _payTicketId = null, _gcPickerOpen = false, _newGcOpen = false, _payCash = 0, _payTip = 0, _payZelle = 0;   // _payCash/_payTip/_payZelle in dollars (split-tender cash / Zelle / tip). The tip is collected ON TOP of the bill by whatever tender covers it (cash/Zelle/card) — never part of ticketTotal.
+let _payGc = [], _payTicketId = null, _gcPickerOpen = false, _newGcOpen = false, _payCash = 0, _payTip = 0, _payZelle = 0;   // _payCash/_payTip/_payZelle in dollars
+// When checked (default ON if a drawer is open), the card-collected portion of the tip is paid to
+// the tech in cash on finalize via a drawer Cash Out tagged 'tip' — so the drawer reconciles and
+// tip payouts are tallied. Cash tips already go straight to the tech, so this only ever logs the
+// CARD tip amount.
+let _payTipFromDrawer = false;
 const _gcBal = g => (g.amount || 0) - (window.gcTotalUsed ? window.gcTotalUsed(g) : 0);
 const _payTotalDollars = () => (_pendingPay?.cents || 0) / 100;                 // the BILL (svc + items + fees − discount); tip NOT included
 const _payTipDollars   = () => Math.max(0, _payTip || 0);
@@ -97,6 +102,7 @@ export function openSquarePOS(entryId) {
   _payTicketId = String(entryId);
   _payGc = (entry.giftcardRedemptions || []).map(t => ({ giftcardId: t.giftcardId, serial: t.serial, who: t.who, amount: t.amount }));
   _gcPickerOpen = false; _newGcOpen = false; _payCash = 0; _payTip = 0; _payZelle = 0;
+  _payTipFromDrawer = !!cfg().cash_drawer;   // default ON when a drawer is open (the common card-tip → cash-payout case)
   renderPayGc();
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
@@ -104,7 +110,7 @@ export function openSquarePOS(entryId) {
 
 export function closeSquareConfirm() {
   _pendingPay = null;
-  _payGc = []; _payTicketId = null; _gcPickerOpen = false; _newGcOpen = false; _payCash = 0; _payTip = 0; _payZelle = 0;
+  _payGc = []; _payTicketId = null; _gcPickerOpen = false; _newGcOpen = false; _payCash = 0; _payTip = 0; _payZelle = 0; _payTipFromDrawer = false;
   const gs = document.getElementById('square-gc-section'); if (gs) gs.innerHTML = '';
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.add('hidden'); m.style.display = ''; }
@@ -206,6 +212,10 @@ export async function proceedTerminalPayment() {
   // Capture BEFORE closeSquareConfirm() — it nulls _pendingPay / _payTicketId / _payCash / _payTip.
   const payNames = _pendingPay.names || '', ticketId = _payTicketId, partyIds = party.map(e => String(e.id));
   const tenders  = { cash: cashBillC / 100, card: cardBillC / 100, gift: giftCents / 100, zelle: zelleBillC / 100, cashReceived: cashReceivedC / 100, change: changeCents / 100 };
+  // Card-collected tip = the part of the tip the CARD paid (termCharge minus its bill share); cash/
+  // Zelle-covered tip is excluded (that money never sat in the drawer to pay out). Logged from the
+  // drawer on success when the operator left the "pay tip in cash" box checked.
+  const tipPayout = (_payTipFromDrawer && (termCharge - cardBillC) > 0) ? +(((termCharge - cardBillC) / 100).toFixed(2)) : 0;
   // Stash recorded gift cards on the ticket so they're drawn down when marked Paid.
   if (ticketId) {
     const ge = queue().find(x => String(x.id) === ticketId);
@@ -272,6 +282,8 @@ export async function proceedTerminalPayment() {
       if (!zellePaymentId) unrecorded.push('Zelle');
     }
     _finalizeTerminalPaid(partyIds, tenders, [cardPaymentId, cashPaymentId, zellePaymentId].filter(Boolean), tipCents / 100, unrecorded);
+    // Pay the card tip to the tech in cash from the drawer (no-op if no drawer is open).
+    if (tipPayout > 0) window.cdRecordCashOut?.(tipPayout, ('Card tip — ' + payNames).slice(0, 80), 'tip');
   } catch (e) { hideTerminalModal(); showToast('Square: ' + (e.message || 'error')); }
   finally { _charging = false; }
 }
@@ -467,6 +479,15 @@ function renderPayGc() {
       <span class="flex items-center gap-1"><span class="text-on-surface-variant text-sm">$</span>
       <input id="sq-tip-amt" type="text" inputmode="none" value="${_payTip > 0 ? _payTip.toFixed(2) : ''}" placeholder="0.00" onfocus="openNumpad(this,'Tip','cost')" onclick="openNumpad(this,'Tip','cost')" oninput="sqTipInput(this.value)" class="w-24 border border-surface-container-high rounded-lg px-2 py-1.5 text-sm text-right text-on-surface bg-surface-container-lowest focus:outline-none focus:border-primary"></span>
     </div>`;
+  // Optional: pay the card-collected tip to the tech in cash now, logging a drawer Cash Out
+  // (tagged 'tip' so it's tallied). Shown only when a drawer is open — cash tips already go
+  // straight to the tech.
+  const tipDrawerRow = cfg().cash_drawer ? `<label onclick="sqToggleTipDrawer()" class="flex items-center gap-2 mb-3 cursor-pointer select-none">
+      <div id="sq-tipdrawer-box" style="width:20px;height:20px;border-radius:5px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border:2px solid ${_payTipFromDrawer ? '#1a5252' : 'var(--outline-variant,#7a858a)'};background:${_payTipFromDrawer ? '#1a5252' : 'transparent'}">
+        <span id="sq-tipdrawer-check" class="material-symbols-outlined ${_payTipFromDrawer ? '' : 'hidden'}" style="font-size:13px;color:#fff;font-variation-settings:'FILL' 1">check</span>
+      </div>
+      <span class="text-xs font-body text-on-surface-variant">Pay the card tip to the tech in cash now — logs a drawer Cash Out</span>
+    </label>` : '';
   // Summary: small detail rows (shown only when they apply), then the three key amounts —
   // Sales Total (the bill), Change due, and Card on Terminal (last, divided off) — each ~1.2×
   // the detail rows with a teal amount. Tip Total / Cash received / Change due / Card on
@@ -487,7 +508,7 @@ function renderPayGc() {
       <div id="sq-row-change" class="${BIG}" style="${BIGS};display:none"><span class="text-on-surface">Change due</span><span class="text-primary" id="sq-change">$0.00</span></div>
       <div class="${BIG} border-t border-surface-container-high mt-2 pt-2" style="${BIGS}"><span class="text-on-surface">Card on Terminal</span><span class="text-primary" id="sq-card-due">$${_payCardDueDollars().toFixed(2)}</span></div>
     </div>`;
-  host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}${zelleRow}${tipRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${newGcBtn}${picker}${newGcForm}${breakdown}`;
+  host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}${zelleRow}${tipRow}${tipDrawerRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${newGcBtn}${picker}${newGcForm}${breakdown}`;
   sqUpdatePayBreakdown();
 }
 export function sqCashInput(v) {
@@ -504,6 +525,14 @@ export function sqZelleInput(v) {
   const n = parseFloat(v);
   _payZelle = isFinite(n) && n > 0 ? n : 0;
   sqUpdatePayBreakdown();
+}
+// Toggle "pay the card tip from the drawer in cash" — visual flip only (no re-render, so the
+// numpad isn't yanked). The actual drawer Cash Out is logged on finalize in proceedTerminalPayment.
+export function sqToggleTipDrawer() {
+  _payTipFromDrawer = !_payTipFromDrawer;
+  const box = document.getElementById('sq-tipdrawer-box'), chk = document.getElementById('sq-tipdrawer-check');
+  if (box) { box.style.background = _payTipFromDrawer ? '#1a5252' : 'transparent'; box.style.borderColor = _payTipFromDrawer ? '#1a5252' : 'var(--outline-variant,#7a858a)'; }
+  if (chk) chk.classList.toggle('hidden', !_payTipFromDrawer);
 }
 // Live-patch the breakdown numbers + the action buttons as cash/tip are typed, WITHOUT
 // re-rendering the section (which would yank the numpad's target input mid-entry).

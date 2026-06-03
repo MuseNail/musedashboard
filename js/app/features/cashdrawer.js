@@ -49,9 +49,9 @@ export function shiftCashSales(records, drawer, endMs) {
   }, 0);
 }
 function movementTotals(drawer) {
-  let inc = 0, out = 0;
-  (drawer?.movements || []).forEach(m => { if (m.type === 'out') out += m.amount || 0; else inc += m.amount || 0; });
-  return { inc, out };
+  let inc = 0, out = 0, tipOut = 0;
+  (drawer?.movements || []).forEach(m => { if (m.type === 'out') { out += m.amount || 0; if (m.kind === 'tip') tipOut += m.amount || 0; } else inc += m.amount || 0; });
+  return { inc, out, tipOut };   // tipOut is a SUBSET of out (card-tip payouts), shown as its own tally
 }
 export function drawerExpected(records, drawer, endMs) {
   const { inc, out } = movementTotals(drawer);
@@ -120,7 +120,7 @@ function render() {
 
   if (view === 'active') {
     const d = currentDrawer();
-    const { inc, out } = movementTotals(d);
+    const { inc, out, tipOut } = movementTotals(d);
     const sales = shiftCashSales(getState().records, d);
     const expected = (d.openTotal || 0) + sales + inc - out;
     const priorDay = localDateStr(new Date(d.openedAt)) < todayStr();
@@ -137,6 +137,7 @@ function render() {
         ${row('Cash sales', money(sales))}
         ${row('Cash in', money(inc))}
         ${row('Cash out', '−' + money(out))}
+        ${tipOut > 0 ? row('↳ tips paid out', '−' + money(tipOut)) : ''}
         ${row('Expected in drawer', money(expected), true)}
       </div>
       <div class="grid grid-cols-2 gap-2 mb-3">
@@ -200,6 +201,7 @@ function render() {
           <span>Opening: <span class="text-on-surface">${money(s.openTotal)}</span></span>
           <span>Cash sales: <span class="text-on-surface">${money(s.cashSales)}</span></span>
           <span>Cash in/out: <span class="text-on-surface">${money(s.cashIn)} / ${money(s.cashOut)}</span></span>
+          ${s.tipsOut ? `<span>Tips paid: <span class="text-on-surface">${money(s.tipsOut)}</span></span>` : ''}
           <span>Counted: <span class="text-on-surface">${money(s.closeTotal)}</span></span>
           <span>Expected: <span class="text-on-surface">${money(s.expected)}</span></span>
           <span>Over/Short: <span style="color:${osColor(os)};font-weight:700">${osLabel(os)}</span></span>
@@ -245,15 +247,16 @@ export function cdSubmitMovement(type) {
   _cdView = 'active'; render();
 }
 
-// Append a Cash Out to the open drawer (e.g. cash physically returned on a refund) so the close
-// reconciliation accounts for it. No-op if no drawer is open. Called from the refund flow.
-export function cdRecordCashOut(amount, reason) {
+// Append a Cash Out to the open drawer (e.g. cash physically returned on a refund, or a card-tip
+// paid to the tech in cash) so the close reconciliation accounts for it. `kind` tags the movement
+// (e.g. 'tip') so tip payouts can be tallied separately. No-op if no drawer is open.
+export function cdRecordCashOut(amount, reason, kind) {
   const drawer = currentDrawer();
   if (!drawer || !(amount > 0)) return false;
-  const next = { ...drawer, movements: [...(drawer.movements || []), { id: newEntryId(), type: 'out', amount, reason: reason || '', at: new Date().toISOString(), by: me() }] };
+  const next = { ...drawer, movements: [...(drawer.movements || []), { id: newEntryId(), type: 'out', amount, reason: reason || '', at: new Date().toISOString(), by: me(), ...(kind ? { kind } : {}) }] };
   dispatch('config.set', { key: 'cash_drawer', value: next });
-  window.logAudit?.('Cash drawer', `Cash out ${money(amount)}${reason ? ' · ' + reason : ''}`);
-  showToast(`Logged ${money(amount)} cash out from the drawer`);
+  window.logAudit?.('Cash drawer', `${kind === 'tip' ? 'Tip payout' : 'Cash out'} ${money(amount)}${reason ? ' · ' + reason : ''}`);
+  showToast(kind === 'tip' ? `Paid ${money(amount)} tip from the drawer` : `Logged ${money(amount)} cash out from the drawer`);
   return true;
 }
 
@@ -264,10 +267,10 @@ export function cdConfirmClose() {
   const endMs = Date.now();
   const closeTotal = countTotal(_countDraft);
   const cashSales = shiftCashSales(getState().records, drawer, endMs);
-  const { inc, out } = movementTotals(drawer);
+  const { inc, out, tipOut } = movementTotals(drawer);
   const expected = (drawer.openTotal || 0) + cashSales + inc - out;
   const overShort = closeTotal - expected;
-  const closed = { ...drawer, closedAt: new Date(endMs).toISOString(), closedBy: me(), closeCounts: { ..._countDraft }, closeTotal, cashSales, cashIn: inc, cashOut: out, expected, overShort };
+  const closed = { ...drawer, closedAt: new Date(endMs).toISOString(), closedBy: me(), closeCounts: { ..._countDraft }, closeTotal, cashSales, cashIn: inc, cashOut: out, tipsOut: tipOut, expected, overShort };
   const hist = [...(cfg().cash_drawer_history || []), closed];
   if (hist.length > HISTORY_CAP) hist.splice(0, hist.length - HISTORY_CAP);
   dispatch('config.set', { key: 'cash_drawer_history', value: hist });
@@ -320,6 +323,7 @@ function buildShiftHtml(s) {
       <tr><td>+ Cash sales</td><td style="text-align:right">${money(s.cashSales)}</td></tr>
       <tr><td>+ Cash in</td><td style="text-align:right">${money(s.cashIn)}</td></tr>
       <tr><td>− Cash out</td><td style="text-align:right">${money(s.cashOut)}</td></tr>
+      ${s.tipsOut ? `<tr><td style="color:#666">&nbsp;&nbsp;↳ of which tip payouts</td><td style="text-align:right;color:#666">${money(s.tipsOut)}</td></tr>` : ''}
       <tr class="big"><td>Expected in drawer</td><td style="text-align:right">${money(s.expected)}</td></tr>
       <tr class="big"><td>Counted in drawer</td><td style="text-align:right">${money(s.closeTotal)}</td></tr>
       <tr class="big"><td>Over / Short</td><td style="text-align:right" class="os">${osLabel(os)}</td></tr>
