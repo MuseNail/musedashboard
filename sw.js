@@ -1,7 +1,7 @@
-// ── Service Worker (v2.72 — modular ES-module client) ───────────────────────
+// ── Service Worker (v4.20 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'muse-v4.19';
+const CACHE_NAME = 'muse-v4.20';
 
 const PRECACHE_URLS = [
   '/musedashboard/',
@@ -79,10 +79,25 @@ self.addEventListener('fetch', event => {
 async function networkFirst(req) {
   try {
     const res = await fetch(req);
-    const cache = await caches.open(CACHE_NAME);
-    cache.put(req, res.clone());
+    // Only cache genuine successful same-origin responses — never a transient 404/500
+    // (e.g. mid-deploy) or an opaque/redirected response, which would otherwise be
+    // served from cache offline and leave a broken module stuck until the next online fetch.
+    if (res && res.ok && res.type === 'basic' && !res.redirected) {
+      const cache = await caches.open(CACHE_NAME);
+      cache.put(req, res.clone());
+    }
     return res;
-  } catch { return caches.match(req); }
+  } catch {
+    const cached = await caches.match(req);
+    if (cached) return cached;
+    // Offline cache-miss: fall back to the app shell for navigations so the user lands
+    // in the app instead of a raw browser network error.
+    if (req.mode === 'navigate') {
+      const shell = await caches.match('/musedashboard/index.html');
+      if (shell) return shell;
+    }
+    return Response.error();
+  }
 }
 
 // ── Web Push (Muse Staff) ────────────────────────────────────────────────────

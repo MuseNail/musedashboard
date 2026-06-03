@@ -87,6 +87,15 @@ function render() {
   renderMain(meStaff);
 }
 
+// True while a tech is actively typing in a price field. A sync-driven re-render rebuilds
+// #staff-list wholesale, which would blow away the focused input (caret + iPad keyboard);
+// the typed value already survives in _priceDraft, so we just skip the rebuild until the
+// field blurs and let the next sync/action catch the list up.
+function priceInputFocused() {
+  const el = document.activeElement;
+  return !!(el && el.classList && el.classList.contains('staff-price-input'));
+}
+
 function renderLogin(errMsg) {
   document.getElementById('staff-login').classList.remove('hidden');
   document.getElementById('staff-main').classList.add('hidden');
@@ -191,7 +200,7 @@ function lineHtml(entry, a) {
       <span class="text-on-surface-variant font-headline text-2xl">$</span>
       <input type="text" inputmode="decimal" value="${priceVal}" placeholder="${placeholder}"
         oninput="staffPriceInput('${entry.id}','${esc(a.serviceId)}',this.value)"
-        class="flex-1 min-w-0 bg-surface-container border-2 border-surface-container-high rounded-xl px-4 py-3 text-3xl font-headline text-right focus:outline-none focus:border-primary">
+        class="staff-price-input flex-1 min-w-0 bg-surface-container border-2 border-surface-container-high rounded-xl px-4 py-3 text-3xl font-headline text-right focus:outline-none focus:border-primary">
       <button onclick="staffCalc('${entry.id}','${esc(a.serviceId)}')" title="Calculator"
         class="flex-shrink-0 w-14 h-14 flex items-center justify-center rounded-xl border-2 border-primary text-primary hover:bg-primary/10 active:scale-95 transition-all">
         <span class="material-symbols-outlined" style="font-size:26px">calculate</span>
@@ -249,7 +258,7 @@ function buildStaffTodayHtml(techName, lines) {
     table{width:100%;border-collapse:collapse}th{background:#1a5252;color:#fff;padding:7px 9px;text-align:left;font-size:12px}td{padding:6px 9px;border-bottom:1px solid #e0e0e0;font-size:12px}tr:nth-child(even) td{background:#fafafa}
     .footer{margin-top:22px;font-size:10px;color:#999;text-align:center}
   </style></head><body>
-    <div class="h">${logo ? `<img src="${logo}" class="logo" onerror="this.style.display='none'">` : ''}<div><h1>Muse Nails &amp; Spa</h1><p class="sub">${esc(techName)} · ${dateLabel}</p></div></div>
+    <div class="h">${logo ? `<img src="${esc(logo)}" class="logo" onerror="this.style.display='none'">` : ''}<div><h1>Muse Nails &amp; Spa</h1><p class="sub">${esc(techName)} · ${dateLabel}</p></div></div>
     <div class="tot"><div class="v">$${total.toFixed(2)}</div><div class="l">${lines.length} service${lines.length === 1 ? '' : 's'} today</div></div>
     <table><thead><tr><th>Service</th><th>Customer</th><th>Status</th><th style="text-align:right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
     <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
@@ -287,6 +296,13 @@ window.staffStart = (entryId, serviceId) => {
 window.staffComplete = (entryId, serviceId) => {
   const key = entryId + ':' + serviceId;
   const priced = parsePrice(_priceDraft[key]);
+  // Require a real price before completing — a $0 service skews the tech's daily total and
+  // the dashboard can't Pay it anyway (mirrors the dashboard's pay-time validation). The
+  // effective price is the typed draft if present, else the cost already on the assignment.
+  const existing = (queue().find(e => String(e.id) === String(entryId))?.assignments || [])
+    .find(x => x.serviceId === serviceId && x.techId === myId);
+  const effective = priced != null ? priced : parsePrice(existing?.cost);
+  if (effective == null || effective <= 0) { showToast('Enter a price first'); return; }
   updateAssignment(entryId, serviceId, a => { a.status = 'complete'; if (priced != null) a.cost = priced; });
   delete _priceDraft[key];
   showToast('Sent to front desk ✓');
@@ -406,7 +422,7 @@ window.staffPinInput = () => {
   const ambiguous = (cfg().staff || []).some(s => s.pin && !inactive.has(s.id) && String(s.pin) !== pin && String(s.pin).startsWith(pin));
   if (!ambiguous) window.staffPinSubmit();
 };
-window.staffSwitch = () => { localStorage.removeItem(MY_KEY); myId = null; render(); };
+window.staffSwitch = () => { unregisterPush(); localStorage.removeItem(MY_KEY); myId = null; render(); };
 window.staffLogout = window.staffSwitch;
 
 // ── Push notifications (assignment alerts) ────────
@@ -447,6 +463,19 @@ async function registerPush() {
     localStorage.setItem('muse_push_techid', myId);
   } catch {}
 }
+// On logout, drop the server-side link between this device and the signed-out tech so the
+// device stops receiving that tech's assignment alerts. The browser push subscription itself
+// is left intact (the next tech to sign in re-tags it via registerPush — no re-prompt).
+async function unregisterPush() {
+  const techId = localStorage.getItem('muse_push_techid');
+  if (!techId || !pushSupported()) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await fetch(PUSH_PROXY + '/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId, endpoint: sub.endpoint }) });
+    localStorage.removeItem('muse_push_techid');
+  } catch {}
+}
 
 // ── App-update prompt ─────────────────────────────
 // iOS keeps a home-screen PWA suspended in memory, so it rarely cold-reloads to pick
@@ -473,7 +502,7 @@ window.staffUpdateNow = async () => {
 // ── Boot ──────────────────────────────────────────
 function boot() {
   sync.start();
-  store.subscribe(() => render());
+  store.subscribe(() => { if (priceInputFocused()) return; render(); });
   render();   // instant render from cached state; subscribe re-renders on hydrate
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').then(() => registerPush()).catch(() => {});
   checkStaffVersion();   // on cold start
