@@ -5,6 +5,33 @@ public-product fork). Ordered by impact.
 
 ---
 
+## ⭐ P0 (NEW, owner-requested 2026-06-03) — "Paid" status policy + safe reversal
+
+Decide and implement the rules around marking a ticket **Paid**, then make mistakes recoverable:
+
+1. **Should staff be able to mark a ticket Paid manually at all?** Today there are two "→ paid"
+   paths: the full **Pay screen** (records tenders + gift draw-down + audit) and a quick
+   **"Mark Paid ✓"** status button (`_blockDirectPaid` blocks front-desk users without the
+   `markPaidDirect` permission when Square is configured + total>0, but admins/managers and
+   $0/no-Square tickets pass straight through). Decide: who (which roles) may mark paid manually,
+   under what conditions, and whether the quick button should exist at all or always route through
+   the Pay screen.
+2. **The two paths diverge** (the §5/§8 "divergent pay paths" finding): the quick path skips
+   gift-card draw-down, the payment audit entry, and tender recording — so cash/gift sales done that
+   way are invisible to the drawer and reports. The fix is to **funnel every "→ paid" (and reopen)
+   through ONE path** that always does tenders + gift sync + audit.
+3. **Safe reversal of a mistake:** define and harden the "un-pay"/reopen flow so it always
+   (a) reverses gift-card redemptions (`gcReverseTicket`), (b) leaves a clear audit trail, (c) can't
+   double-charge or strand money, and (d) is permission-gated. Today reopen via the modal status-cycle
+   bypasses gift reversal (§5), and refund doesn't reverse gift redemptions (§7) — both must be closed
+   as part of this.
+
+This is a policy decision + a structural consolidation; do it as its own change (good candidate to
+pair with the §10 Square pay-flow audit). Related audit findings: §5 (gift draw-down skip, reopen
+bypass), §7 (refund no-reverse), §8 (A3, A4).
+
+---
+
 ## ✅ RESOLVED — Roster wipe / "losing sync" (v4.00, `276e616`)
 
 Selected technicians disappeared mid-day, multiple times. Root cause: the daily rollover clears the
