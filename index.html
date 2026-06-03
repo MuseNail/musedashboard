@@ -2322,6 +2322,10 @@ tailwind.config = {
       <input type="checkbox" id="refund-to-square" class="mt-0.5 w-4 h-4 flex-shrink-0" style="accent-color:#5c4010">
       <span class="text-xs font-body text-on-surface-variant leading-snug">Also refund this <strong class="text-on-surface">in Square</strong> (<span id="refund-square-amt">card portion</span>) — card goes back to the card; cash &amp; Zelle are recorded refunds. Gift-card portions are returned by hand.</span>
     </label>
+    <label id="refund-cash-out-row" class="hidden items-start gap-2.5 mb-4 cursor-pointer select-none rounded-xl border border-surface-container-high px-3 py-2.5">
+      <input type="checkbox" id="refund-cash-out" class="mt-0.5 w-4 h-4 flex-shrink-0" style="accent-color:#5c4010">
+      <span class="text-xs font-body text-on-surface-variant leading-snug">I returned this <strong class="text-on-surface">in cash from the drawer</strong> — log a Cash Out so the open drawer reconciles. (Leave unchecked for card / Zelle refunds.)</span>
+    </label>
     <div class="flex gap-2">
       <button onclick="closeRefundModal()" class="flex-1 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-semibold">Cancel</button>
       <button onclick="confirmRefund()" class="flex-1 py-3 rounded-xl font-headline font-bold text-white transition-all" style="background:#5c4010">Confirm Refund</button>

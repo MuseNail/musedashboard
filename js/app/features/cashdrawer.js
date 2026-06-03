@@ -245,6 +245,18 @@ export function cdSubmitMovement(type) {
   _cdView = 'active'; render();
 }
 
+// Append a Cash Out to the open drawer (e.g. cash physically returned on a refund) so the close
+// reconciliation accounts for it. No-op if no drawer is open. Called from the refund flow.
+export function cdRecordCashOut(amount, reason) {
+  const drawer = currentDrawer();
+  if (!drawer || !(amount > 0)) return false;
+  const next = { ...drawer, movements: [...(drawer.movements || []), { id: newEntryId(), type: 'out', amount, reason: reason || '', at: new Date().toISOString(), by: me() }] };
+  dispatch('config.set', { key: 'cash_drawer', value: next });
+  window.logAudit?.('Cash drawer', `Cash out ${money(amount)}${reason ? ' · ' + reason : ''}`);
+  showToast(`Logged ${money(amount)} cash out from the drawer`);
+  return true;
+}
+
 export function cdConfirmClose() {
   commitNumpad();
   const drawer = currentDrawer();

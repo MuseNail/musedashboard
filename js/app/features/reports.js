@@ -1818,6 +1818,11 @@ export function initiateRefund(recordId) {
   if (cb) cb.checked = false;
   if (row) row.classList.toggle('hidden', sqAmt <= 0);
   if (sqAmt > 0) { const a = document.getElementById('refund-square-amt'); if (a) a.textContent = `up to $${sqAmt.toFixed(2)} in Square`; }
+  // Cash-from-drawer row: shown only when a drawer is open, so a cash refund can log a Cash Out
+  // and the close reconciliation isn't thrown short. Always reset OFF (per-refund opt-in).
+  const coRow = document.getElementById('refund-cash-out-row'), coCb = document.getElementById('refund-cash-out');
+  if (coCb) coCb.checked = false;
+  if (coRow) coRow.classList.toggle('hidden', !cfg().cash_drawer);
   const m = document.getElementById('refund-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   setTimeout(() => document.getElementById('refund-reason')?.focus(), 100);
 }
@@ -1949,6 +1954,9 @@ export async function confirmRefund() {
   const record = { id: newEntryId(), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -refundAmount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: refundOfId, refundTechBilled, loggedBy: getActiveUser()?.name || '', ...(squareRefundIds && squareRefundIds.length ? { squareRefundIds } : {}) };
   dispatch('record.save', { record });
   window.logAudit?.('Refund', `${o.name || '—'} · $${refundAmount.toFixed(2)}${squareRefundIds && squareRefundIds.length ? ' · refunded in Square' : ''}${reason ? ' · ' + reason : ''}`);
+  // If the operator returned cash from the open drawer, log a Cash Out so the shift reconciliation
+  // accounts for the physical cash that left (otherwise the drawer reads a phantom short at close).
+  if (document.getElementById('refund-cash-out')?.checked) window.cdRecordCashOut?.(refundAmount, `Refund: ${o.name || ''}`.trim());
   closeRefundModal();
   renderTransactions();
   if (document.getElementById('panel-reports')?.classList.contains('active')) runReport();
