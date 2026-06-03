@@ -253,11 +253,18 @@ function payPeriodDates(now = new Date()) {
     if (today.getDate() <= 15) return { from: new Date(today.getFullYear(), today.getMonth(), 1), to: new Date(today.getFullYear(), today.getMonth(), 15, 23,59,59) };
     return { from: new Date(today.getFullYear(), today.getMonth(), 16), to: new Date(today.getFullYear(), today.getMonth()+1, 0, 23,59,59) };
   }
-  const len = type === 'biweekly' ? 14 : 7, msDay = 86400000;
-  const anchor = pp.startDate ? new Date(pp.startDate + 'T00:00:00') : today;
-  const mod = (((Math.floor((today - anchor) / msDay)) % len) + len) % len;
-  const from = new Date(today.getTime() - mod * msDay); from.setHours(0,0,0,0);
-  const to = new Date(from.getTime() + (len-1) * msDay); to.setHours(23,59,59,999);
+  const len = type === 'biweekly' ? 14 : 7;
+  // With no configured start date, anchor to a FIXED reference Sunday (2024-01-07) so week/biweek
+  // boundaries are stable. (Anchoring to `today` made the period slide every day — and start in the
+  // future: mod=0 → from=today, to=today+6.) A configured startDate always wins. Day counts use
+  // UTC midnights + calendar arithmetic (new Date(y,m,d±n)) so a DST transition between the anchor
+  // and today — or inside the period — can't shift the boundary by a day.
+  const anchor = pp.startDate ? new Date(pp.startDate + 'T00:00:00') : new Date(2024, 0, 7);
+  const utcMid = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  const daysSince = Math.round((utcMid(today) - utcMid(anchor)) / 86400000);
+  const mod = ((daysSince % len) + len) % len;
+  const from = new Date(today.getFullYear(), today.getMonth(), today.getDate() - mod);
+  const to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + (len - 1), 23, 59, 59, 999);
   return { from, to };
 }
 function getReportDates() {
@@ -1907,30 +1914,45 @@ export async function confirmRefund() {
   // error — don't record an app refund that implies Square sent the money when it didn't.
   const wantSquare = !!document.getElementById('refund-to-square')?.checked;
   let squareRefundIds = null;
+  let refundAmount = amount;   // may be lowered to the amount Square ACTUALLY returned on a partial failure
   if (wantSquare && _squareRefundable(o) > 0) {
     const btn = document.querySelector('#refund-modal button[onclick="confirmRefund()"]'); if (btn) { btn.disabled = true; btn.textContent = 'Refunding in Square…'; }
     const r = await refundInSquare(o, amount, reason);
     if (btn) { btn.disabled = false; btn.textContent = 'Confirm Refund'; }
-    if (!r.ok) { showToast('Square refund failed: ' + (r.error || 'error') + ' — nothing recorded.'); return; }
-    squareRefundIds = (r.refundIds || []).filter(Boolean);
-    showToast(`Refunded $${(r.refundedCents / 100).toFixed(2)} in Square ✓`);
+    const refunded = (r.refundedCents || 0) / 100;
+    if (!r.ok) {
+      // Square may have already returned PART of the money (multi-tender: card succeeded, a later
+      // tender failed). Never claim "nothing recorded" when money went back — record exactly what
+      // was refunded and tell the operator to finish the rest by hand.
+      if (refunded > 0) {
+        refundAmount = refunded;
+        squareRefundIds = (r.refundIds || []).filter(Boolean);
+        showToast(`Square partially refunded $${refunded.toFixed(2)} — recording that; finish the remainder by hand.`);
+      } else {
+        showToast('Square refund failed: ' + (r.error || 'error') + ' — nothing recorded.');
+        return;
+      }
+    } else {
+      squareRefundIds = (r.refundIds || []).filter(Boolean);
+      showToast(`Refunded $${refunded.toFixed(2)} in Square ✓`);
+    }
   }
   // Refunds are dated to when they're issued (checkinTime = now) so they land in the
   // CURRENT period's totals in Reports/Payroll. refundTechBilled carries the original's
   // per-tech billed (negated, scaled for partial refunds) so the Payroll page can show a
   // per-tech Refunds line and — when config.commission_includes_refunds is on — dock pay.
-  const origTotal = o.totalCost || amount;
-  const ratio = origTotal > 0 ? amount / origTotal : 1;
+  const origTotal = o.totalCost || refundAmount;
+  const ratio = origTotal > 0 ? refundAmount / origTotal : 1;
   const refundTechBilled = (o.assignments || [])
     .filter(a => a.techId)
     .map(a => ({ techId: a.techId, billed: -((a.cost || 0) * ratio) }));
-  const record = { id: newEntryId(), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -amount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: refundOfId, refundTechBilled, loggedBy: getActiveUser()?.name || '', ...(squareRefundIds && squareRefundIds.length ? { squareRefundIds } : {}) };
+  const record = { id: newEntryId(), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -refundAmount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: refundOfId, refundTechBilled, loggedBy: getActiveUser()?.name || '', ...(squareRefundIds && squareRefundIds.length ? { squareRefundIds } : {}) };
   dispatch('record.save', { record });
-  window.logAudit?.('Refund', `${o.name || '—'} · $${amount.toFixed(2)}${squareRefundIds && squareRefundIds.length ? ' · refunded in Square' : ''}${reason ? ' · ' + reason : ''}`);
+  window.logAudit?.('Refund', `${o.name || '—'} · $${refundAmount.toFixed(2)}${squareRefundIds && squareRefundIds.length ? ' · refunded in Square' : ''}${reason ? ' · ' + reason : ''}`);
   closeRefundModal();
   renderTransactions();
   if (document.getElementById('panel-reports')?.classList.contains('active')) runReport();
-  showToast(`Refund of $${amount.toFixed(2)} recorded ✓`);
+  showToast(`Refund of $${refundAmount.toFixed(2)} recorded ✓`);
 }
 
 // ── Delete transaction (soft delete via DO) ───────
@@ -2082,9 +2104,12 @@ export function saveHistoricalTransaction() {
   if (_rawDiscount > _histBase) showToast(`Discount capped at $${_histBase.toFixed(2)}`);
   const total = _computeHistTotal();
   const assignments = _histSelectedSvcs.map(sid => ({ serviceId: sid, techId: _histAssignments[sid]?.techId||'', station: _histAssignments[sid]?.station||'', cost: parseFloat(_histAssignments[sid]?.cost)||0, status: 'paid', assignedAt: checkinTime.getTime() }));
-  if (assignments.length === 0 && total > 0) assignments.push({ serviceId:'', techId:'', station:'', cost: total, status:'paid', assignedAt: checkinTime.getTime() });
   const items = _histItems.filter(i => i.itemId && i.qty > 0).map(i => ({ itemId: i.itemId, qty: i.qty, price: i.price }));
   const fees = _histFees.filter(f => f.feeId && f.amount > 0).map(f => ({ feeId: f.feeId, amount: f.amount }));
+  // Only collapse into a synthetic lump-sum assignment when there are NO items AND NO fees — otherwise
+  // the items/fees are already counted and a synthetic assignment carrying the FULL total would DOUBLE
+  // them when buildCombinedRecords re-derives the record via ticketTotal (assignments + items + fees).
+  if (assignments.length === 0 && items.length === 0 && fees.length === 0 && total > 0) assignments.push({ serviceId:'', techId:'', station:'', cost: total, status:'paid', assignedAt: checkinTime.getTime() });
   const base = { name, phone, services: _histSelectedSvcs, assignments, items, fees, discount, discountNote, tip, totalCost: total, checkinTime: checkinTime.toISOString(), status: 'paid', isAppointment: _histType === 'Appointment', loggedBy: getActiveUser()?.name || 'Admin' };
   if (_histMode === 'edit') {
     const existing = records().find(r => String(r.id) === String(_histEditId));
