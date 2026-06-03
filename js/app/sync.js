@@ -169,6 +169,9 @@ export function dispatch(op, payload) {
   // what stops a lingering stale device copy from clobbering a good record (e.g. dropping a fee).
   if (op === 'queue.upsert' && payload && payload.entry)  { payload.entry.updatedAt  = Date.now(); payload.entry.updatedBy  = DEVICE_ID; }
   if (op === 'record.save'  && payload && payload.record) { payload.record.updatedAt = Date.now(); payload.record.updatedBy = DEVICE_ID; }
+  // Stamp config writes too (per-key version) so a stale offline replay or a clobbering concurrent
+  // edit of the catalog / turns roster / settings is rejected by the guard instead of last-writer-wins.
+  if (op === 'config.set'   && payload)                   { payload.updatedAt = Date.now(); payload.updatedBy = DEVICE_ID; }
   applyChange(op, payload);                                  // optimistic
   const msg = { type: 'mutate', op, payload, mutationId, device: DEVICE_ID };
   enqueue(msg);

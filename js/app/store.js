@@ -30,6 +30,7 @@ function emptyConfig() {
 
 const state = {
   config:    emptyConfig(),
+  configMeta: {},  // per-key write stamp { [key]: { updatedAt, updatedBy } } — drives the config.set stale-write guard (mirrors records/queue)
   queue:     [],
   records:   [],
   giftcards: [],
@@ -90,6 +91,7 @@ export function hydrate(snap) {
     if (cfg[k] !== undefined && cfg[k] !== null) merged[k] = cfg[k];
   }
   state.config    = merged;
+  state.configMeta = (incoming.configMeta && typeof incoming.configMeta === 'object') ? incoming.configMeta : {};
   state.queue     = Array.isArray(incoming.queue)     ? incoming.queue     : [];
   state.records   = Array.isArray(incoming.records)   ? incoming.records   : [];
   state.giftcards = Array.isArray(incoming.giftcards) ? incoming.giftcards : [];
@@ -105,7 +107,18 @@ export function hydrate(snap) {
 // Pure state mutation + notify; never performs I/O.
 export function applyChange(op, payload, seq) {
   switch (op) {
-    case 'config.set':    state.config[payload.key] = payload.value; break;
+    case 'config.set': {
+      // Stale-write guard for config (mirrors records/queue): reject a write strictly OLDER than
+      // the value we already hold for this key, so a stale offline-outbox replay or a clobbering
+      // concurrent edit can't silently revert the catalog / turns roster / settings. Unstamped or
+      // equal writes always apply (legacy data + last-writer-wins on a tie).
+      const ts = (payload && typeof payload.updatedAt === 'number') ? payload.updatedAt : null;
+      const prev = state.configMeta[payload.key];
+      if (ts != null && prev && typeof prev.updatedAt === 'number' && ts < prev.updatedAt) return;   // older → keep the newer value
+      state.config[payload.key] = payload.value;
+      if (ts != null) state.configMeta[payload.key] = { updatedAt: ts, updatedBy: payload.updatedBy || null };
+      break;
+    }
     case 'queue.upsert':  if (!upsertByIdGuarded(state.queue, payload.entry)) return; break;   // stale → ignore (keep newer)
     case 'queue.remove':  removeById(state.queue, payload.id); break;
     case 'record.save':
@@ -142,7 +155,7 @@ export function setConnection(connected, pendingCount) {
 function saveCache() {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify({
-      config: state.config, queue: state.queue, records: state.records,
+      config: state.config, configMeta: state.configMeta, queue: state.queue, records: state.records,
       giftcards: state.giftcards, deletions: state.deletions, seq: state.seq,
     }));
   } catch (e) { /* quota / unavailable — non-fatal */ }

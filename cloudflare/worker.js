@@ -501,9 +501,19 @@ export class MuseSalonDO {
     let stale = false;
     try {
       switch (op) {
-        case 'config.set':
+        case 'config.set': {
+          // Stale-write guard for config (mirrors queue/record): reject a write strictly OLDER than
+          // the stored value for this key, so a stale offline-outbox replay can't revert the catalog /
+          // turns roster / settings and re-broadcast the regression. Unstamped/equal writes apply.
+          const cts = (typeof payload.updatedAt === 'number') ? payload.updatedAt : null;
+          if (cts != null) {
+            const prevMeta = await this.state.storage.get('cfgmeta:' + payload.key);
+            if (prevMeta && typeof prevMeta.updatedAt === 'number' && cts < prevMeta.updatedAt) { stale = true; break; }
+          }
           await this.state.storage.put('config:' + payload.key, payload.value);
+          if (cts != null) await this.state.storage.put('cfgmeta:' + payload.key, { updatedAt: cts, updatedBy: payload.updatedBy || null });
           break;
+        }
         case 'queue.upsert': {
           const qKey = 'queue:' + payload.entry.id;
           const prevEntry = await this.state.storage.get(qKey);
@@ -586,9 +596,11 @@ export class MuseSalonDO {
 
   // Assemble the full state from storage (prefix scans skip mut:/meta: keys).
   async buildSnapshot() {
-    const state = { config: {}, queue: [], records: [], giftcards: [], deletions: [], audit: [] };
+    const state = { config: {}, configMeta: {}, queue: [], records: [], giftcards: [], deletions: [], audit: [] };
     const cfg = await this.state.storage.list({ prefix: 'config:' });
     for (const [k, v] of cfg) state.config[k.slice('config:'.length)] = v;
+    const cm = await this.state.storage.list({ prefix: 'cfgmeta:' });
+    for (const [k, v] of cm) state.configMeta[k.slice('cfgmeta:'.length)] = v;
     const q = await this.state.storage.list({ prefix: 'queue:' });
     for (const [, v] of q) state.queue.push(v);
     const r = await this.state.storage.list({ prefix: 'record:' });
