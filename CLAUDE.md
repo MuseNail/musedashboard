@@ -14,9 +14,15 @@ The app is **live and in active operational use**. All planned phases (Split thr
 
 ## ⚠️ Product line — this repo vs TurnDesk (read before any "make it a product" work)
 
-**This repo (`musedashboard`) is the STABLE, single-salon, live app — keep it that way.** A separate public/SaaS product — **TurnDesk** — is being forked from this codebase into its **own GitHub repo, its own Cloudflare Worker, and its own Cloudflare account** (decision locked 2026-05-28). TurnDesk is **multi-tenant** (one Durable Object per salon), has a **pluggable payment-processor adapter layer** (Square / Stripe / **Helcim**), and adds accounts/billing/onboarding for public signups.
+> ### 🔄 DIRECTION CHANGE (2026-06-03) — SUPERSEDES the TurnDesk framing below
+> - **TurnDesk is PAUSED** until the MuseNail app (THIS repo) is fully functional/stable and needs no further major updates. Do not start/continue TurnDesk work until the owner un-pauses it.
+> - **Square → Helcim is now a THIS-REPO change.** The owner will **replace Square with Helcim** for Muse Nails & Spa *inside `musedashboard`* — a straight **single-processor replacement**, NOT the multi-processor adapter (that was the TurnDesk approach). So the "Helcim = TurnDesk-only / don't touch processors here" rule below no longer applies to Helcim.
+> - **Sequencing:** stabilize the app first (finish deferred audit/security work + pay-path P0), **get hardware** (Helcim **Smart Terminal** — the API-drivable device; NOT the $199 mobile card reader), THEN do the Square→Helcim swap as its own project. Keep it in mind when touching the pay flow / Worker (a clean pay-path consolidation + a Worker webhook seam make the later swap easier — but DON'T build a full adapter abstraction; this is a replacement, keep it simple per "no premature abstraction").
+> - Helcim integration model: backend POSTs "start a purchase" to the **Smart Terminal API** (terminal in API mode) and receives the result via a **webhook** (vs Square's poll) → the Worker needs a webhook endpoint + a `HELCIM_API_TOKEN` secret. This also intersects the §13 backend-auth work.
 
-- **Do NOT build TurnDesk features in this repo.** TurnDesk is developed in its own repo/chat.
+**This repo (`musedashboard`) is the STABLE, single-salon, live app — keep it that way.** A separate public/SaaS product — **TurnDesk** — was being forked from this codebase into its **own GitHub repo, its own Cloudflare Worker, and its own Cloudflare account** (decision locked 2026-05-28; **PAUSED 2026-06-03, see above**). TurnDesk is **multi-tenant** (one Durable Object per salon), has a **pluggable payment-processor adapter layer** (Square / Stripe / **Helcim**), and adds accounts/billing/onboarding for public signups.
+
+- **Do NOT build TurnDesk features in this repo** — EXCEPT the Square→Helcim replacement, which is now an explicitly-sanctioned in-repo change (see the direction-change box above).
 - Full plan + all locked decisions: `ROADMAP.md` (TurnDesk section). Kickoff prompt to start the fork in a new chat: **`TURNDESK-KICKOFF.md`** (repo root).
 
 > ## ⚡ Development Posture (v2.00+) — SUPERSEDES the rules below where they conflict
