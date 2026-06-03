@@ -2,6 +2,8 @@
 
 All planned phases (Split through Phase 7) are complete. The app is live and operational. This document preserves the build history and defines the post-launch development direction.
 
+> ⭐ **Active work (2026-06): a system-wide code audit.** Production is **v4.15** (audit fixes v4.11–v4.15 shipped, incl. the `config.set` + `giftcard.save` stale-write guards, deployed to the Worker). The full audit record — every finding, what's fixed, what's deferred, and the decisions — is in **`AUDIT-2026-06.md`**; the live backlog (incl. the P0 "Paid" status policy) is in **`PRIORITIES.md`**.
+
 ---
 
 ## ⭐ TurnDesk — public SaaS productization (SEPARATE product, planned 2026-05-28)

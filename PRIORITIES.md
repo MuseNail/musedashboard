@@ -161,11 +161,19 @@ one becomes an operational problem.
 
 ## Recently shipped (not previously on this list)
 
-- **v4.10 (`8ad6a93`, client-only):** quick-date presets (Today/Yesterday/N-days-ago) on the Turns +
-  Queue history pickers; smooth **in-place pill toggles** (services / staff / calendar auto-hide / role
-  permissions) via shared `utils.setSwitchVisual()` — replaces the per-tap full-list rebuild that caused
-  the "weird bounce" and made the dashboard toggle feel slow / drop taps on touch.
+- **v4.10 (`8ad6a93`, client-only):** quick-date presets on the Turns + Queue history pickers; smooth
+  **in-place pill toggles** via shared `utils.setSwitchVisual()` (fixed the "weird bounce" / dropped taps).
+- **v4.11–v4.15 — the 2026-06 system audit fixes** (see **`AUDIT-2026-06.md`** for the full record):
+  tip-forced-onto-card; numpad `00` overflow; `saveRecord`→`ticketTotal`; historical discount cap;
+  Square push error toast + stable idempotency; observability (dead-letter toast, "Failed N" pill,
+  global error handler); **`config.set` stale-write guard** (the roster-wipe root cause); §7 reports
+  hotfixes (historical double-count, partial-refund recording, DST-safe pay period); §8 cash-refund
+  drawer Cash-Out; gift-card ticketId carry-through + **`giftcard.save` guard**. (v4.13 + v4.15 included
+  Worker changes — deployed.)
+
+> ⭐ **The active system-wide audit (§1–§8 done, §9 next) and ALL open findings live in `AUDIT-2026-06.md`.**
+> The P0 above ("Paid" status policy + safe reversal) came out of it.
 
 ---
 
-_Last updated: 2026-06-02 (musedashboard @ v4.10)._
+_Last updated: 2026-06-03 (musedashboard @ v4.15). Audit record: `AUDIT-2026-06.md`._

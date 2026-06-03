@@ -1,10 +1,10 @@
 # Muse Nails & Spa — Dashboard
 
-Salon management PWA for Muse Nails & Spa. Manages a live customer queue, technician turn rotation, check-in kiosk, appointments, transactions, gift cards, staff, and settings. Hosted on GitHub Pages with a Cloudflare Worker edge layer and Google Sheets as the durable data store.
+Salon management PWA for Muse Nails & Spa. Manages a live customer queue, technician turn rotation, check-in kiosk, appointments, transactions, gift cards, staff, and settings. Hosted on GitHub Pages with a Cloudflare Worker + **Durable Object** as the durable, real-time-synced data store (the old Google Sheets store was retired in the v3 re-architecture).
 
 **Live URL:** https://musenail.github.io/musedashboard
-**Current version:** v1.79
-**Status:** Production — operational optimization mode
+**Current version:** v4.15
+**Status:** Production — operational; a system-wide code audit is in progress (see **`AUDIT-2026-06.md`** for findings/fixes, **`PRIORITIES.md`** for the backlog).
 
 ---
 

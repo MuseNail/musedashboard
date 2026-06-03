@@ -129,7 +129,7 @@ No server-side logic in the front end, no dynamic routes, no build artifacts —
 | Cash register / drawer (open/close count, cash in/out, reconcile, PDF) | `js/app/features/cashdrawer.js` |
 | SMS texting via httpSMS (send + Settings test panel) | `js/app/features/sms.js` (+ `cloudflare/worker.js` `/sms/*`) |
 | Reconciliation report (recorded vs charged) + Reports drill-downs | `js/app/features/reports.js` (`openReconcile`, `drillDown*`) |
-| Stale-write guard (reject older-than-stored writes) | `js/app/store.js` (`isStaleWrite`/`upsertByIdGuarded`) + `cloudflare/worker.js` (DO `applyMutation`) |
+| Stale-write guard (reject older-than-stored writes) | `js/app/store.js` (`isStaleWrite`/`upsertByIdGuarded`) + `cloudflare/worker.js` (DO `applyMutation`). As of v4.13/v4.15 this now covers **records, queue, `config.set` (per-key, via `configMeta`/`cfgmeta:`), AND `giftcard.save`** — `dispatch` stamps a numeric `updatedAt`/`updatedBy` on all four; unstamped/equal writes apply (back-compat). |
 | Assign&Price cross-device hard lock | `js/app/features/queue.js` (`edit_locks` config map) |
 | Google Calendar / appointments | `js/app/features/calendar.js` |
 | Floor plan | `js/app/features/floorplan.js` |
@@ -234,6 +234,8 @@ These markers use Unicode box-drawing characters (U+2500 `─`). If you add a ne
 
 | File | Purpose |
 |---|---|
+| `AUDIT-2026-06.md` | ⭐ **System-wide code audit (in progress, §1–§8 done, §9 next) — master record of every finding, fixes shipped (v4.11–v4.15), deferred items, and decisions. Read first when resuming the audit.** |
+| `PRIORITIES.md` | Live-app build backlog (incl. P0 "Paid" status policy + safe reversal) |
 | `ROADMAP.md` | Completed phase history + post-launch optimization roadmap |
 | `README.md` | Project overview and architecture |
 | `manifest.json` | PWA manifest (name, icons, display mode, theme color) |
