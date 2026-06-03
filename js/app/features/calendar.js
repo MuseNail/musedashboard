@@ -13,6 +13,15 @@ const GTASK_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/tasks/v1/r
 const cfg = () => getState().config;
 const queue = () => getState().queue;
 
+// Escapers for untrusted Google/Square data interpolated into innerHTML. _escHtml
+// for HTML-text/attribute context; _escAttrJs for a value placed inside a single-
+// quoted JS string that itself sits inside a double-quoted on*= attribute (JS-string
+// escape first, then HTML-escape so the browser's attribute decode yields a clean
+// JS literal). Several render fns still define their own local escHtml/_e — these are
+// the module-level versions used by calEventClick / tasks / autocomplete.
+const _escHtml = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const _escAttrJs = s => (s == null ? '' : String(s)).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 let _calGapiLoaded = false, _calGisLoaded = false, _calTokenClient = null, _calRefreshTimer = null;
 let _calDate = new Date(), _calCalendars = [], _calEvents = {}, _calPrimaryId = '';
 // Today's appointment events, loaded INDEPENDENTLY of the calendar's viewed day (_calDate) so
@@ -31,6 +40,11 @@ export function toggleApptsUpcoming() {
   renderTodaysAppointments();
 }
 let _apptEditId = null, _apptLines = [], _apptExtraGuests = [], _apptEditGroupId = '';
+// Re-entry guard: saveAppt runs a multi-second sequence of awaited Google writes while
+// the modal stays open. Without this, an impatient second Save tap mints a fresh groupId
+// and inserts a whole duplicate party (+ duplicate Square upserts). Blocks re-entry until
+// the in-flight save settles.
+let _apptSaving = false;
 let _calSyncTimer = null, _calSelectorDraft = null, _calDragIdx = null;
 let _calSlotH = 52, _calSlotMins = 30, _calTouchStartDist = null;
 let _calHidden = new Set(JSON.parse(localStorage.getItem('gcal_hidden') || '[]'));
@@ -130,11 +144,19 @@ export function apptsForReminders() {
   groups.forEach(items => {
     const primary = items.find(it => it.ev.extendedProperties?.private?.musePrimary === '1') || items[0];
     const pev = primary.ev, ppriv = pev.extendedProperties?.private || {};
+    const startMs = new Date(pev.start.dateTime).getTime();
+    // Don't remind for an appointment already handled: no-show, or already checked in
+    // (linked queue entry or a phone match near the appt time). Mirrors apptsForTurns so
+    // a banner never fires for someone already in a chair or flagged a no-show.
+    if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;
+    let qm = null;
+    items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g, ''), startMs); });
+    if (qm) return;
     const lines = [];
     items.forEach(({ ev, calId }) => _parseApptLines(ev, calId).forEach(l => lines.push({ ...l, calId: l.calId || calId })));
     const svc = [...new Set(lines.map(l => cfg().services.find(s => s.id === l.svcId)?.label).filter(Boolean))].join(', ');
     const techName = [...new Set(lines.map(l => staffForCal(l.calId)?.name).filter(Boolean))].join(', ');
-    out.push({ id: pev.id, name: ppriv.musePrimaryName || ppriv.museName || (pev.summary || '').split(' — ')[0] || 'Guest', startMs: new Date(pev.start.dateTime).getTime(), svc, techName });
+    out.push({ id: pev.id, name: ppriv.musePrimaryName || ppriv.museName || (pev.summary || '').split(' — ')[0] || 'Guest', startMs, svc, techName });
   });
   return out;
 }
@@ -310,9 +332,13 @@ function ensureFreshToken() {
   if (!_calTokenClient) return Promise.reject(new Error('calendar-not-ready'));
   return new Promise((resolve, reject) => {
     let done = false;
-    const settle = err => { if (done) return; done = true; clearTimeout(to); err ? reject(err) : resolve(); };
+    const w = { resolve: () => settle(), reject: settle };
+    // settle must remove THIS waiter from _tokenWaiters — otherwise a timeout leaves a dead
+    // entry, the `length === 1` gate below never becomes true again, and every later refresh
+    // silently stops firing requestAccessToken (writes hang 20s for the rest of the session).
+    const settle = err => { if (done) return; done = true; clearTimeout(to); const i = _tokenWaiters.indexOf(w); if (i >= 0) _tokenWaiters.splice(i, 1); err ? reject(err) : resolve(); };
     const to = setTimeout(() => settle(new Error('token-refresh-timeout')), 20000);
-    _tokenWaiters.push({ resolve: () => settle(), reject: settle });
+    _tokenWaiters.push(w);
     if (_tokenWaiters.length === 1) { try { _calTokenClient.requestAccessToken({ prompt: '' }); } catch (e) { _settleTokenWaiters(e); } }
   });
 }
@@ -431,12 +457,16 @@ export async function calLoadAndRender(silent) {
     const dayStart = new Date(_calDate); dayStart.setHours(0,0,0,0);
     const dayEnd = new Date(_calDate); dayEnd.setHours(23,59,59,999);
     applyCalOrder();
-    _calEvents = {};
-    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); _calEvents[cal.id] = r.result.items || []; } catch (e) { _calEvents[cal.id] = []; } }));
+    // Keep the prior day's per-cal events on a transient fetch failure instead of blanking the
+    // column — an empty column reads as "no appointments" and the front desk books over real
+    // bookings. Track anyFail so a partial load shows the error pill rather than a healthy green.
+    const prev = _calEvents; _calEvents = {}; let anyFail = false;
+    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); _calEvents[cal.id] = r.result.items || []; } catch (e) { anyFail = true; console.warn('[calendar] events.list failed for', cal.name, e); _calEvents[cal.id] = prev[cal.id] || []; } }));
     const gbBefore = document.getElementById('cal-scroll'); const savedScroll = gbBefore ? gbBefore.scrollTop : null;
     calRenderGrid();
     if (savedScroll !== null) requestAnimationFrame(() => { const gb = document.getElementById('cal-scroll'); if (gb) gb.scrollTop = savedScroll; });
     renderCalSelectorList(); calUpdateDateInput(); renderGcalCalendarList(); renderTodaysAppointments();
+    if (anyFail) setCalSyncIndicator('error');
   } catch (err) {
     if (err.status === 401) { localStorage.removeItem('gcal_token'); calSetStatus('Session expired — reconnecting…'); calSignIn(true); document.getElementById('cal-signin-btn')?.classList.remove('hidden'); }
     else calSetStatus('Error loading calendar: ' + (err.result?.error?.message || err.message || 'Unknown error'));
@@ -607,14 +637,16 @@ async function calSilentSync() {
     setCalSyncIndicator('syncing');
     const dayStart = new Date(_calDate); dayStart.setHours(0,0,0,0);
     const dayEnd = new Date(_calDate); dayEnd.setHours(23,59,59,999);
-    const newEvents = {};
-    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); newEvents[cal.id] = r.result.items || []; } catch (e) { newEvents[cal.id] = _calEvents[cal.id] || []; } }));
+    const newEvents = {}; let anyFail = false;
+    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); newEvents[cal.id] = r.result.items || []; } catch (e) { anyFail = true; console.warn('[calendar] silent sync failed for', cal.name, e); newEvents[cal.id] = _calEvents[cal.id] || []; } }));
     _calEvents = newEvents;
     // Preserve the user's scroll position on a silent refresh — calRenderGrid()
     // re-scrolls to ~1hr-before-now, which yanked the view away mid-use.
     if (document.getElementById('panel-calendar')?.classList.contains('active')) calRenderGridPreserveScroll();
     renderTodaysAppointments();
-    setCalSyncIndicator('ok');
+    // A per-cal failure keeps that column's stale events; flag the pill 'error' so a frozen
+    // column isn't masked by a healthy green pill.
+    setCalSyncIndicator(anyFail ? 'error' : 'ok');
   } catch (e) { setCalSyncIndicator('error'); }
 }
 function startCalSync() { if (_calSyncTimer) return; setCalSyncIndicator('ok'); _calSyncTimer = setInterval(() => calSilentSync(), CAL_SYNC_INTERVAL); }
@@ -761,8 +793,8 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   if (noShow) statusBadge = '<span style="color:#dc2626;font-size:11px;font-weight:700">⊘ No Show</span>';
   const confirmBadge = confirmed ? '<span style="color:#16a34a;font-size:11px;font-weight:700">✓ Confirmed</span>' : '';
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl">
-    <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${title}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
-    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${cal?.name||''}</span> · ${startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</p>${phone?`<p>📞 ${phone}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${ev.created?`<p class="text-xs opacity-60">🗓 Booked ${new Date(ev.created).toLocaleString([],{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}</p>`:''}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
+    <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${_escHtml(title)}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
+    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${_escHtml(cal?.name||'')}</span> · ${startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</p>${phone?`<p>📞 ${_escHtml(phone)}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${ev.created?`<p class="text-xs opacity-60">🗓 Booked ${new Date(ev.created).toLocaleString([],{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}</p>`:''}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
     <div class="space-y-2">
       ${isAppt ? `<button onclick="calQuickCheckin('${calId}','${eventId}'); this.closest('.fixed').remove()" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Quick Check-In</button>
       ${queueMatch?`<button onclick="this.closest('.fixed').remove(); showGroupAssignModal('${queueMatch.id}')" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">assignment_ind</span> Assign & Price</button>`:''}
@@ -789,6 +821,11 @@ function _phoneQueueMatch(rawPhone, apptStartMs) {
   const before = 2 * 3600 * 1000, after = 4 * 3600 * 1000;   // up to 2h early … 4h late/mid-service
   return queue().find(x => {
     if ((x.phone || '').replace(/\D/g, '') !== rawPhone) return false;
+    // A completed/paid earlier visit (e.g. a morning walk-in on a shared household phone)
+    // cannot be THIS later appointment — exclude finished entries so it can't stamp its
+    // status onto the appt or wrongly drop it from Turns. The explicit calEventId link is
+    // checked first at every call site and always wins, so a real check-in is unaffected.
+    if (['complete', 'paid', 'done'].includes(x.status)) return false;
     const t = x.checkinTime ? new Date(x.checkinTime).getTime() : NaN;
     return isFinite(t) && t >= apptStartMs - before && t <= apptStartMs + after;
   }) || null;
@@ -958,7 +995,7 @@ export function apptAcSearch(input, field) {
   if (!val || val.length < 2) { acBox.classList.add('hidden'); acBox.innerHTML = ''; return; }
   const matches = squareCustomers.filter(c => { const full = ((c.given_name||'')+' '+(c.family_name||'')).toLowerCase(); const phone = (c.phone_number||c.phone||'').replace(/\D/g,''); if (field === 'phone') return phone.includes(val.replace(/\D/g,'')) && val.replace(/\D/g,'').length >= 3; return full.startsWith(val) || (c.given_name||'').toLowerCase().startsWith(val); }).slice(0, 8);
   if (!matches.length) { acBox.classList.add('hidden'); return; }
-  acBox.innerHTML = matches.map(c => { const name = [c.given_name,c.family_name].filter(Boolean).join(' '), phone = c.phone_number||c.phone||''; return `<div class="autocomplete-item" onmousedown="apptAcFill('${name.replace(/'/g,"\\'")}','${phone.replace(/'/g,"\\'")}')"><span class="ac-name">${name}</span>${phone?`<span class="ac-phone">${phone}</span>`:''}</div>`; }).join('');
+  acBox.innerHTML = matches.map(c => { const name = [c.given_name,c.family_name].filter(Boolean).join(' '), phone = c.phone_number||c.phone||''; return `<div class="autocomplete-item" onmousedown="apptAcFill('${_escAttrJs(name)}','${_escAttrJs(phone)}')"><span class="ac-name">${_escHtml(name)}</span>${phone?`<span class="ac-phone">${_escHtml(phone)}</span>`:''}</div>`; }).join('');
   acBox.classList.remove('hidden');
 }
 export function apptAcFill(name, phone) {
@@ -1009,7 +1046,7 @@ export function apptExtraAcSearch(input, idx, field) {
   if (!val || val.length < 2) { acBox.classList.add('hidden'); acBox.innerHTML = ''; return; }
   const matches = squareCustomers.filter(c => { const full = ((c.given_name||'')+' '+(c.family_name||'')).toLowerCase(); const phone = (c.phone_number||c.phone||'').replace(/\D/g,''); if (field === 'phone') return phone.includes(val.replace(/\D/g,'')) && val.replace(/\D/g,'').length >= 3; return full.startsWith(val) || (c.given_name||'').toLowerCase().startsWith(val); }).slice(0, 6);
   if (!matches.length) { acBox.classList.add('hidden'); return; }
-  acBox.innerHTML = matches.map(c => { const name = [c.given_name,c.family_name].filter(Boolean).join(' '), phone = c.phone_number||c.phone||''; return `<div class="autocomplete-item" onmousedown="apptExtraAcFill(${idx},'${name.replace(/'/g,"\\'")}','${phone.replace(/'/g,"\\'")}')"><span class="ac-name">${name}</span>${phone?`<span class="ac-phone">${phone}</span>`:''}</div>`; }).join('');
+  acBox.innerHTML = matches.map(c => { const name = [c.given_name,c.family_name].filter(Boolean).join(' '), phone = c.phone_number||c.phone||''; return `<div class="autocomplete-item" onmousedown="apptExtraAcFill(${idx},'${_escAttrJs(name)}','${_escAttrJs(phone)}')"><span class="ac-name">${_escHtml(name)}</span>${phone?`<span class="ac-phone">${_escHtml(phone)}</span>`:''}</div>`; }).join('');
   acBox.classList.remove('hidden');
 }
 export function apptExtraAcFill(idx, name, phone) {
@@ -1175,6 +1212,7 @@ function _apptEventBody(person, startDt, endDt, notes, groupId, primary) {
 }
 
 export async function saveAppt() {
+  if (_apptSaving) return;   // ignore double-taps while the previous save is still writing to Google
   const first = document.getElementById('appt-first')?.value.trim() || '', last = document.getElementById('appt-last')?.value.trim() || '';
   const name = [first,last].filter(Boolean).join(' ') || document.getElementById('appt-name')?.value.trim() || '';
   const phone = document.getElementById('appt-phone').value.trim(), dateVal = document.getElementById('appt-date').value, timeVal = document.getElementById('appt-time').value;
@@ -1211,6 +1249,8 @@ export async function saveAppt() {
     }));
   }
 
+  const saveBtn = document.querySelector('#appt-modal button[onclick="saveAppt()"]');
+  _apptSaving = true; if (saveBtn) saveBtn.disabled = true;
   try {
     showToast('Saving…');
     await ensureFreshToken();
@@ -1245,13 +1285,26 @@ export async function saveAppt() {
     closeApptModal(); await calLoadAndRender(true);
     showToast(people.length > 1 ? `Appointment saved for ${people.length} guests ✓` : 'Appointment saved ✓');
   } catch (err) { _calWriteError(err, 'Save'); }
+  finally { _apptSaving = false; if (saveBtn) saveBtn.disabled = false; }   // re-enable for the error path (success already closed the modal)
 }
 export async function deleteAppt(calIdParam, eventIdParam) {
   const calId = calIdParam || document.getElementById('appt-cal-id')?.value, eventId = eventIdParam || document.getElementById('appt-event-id')?.value;
   if (!calId || !eventId) return;
   if (!calIdParam && !confirm('Cancel this appointment?')) return;
-  try { await ensureFreshToken(); await gapi.client.calendar.events.delete({ calendarId: calId, eventId }); if (!calIdParam) closeApptModal(); await calLoadAndRender(true); showToast('Appointment cancelled'); }
-  catch (err) { _calWriteError(err, 'Delete'); }
+  // Cancel EVERY copy of the booking (one event per staff column / unassigned, all sharing
+  // museGroupId) — mirrors confirm/no-show fan-out. A single delete left party/multi-staff
+  // bookings half-cancelled, with the survivors re-appearing on the next sync. allSettled so
+  // an already-missing copy (404) doesn't abort the rest; surface partial failures.
+  try {
+    const refs = _eventGroupRefs(calId, eventId);
+    await ensureFreshToken();
+    const results = await Promise.allSettled(refs.map(r => gapi.client.calendar.events.delete({ calendarId: r.calId, eventId: r.eventId })));
+    const failed = results.filter(r => r.status === 'rejected' && r.reason?.status !== 404 && r.reason?.result?.error?.code !== 404);
+    if (!calIdParam) closeApptModal();
+    await calLoadAndRender(true);
+    if (failed.length) { _calWriteError(failed[0].reason, 'Delete'); showToast(`Cancelled ${refs.length - failed.length} of ${refs.length} — ${failed.length} could not be cancelled`); }
+    else showToast(refs.length > 1 ? `Appointment cancelled (${refs.length} entries)` : 'Appointment cancelled');
+  } catch (err) { _calWriteError(err, 'Delete'); }
 }
 
 // ── Google Tasks ──────────────────────────────────
@@ -1261,7 +1314,7 @@ export async function loadTaskLists() {
     const res = await gapi.client.tasks.tasklists.list({ maxResults: 20 });
     _taskLists = res.result.items || [];
     const sel = document.getElementById('tasks-list-select'); if (!sel) return;
-    sel.innerHTML = _taskLists.map(l => `<option value="${l.id}">${l.title}</option>`).join('');
+    sel.innerHTML = _taskLists.map(l => `<option value="${_escHtml(l.id)}">${_escHtml(l.title)}</option>`).join('');
     if (_taskLists.length > 0) { _currentListId = _taskLists[0].id; loadTasksForList(_currentListId); }
     const panel = document.getElementById('cal-tasks-panel'); if (panel) { panel.classList.remove('hidden'); panel.style.display = 'flex'; }
   } catch (e) { console.warn('[Tasks] loadTaskLists failed:', e); }
@@ -1278,7 +1331,7 @@ function renderTasks(tasks) {
   const container = document.getElementById('tasks-list'); if (!container) return;
   if (!tasks.length) { container.innerHTML = '<div class="text-xs text-on-surface-variant text-center py-6 opacity-60">No tasks — all caught up!</div>'; return; }
   container.innerHTML = tasks.map(t => { const done = t.status === 'completed', due = t.due ? new Date(t.due) : null, dueStr = due ? due.toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '', overdue = due && due < new Date() && !done, lid = _currentListId;
-    return `<div class="flex items-start gap-2 px-2 py-0.5 rounded-lg hover:bg-surface-container transition-colors group"><button onclick="toggleTask('${lid}','${t.id}','${done?'needsAction':'completed'}')" class="flex-shrink-0 transition-colors" style="width:15px;height:15px;min-width:15px;min-height:15px;margin-top:1px;aspect-ratio:1/1;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};background:${done?'#1a5252':'#fff'};display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box">${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;line-height:1;font-variation-settings:\'FILL\' 1">check</span>':''}</button><div class="flex-1 min-w-0" style="line-height:1.25"><div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}" style="line-height:1.3">${t.title||'(no title)'}</div>${t.notes?`<div class="text-[10px] text-on-surface-variant truncate" style="line-height:1.25">${t.notes}</div>`:''}${dueStr?`<div class="text-[10px] font-semibold ${overdue?'text-error':'text-on-surface-variant'}" style="line-height:1.25">${overdue?'⚠ ':''}${dueStr}</div>`:''}</div><button onclick="deleteTask('${lid}','${t.id}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all" style="margin-top:1px;height:16px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0"><span class="material-symbols-outlined" style="font-size:13px;line-height:1">close</span></button></div>`;
+    return `<div class="flex items-start gap-2 px-2 py-0.5 rounded-lg hover:bg-surface-container transition-colors group"><button onclick="toggleTask('${_escAttrJs(lid)}','${_escAttrJs(t.id)}','${done?'needsAction':'completed'}')" class="flex-shrink-0 transition-colors" style="width:15px;height:15px;min-width:15px;min-height:15px;margin-top:1px;aspect-ratio:1/1;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};background:${done?'#1a5252':'#fff'};display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box">${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;line-height:1;font-variation-settings:\'FILL\' 1">check</span>':''}</button><div class="flex-1 min-w-0" style="line-height:1.25"><div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}" style="line-height:1.3">${_escHtml(t.title||'(no title)')}</div>${t.notes?`<div class="text-[10px] text-on-surface-variant truncate" style="line-height:1.25">${_escHtml(t.notes)}</div>`:''}${dueStr?`<div class="text-[10px] font-semibold ${overdue?'text-error':'text-on-surface-variant'}" style="line-height:1.25">${overdue?'⚠ ':''}${dueStr}</div>`:''}</div><button onclick="deleteTask('${_escAttrJs(lid)}','${_escAttrJs(t.id)}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all" style="margin-top:1px;height:16px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0"><span class="material-symbols-outlined" style="font-size:13px;line-height:1">close</span></button></div>`;
   }).join('');
 }
 export function toggleTasksPanel() {
