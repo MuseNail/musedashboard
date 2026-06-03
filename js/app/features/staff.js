@@ -1,7 +1,7 @@
 // ── Staff CRUD + weekly schedule ────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, byName, setSwitchVisual } from '../utils.js';
+import { showToast, localDateStr, byName, setSwitchVisual, escHtml } from '../utils.js';
 import { SCHEDULE_COLORS } from '../config.js';
 
 const cfg = () => getState().config;
@@ -36,7 +36,7 @@ export function renderStaffList() {
     const active = isStaffActive(st.id);
     const photoHtml = st.photo
       ? `<button onclick="event.stopPropagation();showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border border-surface-container-high hover:opacity-80 transition-opacity"></button>`
-      : `<button onclick="event.stopPropagation();showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-primary hover:text-on-primary transition-colors"><span class="text-sm font-headline font-bold text-on-surface">${st.name.charAt(0).toUpperCase()}</span></div></button>`;
+      : `<button onclick="event.stopPropagation();showTechPhoto('${st.id}')" title="View photo" class="flex-shrink-0 focus:outline-none"><div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center hover:bg-primary hover:text-on-primary transition-colors"><span class="text-sm font-headline font-bold text-on-surface">${escHtml(st.name.charAt(0).toUpperCase())}</span></div></button>`;
     const staffSvcs = (st.services && st.services.length > 0)
       ? st.services.map(sid => cfg().services.find(s => s.id === sid)?.abbr || '?').join(', ')
       : 'All services';
@@ -45,7 +45,7 @@ export function renderStaffList() {
       <div class="flex items-center gap-4 min-w-0">
         ${photoHtml}
         <div class="min-w-0">
-          <div class="font-headline font-semibold text-on-surface text-base ${active ? '' : 'line-through text-outline-variant'}">${st.name}</div>
+          <div class="font-headline font-semibold text-on-surface text-base ${active ? '' : 'line-through text-outline-variant'}">${escHtml(st.name)}</div>
           <div class="flex gap-3 flex-wrap mt-0.5">
             ${st.commission != null ? `<span class="text-xs font-body text-on-surface-variant">${st.commission}% commission</span>` : ''}
             <span class="text-xs font-body text-primary truncate">${staffSvcs}</span>
@@ -72,14 +72,14 @@ export function showTechPhoto(staffId) {
   if (!st) return;
   const inner = st.photo
     ? `<img src="${st.photo}" style="max-width:90vw;max-height:78vh;object-fit:contain;border-radius:16px;box-shadow:0 10px 50px rgba(0,0,0,.55)">`
-    : `<div style="width:220px;height:220px;border-radius:50%;background:#1a5252;color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--font-headline);font-weight:700;font-size:96px;box-shadow:0 10px 50px rgba(0,0,0,.55)">${(st.name || '?').charAt(0).toUpperCase()}</div>`;
+    : `<div style="width:220px;height:220px;border-radius:50%;background:#1a5252;color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--font-headline);font-weight:700;font-size:96px;box-shadow:0 10px 50px rgba(0,0,0,.55)">${escHtml((st.name || '?').charAt(0).toUpperCase())}</div>`;
   const m = document.createElement('div');
   m.className = 'fixed inset-0 z-[95] flex flex-col items-center justify-center bg-black/80 p-4';
   const close = () => { m.remove(); document.removeEventListener('keydown', onKey); };
   function onKey(e) { if (e.key === 'Escape') close(); }
   m.onclick = close;
   document.addEventListener('keydown', onKey);
-  m.innerHTML = `${inner}<div style="color:#fff;margin-top:16px;font-family:var(--font-headline);font-weight:700;font-size:18px">${(st.name || '')}</div><div style="color:#cbd5d5;margin-top:4px;font-size:12px">Tap anywhere or press Esc to close</div>`;
+  m.innerHTML = `${inner}<div style="color:#fff;margin-top:16px;font-family:var(--font-headline);font-weight:700;font-size:18px">${escHtml(st.name || '')}</div><div style="color:#cbd5d5;margin-top:4px;font-size:12px">Tap anywhere or press Esc to close</div>`;
   document.body.appendChild(m);
 }
 
@@ -180,8 +180,26 @@ export function saveStaff() {
 export function deleteStaff(id) {
   const st = cfg().staff.find(s => s.id === id);
   if (!st) return;
-  if (!confirm(`Remove ${st.name} from staff?`)) return;
+  // Hard-deleting a tech who has past sales makes those records show as "Unknown" with $0
+  // commission in payroll — steer the operator to deactivate (Active toggle) instead.
+  const hasHistory = (getState().records || []).some(r => (r.assignments || []).some(a => a.techId === id));
+  const msg = hasHistory
+    ? `Remove ${st.name}? They have past sales, which will then show as "Unknown" with no commission in reports. To keep their history, tap Cancel and use the Active toggle to hide them instead.\n\nDelete anyway?`
+    : `Remove ${st.name} from staff?`;
+  if (!confirm(msg)) return;
   setStaff(cfg().staff.filter(s => s.id !== id));
+  // Scrub orphaned references so a deleted tech's id doesn't linger (and keep syncing) in config.
+  if ((cfg().inactive_staff || []).includes(id)) dispatch('config.set', { key: 'inactive_staff', value: cfg().inactive_staff.filter(x => x !== id) });
+  if ((cfg().turns_order || []).includes(id)) dispatch('config.set', { key: 'turns_order', value: cfg().turns_order.filter(x => x !== id) });
+  if (cfg().svc_time_reset && cfg().svc_time_reset[id] != null) { const m = { ...cfg().svc_time_reset }; delete m[id]; dispatch('config.set', { key: 'svc_time_reset', value: m }); }
+  const sched = cfg().schedule;
+  const inSched = sched && (sched._repeats?.[id] != null || Object.keys(sched).some(k => k !== '_repeats' && sched[k] && sched[k][id] != null));
+  if (inSched) {
+    const next = JSON.parse(JSON.stringify(sched));
+    Object.keys(next).forEach(k => { if (k === '_repeats') return; if (next[k] && next[k][id] != null) { delete next[k][id]; if (!Object.keys(next[k]).length) delete next[k]; } });
+    if (next._repeats && next._repeats[id] != null) delete next._repeats[id];
+    dispatch('config.set', { key: 'schedule', value: next });
+  }
   renderStaffList();
   showToast(`${st.name} removed`);
 }
@@ -235,7 +253,7 @@ export function renderSchedule() {
   const staffRows = [...cfg().staff].sort(byName).map(st => {
     const photoHtml = st.photo
       ? `<img src="${st.photo}" class="w-8 h-8 rounded-full object-cover border border-surface-container-high flex-shrink-0">`
-      : `<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center flex-shrink-0"><span class="text-xs font-headline font-bold text-on-surface">${st.name.charAt(0).toUpperCase()}</span></div>`;
+      : `<div class="w-8 h-8 rounded-full bg-surface-container-high flex items-center justify-center flex-shrink-0"><span class="text-xs font-headline font-bold text-on-surface">${escHtml(st.name.charAt(0).toUpperCase())}</span></div>`;
     const cells = dates.map(d => {
       const key = localDateStr(d);
       const status = getScheduleStatus(key, st.id);
@@ -256,7 +274,7 @@ export function renderSchedule() {
       <div class="flex items-center border-b border-surface-container-high last:border-0">
         <div class="flex items-center gap-2 w-[160px] pr-2 py-1 flex-shrink-0 sticky left-0 z-10" style="${stickyBg}">
           <button onclick="openWeekFill('${st.id}')" title="Fill ${st.name.replace(/'/g,'')}'s week" class="flex-shrink-0 hover:opacity-70 transition-opacity">${photoHtml}</button>
-          <span class="text-sm font-body font-semibold text-on-surface truncate min-w-0 flex-grow">${st.name}</span>
+          <span class="text-sm font-body font-semibold text-on-surface truncate min-w-0 flex-grow">${escHtml(st.name)}</span>
           <button onclick="openWeekFill('${st.id}')" title="Fill ${st.name.replace(/'/g,'')}'s week" class="flex-shrink-0 w-6 h-6 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">edit_calendar</span></button>
         </div>
         ${cells}

@@ -11,6 +11,11 @@ const isServiceVisibleOnCheckin = id => !cfg().hidden_services.includes(id);
 
 let guestCount = 0;
 let groupColorIndex = 0;
+// Double-submit guard: the Check-In button calls submitCheckin directly; a bounced/laggy
+// double-tap queues two events that would each build a fresh party (new ids + groupId) →
+// duplicate queue rows + duplicate Square upserts. The handler is synchronous, so a second
+// queued tap fires after the first returns — a short self-releasing lock blocks it.
+let _submitting = false;
 
 export function renderGuestsContainer() {
   const container = document.getElementById('guests-container');
@@ -48,7 +53,7 @@ export function addGuestCard() {
 
   const visibleServices = cfg().services.filter(s => isServiceVisibleOnCheckin(s.id));
   const serviceButtons = visibleServices.map(s => `
-    <button type="button" onclick="toggleService(this, '${idx}', '${s.id}')" data-service="${s.id}"
+    <button type="button" onclick="toggleService(this)" data-service="${s.id}"
       class="service-btn flex flex-col items-center justify-center py-3 rounded-lg bg-surface-container text-on-surface-variant border border-outline-variant/30 hover:bg-primary/10 hover:text-primary transition-all duration-200">
       <span class="text-xs font-headline font-bold">${s.abbr}</span>
       <span class="text-[9px] font-body mt-0.5 uppercase tracking-tighter leading-tight text-center">${s.label}</span>
@@ -217,6 +222,9 @@ export function submitCheckin() {
     newEntries.push(entry);
   }
   if (newEntries.length === 0) return;
+  if (_submitting) return;                 // ignore a bounced/double tap while the first submit is in flight
+  _submitting = true;
+  setTimeout(() => { _submitting = false; }, 1500);   // self-release so the lock can never wedge the kiosk
 
   if (newEntries.length > 1) {
     const groupId = `grp-${Date.now()}`;

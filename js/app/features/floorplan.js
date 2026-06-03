@@ -8,7 +8,7 @@
 // Assign & Price. Reuses the a.station field (set on all the customer's assignments).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap } from '../utils.js';
+import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap, escHtml } from '../utils.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince } from './status.js';
 import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef } from './queue.js';
 import { getActiveTurnsOrder, getTechStatusColor } from './turns.js';
@@ -84,8 +84,11 @@ function collectFloor() {
     const at = active.find(a => a.station && stationIds.includes(a.station));
     // A customer's seat = a service's station, else the entry-level station set by dragging on the plan.
     const station = at ? at.station : (e.station && stationIds.includes(e.station) ? e.station : null);
-    if (station) { if (!byStation[station]) byStation[station] = e; }
-    else unplaced.push(e);   // ANY active customer not yet seated — including ones with no service/tech assigned
+    // Keep first-in-queue-order as the seated occupant; route a same-station COLLISION (two
+    // entries claiming one seat — cross-device race, or two dropdown assigns to the same station)
+    // to the tray instead of dropping it, so the second guest stays visible + re-seatable.
+    if (station && !byStation[station]) byStation[station] = e;
+    else unplaced.push(e);   // not seated, OR a station collision loser — kept visible either way
   });
   return { byStation, unplaced };
 }
@@ -95,7 +98,7 @@ function custLines(e, stationId, fs = 1) {
     const s = a.serviceId ? svc(a.serviceId) : null, t = a.techId ? staffById(a.techId) : null;
     const sti = serviceTimeInfo(a);
     const stiHtml = sti ? `<div style="font-size:${Math.round(9 * fs)}px;font-weight:700;color:${sti.color}">${sti.text}</div>` : '';
-    return `<div class="truncate" style="font-size:${Math.round(10 * fs)}px;color:#374151">${s ? s.label : 'Service'}${t ? ' · ' + t.name.split(' ')[0] : ''}${a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}</div>${stiHtml}`;
+    return `<div class="truncate" style="font-size:${Math.round(10 * fs)}px;color:#374151">${s ? escHtml(s.label) : 'Service'}${t ? ' · ' + escHtml(t.name.split(' ')[0]) : ''}${a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}</div>${stiHtml}`;
   }).join('');
 }
 
@@ -121,16 +124,16 @@ function stationHtml(id, entry) {
     content = `<div class="${floorEditMode ? '' : 'floor-bubble cursor-pointer'} h-full w-full flex flex-col justify-center px-1.5 py-1 overflow-hidden" ${floorEditMode ? '' : `data-entry-id="${entry.id}"`}>
       <div class="flex items-start justify-between gap-1">
         ${entry.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:${Math.round(15*fs)}px;height:${Math.round(15*fs)}px;border-radius:4px;background:${entry.groupColor||'#888'};color:#fff;font-size:${Math.round(9*fs)}px;font-weight:800;flex-shrink:0;margin-top:1px">${_fpLetters.get(entry.groupId)||'•'}</span>` : ''}
-        <div class="font-semibold" style="font-size:${Math.round(11 * fs)}px;color:#1f2937;flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.15">${entry.name}</div>
+        <div class="font-semibold" style="font-size:${Math.round(11 * fs)}px;color:#1f2937;flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.15">${escHtml(entry.name)}</div>
         <span class="flex-shrink-0" style="font-size:${Math.round(9 * fs)}px;color:#52606d" data-checkin-ts="${entryStatusSince(entry)}">${formatElapsed(entryStatusSince(entry))}</span>
       </div>
       <div class="overflow-hidden leading-tight">${custLines(entry, id, fs)}</div></div>`;
   } else {
-    content = `<div class="h-full w-full flex items-center justify-center" style="font-size:${Math.round(12 * fs)}px;font-weight:800;color:${border};opacity:0.55">${stationLabel(id)}</div>`;
+    content = `<div class="h-full w-full flex items-center justify-center" style="font-size:${Math.round(12 * fs)}px;font-weight:800;color:${border};opacity:0.55">${escHtml(stationLabel(id))}</div>`;
   }
   return `<div class="floor-station absolute ${floorEditMode ? 'cursor-move' : ''}" data-station="${id}"
     style="left:${L.x}px;top:${L.y}px;width:${L.w}px;height:${L.h}px;box-sizing:border-box;border:2px solid ${border};border-radius:${radius};background:${bg};overflow:hidden;${sel ? 'outline:3px solid #1a5252;outline-offset:2px;' : ''}">
-    ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${border};opacity:0.65;pointer-events:none">${stationLabel(id)}</div>` : ''}
+    ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${border};opacity:0.65;pointer-events:none">${escHtml(stationLabel(id))}</div>` : ''}
     ${content}
   </div>`;
 }
@@ -149,10 +152,10 @@ function renderFloorStaffRow() {
     const drag = floorEditMode ? '' : 'floor-tech';
     const avatar = st.photo
       ? `<img src="${st.photo}" draggable="false" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ${c.bg};box-shadow:0 1px 3px rgba(0,0,0,.18)">`
-      : `<div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:${c.bg};color:${c.text};font-family:var(--font-headline);font-weight:700;font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,.18)">${(st.name||'?').charAt(0).toUpperCase()}</div>`;
+      : `<div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:${c.bg};color:${c.text};font-family:var(--font-headline);font-weight:700;font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,.18)">${escHtml((st.name||'?').charAt(0).toUpperCase())}</div>`;
     return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:64px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Tap for status · drag onto a station to assign"'}>
       ${avatar}
-      <span style="font-size:11px;font-weight:600;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px">${st.name.split(' ')[0]}</span>
+      <span style="font-size:11px;font-weight:600;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px">${escHtml(st.name.split(' ')[0])}</span>
       <span style="font-size:9px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
     </div>`;
   }).join('');
@@ -186,7 +189,7 @@ export function renderFloorPlan() {
       <div class="text-[11px] font-body font-semibold text-on-surface-variant">All guests seated — drag a guest here to un-seat.</div></div>`;
     else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not seated — drag onto a station (${unplaced.length})</div>
-      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#c8e6c5' : '#ffe0b2'};color:#1f2937;font-size:11px">${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${e.name}</span></div>`).join('')}</div></div>`;
+      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#c8e6c5' : '#ffe0b2'};color:#1f2937;font-size:11px">${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${escHtml(e.name)}</span></div>`).join('')}</div></div>`;
   }
 
   grid.style.position = 'relative';
@@ -311,6 +314,9 @@ export function resetFloorLayout() {
 function seatCustomer(entryId, stationId) {
   const e = q().find(x => String(x.id) === String(entryId));
   if (!e) return;
+  // A 'paid' broadcast (or other edit) from another device can land during the drag; re-dispatching
+  // the whole entry would revert it. Bail if it's already checked out.
+  if (isPaidStatus(e.status)) { showToast(`${e.name.split(' ')[0]} is already paid`); renderFloorPlan(); return; }
   const occupant = collectFloor().byStation[stationId];
   if (occupant && String(occupant.id) !== String(e.id)) { showToast(`${stationId} is taken by ${occupant.name}`); return; }
   e.station = stationId;                                    // seat the customer — works with OR without an assigned tech
@@ -334,6 +340,7 @@ function validTechStations() {
 function assignTechToStation(techId, stationId) {
   const e = collectFloor().byStation[stationId];
   if (!e) { showToast(`No customer at ${stationLabel(stationId)}`); return; }
+  if (isPaidStatus(e.status)) { showToast(`${e.name.split(' ')[0]} is already paid`); renderFloorPlan(); return; }
   // Prefill the dropped tech onto the first service seated here that still needs one (pedicures
   // can need several; drag again for the next), then open Assign & Price so the price can be set
   // in the same motion. If every service here already has a tech, still open the modal to edit.
