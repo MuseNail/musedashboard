@@ -544,9 +544,15 @@ export class MuseSalonDO {
           });
           break;
         }
-        case 'giftcard.save':
-          await this.state.storage.put('giftcard:' + payload.card.id, payload.card);
+        case 'giftcard.save': {
+          // Stored-value money — guard like records/queue: reject a stale card copy so an offline
+          // replay can't clobber a newer balance and re-broadcast the regression.
+          const gKey = 'giftcard:' + payload.card.id;
+          const prevCard = await this.state.storage.get(gKey);
+          if (_isStaleWrite(prevCard, payload.card)) { stale = true; break; }
+          await this.state.storage.put(gKey, payload.card);
           break;
+        }
         case 'giftcard.delete':
           await this.state.storage.delete('giftcard:' + payload.id);
           break;

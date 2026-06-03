@@ -134,7 +134,7 @@ export function applyChange(op, payload, seq) {
       if (!state.deletions.includes(String(payload.id))) state.deletions.push(String(payload.id));
       break;
     }
-    case 'giftcard.save':   upsertById(state.giftcards, payload.card); break;
+    case 'giftcard.save':   if (!upsertByIdGuarded(state.giftcards, payload.card)) return; break;   // stale card copy → keep the newer balance
     case 'giftcard.delete': removeById(state.giftcards, payload.id); break;
     case 'audit.log':       if (payload && payload.event) { state.audit.unshift(payload.event); if (state.audit.length > 500) state.audit.length = 500; } break;
     default: console.warn('[store] unknown op', op); return;

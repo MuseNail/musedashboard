@@ -172,6 +172,8 @@ export function dispatch(op, payload) {
   // Stamp config writes too (per-key version) so a stale offline replay or a clobbering concurrent
   // edit of the catalog / turns roster / settings is rejected by the guard instead of last-writer-wins.
   if (op === 'config.set'   && payload)                   { payload.updatedAt = Date.now(); payload.updatedBy = DEVICE_ID; }
+  // Gift cards are stored-value money — stamp them so a stale card copy can't clobber a newer balance.
+  if (op === 'giftcard.save' && payload && payload.card)  { payload.card.updatedAt = Date.now(); payload.card.updatedBy = DEVICE_ID; }
   applyChange(op, payload);                                  // optimistic
   const msg = { type: 'mutate', op, payload, mutationId, device: DEVICE_ID };
   enqueue(msg);

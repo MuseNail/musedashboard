@@ -27,7 +27,7 @@ function _gcCommit(card) {
   const redemptions = (card.redemptions || []).filter(r => r && ((r.amount || 0) > 0 || r.date));
   const amountUsed = redemptions.reduce((s, r) => s + (r.amount || 0), 0);
   const dateUsed = redemptions.map(r => r.date).filter(Boolean).sort().pop() || '';
-  dispatch('giftcard.save', { card: { ...card, redemptions, amountUsed, dateUsed, updatedAt: new Date().toISOString() } });
+  dispatch('giftcard.save', { card: { ...card, redemptions, amountUsed, dateUsed } });   // updatedAt stamped numerically in dispatch()
 }
 export function gcReverseTicket(ticketId) {
   if (!ticketId) return;
@@ -79,7 +79,9 @@ export function showEditGiftCard(id) {
   document.getElementById('gc-from').value = gc.from || '';
   document.getElementById('gc-to').value = gc.to || '';
   document.getElementById('gc-notes').value = gc.notes || '';
-  _gcRedeem = gcRedemptions(gc).map(r => ({ date: r.date || '', amount: r.amount || 0 }));
+  // Preserve ticketId on each redemption so auto-reversal (gcReverseTicket on reopen) still matches
+  // after a manual edit+save. Hand-added rows simply have no ticketId.
+  _gcRedeem = gcRedemptions(gc).map(r => ({ date: r.date || '', amount: r.amount || 0, ...(r.ticketId ? { ticketId: r.ticketId } : {}) }));
   renderGcRedemptions(); _gcShowDelete(true);
   document.getElementById('gc-paymethod-row')?.classList.add('hidden');   // no re-charge when editing an existing card
   document.getElementById('gc-to-ac')?.classList.add('hidden');
@@ -135,7 +137,7 @@ export async function saveGiftCard() {
   const existing = editId ? giftCards().find(g => g.id === editId) : null;
   const rawSerial = document.getElementById('gc-serial').value.trim();
   const serial = /^\d+$/.test(rawSerial) ? rawSerial.padStart(8, '0') : rawSerial;   // 29 → 00000029
-  const redemptions = _gcRedeem.filter(r => (r.amount || 0) > 0 || r.date).map(r => ({ date: r.date || '', amount: parseFloat(r.amount) || 0 }));
+  const redemptions = _gcRedeem.filter(r => (r.amount || 0) > 0 || r.date).map(r => ({ date: r.date || '', amount: parseFloat(r.amount) || 0, ...(r.ticketId ? { ticketId: r.ticketId } : {}) }));
   const amountUsed = redemptions.reduce((s, r) => s + (r.amount || 0), 0);
   const lastDate = redemptions.map(r => r.date).filter(Boolean).sort().pop() || '';
   const amount = parseFloat(document.getElementById('gc-amount').value) || 0;
@@ -179,7 +181,7 @@ export async function saveGiftCard() {
     dateUsed: lastDate,  // last redemption date — legacy compat
     notes,
     createdAt: existing?.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    // updatedAt/updatedBy are stamped numerically in dispatch() so the stale-write guard can compare them.
     ...(squarePaymentIds ? { squarePaymentIds } : {}),
     ...(salePaidBy ? { salePaidBy } : {}),
   };
