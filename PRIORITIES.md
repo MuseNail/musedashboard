@@ -3,6 +3,14 @@
 Build backlog for the **live single-salon app** (distinct from `TURNDESK-PORT.md`, which tracks the
 public-product fork). Ordered by impact.
 
+> ## ⭐ MASTER PLAN = `NEXT-SESSION-KICKOFF.md` (post-audit phased strategy, 2026-06-03)
+> The system-wide audit (§1–§15) is complete. The ordered execution plan now lives in
+> **`NEXT-SESSION-KICKOFF.md`** (Phase 1 quick wins → Phase 2 client security → Phase 3 app-as-source-of-truth
+> [customers+catalog off Square] → **Phase 4 financial/Helcim LAST**). Methodology: non-Square first;
+> migrate to app-source-of-truth while Square still runs payments; financial/card last; don't polish
+> doomed Square code. **The "Paid" status P0 below is now Phase 4a** (it pairs with the Helcim pay-flow rewrite).
+> The Square→Helcim detail is in `HELCIM-MIGRATION.md`.
+
 ---
 
 ## ⭐ P0 (NEW, owner-requested 2026-06-03) — "Paid" status policy + safe reversal
