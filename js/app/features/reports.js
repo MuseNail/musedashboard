@@ -38,6 +38,7 @@ export function saveRecord(entry) {
     ...(entry.squarePaymentIds?.length ? { squarePaymentIds: entry.squarePaymentIds } : {}),
     ...(entry.tenders ? { tenders: entry.tenders } : {}),
     ...(entry.tip ? { tip: entry.tip } : {}),   // card tip — tracked separately; NOT part of totalCost
+    ...(entry.squareUnrecorded?.length ? { squareUnrecorded: entry.squareUnrecorded } : {}),   // tenders that failed to POST to Square (cash/Zelle) — flagged for Reconcile
   };
   dispatch('record.save', { record });
 }

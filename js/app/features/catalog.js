@@ -165,7 +165,7 @@ export function renderSettingsItems() {
           onchange="updateItemField(${i},'price',this.value)"
           class="w-16 bg-transparent border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:border-primary outline-none text-right">
       </div>
-      ${hasSquare ? `<button onclick="squarePushItem(${i})" title="Push to Square" class="text-outline-variant hover:text-primary transition-colors flex-shrink-0">
+      ${hasSquare ? `<button onclick="squarePushItem('${item.id}')" title="Push to Square" class="text-outline-variant hover:text-primary transition-colors flex-shrink-0">
         <span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span>
       </button>` : ''}
       <button onclick="removeItem(${i})" class="text-outline-variant hover:text-error transition-colors flex-shrink-0">

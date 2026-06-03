@@ -4,7 +4,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, formatPhone, autoCapitalize, dismissNumpad } from '../utils.js';
+import { showToast, formatPhone, autoCapitalize, dismissNumpad, escHtml, escAttrJs } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
 
 const cfg = () => getState().config;
@@ -205,11 +205,11 @@ export function buildDropdown(customers, dropdownId, guestIdx, phoneId, firstId,
     if (maskPhone && digits.length >= 4) displayPhone = `(***) ***-${digits.slice(-4)}`;
     return `
     <div class="autocomplete-item" data-ac-idx="${i}" onmousedown="fillFromCustomer(
-      {id:'${c.id}',phone:'${c.phone.replace(/'/g,"\\'")}',given_name:'${c.given_name.replace(/'/g,"\\'")}',family_name:'${c.family_name.replace(/'/g,"\\'")}'},
+      {id:'${escAttrJs(c.id)}',phone:'${escAttrJs(c.phone)}',given_name:'${escAttrJs(c.given_name)}',family_name:'${escAttrJs(c.family_name)}'},
       ${guestIdx}, '', '${phoneId}', '${firstId}', '${lastId}'
     )">
-      <div class="ac-name">${c.display || '—'}</div>
-      <div class="ac-phone">${displayPhone || 'No phone'}</div>
+      <div class="ac-name">${escHtml(c.display) || '—'}</div>
+      <div class="ac-phone">${escHtml(displayPhone) || 'No phone'}</div>
     </div>`;
   }).join('');
   dropdown.classList.remove('hidden');
@@ -296,13 +296,13 @@ export function renderCustomerDir(query) {
   list.innerHTML = filtered.map(c => {
     const name = [c.firstName, c.lastName].filter(Boolean).join(' ') || 'Unknown';
     return `
-      <div onclick="showEditCustomer('${c.squareId}')" title="Edit customer" class="flex items-center gap-3 px-4 py-3 border-b border-surface-container-high hover:bg-surface-container transition-colors cursor-pointer">
+      <div onclick="showEditCustomer('${escAttrJs(c.squareId)}')" title="Edit customer" class="flex items-center gap-3 px-4 py-3 border-b border-surface-container-high hover:bg-surface-container transition-colors cursor-pointer">
         <div class="w-9 h-9 rounded-full bg-primary-container flex items-center justify-center flex-shrink-0">
-          <span class="text-sm font-headline font-bold text-primary">${name.charAt(0).toUpperCase()}</span>
+          <span class="text-sm font-headline font-bold text-primary">${escHtml(name.charAt(0).toUpperCase())}</span>
         </div>
         <div class="flex-grow min-w-0">
-          <div class="font-headline font-semibold text-on-surface text-sm">${name}</div>
-          <div class="text-xs font-body text-on-surface-variant">${c.phone || ''}${c.email ? ' · ' + c.email : ''}</div>
+          <div class="font-headline font-semibold text-on-surface text-sm">${escHtml(name)}</div>
+          <div class="text-xs font-body text-on-surface-variant">${escHtml(c.phone || '')}${c.email ? ' · ' + escHtml(c.email) : ''}</div>
         </div>
         <span class="material-symbols-outlined text-on-surface-variant flex-shrink-0" style="font-size:18px">chevron_right</span>
       </div>`;
@@ -558,7 +558,7 @@ export async function squareUpsertCustomer(entry) {
           else customerDirectory.push({ squareId: c.id, firstName: c.given_name||'', lastName: c.family_name||'', phone: c.phone_number||'', email: '', note: c.note||'' });
           localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
         }
-      }
+      } else console.warn('[Square] Customer update failed:', existingId, res.status);
     } else {
       const iKey = rawPhone ? `muse-customer-${rawPhone}` : `muse-customer-${firstName.toLowerCase()}-${lastName.toLowerCase()}`;
       const res = await fetch(`${SQUARE_PROXY}/v2/customers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotency_key: iKey, ...payload }) });
@@ -570,7 +570,7 @@ export async function squareUpsertCustomer(entry) {
           customerDirectory.push({ squareId: c.id, firstName: c.given_name||'', lastName: c.family_name||'', phone: c.phone_number||'', email: '', note: c.note||'' });
           localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
         }
-      }
+      } else console.warn('[Square] Customer create failed:', res.status);
     }
   } catch (e) { console.warn('[Square] Customer upsert failed:', e); }
   return resolvedId;

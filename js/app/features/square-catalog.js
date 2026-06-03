@@ -4,7 +4,7 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast } from '../utils.js';
+import { showToast, escHtml } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
 import { loadSquareCustomers } from './square-customers.js';
 
@@ -105,9 +105,11 @@ export async function syncSquare() {
   updateSyncLabel('pending', 'Syncing…');
   showToast('Syncing with Square…');
   try {
-    await Promise.all([loadSquareCustomers(), squarePullServices()]);
-    updateSyncLabel('ok', 'Square synced');
-    showToast('Square sync complete');
+    // Both loaders return false (and toast their own reason) on a partial/failed pull instead of
+    // throwing, so only claim "complete" when BOTH succeeded — no false green on a silent failure.
+    const [okCust, okCat] = await Promise.all([loadSquareCustomers(), squarePullServices()]);
+    if (okCust && okCat) { updateSyncLabel('ok', 'Square synced'); showToast('Square sync complete'); }
+    else { updateSyncLabel('error', 'Sync incomplete'); }
   } catch (e) { updateSyncLabel('error', 'Sync failed'); showToast('Square sync failed. Check settings.'); }
 }
 
@@ -120,28 +122,41 @@ export function updateSyncLabel(state, label) {
 
 // Pull Square catalog (ITEM type) → classify into services / items / fees.
 export async function squarePullServices() {
-  if (!sqConfig()) return;
+  if (!sqConfig()) return false;
   try {
-    const res = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=ITEM`);
-    if (!res.ok) {
-      let detail = `HTTP ${res.status}`;
-      try { const e = await res.json(); detail = e.errors?.[0]?.detail || e.errors?.[0]?.code || e.errors?.[0]?.category || detail; } catch {}
-      showToast(`Square catalog: ${detail}`); return;
-    }
-    const data = await res.json();
+    // Paginate the whole catalog. A single /catalog/list page (~100 objects) silently dropped the
+    // overflow, leaving later services without a squareVariationId (breaks booking push + appt
+    // matching) under a "synced ✓" toast. Accumulate across the cursor, then classify the full set.
+    let all = [], cursor = null;
+    do {
+      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=ITEM${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`);
+      if (!res.ok) {
+        let detail = `HTTP ${res.status}`;
+        try { const e = await res.json(); detail = e.errors?.[0]?.detail || e.errors?.[0]?.code || e.errors?.[0]?.category || detail; } catch {}
+        showToast(`Square catalog: ${detail}`); return false;   // abort without a partial import
+      }
+      const data = await res.json();
+      all = all.concat(data.objects || []);
+      cursor = data.cursor || null;
+    } while (cursor);
+
     const services = [...cfg().services];
     const items    = [...cfg().items];
     const fees     = [...cfg().fees];
     let addedSvc = 0, addedItems = 0;
 
-    (data.objects || []).forEach(item => {
+    all.forEach(item => {
       const name = item.item_data?.name;
       if (!name) return;
       const lname = name.toLowerCase();
       const productType = item.item_data?.product_type;
       const isService = !productType || productType === 'APPOINTMENTS_SERVICE';
 
-      if (lname.includes('fee') || lname.includes('charge') || lname.includes('surcharge')) {
+      // Only bucket as a salon FEE when it's NOT an explicit appointment service, and match
+      // fee/charge/surcharge on a WORD boundary — so a real service ("No-Show Fee",
+      // "Cancellation Charge") stays a service and names like "Coffee"/"Toffee"/"Recharge"
+      // aren't mis-bucketed as fees.
+      if (productType !== 'APPOINTMENTS_SERVICE' && /\b(fee|surcharge|charge)\b/.test(lname)) {
         const id = `sq-fee-${item.id}`;
         if (!fees.find(f => f.id === id || f.label.toLowerCase() === lname)) {
           const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
@@ -177,7 +192,8 @@ export async function squarePullServices() {
     if (addedItems > 0) showToast(`${addedItems} item${addedItems>1?'s':''} imported from Square`);
     if (addedSvc === 0 && addedItems === 0) showToast('Catalog already up to date');
     window.renderServicesMerged?.();
-  } catch (e) { console.warn('Could not pull Square catalog:', e); }
+    return true;
+  } catch (e) { console.warn('Could not pull Square catalog:', e); showToast('Square catalog sync incomplete'); return false; }
 }
 
 // Pull a human-readable error detail out of a failed Square response (for a toast).
@@ -229,9 +245,12 @@ export async function squarePushService(svc) {
 }
 
 // Push a retail item to Square (create or update). itemIndex is the index in config.items.
-export async function squarePushItem(itemIndex) {
-  const item = cfg().items[itemIndex];
-  if (!sqConfig() || !item) return;
+export async function squarePushItem(id) {
+  // Resolve by stable id, not a render-time array index — config.items is synced, so a remote
+  // add/remove/reorder would otherwise make a frozen index push the WRONG item to Square.
+  const item = cfg().items.find(i => i.id === id);
+  if (!sqConfig()) return;
+  if (!item) { showToast('Square: item no longer exists — reopen Settings.'); return; }
   try {
     if (item.squareItemId) {
       const getRes = await fetch(`${SQUARE_PROXY}/v2/catalog/object/${item.squareItemId}`);
@@ -281,7 +300,7 @@ export async function loadSquareBookingTeamMembers() {
     sel.innerHTML = '<option value="">— None (no SMS reminders) —</option>' + members.map(m => {
       const name = [m.given_name, m.family_name].filter(Boolean).join(' ');
       const selected = m.id === sqConfig()?.bookingTeamMemberId ? 'selected' : '';
-      return `<option value="${m.id}" ${selected}>${name}</option>`;
+      return `<option value="${escHtml(m.id)}" ${selected}>${escHtml(name)}</option>`;
     }).join('');
     if (members.length === 0) showToast('No active team members found in Square.');
   } catch (e) { showToast('Could not load team members from Square.'); }

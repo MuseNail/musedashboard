@@ -19,6 +19,15 @@ export function ticketTotal(r) {
   return Math.max(0, svc + items + fees - (r.discount || 0));
 }
 
+// ── HTML / attribute escapers for untrusted data ─────────────────────────────
+// Square/Google customer + catalog data is externally sourced (online booking, import)
+// and gets interpolated into innerHTML and inline on*= handlers. escHtml for HTML-text/
+// attribute context; escAttrJs for a value placed inside a single-quoted JS string that
+// itself sits inside a double-quoted on*= attribute (JS-string escape first, then HTML-
+// escape so the browser's attribute decode yields a clean JS literal).
+export const escHtml = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+export const escAttrJs = s => (s == null ? '' : String(s)).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 // ── Pill switch in-place flip ────────────────────
 // Flip a single .mswitch toggle's visual state WITHOUT re-rendering its whole list.
 // Rebuilding a list on every tap recreated the row + button under the user's finger —

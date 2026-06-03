@@ -114,6 +114,10 @@ export function proceedSquarePayment() {
   if (!_pendingPay) return;
   const appId = sqConfig()?.applicationId;
   if (!appId) { showToast('Add your Square Application ID in Settings → Square first.'); return; }
+  // Safety net behind the disabled-button guard: the legacy deep link cannot represent the app's
+  // gift redemption (it charges the full bill), so a staged gift would double-collect. Force gift
+  // sales through the Terminal flow, which nets the gift via _payCardDueDollars.
+  if (_payGiftDollars() > 0.001) { showToast('A gift card is applied — use Pay on Terminal so the card is charged only the remaining balance.'); return; }
   const data = {
     // callback_url must EXACTLY match the Web Callback URL registered in the Square
     // Developer Console (Point of Sale API). Pinned to the app scope.
@@ -151,6 +155,11 @@ export function openSquarePOSFromModal() {
 // the full per-item breakdown. All calls go through SQUARE_PROXY (server-side token);
 // polling, no webhook.
 let _termCheckoutId = null, _termPollTimer = null;
+// Re-entry guard for the Terminal pay flow: there's an `await squareUpsertCustomer` before the
+// blocking Terminal modal shows, during which the Pay button stays live. The deterministic idem
+// keys already prevent a double-charge, but a double-tap leaks the poll timer + double-toasts —
+// this blocks the second invocation until the first settles.
+let _charging = false;
 
 function showTerminalModal(msg) {
   const t = document.getElementById('square-terminal-status'); if (t) t.textContent = msg;
@@ -164,6 +173,7 @@ function hideTerminalModal() {
 
 export async function proceedTerminalPayment() {
   if (!_pendingPay) return;
+  if (_charging) return;   // ignore double-taps while a charge is already in flight
   const sc = sqConfig();
   if (!sc?.locationId) { showToast('Add your Square Location ID in Settings → Square first.'); return; }
   const party = (_pendingPay.ids || []).map(id => queue().find(x => String(x.id) === String(id))).filter(Boolean);
@@ -216,6 +226,7 @@ export async function proceedTerminalPayment() {
   // Resolve/create the Square customer for this ticket (by the primary guest's phone) so the
   // sale is ATTACHED to them in Square via customer_id — not just a free-text name note.
   // Best-effort: never blocks the charge (no phone / Square unreachable → stays unlinked).
+  _charging = true;
   let customerId = null;
   try { customerId = await squareUpsertCustomer(party[0]); } catch (e) {}
   closeSquareConfirm();
@@ -243,19 +254,26 @@ export async function proceedTerminalPayment() {
       cardPaymentId = (co.payment_ids || [])[0] || null;
     }
     // 2) Only AFTER the card succeeds, record the cash portion in Square.
+    // Track which tenders failed to POST so the operator isn't told "Paid ✓" while Square's
+    // totals silently miss real cash/Zelle (the recorders return null on failure, by design,
+    // because the money was physically received — so we surface it instead of blocking).
+    const unrecorded = [];
     let cashPaymentId = null;
     if (cashAppliedC > 0) {
       showTerminalModal('Recording cash payment…');
       cashPaymentId = await recordCashPayment(cashAppliedC, cashReceivedC, sc.locationId, pend.cashKey, customerId);
+      if (!cashPaymentId) unrecorded.push('cash');
     }
     // 3) Record the Zelle portion as an EXTERNAL payment so Square's totals include it.
     let zellePaymentId = null;
     if (zelleC > 0) {
       showTerminalModal('Recording Zelle payment…');
       zellePaymentId = await recordExternalPayment(zelleC, 'Zelle', sc.locationId, pend.zelleKey, customerId);
+      if (!zellePaymentId) unrecorded.push('Zelle');
     }
-    _finalizeTerminalPaid(partyIds, tenders, [cardPaymentId, cashPaymentId, zellePaymentId].filter(Boolean), tipCents / 100);
+    _finalizeTerminalPaid(partyIds, tenders, [cardPaymentId, cashPaymentId, zellePaymentId].filter(Boolean), tipCents / 100, unrecorded);
   } catch (e) { hideTerminalModal(); showToast('Square: ' + (e.message || 'error')); }
+  finally { _charging = false; }
 }
 
 // Reusable one-off Terminal charge (e.g. a gift-card sale) — NOT tied to a queue ticket. Shows the
@@ -340,13 +358,13 @@ function _pollTerminalCheckout(id) {
   });
 }
 
-function _finalizeTerminalPaid(partyIds, tenders, paymentIds, tipDollars) {
+function _finalizeTerminalPaid(partyIds, tenders, paymentIds, tipDollars, unrecorded) {
   hideTerminalModal();
   partyIds.forEach((id, i) => {
     const ge = queue().find(x => String(x.id) === String(id));
     if (ge) {
       if (paymentIds.length) ge.squarePaymentIds = paymentIds;
-      if (i === 0) { ge.tenders = tenders; if (tipDollars > 0) ge.tip = tipDollars; }   // group-level split + one tip, recorded on the primary ticket
+      if (i === 0) { ge.tenders = tenders; if (tipDollars > 0) ge.tip = tipDollars; if (unrecorded?.length) ge.squareUnrecorded = unrecorded; }   // group-level split + one tip, recorded on the primary ticket
       ge.totalCost = ticketTotal(ge);   // bill only — tip is NOT folded in
       dispatch('queue.upsert', { entry: ge });
     }
@@ -354,7 +372,11 @@ function _finalizeTerminalPaid(partyIds, tenders, paymentIds, tipDollars) {
   });
   try { localStorage.removeItem('muse_term_pending'); } catch (e) {}
   _pendingPay = null; _payGc = []; _payTicketId = null; _payCash = 0; _payTip = 0; _payZelle = 0;
-  showToast('Paid ✓');
+  // If a cash/Zelle record failed to reach Square, the ticket is still correctly Paid (money was
+  // received) but Square's totals are short — tell the operator instead of a clean "Paid ✓".
+  showToast(unrecorded?.length
+    ? `Paid ✓ — ${unrecorded.join(' & ')} not logged to Square (will show in Reconcile)`
+    : 'Paid ✓');
 }
 
 export async function cancelTerminalCheckout() {
@@ -380,7 +402,7 @@ export async function reprintTerminalReceipt(recordId) {
     const res = await fetch(`${SQUARE_PROXY}/v2/terminals/actions`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        idempotency_key: 'rcpt-' + recordId + '-' + Date.now(),
+        idempotency_key: 'rcpt-' + recordId + '-' + paymentId,   // stable per (record,payment) so a double-tap dedupes instead of printing twice
         action: { type: 'RECEIPT', device_id: deviceId, receipt_options: { payment_id: paymentId, is_duplicate: true, print_only: true } },
       }),
     });
@@ -499,7 +521,10 @@ export function sqUpdatePayBreakdown() {
   // The legacy Square POS deep link charges the bill only (no cash split, no tip) — disable it
   // whenever a cash split or a tip is in play, since those are handled by the Terminal.
   const pb = document.getElementById('sq-pos-btn');
-  if (pb) { const off = _payCash > 0 || _payTip > 0 || _payZelle > 0; pb.disabled = off; pb.style.opacity = off ? '0.4' : ''; pb.style.pointerEvents = off ? 'none' : ''; pb.title = off ? 'Cash/Zelle/tip is handled by the Terminal flow' : ''; }
+  // Disable the legacy POS deep link whenever cash/Zelle/tip OR a gift card is in play — the deep
+  // link charges the BILL only (no gift reduction), so a gift + deep link would charge the full
+  // bill to the card AND still draw the gift down on return. Those splits go through the Terminal.
+  if (pb) { const off = _payCash > 0 || _payTip > 0 || _payZelle > 0 || _payGiftDollars() > 0.001; pb.disabled = off; pb.style.opacity = off ? '0.4' : ''; pb.style.pointerEvents = off ? 'none' : ''; pb.title = off ? 'Cash / Zelle / tip / gift cards are handled by the Terminal flow' : ''; }
 }
 function _gcPickerRows(room) {
   const q = (document.getElementById('sq-gc-search')?.value || '').toLowerCase();
@@ -612,7 +637,9 @@ export async function squarePushBooking(calId, eventId) {
 
   showToast('Creating Square booking…');
   try {
-    const bookingBody = { idempotency_key: `muse-booking-${eventId}-${Date.now()}`, booking: {
+    // Stable key (event + start time) so a re-tap / retry-after-timeout dedupes within Square's
+    // 24h window instead of creating a duplicate booking; a real reschedule changes start_at → new key.
+    const bookingBody = { idempotency_key: `muse-booking-${eventId}-${startDt.toISOString()}`, booking: {
       start_at: startDt.toISOString(), location_id: sqConfig().locationId, customer_note: ev.summary || '',
       ...(custDir?.squareId ? { customer_id: custDir.squareId } : {}),
       appointment_segments: [{ duration_minutes: durMins, service_variation_id: svc.squareVariationId, service_variation_version: variationVersion, team_member_id: sqConfig().bookingTeamMemberId }],
