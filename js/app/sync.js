@@ -182,7 +182,7 @@ function replayOutbox() { for (const msg of _outbox) send(msg); } // DO dedupes 
 function reapplyOutbox() { for (const msg of _outbox) { try { applyChange(msg.op, msg.payload); } catch {} } }
 
 // ── Public: dispatch a mutation (optimistic local apply + queued send) ──────────
-// op: 'config.set' | 'queue.upsert' | 'queue.remove' | 'record.save'
+// op: 'config.set' | 'queue.upsert' | 'queue.assignmentPatch' | 'queue.remove' | 'record.save'
 //   | 'record.delete' | 'giftcard.save' | 'giftcard.delete' | 'audit.log'
 //   | 'customer.upsert' | 'customer.delete' | 'customer.bulkUpsert' | 'customer.bulkDelete'
 export function dispatch(op, payload) {

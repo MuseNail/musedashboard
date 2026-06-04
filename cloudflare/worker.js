@@ -46,6 +46,32 @@ function json(data, status = 200) {
 function _isStaleWrite(prev, next) {
   return !!(prev && next && typeof prev.updatedAt === 'number' && typeof next.updatedAt === 'number' && prev.updatedAt > next.updatedAt);
 }
+// Recompute entry.status from its assignments + stamp statusSince on change (mirrors client
+// status.js deriveEntryStatus/applyEntryStatus). Used after a per-assignment merge/patch.
+function _deriveEntryStatus(entry) {
+  const ss = (entry.assignments || []).map(a => a.status || 'waiting');
+  let next;
+  if (!ss.length) next = entry.status || 'waiting';
+  else if (ss.some(s => s === 'inservice')) next = 'inservice';
+  else if (ss.every(s => s === 'paid' || s === 'done')) next = 'paid';
+  else if (ss.every(s => s === 'complete' || s === 'paid' || s === 'done')) next = 'complete';
+  else next = 'waiting';
+  if (next !== entry.status) { entry.prevStatusSince = entry.statusSince; entry.statusSince = Date.now(); }
+  entry.status = next;
+}
+// Per-assignment field-merge for a whole-entry write: keep a STORED assignment whose own updatedAt
+// is NEWER than the incoming one (so a whole-entry save can't revert a concurrent per-assignment
+// change). Backward-compatible: only when both carry assignment.updatedAt. Returns true if it merged.
+function _mergeNewerAssignments(incoming, stored) {
+  if (!stored || !Array.isArray(incoming.assignments) || !Array.isArray(stored.assignments)) return false;
+  let merged = false;
+  incoming.assignments = incoming.assignments.map(ia => {
+    const sa = stored.assignments.find(x => x.serviceId === ia.serviceId && x.techId === ia.techId);
+    if (sa && typeof sa.updatedAt === 'number' && typeof ia.updatedAt === 'number' && sa.updatedAt > ia.updatedAt) { merged = true; return sa; }
+    return ia;
+  });
+  return merged;
+}
 
 // Normalize a US phone to E.164 (+1XXXXXXXXXX) for httpSMS. Returns null if it isn't a
 // usable 10/11-digit US number (so we never send to a malformed recipient).
@@ -518,8 +544,22 @@ export class MuseSalonDO {
           const qKey = 'queue:' + payload.entry.id;
           const prevEntry = await this.state.storage.get(qKey);
           if (_isStaleWrite(prevEntry, payload.entry)) { stale = true; break; }   // older copy — don't clobber a newer one
+          if (_mergeNewerAssignments(payload.entry, prevEntry)) _deriveEntryStatus(payload.entry);   // 3c: protect a concurrent per-assignment change
           await this.state.storage.put(qKey, payload.entry);
           this._notifyNewAssignments(prevEntry, payload.entry);   // push to newly-assigned techs (best-effort)
+          break;
+        }
+        case 'queue.assignmentPatch': {
+          // 3c: a tech's per-assignment change merged into the CURRENT stored entry, so it can't
+          // clobber a concurrent front-desk fee/item/discount edit on the same ticket.
+          const e = await this.state.storage.get('queue:' + payload.entryId);
+          if (!e || !Array.isArray(e.assignments)) break;
+          if (e.status === 'paid' || e.status === 'done') break;   // never let a stale device un-pay
+          const idx = e.assignments.findIndex(x => x.serviceId === payload.serviceId && x.techId === payload.techId);
+          if (idx < 0) break;                                      // assignment reassigned away — ignore
+          e.assignments[idx] = payload.assignment;
+          _deriveEntryStatus(e);
+          await this.state.storage.put('queue:' + payload.entryId, e);
           break;
         }
         case 'queue.remove':

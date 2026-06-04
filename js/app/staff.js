@@ -10,7 +10,7 @@
 import * as store from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr } from './utils.js';
-import { applyEntryStatus, isPaidStatus } from './features/status.js';
+import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, APP_VERSION } from './config.js';
 
 const cfg     = () => store.getState().config;
@@ -275,22 +275,25 @@ window.staffDownloadTodayPdf = () => {
 };
 
 // ── Actions ───────────────────────────────────────
-function updateAssignment(entryId, serviceId, mut) {
+// 3c: send a per-assignment PATCH (not the whole entry). The DO + every device merge it into the
+// CURRENT ticket, so a tech's Start/Complete/Reopen can't clobber a concurrent front-desk
+// fee/item/discount edit that hasn't propagated to this device yet (the §14 clobber HIGH).
+function updateAssignment(entryId, serviceId, newStatus, priced) {
   const src = queue().find(e => String(e.id) === String(entryId));
   if (!src) return;
-  const entry = JSON.parse(JSON.stringify(src));   // clone so the optimistic dispatch is the only writer
-  const a = (entry.assignments || []).find(x => x.serviceId === serviceId && x.techId === myId);
-  if (!a) { showToast('That service is no longer assigned to you'); return; }
-  mut(a);
-  applyEntryStatus(entry);                          // sets status + stamps statusSince (per-status timer)
-  sync.dispatch('queue.upsert', { entry });        // optimistic local apply → subscribe re-renders
+  const a0 = (src.assignments || []).find(x => x.serviceId === serviceId && x.techId === myId);
+  if (!a0) { showToast('That service is no longer assigned to you'); return; }
+  const a = JSON.parse(JSON.stringify(a0));        // patch a clone of ONLY this assignment
+  if (priced != null) a.cost = priced;
+  applyAssignmentStatus(a, newStatus);             // banks serviceMs / starts spell + stamps a.status & a.updatedAt
+  sync.dispatch('queue.assignmentPatch', { entryId: String(entryId), serviceId, techId: myId, assignment: a });
 }
 
 window.staffPriceInput = (entryId, serviceId, val) => { _priceDraft[entryId + ':' + serviceId] = val; };
 
 window.staffStart = (entryId, serviceId) => {
   const priced = parsePrice(_priceDraft[entryId + ':' + serviceId]);
-  updateAssignment(entryId, serviceId, a => { a.status = 'inservice'; if (priced != null) a.cost = priced; });
+  updateAssignment(entryId, serviceId, 'inservice', priced);
   showToast('Started');
 };
 window.staffComplete = (entryId, serviceId) => {
@@ -303,12 +306,12 @@ window.staffComplete = (entryId, serviceId) => {
     .find(x => x.serviceId === serviceId && x.techId === myId);
   const effective = priced != null ? priced : parsePrice(existing?.cost);
   if (effective == null || effective <= 0) { showToast('Enter a price first'); return; }
-  updateAssignment(entryId, serviceId, a => { a.status = 'complete'; if (priced != null) a.cost = priced; });
+  updateAssignment(entryId, serviceId, 'complete', priced);
   delete _priceDraft[key];
   showToast('Sent to front desk ✓');
 };
 window.staffReopen = (entryId, serviceId) => {
-  updateAssignment(entryId, serviceId, a => { a.status = 'inservice'; });
+  updateAssignment(entryId, serviceId, 'inservice');
   showToast('Reopened');
 };
 window.staffTab = (v) => { _view = (v === 'history' ? 'history' : 'active'); render(); };

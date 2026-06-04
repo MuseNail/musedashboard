@@ -748,7 +748,8 @@ export function revertServiceStatus(entryId, serviceId, prevStatus) {
   const label = { waiting:'Waiting', inservice:'In Service', complete:'Complete' }[prevStatus] || prevStatus;
   showWarnModal('Move status back?', `This moves ${svc(serviceId)?.label || 'this service'} back to "${label}". Use this only to correct a mistake.`, () => {
     const e = q().find(x => String(x.id) === String(entryId)); if (!e) return;
-    setAssignmentStatus(e, serviceId, prevStatus);
+    setAssignmentStatus(e, serviceId, prevStatus, true);   // isRevert → restore the pre-mistake status timer
+    window.logAudit?.('Status revert', `${e.name || '—'} · ${svc(serviceId)?.label || 'service'} → ${label}`);
     renderGroupAssignContent();
     renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
   }, 'Move back');
@@ -1208,7 +1209,7 @@ export function confirmReopen(entryId) {
   showWarnModal('Reopen this ticket?', `This will move ${entry.name} back to "In Service."`, () => {
     if (entry.assignments && entry.assignments.length) {
       entry.assignments.forEach(a => { if (isPaidStatus(getAssignmentStatus(entry, a)) || getAssignmentStatus(entry, a) === 'complete') applyAssignmentStatus(a, 'inservice'); });
-      applyEntryStatus(entry);
+      applyEntryStatus(entry, true);   // reopen = correction → restore the pre-paid status timer
     } else { if (entry.status !== 'inservice') entry.statusSince = Date.now(); entry.status = 'inservice'; }
     entry.completedAt = null;
     // R6: reopening a paid ticket must restore the gift-card balances it drew down.

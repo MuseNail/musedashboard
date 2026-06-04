@@ -27,10 +27,20 @@ export function deriveEntryStatus(entry) {
 // status actually changes, so views can show a timer that resets per status
 // (waiting → inservice → complete). Call this instead of assigning entry.status
 // directly, BEFORE dispatching, so statusSince syncs to every device.
-export function applyEntryStatus(entry) {
+// Pass isRevert=true when CORRECTING a mistake (moving a status backward) so the visible
+// per-status timer isn't reset to now — instead it's restored from the anchor saved before the
+// (mistaken) forward transition. One level of undo, which is all a correction needs.
+export function applyEntryStatus(entry, isRevert) {
   const prev = entry.status;
   const next = deriveEntryStatus(entry);
-  if (next !== prev) entry.statusSince = Date.now();
+  if (next !== prev) {
+    if (isRevert && entry.prevStatusSince != null) {
+      entry.statusSince = entry.prevStatusSince;   // correction → restore the pre-mistake timer
+    } else {
+      entry.prevStatusSince = entry.statusSince;   // remember the anchor so a later revert can restore it
+      entry.statusSince = Date.now();
+    }
+  }
   entry.status = next;
   return next;
 }
@@ -56,13 +66,14 @@ export function applyAssignmentStatus(a, newStatus) {
     a.svcStartedAt = 0;
   }
   a.status = newStatus;
+  a.updatedAt = Date.now();   // per-assignment version → drives the per-assignment merge in queue.upsert (3c)
 }
 
-export function setAssignmentStatus(entry, serviceId, newStatus) {
+export function setAssignmentStatus(entry, serviceId, newStatus, isRevert) {
   if (!entry.assignments) entry.assignments = [];
   const a = entry.assignments.find(x => x.serviceId === serviceId);
   if (a) applyAssignmentStatus(a, newStatus);
-  applyEntryStatus(entry);
+  applyEntryStatus(entry, isRevert);
   dispatch('queue.upsert', { entry });
   if (entry.status === 'paid') window.saveRecord?.(entry);   // finalize the sale only at Paid
   window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.(); window.renderFloorPlan?.();

@@ -84,6 +84,35 @@ function removeById(arr, id) {
   const i = arr.findIndex(x => String(x.id) === String(id));
   if (i >= 0) arr.splice(i, 1);
 }
+// Recompute entry.status from its assignments + stamp statusSince on change. Mirrors
+// status.js deriveEntryStatus/applyEntryStatus (inlined to avoid a store↔status import cycle).
+// Used after a per-assignment merge/patch so entry.status stays consistent with its assignments.
+function deriveEntryStatusFields(entry) {
+  const ss = (entry.assignments || []).map(a => a.status || 'waiting');
+  let next;
+  if (!ss.length) next = entry.status || 'waiting';
+  else if (ss.some(s => s === 'inservice')) next = 'inservice';
+  else if (ss.every(s => s === 'paid' || s === 'done')) next = 'paid';
+  else if (ss.every(s => s === 'complete' || s === 'paid' || s === 'done')) next = 'complete';
+  else next = 'waiting';
+  if (next !== entry.status) { entry.prevStatusSince = entry.statusSince; entry.statusSince = Date.now(); }
+  entry.status = next;
+}
+// Per-assignment field-merge for a whole-entry write: keep a STORED assignment whose own
+// updatedAt is NEWER than the incoming one, so a front-desk whole-entry save can't revert a
+// tech's concurrent per-assignment change (and vice-versa). Backward-compatible — only merges
+// when both sides carry assignment.updatedAt; otherwise the incoming assignment is used as-is.
+// Returns true if any stored assignment was preserved.
+function mergeNewerAssignments(incoming, stored) {
+  if (!stored || !Array.isArray(incoming.assignments) || !Array.isArray(stored.assignments)) return false;
+  let merged = false;
+  incoming.assignments = incoming.assignments.map(ia => {
+    const sa = stored.assignments.find(x => x.serviceId === ia.serviceId && x.techId === ia.techId);
+    if (sa && typeof sa.updatedAt === 'number' && typeof ia.updatedAt === 'number' && sa.updatedAt > ia.updatedAt) { merged = true; return sa; }
+    return ia;
+  });
+  return merged;
+}
 
 // ── Hydrate from a full DO snapshot ─────────────────────────────────────────────
 export function hydrate(snap) {
@@ -125,7 +154,26 @@ export function applyChange(op, payload, seq) {
       if (ts != null) state.configMeta[payload.key] = { updatedAt: ts, updatedBy: payload.updatedBy || null };
       break;
     }
-    case 'queue.upsert':  if (!upsertByIdGuarded(state.queue, payload.entry)) return; break;   // stale → ignore (keep newer)
+    case 'queue.upsert': {
+      const inc = payload.entry;
+      const cur = state.queue.find(x => String(x.id) === String(inc.id));
+      if (cur && isStaleWrite(cur, inc)) return;                       // whole-entry stale guard (keep newer)
+      if (mergeNewerAssignments(inc, cur)) deriveEntryStatusFields(inc);   // 3c: protect a concurrent per-assignment change
+      upsertById(state.queue, inc);
+      break;
+    }
+    case 'queue.assignmentPatch': {
+      // 3c: a tech's per-assignment change (staff app) merged into the CURRENT entry, so it can't
+      // clobber a concurrent front-desk fee/item/discount edit on the same ticket.
+      const e = state.queue.find(x => String(x.id) === String(payload.entryId));
+      if (!e || !Array.isArray(e.assignments)) return;
+      if (e.status === 'paid' || e.status === 'done') return;           // never let a stale device un-pay
+      const idx = e.assignments.findIndex(x => x.serviceId === payload.serviceId && x.techId === payload.techId);
+      if (idx < 0) return;                                              // assignment reassigned away — drop
+      e.assignments[idx] = payload.assignment;
+      deriveEntryStatusFields(e);
+      break;
+    }
     case 'queue.remove':  removeById(state.queue, payload.id); break;
     case 'record.save':
       // Never revive a deleted transaction: a stale paid queue copy on another device can re-fire
