@@ -298,12 +298,24 @@ function _custStatsByPhone() {
   return m;
 }
 
-export function filterCustomersTab(query) { renderCustomersTab(query); }
-export function renderCustomerDir(query) { renderCustomersTab(query); }   // legacy alias (cleanup back-button, saveEditCustomer)
+const CUST_PAGE_SIZE = 200;
+let _custPage = 0;
+
+// Display-only phone formatter: a standard US 10-digit number (or 11 with a leading 1) renders as
+// "(555) 123-4567"; anything non-standard shows as-is. Stored data is NOT changed — only display.
+function _fmtPhoneDisplay(p) {
+  const d = (p || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1');
+  return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : (p || '—');
+}
+
+export function filterCustomersTab(query) { _custPage = 0; renderCustomersTab(query); }   // new search → back to page 1
+export function renderCustomerDir(query) { _custPage = 0; renderCustomersTab(query); }     // legacy alias (cleanup back-button, saveEditCustomer)
+export function custPage(delta) { _custPage += delta; renderCustomersTab(); }              // pager Prev/Next (clamped in render)
 
 export function renderCustomersTab(query) {
   const host = document.getElementById('customers-content');
   if (!host) return;   // tab not open
+  // query==null → a background re-render (store sync): keep the live search box + current page.
   const q = (query == null ? (document.getElementById('customers-search')?.value || '') : query).trim().toLowerCase();
   const qDigits = q.replace(/\D/g, '');
   const total = customerDirectory.length;
@@ -323,25 +335,39 @@ export function renderCustomersTab(query) {
     if (qDigits && (c.phone || '').replace(/\D/g, '').includes(qDigits)) return true;
     return false;
   });
-  const rows = filtered.slice(0, 500).map(c => {
+  // Paginate at 200/page. Clamp the page so a shrinking list (e.g. after a delete) never lands
+  // on an empty page; flipping pages walks the full alphabetical list A→Z.
+  const pages = Math.max(1, Math.ceil(filtered.length / CUST_PAGE_SIZE));
+  _custPage = Math.min(Math.max(_custPage, 0), pages - 1);
+  const start = _custPage * CUST_PAGE_SIZE;
+  const pageRows = filtered.slice(start, start + CUST_PAGE_SIZE);
+  const rows = pageRows.map(c => {
     const name = [c.firstName, c.lastName].filter(Boolean).join(' ') || 'Unknown';
     const s = stats.get(notePhoneKey(c.phone)) || { visits: 0, last: 0, spent: 0 };
     const last = s.last ? new Date(s.last).toLocaleDateString() : '—';
     return `<tr onclick="showEditCustomer('${escAttrJs(c.squareId)}')" class="cursor-pointer hover:bg-surface-container transition-colors">
       <td class="font-headline font-semibold text-on-surface">${escHtml(name)}</td>
-      <td>${escHtml(c.phone || '—')}</td>
+      <td>${escHtml(_fmtPhoneDisplay(c.phone))}</td>
       <td class="text-on-surface-variant">${escHtml(c.email || '—')}</td>
       <td class="text-right">${s.visits || '—'}</td>
       <td>${last}</td>
       <td class="text-right">${s.spent ? '$' + s.spent.toFixed(0) : '—'}</td>
     </tr>`;
   }).join('');
+  const from = filtered.length ? start + 1 : 0, to = start + pageRows.length;
+  const btn = (label, delta, disabled) => `<button onclick="custPage(${delta})" ${disabled ? 'disabled' : ''} class="px-3 py-1.5 rounded-lg border border-surface-container-high text-sm font-body font-semibold disabled:opacity-40 disabled:cursor-default hover:bg-surface-container transition-colors">${label}</button>`;
+  const pager = pages > 1 ? `<div class="flex items-center justify-center gap-3 mt-3">
+      ${btn('‹ Prev', -1, _custPage === 0)}
+      <span class="text-sm font-body text-on-surface-variant">Page ${_custPage + 1} of ${pages}</span>
+      ${btn('Next ›', 1, _custPage >= pages - 1)}
+    </div>` : '';
   host.innerHTML = `
-    <div class="text-[11px] font-body text-on-surface-variant mb-2">${filtered.length} of ${total} customer${total !== 1 ? 's' : ''}${q ? ' (filtered)' : ''}</div>
+    <div class="text-[11px] font-body text-on-surface-variant mb-2">Showing ${from}–${to} of ${filtered.length} customer${filtered.length !== 1 ? 's' : ''}${q ? ' (filtered)' : ''}</div>
     <div class="overflow-x-auto"><table class="data-table w-full text-sm">
       <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th class="text-right">Visits</th><th>Last visit</th><th class="text-right">Total</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" class="text-center py-6 text-on-surface-variant">No matches.</td></tr>'}</tbody>
-    </table></div>`;
+    </table></div>
+    ${pager}`;
 }
 
 // New blank-customer entry — opens the shared edit modal in "add" mode (no id).
