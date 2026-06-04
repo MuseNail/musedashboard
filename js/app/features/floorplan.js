@@ -175,15 +175,15 @@ function renderFloorStaffRow() {
     // has a seat but no tech yet (handled by the pointer-drag system below). Not in edit mode.
     const drag = floorEditMode ? '' : 'floor-tech';
     const avatar = st.photo
-      ? `<img src="${st.photo}" draggable="false" style="width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid ${c.bg};box-shadow:0 2px 5px rgba(0,0,0,.18)">`
-      : `<div style="display:flex;align-items:center;justify-content:center;width:80px;height:80px;border-radius:50%;background:${c.bg};color:${c.text};font-family:var(--font-headline);font-weight:700;font-size:30px;box-shadow:0 2px 5px rgba(0,0,0,.18)">${escHtml((st.name||'?').charAt(0).toUpperCase())}</div>`;
+      ? `<img src="${st.photo}" draggable="false" style="width:68px;height:68px;border-radius:50%;object-fit:cover;border:3px solid ${c.bg};box-shadow:0 2px 5px rgba(0,0,0,.18)">`
+      : `<div style="display:flex;align-items:center;justify-content:center;width:68px;height:68px;border-radius:50%;background:${c.bg};color:${c.text};font-family:var(--font-headline);font-weight:700;font-size:26px;box-shadow:0 2px 5px rgba(0,0,0,.18)">${escHtml((st.name||'?').charAt(0).toUpperCase())}</div>`;
     const turns = getTechTurns(id).total;
     const turnsTxt = Number.isInteger(turns) ? String(turns) : turns.toFixed(1);
-    const turnsBadge = `<span title="${turnsTxt} turns today" style="position:absolute;bottom:-4px;right:-4px;min-width:34px;height:34px;padding:0 5px;border-radius:17px;background:#1a5252;color:#fff;font-size:18px;font-weight:800;display:flex;align-items:center;justify-content:center;border:3px solid var(--surface-container-lowest,#fff);box-sizing:border-box">${turnsTxt}</span>`;
-    return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:92px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Tap for status · drag onto a station to assign"'}>
+    const turnsBadge = `<span title="${turnsTxt} turns today" style="position:absolute;bottom:-3px;right:-3px;min-width:29px;height:29px;padding:0 4px;border-radius:15px;background:#1a5252;color:#fff;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface-container-lowest,#fff);box-sizing:border-box">${turnsTxt}</span>`;
+    return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:78px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Tap for status · drag onto a station to assign"'}>
       <div style="position:relative">${avatar}${turnsBadge}</div>
-      <span style="font-size:15px;font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px">${escHtml(st.name.split(' ')[0])}</span>
-      <span style="font-size:12px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
+      <span style="font-size:13px;font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:76px">${escHtml(st.name.split(' ')[0])}</span>
+      <span style="font-size:10px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
     </div>`;
   }).join('');
   el.innerHTML = `<div class="flex flex-wrap items-start justify-center gap-3 pt-3 border-t border-surface-container-high">${bubbles}</div>`;
