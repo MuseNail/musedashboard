@@ -32,7 +32,18 @@ Decide and implement the rules around marking a ticket **Paid**, then make mista
    (a) reverses gift-card redemptions (`gcReverseTicket`), (b) leaves a clear audit trail, (c) can't
    double-charge or strand money, and (d) is permission-gated. Today reopen via the modal status-cycle
    bypasses gift reversal (§5), and refund doesn't reverse gift redemptions (§7) — both must be closed
-   as part of this.
+   as part of this. **NB (audit §7):** reopening a PAID ticket reverses gift cards but does NOT remove
+   the already-saved transaction record, so the sale keeps counting in Reports until it's re-paid — the
+   safe-reversal must void/zero (or non-count) the record on reopen.
+4. **⭐ Cancelled processor transaction (owner-flagged 2026-06-04):** define what happens when a
+   processor charge is STARTED then CANCELLED before payment is taken — e.g. front desk taps Pay on the
+   Square/Helcim terminal, then cancels (needs to make adjustments, or the customer needs more time).
+   The ticket must **NOT** be marked Paid and must **NOT** count in Reports — it should cleanly return
+   to its prior status (in-service/complete) with no record written, no tenders recorded, and any
+   staged gift draw-down un-staged. Audit the current Square Terminal flow for this (the `muse_term_pending`
+   handling + the "→ paid" return path) and make the cancel/back path a first-class, no-op-on-finances
+   case. Carries straight into the Helcim **poll→webhook** rewrite (a webhook "declined/cancelled"
+   result must finalize to NOT-paid). Pairs with #2 (one pay path) so cancel is handled in one place.
 
 This is a policy decision + a structural consolidation; do it as its own change (good candidate to
 pair with the §10 Square pay-flow audit). Related audit findings: §5 (gift draw-down skip, reopen
