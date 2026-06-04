@@ -556,6 +556,21 @@ export class MuseSalonDO {
         case 'giftcard.delete':
           await this.state.storage.delete('giftcard:' + payload.id);
           break;
+        case 'customer.upsert': {
+          // Customer directory entity (per-record key, mirrors records). Don't revive a deleted
+          // customer, and reject a stale offline copy so it can't clobber a newer edit.
+          const cKey = 'customer:' + payload.customer.id;
+          if (await this.state.storage.get('custdeletion:' + payload.customer.id)) { stale = true; break; }
+          const prevCust = await this.state.storage.get(cKey);
+          if (_isStaleWrite(prevCust, payload.customer)) { stale = true; break; }
+          await this.state.storage.put(cKey, payload.customer);
+          break;
+        }
+        case 'customer.delete': {
+          await this.state.storage.delete('customer:' + payload.id);
+          await this.state.storage.put('custdeletion:' + payload.id, { id: payload.id, at: new Date().toISOString() });
+          break;
+        }
         case 'audit.log': {
           // Append-only activity log (who/when/device/action). Each event is its own key
           // so concurrent writes never clobber. Probabilistically prune to the last ~1000.
@@ -602,7 +617,7 @@ export class MuseSalonDO {
 
   // Assemble the full state from storage (prefix scans skip mut:/meta: keys).
   async buildSnapshot() {
-    const state = { config: {}, configMeta: {}, queue: [], records: [], giftcards: [], deletions: [], audit: [] };
+    const state = { config: {}, configMeta: {}, queue: [], records: [], giftcards: [], customers: [], deletions: [], customerDeletions: [], audit: [] };
     const cfg = await this.state.storage.list({ prefix: 'config:' });
     for (const [k, v] of cfg) state.config[k.slice('config:'.length)] = v;
     const cm = await this.state.storage.list({ prefix: 'cfgmeta:' });
@@ -613,6 +628,10 @@ export class MuseSalonDO {
     for (const [, v] of r) state.records.push(v);
     const g = await this.state.storage.list({ prefix: 'giftcard:' });
     for (const [, v] of g) state.giftcards.push(v);
+    const cu = await this.state.storage.list({ prefix: 'customer:' });
+    for (const [, v] of cu) state.customers.push(v);
+    const cd = await this.state.storage.list({ prefix: 'custdeletion:' });
+    for (const [, v] of cd) state.customerDeletions.push(v);
     const d = await this.state.storage.list({ prefix: 'deletion:' });
     for (const [, v] of d) state.deletions.push(v);
     const al = await this.state.storage.list({ prefix: 'audit:' });

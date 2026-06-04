@@ -162,6 +162,7 @@ function reapplyOutbox() { for (const msg of _outbox) { try { applyChange(msg.op
 // ── Public: dispatch a mutation (optimistic local apply + queued send) ──────────
 // op: 'config.set' | 'queue.upsert' | 'queue.remove' | 'record.save'
 //   | 'record.delete' | 'giftcard.save' | 'giftcard.delete' | 'audit.log'
+//   | 'customer.upsert' | 'customer.delete'
 export function dispatch(op, payload) {
   const mutationId = DEVICE_ID + '-' + Date.now() + '-' + (++_mutCounter);
   // Stamp queue + record writes with a wall-clock version so the stale-write guard (store.js
@@ -174,6 +175,8 @@ export function dispatch(op, payload) {
   if (op === 'config.set'   && payload)                   { payload.updatedAt = Date.now(); payload.updatedBy = DEVICE_ID; }
   // Gift cards are stored-value money — stamp them so a stale card copy can't clobber a newer balance.
   if (op === 'giftcard.save' && payload && payload.card)  { payload.card.updatedAt = Date.now(); payload.card.updatedBy = DEVICE_ID; }
+  // Customer directory entities — stamp so a stale offline copy can't clobber a newer edit.
+  if (op === 'customer.upsert' && payload && payload.customer) { payload.customer.updatedAt = Date.now(); payload.customer.updatedBy = DEVICE_ID; }
   applyChange(op, payload);                                  // optimistic
   const msg = { type: 'mutate', op, payload, mutationId, device: DEVICE_ID };
   enqueue(msg);

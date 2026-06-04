@@ -34,7 +34,9 @@ const state = {
   queue:     [],
   records:   [],
   giftcards: [],
+  customers: [],   // synced customer directory entities ({id,firstName,lastName,phone,email,...}); per-record DO keys (customer:<id>), NOT a config blob
   deletions: [],   // array of deleted record ids (strings)
+  customerDeletions: [],   // array of deleted customer ids (strings) — tombstones so a stale offline upsert can't revive a deleted customer
   audit:     [],   // universal activity log (newest first, capped) — synced via the DO
   seq:       0,
   rev:       0,    // monotonic data-revision counter (bumped on hydrate + each applied change); lets consumers cheaply cache derived results and invalidate when state actually changes (records are mutated in place, so the array ref is not a reliable signal)
@@ -96,7 +98,9 @@ export function hydrate(snap) {
   state.queue     = Array.isArray(incoming.queue)     ? incoming.queue     : [];
   state.records   = Array.isArray(incoming.records)   ? incoming.records   : [];
   state.giftcards = Array.isArray(incoming.giftcards) ? incoming.giftcards : [];
+  state.customers = Array.isArray(incoming.customers) ? incoming.customers : [];
   state.deletions = Array.isArray(incoming.deletions) ? incoming.deletions.map(d => String(d.id ?? d)) : [];
+  state.customerDeletions = Array.isArray(incoming.customerDeletions) ? incoming.customerDeletions.map(d => String(d.id ?? d)) : [];
   state.audit     = Array.isArray(incoming.audit) ? incoming.audit : [];
   state.seq       = snap && snap.seq ? snap.seq : 0;
   state.rev++;
@@ -138,6 +142,15 @@ export function applyChange(op, payload, seq) {
     }
     case 'giftcard.save':   if (!upsertByIdGuarded(state.giftcards, payload.card)) return; break;   // stale card copy → keep the newer balance
     case 'giftcard.delete': removeById(state.giftcards, payload.id); break;
+    case 'customer.upsert':
+      // Don't revive a deleted customer (mirrors record.save's deletion guard).
+      if (state.customerDeletions.includes(String(payload.customer && payload.customer.id))) return;
+      if (!upsertByIdGuarded(state.customers, payload.customer)) return;   // stale → keep the newer copy
+      break;
+    case 'customer.delete':
+      removeById(state.customers, payload.id);
+      if (!state.customerDeletions.includes(String(payload.id))) state.customerDeletions.push(String(payload.id));
+      break;
     case 'audit.log':       if (payload && payload.event) { state.audit.unshift(payload.event); if (state.audit.length > 500) state.audit.length = 500; } break;
     default: console.warn('[store] unknown op', op); return;
   }
@@ -159,7 +172,8 @@ function saveCache() {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify({
       config: state.config, configMeta: state.configMeta, queue: state.queue, records: state.records,
-      giftcards: state.giftcards, deletions: state.deletions, seq: state.seq,
+      giftcards: state.giftcards, customers: state.customers, deletions: state.deletions,
+      customerDeletions: state.customerDeletions, seq: state.seq,
     }));
   } catch (e) { /* quota / unavailable — non-fatal */ }
 }
