@@ -28,7 +28,29 @@ let _ws = null, _connected = false, _reconnect = null, _ping = null, _mutCounter
 let _lastRecv = 0, _resyncTimer = null;   // heartbeat watchdog + resync throttle
 let _outbox = loadOutbox();
 
-function loadOutbox() { try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch { return []; } }
+function loadOutbox() {
+  let arr = [];
+  try { arr = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch { return []; }
+  // Self-heal a flooded outbox: a pre-v4.26 bulk customer import enqueued one customer.upsert per
+  // customer, which freezes the tab when replayed one-by-one (each replay = a full-state cache write
+  // + re-render). Coalesce a large run of them into chunked customer.bulkUpsert messages (latest per
+  // id wins) so replay is O(chunks), not O(customers). Deterministic mutationIds → the DO dedupes
+  // if this runs again.
+  const custCount = arr.reduce((n, m) => n + (m && m.op === 'customer.upsert' ? 1 : 0), 0);
+  if (custCount > 30) {
+    const others = arr.filter(m => !(m && m.op === 'customer.upsert' && m.payload && m.payload.customer));
+    const byId = new Map();
+    arr.forEach(m => { if (m && m.op === 'customer.upsert' && m.payload && m.payload.customer) byId.set(String(m.payload.customer.id), m.payload.customer); });
+    const list = [...byId.values()];
+    const bulk = [];
+    for (let i = 0; i < list.length; i += 200) {
+      bulk.push({ type: 'mutate', op: 'customer.bulkUpsert', payload: { customers: list.slice(i, i + 200) }, mutationId: DEVICE_ID + '-coalesce-' + list.length + '-' + i, device: DEVICE_ID });
+    }
+    arr = [...others, ...bulk];
+    try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(arr)); } catch {}
+  }
+  return arr;
+}
 function saveOutbox() {
   try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(_outbox)); } catch {}
   setConnection(_connected, _outbox.length);
@@ -162,7 +184,7 @@ function reapplyOutbox() { for (const msg of _outbox) { try { applyChange(msg.op
 // ── Public: dispatch a mutation (optimistic local apply + queued send) ──────────
 // op: 'config.set' | 'queue.upsert' | 'queue.remove' | 'record.save'
 //   | 'record.delete' | 'giftcard.save' | 'giftcard.delete' | 'audit.log'
-//   | 'customer.upsert' | 'customer.delete'
+//   | 'customer.upsert' | 'customer.delete' | 'customer.bulkUpsert'
 export function dispatch(op, payload) {
   const mutationId = DEVICE_ID + '-' + Date.now() + '-' + (++_mutCounter);
   // Stamp queue + record writes with a wall-clock version so the stale-write guard (store.js
@@ -177,6 +199,8 @@ export function dispatch(op, payload) {
   if (op === 'giftcard.save' && payload && payload.card)  { payload.card.updatedAt = Date.now(); payload.card.updatedBy = DEVICE_ID; }
   // Customer directory entities — stamp so a stale offline copy can't clobber a newer edit.
   if (op === 'customer.upsert' && payload && payload.customer) { payload.customer.updatedAt = Date.now(); payload.customer.updatedBy = DEVICE_ID; }
+  // Bulk customer import — stamp every customer in the batch (one apply, not one-per-customer).
+  if (op === 'customer.bulkUpsert' && payload && Array.isArray(payload.customers)) { const ts = Date.now(); payload.customers.forEach(c => { c.updatedAt = ts; c.updatedBy = DEVICE_ID; }); }
   applyChange(op, payload);                                  // optimistic
   const msg = { type: 'mutate', op, payload, mutationId, device: DEVICE_ID };
   enqueue(msg);

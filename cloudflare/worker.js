@@ -571,6 +571,19 @@ export class MuseSalonDO {
           await this.state.storage.put('custdeletion:' + payload.id, { id: payload.id, at: new Date().toISOString() });
           break;
         }
+        case 'customer.bulkUpsert': {
+          // One-shot import of a batch of customers (the Square import sends ~200 per message).
+          // Per-customer guards mirror customer.upsert; one broadcast for the whole batch.
+          const list = Array.isArray(payload.customers) ? payload.customers : [];
+          for (const cust of list) {
+            if (!cust || cust.id == null) continue;
+            if (await this.state.storage.get('custdeletion:' + cust.id)) continue;   // don't revive a deleted customer
+            const prev = await this.state.storage.get('customer:' + cust.id);
+            if (_isStaleWrite(prev, cust)) continue;
+            await this.state.storage.put('customer:' + cust.id, cust);
+          }
+          break;
+        }
         case 'audit.log': {
           // Append-only activity log (who/when/device/action). Each event is its own key
           // so concurrent writes never clobber. Probabilistically prune to the last ~1000.

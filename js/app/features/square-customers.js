@@ -92,13 +92,21 @@ export async function importCustomersFromSquare() {
   const byId = new Set(have.map(c => String(c.id)));
   const byPhone = new Map(have.map(c => [notePhoneKey(c.phone), c]).filter(([k]) => k));
   let added = 0, updated = 0;
-  sq.forEach(c => {
+  const toUpsert = sq.map(c => {
     const pk = notePhoneKey(c.phone);
     const match = byId.has(String(c.id)) ? have.find(x => String(x.id) === String(c.id)) : (pk ? byPhone.get(pk) : null);
-    const id = match ? match.id : c.id;
-    dispatch('customer.upsert', { customer: { id, firstName: c.firstName, lastName: c.lastName, phone: c.phone, email: c.email, squareId: c.id, createdAt: match?.createdAt || Date.now() } });
     if (match) updated++; else added++;
+    return { id: match ? match.id : c.id, firstName: c.firstName, lastName: c.lastName, phone: c.phone, email: c.email, squareId: c.id, createdAt: match?.createdAt || Date.now() };
   });
+  // Send in BULK chunks with a yield between each — one apply (saveCache + re-render) per chunk
+  // instead of per customer, so a big directory can't freeze the tab. Each chunk is also one
+  // outbox entry + one WebSocket message + one DO mutation.
+  const CHUNK = 200;
+  for (let i = 0; i < toUpsert.length; i += CHUNK) {
+    dispatch('customer.bulkUpsert', { customers: toUpsert.slice(i, i + CHUNK) });
+    showToast(`Importing… ${Math.min(i + CHUNK, toUpsert.length)}/${toUpsert.length}`);
+    await new Promise(r => setTimeout(r, 30));   // let the UI breathe + paint progress
+  }
   showToast(`Imported from Square: ${added} added, ${updated} updated ✓`);
   window.logAudit?.('Customer import', `${added} added · ${updated} updated from Square`);
   window.renderCustomersTab?.();

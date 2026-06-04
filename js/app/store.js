@@ -147,6 +147,17 @@ export function applyChange(op, payload, seq) {
       if (state.customerDeletions.includes(String(payload.customer && payload.customer.id))) return;
       if (!upsertByIdGuarded(state.customers, payload.customer)) return;   // stale → keep the newer copy
       break;
+    case 'customer.bulkUpsert': {
+      // One-shot import of many customers — applied in a single pass (one saveCache + notify),
+      // so a large Square import can't freeze the tab by re-rendering per customer.
+      const list = Array.isArray(payload.customers) ? payload.customers : [];
+      for (const cust of list) {
+        if (!cust || cust.id == null) continue;
+        if (state.customerDeletions.includes(String(cust.id))) continue;
+        upsertByIdGuarded(state.customers, cust);
+      }
+      break;
+    }
     case 'customer.delete':
       removeById(state.customers, payload.id);
       if (!state.customerDeletions.includes(String(payload.id))) state.customerDeletions.push(String(payload.id));
