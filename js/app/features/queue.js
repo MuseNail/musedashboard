@@ -296,7 +296,7 @@ function buildQueueRow(e) {
     const tip = sti ? `<span class="flex-shrink-0" style="color:${sti.color};font-weight:700;margin-left:auto">${sti.text}</span>` : '';
     const rowStyle = `border-left:${hot ? 3 : 2}px solid ${ls.bar};padding-left:5px;${ls.tint ? `background:${ls.tint};` : ''}${ls.rowOpacity < 1 ? `opacity:${ls.rowOpacity};` : ''}`;
     return `<div class="flex items-center gap-1 leading-tight rounded-r" style="${rowStyle}">
-      <span style="color:${ls.glyphColor}">${ls.glyph}</span>
+      <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;flex-shrink:0;${ls.dot}"></span>
       <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
       ${tech ? `<span class="text-on-surface-variant">→ ${escHtml(tech.name)}${a.station ? ' @' + escHtml(String(a.station)) : ''}</span>` : (a.station ? `<span class="text-on-surface-variant">@${escHtml(String(a.station))}</span>` : '')}
       ${a.cost ? `<span class="font-semibold text-primary">$${Number(a.cost).toFixed(2)}</span>` : ''}

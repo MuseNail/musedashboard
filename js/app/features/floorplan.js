@@ -99,7 +99,7 @@ function custLines(e, stationId, fs = 1) {
     const ls = serviceLineStyle(getAssignmentStatus(e, a));   // leading status glyph (color = status)
     const sti = serviceTimeInfo(a);
     const stiHtml = sti ? `<div style="font-size:${Math.round(9 * fs)}px;font-weight:700;color:${sti.color}">${sti.text}</div>` : '';
-    return `<div class="truncate" style="font-size:${Math.round(10 * fs)}px;color:#374151"><span style="color:${ls.glyphColor};font-weight:700">${ls.glyph}</span> ${s ? escHtml(s.label) : 'Service'}${t ? ' · ' + escHtml(t.name.split(' ')[0]) : ''}${a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}</div>${stiHtml}`;
+    return `<div class="truncate" style="font-size:${Math.round(10 * fs)}px;color:#374151"><span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;vertical-align:middle;${ls.dot}"></span> ${s ? escHtml(s.label) : 'Service'}${t ? ' · ' + escHtml(t.name.split(' ')[0]) : ''}${a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}</div>${stiHtml}`;
   }).join('');
 }
 

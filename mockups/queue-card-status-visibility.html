@@ -31,6 +31,7 @@
   /* per-service row */
   .srow{display:flex;align-items:center;gap:6px;font-size:12px;border-radius:0 6px 6px 0;padding:3px 6px 3px 5px;margin-top:3px}
   .glyph{font-size:12px;line-height:1}
+  .dot{display:inline-block;width:11px;height:11px;border-radius:50%;box-sizing:border-box;flex-shrink:0;vertical-align:middle}
   .timing{font-weight:700;margin-left:auto;font-size:11px}
   .row-svc{border-left:3px solid var(--svc-bar);background:var(--svc-tint)}
   .row-done{border-left:2px solid var(--done-bar)}
@@ -49,10 +50,10 @@
 
 <div class="legend">
   <table>
-    <tr><td><span class="glyph" style="color:var(--wait-bar)">●</span></td><td><span class="pill" style="background:var(--wait-bg);color:var(--wait-fg)">Wait</span></td><td>Waiting — not started</td></tr>
-    <tr><td><span class="glyph" style="color:var(--svc-bar)">●</span></td><td><span class="pill" style="background:var(--svc-bg);color:var(--svc-fg)">In Svc</span></td><td><b>In service — the "hot" row</b> (bold bar + tint)</td></tr>
-    <tr><td><span class="glyph" style="color:var(--done-bar)">◍</span></td><td><span class="pill" style="background:var(--done-bg);color:var(--done-fg)">Done</span></td><td>Complete — finished, payment pending</td></tr>
-    <tr><td><span class="glyph" style="color:var(--paid-bar)">✓</span></td><td><span class="pill" style="background:var(--paid-bg);color:var(--paid-fg)">Paid</span></td><td>Paid — settled (row fades)</td></tr>
+    <tr><td><span class="dot" style="background:#d4860a"></span></td><td><span class="pill" style="background:var(--wait-bg);color:var(--wait-fg)">Wait</span></td><td>Waiting — not started</td></tr>
+    <tr><td><span class="dot" style="background:#2a7a4f"></span></td><td><span class="pill" style="background:var(--svc-bg);color:var(--svc-fg)">In Svc</span></td><td><b>In service — the "hot" row</b> (bold bar + tint)</td></tr>
+    <tr><td><span class="dot" style="background:transparent;border:1.6px solid #1a5c7a"></span></td><td><span class="pill" style="background:var(--done-bg);color:var(--done-fg)">Done</span></td><td>Complete — finished, payment pending</td></tr>
+    <tr><td><span class="dot" style="background:#b4bec2"></span></td><td><span class="pill" style="background:var(--paid-bg);color:var(--paid-fg)">Paid</span></td><td>Paid — settled (row fades)</td></tr>
   </table>
 </div>
 
@@ -85,19 +86,19 @@
         <span class="tiny muted" style="margin-left:auto">55m</span>
       </div>
       <div class="srow row-svc">
-        <span class="glyph" style="color:var(--svc-bar)">●</span>
+        <span class="dot" style="background:#2a7a4f"></span>
         <span style="font-weight:700">Pedicure</span><span class="muted">→ John</span><span class="price">$46</span>
         <span class="timing" style="color:var(--svc-bar)">45m ▸ ~54m</span>
         <span class="pill" style="background:var(--svc-bg);color:var(--svc-fg)">In Svc</span>
       </div>
       <div class="srow row-done">
-        <span class="glyph" style="color:var(--done-bar)">◍</span>
+        <span class="dot" style="background:transparent;border:1.6px solid #1a5c7a"></span>
         <span style="font-weight:600">Fill</span><span class="muted">→ Lee Hoang</span>
         <span class="price" style="margin-left:auto">$51</span>
         <span class="pill" style="background:var(--done-bg);color:var(--done-fg)">Done</span>
       </div>
       <div class="srow row-wait">
-        <span class="glyph" style="color:var(--wait-bar)">●</span>
+        <span class="dot" style="background:#d4860a"></span>
         <span>Wax</span>
         <span class="price" style="margin-left:auto">$20</span>
         <span class="pill" style="background:var(--wait-bg);color:var(--wait-fg)">Wait</span>
@@ -132,13 +133,13 @@
         <span class="tiny muted">09:05 · 55m</span>
       </div>
       <div class="srow row-svc">
-        <span class="glyph" style="color:var(--svc-bar)">●</span>
+        <span class="dot" style="background:#2a7a4f"></span>
         <span style="font-weight:700">Pedicure</span><span class="muted">· John · $46</span>
         <span class="timing" style="color:var(--svc-bar)">45m ▸ ~54m</span>
         <span class="pill" style="background:var(--svc-bg);color:var(--svc-fg)">In Svc</span>
       </div>
       <div class="srow row-done">
-        <span class="glyph" style="color:var(--done-bar)">◍</span>
+        <span class="dot" style="background:transparent;border:1.6px solid #1a5c7a"></span>
         <span style="font-weight:600">Fill</span><span class="muted">· Lee · $51</span>
         <span class="pill" style="background:var(--done-bg);color:var(--done-fg);margin-left:auto">Done</span>
       </div>
