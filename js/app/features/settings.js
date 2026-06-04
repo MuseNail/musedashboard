@@ -3,7 +3,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, setSwitchVisual } from '../utils.js';
 import { canDo, getActiveUser, ui } from '../session.js';
-import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION, STATE_PROXY } from '../config.js';
+import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION } from '../config.js';
 import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
 import { setLogo } from './photos.js';
 import { getTurnConfig, saveTurnConfig, isAlwaysBonusService, saveBonusServices } from './turns.js';
@@ -63,58 +63,6 @@ export function updatePermissionGatedUI() {
   const permContent = document.getElementById('settings-perms-section');
   const leafOpen = permContent && !permContent.classList.contains('hidden');
   if (permSection && !leafOpen) permSection.classList.add('hidden');
-}
-
-// ── Audit log (synced — deletions + refunds, read from the DO snapshot) ─────────
-// Cross-device: deletion details (reason/by/at) live in the DO (deletion:* keys)
-// and refunds are records with status 'refund'. Pulled on demand (manual button /
-// leaf open). Falls back to this device's local deletion log if the server is
-// unreachable (offline).
-export async function loadAuditLog() {
-  const el = document.getElementById('audit-log-content');
-  if (!el) return;
-  el.innerHTML = '<p class="text-sm text-on-surface-variant">Loading…</p>';
-  try {
-    const res = await fetch(`${STATE_PROXY}/snapshot`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('snapshot ' + res.status);
-    const st = (await res.json()).state || {};
-    const recById = {};
-    (st.records || []).forEach(r => { recById[String(r.id)] = r; });
-    const events = [];
-    (st.deletions || []).forEach(d => {
-      if (!d || typeof d !== 'object') return;   // older snapshots stored bare ids — no detail to show
-      const rec = recById[String(d.id)];
-      events.push({ type: 'delete', at: d.at, by: d.by || '—', reason: d.reason || '', name: rec?.name || '—', amount: rec?.totalCost ?? null });
-    });
-    (st.records || []).filter(r => r.status === 'refund').forEach(r => {
-      events.push({ type: 'refund', at: r.completedAt || r.checkinTime, by: r.loggedBy || '—', reason: r.discountNote || '', name: r.name || '—', amount: r.totalCost });
-    });
-    events.sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0));
-    el.innerHTML = events.length ? events.map(auditRowHtml).join('') : '<p class="text-sm text-on-surface-variant">No deletions or refunds recorded.</p>';
-  } catch (e) {
-    el.innerHTML = auditFallbackHtml();
-  }
-}
-function auditRowHtml(ev) {
-  const dt = ev.at ? new Date(ev.at) : null;
-  const when = dt && !isNaN(dt) ? `${dt.toLocaleDateString()} ${dt.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}` : '—';
-  const isDel = ev.type === 'delete';
-  const badgeBg = isDel ? '#fa746f' : '#f5c870', badgeFg = isDel ? '#ffffff' : '#3a2800';
-  const amt = ev.amount != null ? `$${Math.abs(ev.amount).toFixed(2)}` : '';
-  return `<div class="bg-surface-container rounded-xl px-4 py-3 text-sm font-body border border-surface-container-high">
-    <div class="flex items-center justify-between mb-1 gap-2">
-      <div class="flex items-center gap-2 min-w-0"><span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0" style="background:${badgeBg};color:${badgeFg}">${isDel ? 'Deleted' : 'Refund'}</span><span class="font-semibold text-on-surface truncate">${ev.name}</span></div>
-      <span class="text-xs text-outline flex-shrink-0">${when}</span>
-    </div>
-    <div class="text-xs text-on-surface-variant">By ${ev.by}${amt ? ' · ' + amt : ''}</div>
-    ${ev.reason ? `<div class="text-xs text-outline mt-1">Reason: ${ev.reason}</div>` : ''}
-  </div>`;
-}
-function auditFallbackHtml() {
-  const log = JSON.parse(localStorage.getItem('muse_deletion_log') || '[]');
-  const head = '<p class="text-xs text-error mb-2">Couldn’t reach the server — showing this device’s local deletion log only.</p>';
-  if (!log.length) return head + '<p class="text-sm text-on-surface-variant">No local audit entries.</p>';
-  return head + [...log].reverse().map(entry => { const dt = new Date(entry.deletedAt); return `<div class="bg-surface-container rounded-xl px-4 py-3 text-sm font-body border border-surface-container-high"><div class="flex items-center justify-between mb-1"><span class="font-semibold text-on-surface">${entry.name || '—'}</span><span class="text-xs text-outline">${dt.toLocaleDateString()} ${dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span></div><div class="text-xs text-on-surface-variant">Deleted by ${entry.deletedBy} · $${(entry.total||0).toFixed(2)}</div>${entry.reason?`<div class="text-xs text-outline mt-1">Reason: ${entry.reason}</div>`:''}</div>`; }).join('');
 }
 
 // ── Turn thresholds + bonus services ──────────────
@@ -298,7 +246,7 @@ const SETTINGS_NAV = [
   ]},
   { id:'staff', title:'Staff & Access', desc:'People & permissions', items:[
     { label:'Technicians', sub:'Staff, photos, schedule & active toggle', content:'staff-merged-section', render:'renderStaffMerged' },
-    { label:'Front Desk Users', sub:'Dashboard PIN login accounts', content:'fdusers-merged-section', render:'renderFdUsersList' },
+    { label:'Front Desk Users', sub:'Dashboard PIN login accounts', content:'fdusers-merged-section', render:'renderFdUsersList', adminOnly:true },
     { label:'Role Permissions', sub:'What each role can do', content:'settings-perms-section', render:'renderRolePermissions', adminOnly:true },
   ]},
   { id:'workflow', title:'Workflow', desc:'How the floor runs', items:[

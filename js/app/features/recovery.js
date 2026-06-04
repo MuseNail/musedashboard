@@ -57,11 +57,16 @@ function _entryName(op, payload) {
 export function recoveryRestoreFailed(mutationId) {
   const item = failedOps().find(x => x.mutationId === mutationId);
   if (!item) { showToast('Item no longer available'); return; }
+  // Restore under the ORIGINAL id (not a fresh one). A fresh id would bypass the
+  // "never revive a deleted transaction" guard and create a duplicate financial record;
+  // re-saving with the original id merges cleanly if the record still exists, and is
+  // correctly blocked by the deletion guard if it was deliberately deleted.
   if (item.op === 'queue.upsert' && item.payload?.entry) {
-    dispatch('queue.upsert', { entry: { ...item.payload.entry, id: newEntryId() } });
+    dispatch('queue.upsert', { entry: { ...item.payload.entry } });
     showToast('Restored to queue ✓');
   } else if (item.op === 'record.save' && item.payload?.record) {
-    dispatch('record.save', { record: { ...item.payload.record, id: newEntryId() } });
+    if (getState().deletions.includes(String(item.payload.record.id))) { showToast('That transaction was deleted — not restored'); return; }
+    dispatch('record.save', { record: { ...item.payload.record } });
     showToast('Transaction restored ✓');
   } else { showToast('This item can’t be auto-restored'); return; }
   clearFailedOp(mutationId);

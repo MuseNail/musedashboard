@@ -3,11 +3,12 @@
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast } from '../utils.js';
+import { showToast, escHtml } from '../utils.js';
 import { getActiveUser, setActiveUser } from '../session.js';
 import { STAFF_PIN } from '../config.js';
 
 const cfg = () => getState().config;
+const isAdmin = () => getActiveUser()?.role === 'admin';   // only admins manage login accounts
 let pinBuffer = '';
 
 // ── Logged-in user display ────────────────────────
@@ -23,7 +24,7 @@ export function updateLoggedInDisplay() {
   const staffUser = cfg().staff.find(s => s.id === au?.id) || cfg().staff.find(s => s.name === name);
   const photo     = fdUser?.photo || staffUser?.photo || null;
 
-  if (photo) avatarEl.innerHTML = `<img src="${photo}" class="w-full h-full rounded-full object-cover">`;
+  if (photo) avatarEl.innerHTML = `<img src="${escHtml(photo)}" class="w-full h-full rounded-full object-cover">`;
   else { avatarEl.innerHTML = ''; avatarEl.textContent = name.charAt(0).toUpperCase(); }
 
   window.updateHistoricalButtonVisibility?.();
@@ -134,7 +135,7 @@ function isAdminCode(code) {
 export function requireAdminCode(onSuccess, msg) {
   _adminCodeOnSuccess = onSuccess;
   const m = document.getElementById('admin-code-modal');
-  if (!m) { onSuccess?.(); return; }   // modal missing → don't hard-block
+  if (!m) { showToast('Admin verification unavailable — action blocked.'); return; }   // fail CLOSED: never run a gated action without the gate
   const input = document.getElementById('admin-code-input'); if (input) input.value = '';
   document.getElementById('admin-code-err')?.classList.add('hidden');
   if (msg) { const el = document.getElementById('admin-code-msg'); if (el) el.textContent = msg; }
@@ -158,6 +159,7 @@ export function submitAdminCode() {
 function setFdUsers(users) { dispatch('config.set', { key: 'fd_users', value: users }); }
 
 export function togglePinViewer() {
+  if (!isAdmin()) { showToast('Only an admin can view login PINs.'); return; }
   const list  = document.getElementById('pin-viewer-list');
   const label = document.getElementById('pin-viewer-label');
   if (!list) return;
@@ -170,10 +172,10 @@ export function togglePinViewer() {
     list.innerHTML = users.map(u => `
       <div class="flex items-center justify-between px-4 py-3 border-b border-surface-container-high last:border-0">
         <div>
-          <span class="font-body font-semibold text-on-surface text-sm">${u.name}</span>
-          <span class="text-xs font-body text-on-surface-variant capitalize ml-2">${u.role}</span>
+          <span class="font-body font-semibold text-on-surface text-sm">${escHtml(u.name)}</span>
+          <span class="text-xs font-body text-on-surface-variant capitalize ml-2">${escHtml(u.role)}</span>
         </div>
-        <span class="font-headline font-bold text-primary tracking-widest text-base">${u.pin}</span>
+        <span class="font-headline font-bold text-primary tracking-widest text-base">${escHtml(u.pin)}</span>
       </div>`).join('');
     label.textContent = 'Hide PINs';
   } else {
@@ -201,15 +203,15 @@ export function renderFdUsersList() {
   }
   list.innerHTML = fd.map(u => {
     const photoHtml = u.photo
-      ? `<img src="${u.photo}" class="w-10 h-10 rounded-full object-cover border-2 border-surface-container-high">`
-      : `<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center"><span class="text-sm font-headline font-bold text-on-primary">${u.name.charAt(0).toUpperCase()}</span></div>`;
+      ? `<img src="${escHtml(u.photo)}" class="w-10 h-10 rounded-full object-cover border-2 border-surface-container-high">`
+      : `<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center"><span class="text-sm font-headline font-bold text-on-primary">${escHtml(u.name.charAt(0).toUpperCase())}</span></div>`;
     return `
       <div class="bg-surface-container-lowest rounded-xl px-5 py-4 border border-surface-container-high flex items-center justify-between">
         <div class="flex items-center gap-4">
           ${photoHtml}
           <div>
-            <div class="font-headline font-semibold text-on-surface text-base">${u.name}</div>
-            <div class="text-xs font-body text-on-surface-variant capitalize">${u.role} · PIN: ${'•'.repeat(u.pin.length)}</div>
+            <div class="font-headline font-semibold text-on-surface text-base">${escHtml(u.name)}</div>
+            <div class="text-xs font-body text-on-surface-variant capitalize">${escHtml(u.role)} · PIN: ${'•'.repeat(u.pin.length)}</div>
           </div>
         </div>
         <div class="flex items-center gap-1">
@@ -238,6 +240,7 @@ export function selectRole(role) {
 }
 
 export function showAddFdUser() {
+  if (!isAdmin()) { showToast('Only an admin can manage users.'); return; }
   document.getElementById('fduser-modal-title').textContent = 'Add Front Desk User';
   document.getElementById('fduser-name-input').value = '';
   document.getElementById('fduser-pin-input').value = '';
@@ -249,6 +252,7 @@ export function showAddFdUser() {
 }
 
 export function showEditFdUser(id) {
+  if (!isAdmin()) { showToast('Only an admin can manage users.'); return; }
   const u = cfg().fd_users.find(x => x.id === id);
   if (!u) return;
   document.getElementById('fduser-modal-title').textContent = 'Edit User';
@@ -266,6 +270,7 @@ export function closeFdUserModal() {
 }
 
 export function saveFdUser() {
+  if (!isAdmin()) { showToast('Only an admin can manage users.'); return; }
   const name = document.getElementById('fduser-name-input').value.trim();
   const pin  = document.getElementById('fduser-pin-input').value.trim();
   const role = document.getElementById('fduser-role-input').value;
@@ -287,6 +292,7 @@ export function saveFdUser() {
 }
 
 export function deleteFdUser(id) {
+  if (!isAdmin()) { showToast('Only an admin can manage users.'); return; }
   const u = cfg().fd_users.find(x => x.id === id);
   if (!u) return;
   if (!confirm(`Remove ${u.name} from front desk users?`)) return;
