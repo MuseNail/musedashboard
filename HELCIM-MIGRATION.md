@@ -1,6 +1,20 @@
 # Square → Helcim migration plan (musedashboard)
 
-**Status:** PLANNING (no code yet) · **Created:** 2026-06-03 · **Decision:** in-repo replacement (NOT TurnDesk's multi-processor adapter — keep it a simple swap; see CLAUDE.md "Product line" box).
+**Status:** IN PROGRESS — customers + catalog DONE; payments/auth/reconcile REMAIN · **Created:** 2026-06-03 · **Updated:** 2026-06-04 (prod v4.33) · **Decision:** in-repo replacement (NOT TurnDesk's multi-processor adapter — keep it a simple swap; see CLAUDE.md "Product line" box).
+
+## ✅ PROGRESS (2026-06-04) — what's done vs what remains
+**DONE (shipped v4.23–v4.27):**
+- **Workstream C (catalog → local): COMPLETE.** Square catalog pull/push + the "push to Square" buttons removed (v4.23); catalog is `config.services/items/fees` only. Square **Bookings** + appointment-sync also removed.
+- **Workstream B (customer directory → DO): mostly COMPLETE.** Customers are now a synced DO **`customer:<id>` entity** (`customer.upsert/delete/bulkUpsert/bulkDelete`, per-record stale guard + `custdeletion:` tombstones) with a dedicated **Customers tab** (search/add/edit/delete/dedup/CSV/import-from-Square). The one-time Square→DO import is built (owner ran it). `config.customer_notes` stays phone-keyed. **The Square customer DUAL-WRITE is intentionally KEPT** (check-in/pay + tab edits) so card charges stay linked — retire it at the Helcim cutover (Workstream E).
+
+**REMAINING (Phase 4 — gated on the Helcim Smart Terminal hardware):**
+- **A. Payments/Terminal → Helcim** (the core, structural poll→webhook change).
+- **D. Reconcile + reports → Helcim** (generic `paymentIds` + `processor` on new records).
+- **§13 full Worker auth** (the unauthenticated-backend cluster) — lands in the same Worker pass as the Helcim proxy/webhook.
+- **Pay-path P0 consolidation** (do FIRST, hardware-independent): one "→ paid"/reopen path incl. the **cancelled-processor-transaction** + **reopen-leaves-record** cases (see `PRIORITIES.md`).
+- **E. Retire Square:** stop the customer dual-write, remove `/square` proxy + `SQUARE_TOKEN` + the Square config UI; keep historical Square ids on old records.
+
+**Hardware-independent first steps (can start anytime):** the **Helcim-API research pass** (below) + the **pay-path P0 consolidation**.
 
 ## Scope (owner-confirmed 2026-06-03)
 Remove **most** Square connections. The app becomes the **source of truth** for:

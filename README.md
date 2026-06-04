@@ -3,8 +3,8 @@
 Salon management PWA for Muse Nails & Spa. Manages a live customer queue, technician turn rotation, check-in kiosk, appointments, transactions, gift cards, staff, and settings. Hosted on GitHub Pages with a Cloudflare Worker + **Durable Object** as the durable, real-time-synced data store (the old Google Sheets store was retired in the v3 re-architecture).
 
 **Live URL:** https://musenail.github.io/musedashboard
-**Current version:** v4.15
-**Status:** Production — operational; a system-wide code audit is in progress (see **`AUDIT-2026-06.md`** for findings/fixes, **`PRIORITIES.md`** for the backlog).
+**Current version:** v4.33
+**Status:** Production — operational. The system-wide audit (§1–§15) is complete and all HIGHs are fixed (v4.11–v4.33). The **customer directory** and the **service catalog** now live in the app (a synced Durable-Object `customer:<id>` entity + a dedicated Customers tab; the Square catalog sync was removed). The **Square→Helcim payment migration** is the next major project (see **`HELCIM-MIGRATION.md`**). Audit record: **`AUDIT-2026-06.md`**; backlog: **`PRIORITIES.md`**.
 
 ---
 

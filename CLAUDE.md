@@ -20,7 +20,8 @@ The app is **live and in active operational use**. All planned phases (Split thr
 > - **Sequencing:** stabilize the app first (finish deferred audit/security work + pay-path P0), **get hardware** (Helcim **Smart Terminal** — the API-drivable device; NOT the $199 mobile card reader), THEN do the Square→Helcim swap as its own project. Keep it in mind when touching the pay flow / Worker (a clean pay-path consolidation + a Worker webhook seam make the later swap easier — but DON'T build a full adapter abstraction; this is a replacement, keep it simple per "no premature abstraction").
 > - Helcim integration model: backend POSTs "start a purchase" to the **Smart Terminal API** (terminal in API mode) and receives the result via a **webhook** (vs Square's poll) → the Worker needs a webhook endpoint + a `HELCIM_API_TOKEN` secret. This also intersects the §13 backend-auth work.
 > - **▶ POST-AUDIT MASTER PLAN = `NEXT-SESSION-KICKOFF.md`** (phased strategy + a copy-paste fresh-chat prompt). Audit §1–§15 complete. Order: Phase 1 quick wins (non-Square) → Phase 2 client security (§12) → Phase 3 app-as-source-of-truth (customers+catalog off Square, Square still pays) → **Phase 4 financial/Helcim + Worker auth LAST**. Methodology: non-Square first; financial last; don't polish doomed Square code.
-> - **Scope (owner-confirmed 2026-06-03): remove MOST Square — the app becomes the source of truth for the customer directory (move OFF Square into the DO) and the service/item/fees catalog (already app-managed); appointments stay Google-backed, SMS stays httpSMS; build a NEW Helcim-based reconcile/reports.** Full phased plan + footprint inventory: **`HELCIM-MIGRATION.md`** (repo root). No code yet — planning only.
+> - **Scope (owner-confirmed 2026-06-03): remove MOST Square — the app becomes the source of truth for the customer directory (move OFF Square into the DO) and the service/item/fees catalog (already app-managed); appointments stay Google-backed, SMS stays httpSMS; build a NEW Helcim-based reconcile/reports.** Full phased plan + footprint inventory: **`HELCIM-MIGRATION.md`** (repo root).
+> - **✅ DONE 2026-06-04 (prod v4.31):** customers + catalog are migrated. Customers now live as a synced DO **`customer:<id>` entity** with a dedicated **Customers tab** (v4.24–v4.27); the **Square customer dual-write is KEPT** (check-in/pay + tab edits) until the Helcim cutover so card charges stay linked. Catalog is app-owned — **Square catalog sync + Square Bookings were removed** (v4.23). **REMAINING = Phase 4 / Helcim (gated on the Smart Terminal hardware):** the Terminal pay swap (poll→webhook), the pay-path P0 consolidation (incl. cancelled-processor-transaction + reopen-leaves-record — see `PRIORITIES.md`), §13 full Worker auth, Helcim reconcile, and retiring the Square customer dual-write.
 
 **This repo (`musedashboard`) is the STABLE, single-salon, live app — keep it that way.** A separate public/SaaS product — **TurnDesk** — was being forked from this codebase into its **own GitHub repo, its own Cloudflare Worker, and its own Cloudflare account** (decision locked 2026-05-28; **PAUSED 2026-06-03, see above**). TurnDesk is **multi-tenant** (one Durable Object per salon), has a **pluggable payment-processor adapter layer** (Square / Stripe / **Helcim**), and adds accounts/billing/onboarding for public signups.
 
@@ -104,6 +105,8 @@ The app is **native ES modules** under `js/app/`. `index.html` loads a single en
 ### Module layout
 - **Core:** `js/app/main.js` (bootstrap, window glue, navigation, version check), `store.js` (in-memory state + `applyChange` op reducer), `sync.js` (WebSocket/HTTP sync + `dispatch` + offline outbox), `session.js`, `config.js` (`APP_VERSION`, constants), `utils.js`.
 - **Features:** `js/app/features/*.js` — auth, photos, catalog, square-customers, square-catalog, square-pos, staff, checkin, status, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, appt-reminders, recovery, audit, **cashdrawer** (cash register/drawer), **sms** (httpSMS texting).
+- **Customer directory (v4.24+):** a first-class synced DO entity (`customer:<id>`), NOT Square/localStorage-only. `square-customers.js` now owns the DO-backed directory + the dedicated **Customers tab** (`nav-customers`/`panel-customers`) + autocomplete/add/edit/delete/dedup/CSV/import-from-Square; it rebuilds its `customerDirectory`/`squareCustomers` caches from `getState().customers` on every store change. `square-catalog.js` no longer syncs the catalog (Terminal pairing + team-member picker only).
+- **`serviceLineStyle(status)` (`status.js`):** one source of truth for the per-service status visual (CSS dot + pill + bar/tint), reused by queue/turns/floor cards. **`store.rev`** (`store.js`): a monotonic data-revision counter for cheap memoization (e.g. `servicetime.js`). Per-station-type **`maxTechs`** lives on each `station_categories` entry (queue.js), edited in Settings → Stations.
 
 ### GitHub Pages only
 No server-side logic in the front end, no dynamic routes, no build artifacts — all client output is static files GitHub Pages serves directly. Backend logic lives in the Cloudflare Worker / Durable Object (`cloudflare/worker.js`).
@@ -124,9 +127,11 @@ No server-side logic in the front end, no dynamic routes, no build artifacts —
 | Photos / logo | `js/app/features/photos.js` |
 | Auth / PIN | `js/app/features/auth.js` |
 | Services, Items, Fees CRUD | `js/app/features/catalog.js` |
-| Square customers, directory, autocomplete, upsert | `js/app/features/square-customers.js` |
-| Square config modal, catalog pull/push | `js/app/features/square-catalog.js` |
-| Square POS deep link, orders, appointments, bookings | `js/app/features/square-pos.js` |
+| **Customers tab** + directory (DO `customer:<id>` entity), autocomplete, add/edit/delete, dedup, import-from-Square, phone-keyed notes | `js/app/features/square-customers.js` |
+| Square config modal + Terminal pairing + SMS team-member picker (catalog sync REMOVED v4.23) | `js/app/features/square-catalog.js` |
+| Square POS deep link, Terminal pay flow, orders (Square Bookings + appt-sync REMOVED v4.23) | `js/app/features/square-pos.js` |
+| Per-service status dot/pill (`serviceLineStyle`) shown on queue/turns/floor | `js/app/features/status.js` |
+| Floor plan: all-services tiles, tech avatars, smart tech-drag, per-station-type tech capacity | `js/app/features/floorplan.js` (+ category `maxTechs`/`setStationCategoryMaxTechs` in `js/app/features/queue.js`) |
 | Staff management | `js/app/features/staff.js` |
 | Check-in kiosk | `js/app/features/checkin.js` |
 | Status flow | `js/app/features/status.js` |
@@ -137,7 +142,7 @@ No server-side logic in the front end, no dynamic routes, no build artifacts —
 | Cash register / drawer (open/close count, cash in/out, reconcile, PDF) | `js/app/features/cashdrawer.js` |
 | SMS texting via httpSMS (send + Settings test panel) | `js/app/features/sms.js` (+ `cloudflare/worker.js` `/sms/*`) |
 | Reconciliation report (recorded vs charged) + Reports drill-downs | `js/app/features/reports.js` (`openReconcile`, `drillDown*`) |
-| Stale-write guard (reject older-than-stored writes) | `js/app/store.js` (`isStaleWrite`/`upsertByIdGuarded`) + `cloudflare/worker.js` (DO `applyMutation`). As of v4.13/v4.15 this now covers **records, queue, `config.set` (per-key, via `configMeta`/`cfgmeta:`), AND `giftcard.save`** — `dispatch` stamps a numeric `updatedAt`/`updatedBy` on all four; unstamped/equal writes apply (back-compat). |
+| Stale-write guard (reject older-than-stored writes) | `js/app/store.js` (`isStaleWrite`/`upsertByIdGuarded`) + `cloudflare/worker.js` (DO `applyMutation`). Covers **records, queue, `config.set` (per-key, via `configMeta`/`cfgmeta:`), `giftcard.save`, AND `customer.upsert`/`customer.bulkUpsert`** (+ `custdeletion:` tombstones, v4.24/v4.26) — `dispatch` stamps a numeric `updatedAt`/`updatedBy`; unstamped/equal writes apply (back-compat). Plus the **§14 per-assignment field-merge** on `queue.upsert`/`queue.assignmentPatch` (v4.28): a whole-entry write keeps a stored assignment whose own `updatedAt` is newer (gated on `assignment.updatedAt`). |
 | Assign&Price cross-device hard lock | `js/app/features/queue.js` (`edit_locks` config map) |
 | Google Calendar / appointments | `js/app/features/calendar.js` |
 | Floor plan | `js/app/features/floorplan.js` |
@@ -181,7 +186,7 @@ The durable source of truth is the **Cloudflare Durable Object** (`MuseSalonDO`)
 
 All mutable state (queue, records, gift cards, and config: staff/services/items/fees/photos/turns order/etc.) lives in memory in `store.js` and syncs through the Durable Object. **Do not use localStorage for config or settings.**
 
-- **`dispatch(op, payload)`** (`sync.js`) is the single write path: it applies the change optimistically via `applyChange` (`store.js`), saves the cache, enqueues to the outbox, and sends to the DO over WebSocket (HTTP `/state` fallback). Ops: `config.set`, `queue.upsert`, `queue.remove`, `record.save`, `record.delete`, `giftcard.save`, `giftcard.delete`.
+- **`dispatch(op, payload)`** (`sync.js`) is the single write path: it applies the change optimistically via `applyChange` (`store.js`), saves the cache, enqueues to the outbox, and sends to the DO over WebSocket (HTTP `/state` fallback). Ops: `config.set`, `queue.upsert`, `queue.assignmentPatch` (v4.28 — per-assignment merge, used by the staff app), `queue.remove`, `record.save`, `record.delete`, `giftcard.save`, `giftcard.delete`, `customer.upsert`, `customer.delete`, `customer.bulkUpsert`/`customer.bulkDelete` (v4.24/v4.26 — chunked imports/cleanup). The synced state arrays are `queue`, `records`, `giftcards`, **`customers`** (+ `deletions`/`customerDeletions` tombstones).
 - **Save pattern for a config value:** `dispatch('config.set', { key, value })` — e.g. turns order = `dispatch('config.set', { key: 'turns_order', value: order })`. Mutate state only through `dispatch`/`applyChange`, never by writing localStorage.
 - **Inbound:** the DO broadcasts changes; `sync.js` ignores echoes of this device's own ops (by `device` id) and applies the rest. A full snapshot hydrates `store.js` and replays the outbox.
 - The Worker also persists each record/queue entry as its own DO key and runs the Square proxy, R2 photos, periodic R2 state-snapshot backups (the DO `alarm()`), and Web Push. _(The old daily Google Sheets backup cron was removed — commit `467317b`; takes effect on the next `wrangler deploy`.)_
@@ -242,7 +247,8 @@ These markers use Unicode box-drawing characters (U+2500 `─`). If you add a ne
 
 | File | Purpose |
 |---|---|
-| `AUDIT-2026-06.md` | ⭐ **System-wide code audit (in progress, §1–§8 done, §9 next) — master record of every finding, fixes shipped (v4.11–v4.15), deferred items, and decisions. Read first when resuming the audit.** |
+| `AUDIT-2026-06.md` | ⭐ **System-wide code audit — COMPLETE (§1–§15); ALL HIGHs closed. Master record of every finding, fixes shipped (v4.11–v4.33), and the remaining deferred/pay-path items.** |
+| `HELCIM-MIGRATION.md` | ⭐ **The teed-up next major project — Square→Helcim payment swap. Customers + catalog already migrated off Square (done); what remains = payments/Terminal (poll→webhook), pay-path P0, §13 Worker auth, Helcim reconcile, retire the Square dual-write. Gated on the Smart Terminal hardware.** |
 | `PRIORITIES.md` | Live-app build backlog (incl. P0 "Paid" status policy + safe reversal) |
 | `ROADMAP.md` | Completed phase history + post-launch optimization roadmap |
 | `README.md` | Project overview and architecture |

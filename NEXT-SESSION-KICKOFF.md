@@ -1,6 +1,19 @@
 # Next-session strategy + kickoff prompt (musedashboard)
 
-**Created 2026-06-03.** Authoritative plan for the post-audit work. The phased strategy is below; the **copy-paste kickoff prompt** for a fresh chat is at the very bottom.
+**Created 2026-06-03 · Updated 2026-06-04.** Authoritative plan for the post-audit work. The phased strategy is below; the **copy-paste kickoff prompt** for a fresh chat is at the very bottom.
+
+---
+
+## ✅ STATUS (2026-06-04) — Phases 1–3 DONE; prod = v4.33 LIVE; next = Helcim migration
+
+**Prod = v4.33 (all pushed). Worker deployed at Version `51b000b0-363c-411b-ab5e-b63deb9f5608`** (has all the new ops). **Every audit HIGH is closed.** `RESTORE_TOKEN` is set (§13 anonymous reset/restore closed).
+
+- **Phase 1 ✅** (v4.20/v4.21) — §15 PWA-shell + §14 staff-app + §11 schedule/perf robustness.
+- **Phase 2 ✅** (v4.22) — §12 client security (fd-user privilege-escalation gate + XSS, requireAdminCode fail-closed, dead-audit-dup removed, recovery dup-id). **Deferred (low pri):** the `viewReports`/`manageStaff`/`manageServices` permission-toggle *wiring* (owner daily-role mix); fallback-PIN/lockout (owner declined).
+- **Phase 3 ✅** — **3a** (v4.23) catalog app-owned + Square catalog/Bookings removed · **3b** (v4.24 foundation + v4.25 tab + v4.26 bulk/freeze-fix + v4.27 pagination) customer directory → DO entity + dedicated **Customers tab** (Square dual-write KEPT until Helcim cutover) · **3c** (v4.28) staff-app assignment-clobber fix (`queue.assignmentPatch` + per-assignment merge) + status wins (revert-preserves-timer, audit reverts).
+- **Extra UX shipped:** v4.29 per-service status dots/pills (queue/turns/floor); v4.30 floor-plan overhaul (all services on tiles + tech avatars + turn-count badges + smart tech-drag + per-station-type tech capacity in Settings); v4.31–v4.33 larger floor staff-row tech avatars + turn badges (dialed to 68px).
+
+**NEXT — gearing up for the Square→Helcim MIGRATION (Phase 4).** See **`HELCIM-MIGRATION.md`** (the detailed, now-current plan). Customers + catalog are already off Square; what REMAINS: the Terminal pay swap (**poll→webhook**), the **pay-path P0** consolidation (incl. cancelled-processor-transaction + reopen-leaves-record — `PRIORITIES.md`), **§13 full Worker auth**, Helcim reconcile/reports, and retiring the Square customer dual-write. **Gated on the Helcim Smart Terminal hardware.** Hardware-independent first steps (can start anytime): a **Helcim-API research pass** + the **pay-path P0 consolidation** (one clean pay path = one swap point). Also available as interim/low-pri: owner-driven UI polish, the deferred Phase-2 permission-toggle wiring, §9 (calendar party-drop / saveAppt-atomicity / stale-day race) + §11 (whole-object schedule/station concurrency).
 
 ---
 
@@ -69,12 +82,12 @@ Acquire + pair the **Helcim Smart Terminal** first; do a short Helcim-API resear
 
 ## 📋 COPY-PASTE KICKOFF PROMPT (paste into a fresh chat)
 
-> We're continuing work on the **musedashboard** salon PWA after a completed system-wide audit. **Read first, in order:** `NEXT-SESSION-KICKOFF.md` (the phased strategy + methodology — THIS is the plan), `CLAUDE.md` (architecture + rules + the Helcim/TurnDesk direction box), `AUDIT-2026-06.md` (every audit finding + what shipped v4.11–v4.19 + what's deferred), and `HELCIM-MIGRATION.md` (the Square→Helcim detail). Auto-loaded memory has a "START HERE" block.
+> We're continuing on the **musedashboard** salon PWA. Phases 1–3 of the post-audit plan are DONE and **prod = v4.33 LIVE; every audit HIGH is closed.** **Read first, in order:** `CLAUDE.md` (architecture + rules + the Helcim/TurnDesk direction box), `NEXT-SESSION-KICKOFF.md` (the ✅ STATUS block at the top = current state + what's next), `HELCIM-MIGRATION.md` (the Square→Helcim plan — the teed-up next project), `AUDIT-2026-06.md` (findings + what shipped v4.11–v4.33 + what's still deferred). Auto-loaded memory has a "START HERE / LATEST" block.
 >
-> **Methodology (do not deviate without asking):** (1) non-Square fixes first; (2) make the app the single source of truth for the customer directory + catalog while Square keeps running payments; (3) financial/card processing (Helcim) + Worker auth LAST; (4) do NOT fix bugs in Square code that's slated for deletion.
+> **Current state:** customers are OFF Square — a synced Durable-Object entity (`customer:<id>`) with a dedicated **Customers tab** (Square customer dual-write is KEPT until the Helcim cutover); catalog is app-owned (Square catalog sync + Bookings removed); per-service status dots/pills on queue/turns/floor; floor-plan shows all services + tech avatars + turn badges + smart tech-drag + per-station-type tech capacity (Settings → Stations). Worker deployed at Version `51b000b0-…`; `RESTORE_TOKEN` is set.
 >
-> **Prod = v4.19, all pushed.** Standing rules: commit freely but **`git push` needs my explicit OK each time**; **`wrangler deploy` is mine** (walk me through it); bump the version trio together on any client change; verify logic in isolation (the preview hits the prod DO — no test writes to prod).
+> **THIS chat is gearing up for the Square→Helcim migration (Phase 4)** — read **`HELCIM-MIGRATION.md`** (the current plan). Customers + catalog are already off Square; what remains = the Terminal pay swap (**poll→webhook**), the pay-path **P0** consolidation (incl. cancelled-processor-transaction + reopen-leaves-record), the **§13** full Worker auth, Helcim reconcile, and retiring the Square customer dual-write. The live Terminal swap is **gated on the Smart Terminal hardware**, but two things can start NOW without it: (a) a **Helcim-API research pass** (Smart Terminal start-purchase + webhook payload/correlation, refunds, transaction-list for reconcile, tip handling), and (b) the **pay-path P0 consolidation** (funnel every "→ paid" + reopen through ONE path = one clean swap point). Keep it a SIMPLE single-processor swap — no multi-processor abstraction.
 >
-> **Start with Phase 1 (quick wins — client-only, non-Square):** the §11/§14/§15 robustness/ergonomic fixes listed in `NEXT-SESSION-KICKOFF.md`. Propose the batch, get my OK, ship it with a version bump. Then proceed through the phases in order. Helcim (Phase 4) is gated on me getting the Smart Terminal hardware — flag it but don't start it.
+> **Standing rules:** commit freely but **`git push` needs my explicit OK each time**; **`wrangler deploy` is mine** (walk me through it step by step; Worker lands the Helcim proxy + `/helcim/webhook` + `HELCIM_API_TOKEN`); **bump the version trio together** on any client change (`js/app/config.js` APP_VERSION + `version.json` + `sw.js` CACHE_NAME); verify logic in isolation (the preview's WebSocket hits the **prod** DO — never dispatch test writes, and note reaching the dashboard needs a PIN login that writes an audit entry); for any UI change, mock it up in `mockups/` first.
 >
-> Before doing anything, give me your read of Phase 1 and a proposed first batch.
+> Ask me what to tackle first (likely the Helcim-API research pass or the pay-path P0) and confirm the plan before coding. Owner-driven UI polish + the deferred Phase-2/§9/§11 items are also fair game if I point you there.

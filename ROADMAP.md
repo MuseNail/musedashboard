@@ -2,7 +2,7 @@
 
 All planned phases (Split through Phase 7) are complete. The app is live and operational. This document preserves the build history and defines the post-launch development direction.
 
-> ⭐ **Active work (2026-06): a system-wide code audit.** Production is **v4.15** (audit fixes v4.11–v4.15 shipped, incl. the `config.set` + `giftcard.save` stale-write guards, deployed to the Worker). The full audit record — every finding, what's fixed, what's deferred, and the decisions — is in **`AUDIT-2026-06.md`**; the live backlog (incl. the P0 "Paid" status policy) is in **`PRIORITIES.md`**.
+> ⭐ **Active work (2026-06): post-audit hardening DONE → Square→Helcim migration next.** Production is **v4.33**. The full system-wide audit (§1–§15) is COMPLETE and **all HIGHs are fixed/shipped** (v4.11–v4.33). Phases 1–3 of the post-audit plan are done — security + robustness fixes, and **customers + the service/item/fees catalog moved OFF Square** into the Durable Object (customers are now a `customer:<id>` entity with a dedicated **Customers tab**; Square catalog sync + Bookings removed). **Next major project = the Square→Helcim payment migration** (`HELCIM-MIGRATION.md`; gated on the Smart Terminal hardware). Audit record: **`AUDIT-2026-06.md`**; backlog + ordered plan: **`PRIORITIES.md`** / **`NEXT-SESSION-KICKOFF.md`**.
 
 ---
 
