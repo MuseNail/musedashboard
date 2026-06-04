@@ -4,7 +4,7 @@ import { dispatch } from '../sync.js';
 import { getActiveUser } from '../session.js';
 import { showToast, commitNumpad, ticketTotal } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
-import { customerDirectory, squareUpsertCustomer } from './square-customers.js';
+import { squareUpsertCustomer } from './square-customers.js';
 
 const cfg     = () => getState().config;
 const sqConfig = () => cfg().square_config || null;
@@ -605,79 +605,3 @@ export function sqApplyGiftcard(id) {
   else _payGc.push({ giftcardId: id, serial: g.serial, who: g.to || g.from || '', amount: +amt.toFixed(2) });
   _gcPickerOpen = false; renderPayGc();
 }
-
-// ── Appointments → queue ──────────────────────────
-export async function syncSquareAppointments() {
-  if (!sqConfig()) { showToast('Square not configured.'); return; }
-  showToast('Loading appointments…');
-  try {
-    const today = new Date();
-    const start = new Date(today.setHours(0,0,0,0)).toISOString();
-    const end   = new Date(today.setHours(23,59,59,999)).toISOString();
-    const res   = await fetch(`${SQUARE_PROXY}/v2/bookings?location_id=${sqConfig().locationId}&start_at_min=${start}&start_at_max=${end}&limit=100`);
-    const data  = await res.json();
-    if (!data.bookings || data.bookings.length === 0) { showToast('No appointments today from Square.'); return; }
-    let added = 0;
-    for (const b of data.bookings) {
-      if (b.status !== 'ACCEPTED' && b.status !== 'PENDING') continue;
-      const entryId = 'appt-' + b.id;
-      if (queue().find(e => String(e.id) === entryId)) continue;
-      const variationId = b.appointment_segments?.[0]?.service_variation_id;
-      const svc = cfg().services.find(s => s.squareVariationId === variationId) || cfg().services.find(s => s.squareItemId === variationId) || cfg().services[0];
-      const custDir = b.customer_id ? customerDirectory.find(c => c.squareId === b.customer_id) : null;
-      const name = custDir ? [custDir.firstName, custDir.lastName].filter(Boolean).join(' ') : (b.customer_note || 'Appointment');
-      dispatch('queue.upsert', { entry: {
-        id: entryId, name, phone: custDir?.phone || '', services: svc ? [svc.id] : [],
-        status: 'waiting', isAppointment: true, checkinTime: new Date(b.start_at).toISOString(), assignments: [], groupId: null,
-      } });
-      added++;
-    }
-    window.renderQueue?.(); window.renderTurns?.();
-    showToast(added > 0 ? `${added} appointment(s) added to queue ✓` : 'No new appointments to add.');
-  } catch (e) { showToast('Appointments sync failed: ' + e.message); }
-}
-
-// ── Push a calendar appointment to Square Bookings (SMS reminders) ──────────────
-export async function squarePushBooking(calId, eventId) {
-  if (!sqConfig()) { showToast('Square not configured.'); return; }
-  if (!sqConfig().bookingTeamMemberId) { showToast('Set a booking team member in Square settings first.'); showSquareModalGlue(); return; }
-
-  const ev = (window.calEventsFor?.(calId) || []).find(x => x.id === eventId);
-  if (!ev) { showToast('Event not found.'); return; }
-
-  const startDt = new Date(ev.start.dateTime || ev.start.date);
-  const endDt   = new Date(ev.end?.dateTime || ev.end?.date || startDt.getTime() + 3600000);
-  const durMins = Math.round((endDt - startDt) / 60000);
-
-  const svc = cfg().services.find(s => (ev.summary||'').toLowerCase().includes(s.label.toLowerCase()) || (ev.description||'').toLowerCase().includes(s.label.toLowerCase()));
-  if (!svc?.squareVariationId) { showToast(svc ? `Push "${svc.label}" to Square catalog first (Settings → Services).` : 'No matching service found — check service names match your catalog.'); return; }
-
-  let variationVersion;
-  try {
-    const objRes = await fetch(`${SQUARE_PROXY}/v2/catalog/object/${svc.squareVariationId}`);
-    if (!objRes.ok) { showToast('Could not fetch service version from Square.'); return; }
-    variationVersion = (await objRes.json()).object?.version;
-    if (!variationVersion) { showToast('Could not read service version from Square.'); return; }
-  } catch (e) { showToast('Square catalog fetch failed: ' + e.message); return; }
-
-  const phoneMatch = (ev.description || '').match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
-  const rawPhone = phoneMatch ? phoneMatch[1].replace(/\D/g, '') : '';
-  const custDir = rawPhone ? customerDirectory.find(c => { const cp = (c.phone||'').replace(/\D/g,'').replace(/^1(\d{10})$/,'$1'); return cp && (cp === rawPhone || cp === rawPhone.replace(/^1/,'')); }) : null;
-
-  showToast('Creating Square booking…');
-  try {
-    // Stable key (event + start time) so a re-tap / retry-after-timeout dedupes within Square's
-    // 24h window instead of creating a duplicate booking; a real reschedule changes start_at → new key.
-    const bookingBody = { idempotency_key: `muse-booking-${eventId}-${startDt.toISOString()}`, booking: {
-      start_at: startDt.toISOString(), location_id: sqConfig().locationId, customer_note: ev.summary || '',
-      ...(custDir?.squareId ? { customer_id: custDir.squareId } : {}),
-      appointment_segments: [{ duration_minutes: durMins, service_variation_id: svc.squareVariationId, service_variation_version: variationVersion, team_member_id: sqConfig().bookingTeamMemberId }],
-    } };
-    const res = await fetch(`${SQUARE_PROXY}/v2/bookings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bookingBody) });
-    const data = await res.json();
-    if (res.ok && data.booking?.id) showToast('Square booking created — SMS reminder will send ✓');
-    else showToast('Square booking failed: ' + (data.errors?.[0]?.detail || data.errors?.[0]?.code || 'unknown'));
-  } catch (e) { showToast('Could not reach Square. Check proxy.'); }
-}
-
-function showSquareModalGlue() { window.showSquareModal?.(); }

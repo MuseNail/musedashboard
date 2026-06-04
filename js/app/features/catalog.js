@@ -114,7 +114,6 @@ export function saveService() {
   closeServiceModal();
   renderServicesMerged();
   showToast(editId ? 'Service updated' : `"${label}" added`);
-  if (cfg().square_config && changedSvc && window.squarePushService) window.squarePushService(changedSvc);
 }
 
 export function deleteService(id) {
@@ -150,7 +149,6 @@ export function renderSettingsItems() {
   const container = document.getElementById('settings-items-list');
   if (!container) return;
   const items = cfg().items;
-  const hasSquare = !!cfg().square_config;
   container.innerHTML = items.map((item, i) => `
     <div class="flex items-center gap-2 py-2 border-b border-surface-container-high last:border-0">
       <input type="text" value="${item.label}" placeholder="Item name"
@@ -165,9 +163,6 @@ export function renderSettingsItems() {
           onchange="updateItemField(${i},'price',this.value)"
           class="w-16 bg-transparent border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:border-primary outline-none text-right">
       </div>
-      ${hasSquare ? `<button onclick="squarePushItem('${item.id}')" title="Push to Square" class="text-outline-variant hover:text-primary transition-colors flex-shrink-0">
-        <span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span>
-      </button>` : ''}
       <button onclick="removeItem(${i})" class="text-outline-variant hover:text-error transition-colors flex-shrink-0">
         <span class="material-symbols-outlined" style="font-size:16px">delete</span>
       </button>

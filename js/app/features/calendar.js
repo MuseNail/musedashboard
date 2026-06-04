@@ -3,7 +3,6 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer } from './square-customers.js';
-import { squarePushBooking } from './square-pos.js';
 
 const GCAL_CLIENT_ID = '174518644579-5vgt7vvllm2ekpk0gb8l4sa4f3va9r9l.apps.googleusercontent.com';
 const GCAL_SCOPES    = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks';
@@ -102,7 +101,7 @@ export function toggleCalAutoHide(btn) {
   if (document.getElementById('cal-grid')) { calRenderGridPreserveScroll(); renderCalSelectorList(); }
 }
 
-// Exposed for square-pos.squarePushBooking (via window.calEventsFor in main.js).
+// Returns the loaded events for a calendar (exposed via window.calEventsFor in main.js).
 export function getCalEvents(calId) { return _calEvents[calId] || []; }
 
 // Load TODAY's events for all calendars into _todayEvents, independent of _calDate. Cached with
@@ -806,7 +805,6 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
       <button onclick="this.closest('.fixed').remove(); showEditApptModal('${calId}','${eventId}')" class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Edit Appointment</button>` : `
       <button onclick="this.closest('.fixed').remove(); showConvertToApptModal('${calId}','${eventId}')" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">event_available</span> Convert to Appointment</button>
       <button onclick="this.closest('.fixed').remove(); showEditApptModal('${calId}','${eventId}')" class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Edit Event</button>`}
-      ${isAppt && cfg().square_config ? `<button onclick="squarePushBooking('${calId}','${eventId}'); this.closest('.fixed').remove()" class="w-full border border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Sync to Square Bookings</button>` : ''}
       <button onclick="if(confirm('Cancel this appointment?')) { deleteAppt('${calId}','${eventId}'); this.closest('.fixed').remove(); }" class="w-full text-error py-2 rounded-xl font-headline font-semibold text-sm hover:bg-error/10 transition-colors">Cancel / Delete</button>
     </div></div>`;
   document.body.appendChild(modal);

@@ -1,6 +1,8 @@
-// ── Square config modal + catalog pull/push ─────────────────────────────────
-// Square location config is synced (config.square_config). Catalog pull merges
-// into config.services / config.items / config.fees via dispatch.
+// ── Square config modal + Terminal pairing + customer-sync glue ─────────────
+// Square location config is synced (config.square_config). Catalog pull/push was
+// REMOVED (v4.23) — the app is the source of truth for services / items / fees.
+// This module now only handles the Square connection, Terminal pairing, the SMS
+// team-member picker, and the customer-directory sync (until customers move to the DO).
 
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
@@ -100,17 +102,17 @@ export function renderTerminalStatus() {
     : `<span class="text-on-surface-variant">No Terminal paired yet.</span>`;
 }
 
+// Sync the customer directory from Square. (Catalog is app-owned and no longer pulled.)
+// Customers move to the Durable Object in a later step; until then they load from Square.
 export async function syncSquare() {
   if (!sqConfig()) { showSquareModal(); return; }
   updateSyncLabel('pending', 'Syncing…');
-  showToast('Syncing with Square…');
+  showToast('Syncing customers with Square…');
   try {
-    // Both loaders return false (and toast their own reason) on a partial/failed pull instead of
-    // throwing, so only claim "complete" when BOTH succeeded — no false green on a silent failure.
-    const [okCust, okCat] = await Promise.all([loadSquareCustomers(), squarePullServices()]);
-    if (okCust && okCat) { updateSyncLabel('ok', 'Square synced'); showToast('Square sync complete'); }
+    const ok = await loadSquareCustomers();
+    if (ok) { updateSyncLabel('ok', 'Square synced'); showToast('Customer sync complete'); }
     else { updateSyncLabel('error', 'Sync incomplete'); }
-  } catch (e) { updateSyncLabel('error', 'Sync failed'); showToast('Square sync failed. Check settings.'); }
+  } catch (e) { updateSyncLabel('error', 'Sync failed'); showToast('Customer sync failed. Check settings.'); }
 }
 
 export function updateSyncLabel(state, label) {
@@ -118,174 +120,6 @@ export function updateSyncLabel(state, label) {
   const lbl = document.getElementById('sync-label');
   if (dot) dot.className = `sync-dot ${state}`;
   if (lbl) lbl.textContent = label;
-}
-
-// Pull Square catalog (ITEM type) → classify into services / items / fees.
-export async function squarePullServices() {
-  if (!sqConfig()) return false;
-  try {
-    // Paginate the whole catalog. A single /catalog/list page (~100 objects) silently dropped the
-    // overflow, leaving later services without a squareVariationId (breaks booking push + appt
-    // matching) under a "synced ✓" toast. Accumulate across the cursor, then classify the full set.
-    let all = [], cursor = null;
-    do {
-      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/list?types=ITEM${cursor ? '&cursor=' + encodeURIComponent(cursor) : ''}`);
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try { const e = await res.json(); detail = e.errors?.[0]?.detail || e.errors?.[0]?.code || e.errors?.[0]?.category || detail; } catch {}
-        showToast(`Square catalog: ${detail}`); return false;   // abort without a partial import
-      }
-      const data = await res.json();
-      all = all.concat(data.objects || []);
-      cursor = data.cursor || null;
-    } while (cursor);
-
-    const services = [...cfg().services];
-    const items    = [...cfg().items];
-    const fees     = [...cfg().fees];
-    let addedSvc = 0, addedItems = 0;
-
-    all.forEach(item => {
-      const name = item.item_data?.name;
-      if (!name) return;
-      const lname = name.toLowerCase();
-      const productType = item.item_data?.product_type;
-      const isService = !productType || productType === 'APPOINTMENTS_SERVICE';
-
-      // Only bucket as a salon FEE when it's NOT an explicit appointment service, and match
-      // fee/charge/surcharge on a WORD boundary — so a real service ("No-Show Fee",
-      // "Cancellation Charge") stays a service and names like "Coffee"/"Toffee"/"Recharge"
-      // aren't mis-bucketed as fees.
-      if (productType !== 'APPOINTMENTS_SERVICE' && /\b(fee|surcharge|charge)\b/.test(lname)) {
-        const id = `sq-fee-${item.id}`;
-        if (!fees.find(f => f.id === id || f.label.toLowerCase() === lname)) {
-          const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
-          fees.push({ id, label: name, type: 'flat', value: price ? price / 100 : 0, squareItemId: item.id });
-        }
-        return;
-      }
-      if (isService) {
-        const id = `sq-${item.id}`;
-        if (!services.find(s => s.id === id || s.label.toLowerCase() === lname)) {
-          const abbr = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4);
-          const variationId = item.item_data?.variations?.[0]?.id || null;
-          services.push({ id, label: name, abbr, squareItemId: item.id, squareVariationId: variationId });
-          addedSvc++;
-        }
-      } else {
-        if (services.find(s => s.label.toLowerCase() === lname)) return;
-        const id = `sq-item-${item.id}`;
-        if (!items.find(i => i.id === id || i.label.toLowerCase() === lname)) {
-          const abbr = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 4);
-          const price = item.item_data?.variations?.[0]?.item_variation_data?.price_money?.amount;
-          items.push({ id, label: name, abbr, price: price ? price / 100 : 0, squareItemId: item.id });
-          addedItems++;
-        }
-      }
-    });
-
-    if (addedSvc)   dispatch('config.set', { key: 'services', value: services });
-    if (addedItems) dispatch('config.set', { key: 'items', value: items });
-    if (fees.length !== cfg().fees.length) dispatch('config.set', { key: 'fees', value: fees });
-
-    if (addedSvc > 0)   showToast(`${addedSvc} service${addedSvc>1?'s':''} imported from Square`);
-    if (addedItems > 0) showToast(`${addedItems} item${addedItems>1?'s':''} imported from Square`);
-    if (addedSvc === 0 && addedItems === 0) showToast('Catalog already up to date');
-    window.renderServicesMerged?.();
-    return true;
-  } catch (e) { console.warn('Could not pull Square catalog:', e); showToast('Square catalog sync incomplete'); return false; }
-}
-
-// Pull a human-readable error detail out of a failed Square response (for a toast).
-async function _sqErr(res, fallback) {
-  try { const d = (await res.json())?.errors?.[0]?.detail; if (d) return d; } catch (e) {}
-  return fallback;
-}
-
-// Push a service to the Square catalog (create or update). Updates config.services
-// with the returned Square ids on create.
-export async function squarePushService(svc) {
-  if (!sqConfig() || !svc) return;
-  try {
-    if (svc.squareItemId) {
-      const getRes = await fetch(`${SQUARE_PROXY}/v2/catalog/object/${svc.squareItemId}`);
-      if (!getRes.ok) { showToast('Square: could not fetch existing service.'); return; }
-      const obj = (await getRes.json()).object;
-      if (!obj) return;
-      obj.item_data.name = svc.label;
-      if (obj.item_data.variations?.[0]?.item_variation_data) {
-        const vd = obj.item_data.variations[0].item_variation_data;
-        vd.pricing_type = svc.baseCost > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING';
-        if (svc.baseCost > 0) vd.price_money = { amount: Math.round(svc.baseCost * 100), currency: 'USD' }; else delete vd.price_money;
-      }
-      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/object`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotency_key: `muse-svc-upd-${svc.id}-${Date.now()}`, object: obj }) });
-      if (res.ok) showToast(`"${svc.label}" updated in Square ✓`);
-      else showToast('Square: ' + await _sqErr(res, 'could not update service.'));
-    } else {
-      const tempId = `#muse-${svc.id}`;
-      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/batch-upsert`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idempotency_key: `muse-svc-create-${svc.id}`, batches: [{ objects: [{
-          type: 'ITEM', id: tempId,
-          item_data: { name: svc.label, product_type: 'APPOINTMENTS_SERVICE', variations: [{ type: 'ITEM_VARIATION', id: `${tempId}-var`, item_variation_data: { item_id: tempId, name: 'Regular', pricing_type: svc.baseCost > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING', ...(svc.baseCost > 0 ? { price_money: { amount: Math.round(svc.baseCost * 100), currency: 'USD' } } : {}) } }] },
-        }] }] }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const itemMapping = (data.id_mappings || []).find(m => m.client_object_id === tempId);
-        const varMapping  = (data.id_mappings || []).find(m => m.client_object_id === `${tempId}-var`);
-        if (itemMapping?.object_id) {
-          const services = cfg().services.map(s => s.id === svc.id ? { ...s, squareItemId: itemMapping.object_id, squareVariationId: varMapping?.object_id } : s);
-          dispatch('config.set', { key: 'services', value: services });
-        }
-        showToast(`"${svc.label}" added to Square ✓`);
-      } else showToast('Square: ' + await _sqErr(res, 'could not add service.'));
-    }
-  } catch (e) { console.warn('[Square] Catalog push failed:', e); showToast('Square: catalog push failed (network).'); }
-}
-
-// Push a retail item to Square (create or update). itemIndex is the index in config.items.
-export async function squarePushItem(id) {
-  // Resolve by stable id, not a render-time array index — config.items is synced, so a remote
-  // add/remove/reorder would otherwise make a frozen index push the WRONG item to Square.
-  const item = cfg().items.find(i => i.id === id);
-  if (!sqConfig()) return;
-  if (!item) { showToast('Square: item no longer exists — reopen Settings.'); return; }
-  try {
-    if (item.squareItemId) {
-      const getRes = await fetch(`${SQUARE_PROXY}/v2/catalog/object/${item.squareItemId}`);
-      if (!getRes.ok) { showToast('Square: could not fetch existing item.'); return; }
-      const obj = (await getRes.json()).object;
-      if (!obj) return;
-      obj.item_data.name = item.label;
-      if (obj.item_data.variations?.[0]?.item_variation_data) {
-        const vd = obj.item_data.variations[0].item_variation_data;
-        vd.pricing_type = item.price > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING';
-        if (item.price > 0) vd.price_money = { amount: Math.round(item.price * 100), currency: 'USD' }; else delete vd.price_money;
-      }
-      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/object`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotency_key: `muse-item-upd-${item.id}-${Date.now()}`, object: obj }) });
-      if (res.ok) showToast(`"${item.label}" updated in Square ✓`);
-      else showToast('Square: ' + await _sqErr(res, 'could not update item.'));
-    } else {
-      const tempId = `#muse-${item.id}`;
-      const res = await fetch(`${SQUARE_PROXY}/v2/catalog/batch-upsert`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idempotency_key: `muse-item-create-${item.id}`, batches: [{ objects: [{
-          type: 'ITEM', id: tempId,
-          item_data: { name: item.label, variations: [{ type: 'ITEM_VARIATION', id: `${tempId}-var`, item_variation_data: { item_id: tempId, name: 'Regular', pricing_type: item.price > 0 ? 'FIXED_PRICING' : 'VARIABLE_PRICING', ...(item.price > 0 ? { price_money: { amount: Math.round(item.price * 100), currency: 'USD' } } : {}) } }] },
-        }] }] }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const mapping = (data.id_mappings || []).find(m => m.client_object_id === tempId);
-        if (mapping?.object_id) {
-          const items = cfg().items.map(i => i.id === item.id ? { ...i, squareItemId: mapping.object_id } : i);
-          dispatch('config.set', { key: 'items', value: items });
-        }
-        showToast(`"${item.label}" added to Square ✓`);
-      } else showToast('Square: ' + await _sqErr(res, 'could not add item.'));
-    }
-  } catch (e) { console.warn('[Square] Catalog push failed:', e); showToast('Square: catalog push failed (network).'); }
 }
 
 // Load bookings-eligible team members into the Square modal picker.
