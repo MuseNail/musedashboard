@@ -8,7 +8,7 @@
     --primary: #1a5252; --primary-dim: #0f3d3d; --primary-container: #8fd4d3;
     --on-primary: #ffffff; --on-primary-container: #0a2e2e;
     --secondary: #5c4010; --secondary-container: #f5c870; --on-secondary-container: #3a2800;
-    --surface: #e8ecee; --surface-container-lowest: #f5f7f8; --surface-container-low: #dde2e5;
+    --surface: #ffffff; --surface-container-lowest: #ffffff; --surface-container-low: #dde2e5;
     --surface-container: #d0d6da; --surface-container-high: #c2cacd; --surface-container-highest: #b4bec2;
     --on-surface: #000000; --on-surface-variant: #1a1a1a;
     --outline: #4a5258; --outline-variant: #7a858a;
@@ -24,6 +24,16 @@
     --secondary-container: #5c4010; --on-secondary-container: #f5c870;
   }
   html[data-appearance="dark"] body { background: var(--surface); }
+
+  /* White + soft cards: body + cards are now white (tokens above), so cards no longer sit on
+     grey. A subtle shadow restores the card/header lift. Light mode only — shadows read as
+     dirty smudges on dark surfaces, and dark keeps its own elevated greys. */
+  html:not([data-appearance="dark"]) header.bg-surface-container-lowest.border-surface-container-high {
+    box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 1px 3px rgba(0,0,0,.05);
+  }
+  html:not([data-appearance="dark"]) .bg-surface-container-lowest.border-surface-container-high:not(header) {
+    box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.05);
+  }
 
   * { box-sizing: border-box; }
   body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
