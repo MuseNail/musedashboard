@@ -69,6 +69,17 @@ export function applyAssignmentStatus(a, newStatus) {
   a.updatedAt = Date.now();   // per-assignment version → drives the per-assignment merge in queue.upsert (3c)
 }
 
+// Per-service-status visual tokens for the queue / turns / floor-plan cards — one source of
+// truth so all three surfaces match. Each status carries THREE redundant cues (color-blind safe):
+// a colored glyph shape, a tiny text pill, and a row accent. Only in-service gets the loud
+// bar+tint ("the hot row"); paid fades. Palette = the staff-app STATUS_CHIP values.
+export function serviceLineStyle(status) {
+  if (isPaidStatus(status))    return { key: 'paid',      glyph: '✓', glyphColor: '#b4bec2', bar: '#b4bec2', tint: '',                          pill: { bg: '#dde2e5', fg: '#555555', label: 'Paid'   }, rowOpacity: 0.6 };
+  if (status === 'inservice')  return { key: 'inservice', glyph: '●', glyphColor: '#2a7a4f', bar: '#2a7a4f', tint: 'rgba(200,230,197,.35)', pill: { bg: '#c8e6c5', fg: '#1b5e20', label: 'In Svc' }, rowOpacity: 1 };
+  if (status === 'complete')   return { key: 'complete',  glyph: '◍', glyphColor: '#1a5c7a', bar: '#1a5c7a', tint: '',                          pill: { bg: '#cfe3ef', fg: '#0a3a52', label: 'Done'   }, rowOpacity: 1 };
+  return                              { key: 'waiting',   glyph: '●', glyphColor: '#d4860a', bar: '#d4860a', tint: '',                          pill: { bg: '#ffe0c2', fg: '#6d3200', label: 'Wait'   }, rowOpacity: 0.9 };
+}
+
 export function setAssignmentStatus(entry, serviceId, newStatus, isRevert) {
   if (!entry.assignments) entry.assignments = [];
   const a = entry.assignments.find(x => x.serviceId === serviceId);

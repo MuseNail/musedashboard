@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup — Per-service status visibility</title>
+<style>
+  :root{
+    --bg:#e8ecee; --card:#ffffff; --on:#0e1a1a; --on-var:#5b6b6b; --outline:#90a0a0;
+    --primary:#1a5252; --primary-c:#8fd4d3;
+    /* STATUS_CHIP tokens (verbatim from staff.js) */
+    --wait-bg:#ffe0c2; --wait-fg:#6d3200; --wait-bar:#d4860a;
+    --svc-bg:#c8e6c5;  --svc-fg:#1b5e20;  --svc-bar:#2a7a4f; --svc-tint:rgba(200,230,197,.35);
+    --done-bg:#cfe3ef; --done-fg:#0a3a52; --done-bar:#1a5c7a;
+    --paid-bg:#dde2e5; --paid-fg:#555555; --paid-bar:#b4bec2;
+  }
+  *{box-sizing:border-box}
+  body{font-family:'Manrope','Inter',system-ui,Arial,sans-serif;background:var(--bg);color:var(--on);margin:0;padding:28px;line-height:1.35}
+  h1{font-size:20px;margin:0 0 4px} h2{font-size:14px;text-transform:uppercase;letter-spacing:.08em;color:var(--on-var);margin:26px 0 10px;border-bottom:1px solid #cfd8d8;padding-bottom:5px}
+  .sub{color:var(--on-var);font-size:13px;margin:0 0 8px}
+  .grid{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+  .col{flex:1;min-width:300px;max-width:360px}
+  .col h3{font-size:12px;color:var(--on-var);margin:0 0 8px;font-weight:600}
+  .panelhdr{display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--wait-fg);background:#fff3e6;padding:6px 12px;border-radius:10px 10px 0 0;border:1px solid #f0ddc4;border-bottom:0}
+  .card{background:var(--card);border:1px solid #dde4e4;border-radius:14px;padding:10px 12px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  .card.flush{border-radius:0 0 14px 14px}
+  .name{font-weight:700;font-size:15px}
+  .muted{color:var(--on-var)} .tiny{font-size:11px} .price{color:var(--primary);font-weight:600}
+  .pill{font-size:9px;font-weight:700;padding:1px 7px;border-radius:999px;white-space:nowrap}
+  .chip{font-size:10px;font-weight:600;padding:1px 7px;border-radius:999px}
+  /* per-service row */
+  .srow{display:flex;align-items:center;gap:6px;font-size:12px;border-radius:0 6px 6px 0;padding:3px 6px 3px 5px;margin-top:3px}
+  .glyph{font-size:12px;line-height:1}
+  .timing{font-weight:700;margin-left:auto;font-size:11px}
+  .row-svc{border-left:3px solid var(--svc-bar);background:var(--svc-tint)}
+  .row-done{border-left:2px solid var(--done-bar)}
+  .row-wait{border-left:2px solid var(--wait-bar);opacity:.9}
+  .row-paid{border-left:2px solid var(--paid-bar);opacity:.55}
+  /* legacy "before" line */
+  .oldline{font-size:12px;color:var(--on-var);margin-top:2px}
+  .legend{background:#fff;border:1px solid #dde4e4;border-radius:12px;padding:6px 12px;display:inline-block}
+  .legend table{border-collapse:collapse;font-size:12px} .legend td{padding:5px 12px;border-top:1px solid #eef2f2}
+  .note{background:#fffbe9;border:1px solid #f0e3b0;border-radius:10px;padding:10px 14px;font-size:13px;color:#5a4a00;max-width:760px}
+</style>
+</head>
+<body>
+<h1>Per-service status visibility — mockup</h1>
+<p class="sub">Recommended design: each service is its own row with a <b>glyph + color + status pill</b>; only the <b>in-service</b> row gets the bold green bar + tint, done rows go quiet-blue, waiting stays amber, paid fades. Reuses the app's existing STATUS_CHIP palette. (This file is a mockup — nothing in the live app is changed.)</p>
+
+<div class="legend">
+  <table>
+    <tr><td><span class="glyph" style="color:var(--wait-bar)">●</span></td><td><span class="pill" style="background:var(--wait-bg);color:var(--wait-fg)">Wait</span></td><td>Waiting — not started</td></tr>
+    <tr><td><span class="glyph" style="color:var(--svc-bar)">●</span></td><td><span class="pill" style="background:var(--svc-bg);color:var(--svc-fg)">In Svc</span></td><td><b>In service — the "hot" row</b> (bold bar + tint)</td></tr>
+    <tr><td><span class="glyph" style="color:var(--done-bar)">◍</span></td><td><span class="pill" style="background:var(--done-bg);color:var(--done-fg)">Done</span></td><td>Complete — finished, payment pending</td></tr>
+    <tr><td><span class="glyph" style="color:var(--paid-bar)">✓</span></td><td><span class="pill" style="background:var(--paid-bg);color:var(--paid-fg)">Paid</span></td><td>Paid — settled (row fades)</td></tr>
+  </table>
+</div>
+
+<!-- ───────── QUEUE / WAITING CARD ───────── -->
+<h2>1 · Queue "Waiting" card</h2>
+<p class="sub">Problem today: she's getting one service AND waiting for another — but you can't tell which. After: each line self-labels.</p>
+<div class="grid">
+
+  <div class="col">
+    <h3>BEFORE (today)</h3>
+    <div class="panelhdr"><span>WAITING</span><span>1 in queue</span></div>
+    <div class="card flush">
+      <div class="name">Jennifer Maya <span class="tiny muted">(primary)</span></div>
+      <div class="tiny muted">09:05 AM · 55m</div>
+      <div class="oldline">⊚ Pedicure → John&nbsp;&nbsp;<span class="price">$46</span></div>
+      <div class="oldline">• Fill → Lee Hoang&nbsp;&nbsp;<span class="price">$51</span></div>
+      <div class="oldline">○ Wax&nbsp;&nbsp;<span class="price">$20</span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <h3>AFTER (recommended)</h3>
+    <div class="panelhdr"><span>WAITING</span><span>1 in queue</span></div>
+    <div class="card flush">
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        <span class="name">Jennifer Maya</span>
+        <span class="chip" style="background:var(--primary-c);color:#0f3d3d">★ 2nd</span>
+        <span class="chip" style="background:var(--svc-bg);color:var(--svc-fg)">In Service</span>
+        <span class="price" style="margin-left:2px">$117</span>
+        <span class="tiny muted" style="margin-left:auto">55m</span>
+      </div>
+      <div class="srow row-svc">
+        <span class="glyph" style="color:var(--svc-bar)">●</span>
+        <span style="font-weight:700">Pedicure</span><span class="muted">→ John</span><span class="price">$46</span>
+        <span class="timing" style="color:var(--svc-bar)">45m ▸ ~54m</span>
+        <span class="pill" style="background:var(--svc-bg);color:var(--svc-fg)">In Svc</span>
+      </div>
+      <div class="srow row-done">
+        <span class="glyph" style="color:var(--done-bar)">◍</span>
+        <span style="font-weight:600">Fill</span><span class="muted">→ Lee Hoang</span>
+        <span class="price" style="margin-left:auto">$51</span>
+        <span class="pill" style="background:var(--done-bg);color:var(--done-fg)">Done</span>
+      </div>
+      <div class="srow row-wait">
+        <span class="glyph" style="color:var(--wait-bar)">●</span>
+        <span>Wax</span>
+        <span class="price" style="margin-left:auto">$20</span>
+        <span class="pill" style="background:var(--wait-bg);color:var(--wait-fg)">Wait</span>
+      </div>
+      <div class="tiny muted" style="margin-top:5px">09:05 AM · (704) 555-0134</div>
+    </div>
+  </div>
+</div>
+
+<!-- ───────── TURNS / ACTIVE CARD ───────── -->
+<h2>2 · Turns / active card</h2>
+<p class="sub">Problem today: both lines look identical — can't tell which is done vs in service. After: the active line pops; the done line is quiet with a "Done" pill.</p>
+<div class="grid">
+
+  <div class="col">
+    <h3>BEFORE (today)</h3>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between"><span class="name">A&nbsp; Jennifer Maya</span><span class="tiny muted">55m</span></div>
+      <div class="oldline" style="color:var(--on)">Pedicure · John · <span class="price">$46</span></div>
+      <div class="oldline">45m ▸ ~54m</div>
+      <div class="oldline" style="color:var(--on)">Fill · Lee · <span class="price">$51</span></div>
+      <div class="oldline">56m ▸ ~1h 07m</div>
+    </div>
+  </div>
+
+  <div class="col">
+    <h3>AFTER (recommended)</h3>
+    <div class="card" style="border-left:4px solid var(--svc-bar);background:rgba(200,230,197,.18)">
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="width:26px;height:26px;border-radius:50%;background:var(--primary-c);color:var(--primary);font-weight:700;display:inline-flex;align-items:center;justify-content:center;font-size:12px">J</span>
+        <span class="name">Jennifer Maya</span>
+        <span class="tiny muted">09:05 · 55m</span>
+      </div>
+      <div class="srow row-svc">
+        <span class="glyph" style="color:var(--svc-bar)">●</span>
+        <span style="font-weight:700">Pedicure</span><span class="muted">· John · $46</span>
+        <span class="timing" style="color:var(--svc-bar)">45m ▸ ~54m</span>
+        <span class="pill" style="background:var(--svc-bg);color:var(--svc-fg)">In Svc</span>
+      </div>
+      <div class="srow row-done">
+        <span class="glyph" style="color:var(--done-bar)">◍</span>
+        <span style="font-weight:600">Fill</span><span class="muted">· Lee · $51</span>
+        <span class="pill" style="background:var(--done-bg);color:var(--done-fg);margin-left:auto">Done</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>Notes</h2>
+<div class="note">
+  <b>Why this works:</b> every status is carried by <b>three redundant cues</b> — shape (○ ● ◍ ✓), color, and a text pill — so it reads instantly and is color-blind safe.<br><br>
+  <b>Effort:</b> Small–Medium. Two render maps (queue.js + turns.js) + one shared <code>serviceLineStyle(status)</code> helper in status.js. No change to the data/sync/status model — per-line status already exists. Standard version-trio bump; no Worker deploy.<br><br>
+  <b>Trade-off to eyeball:</b> each service is now its own row (~+6px), so multi-service cards get a little taller — that's the price of the clarity. Pills use short labels (Wait / In Svc / Done / Paid) to survive narrow iPad widths.
+</div>
+
+</body>
+</html>

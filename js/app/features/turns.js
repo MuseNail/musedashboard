@@ -1,10 +1,10 @@
 // ── Turns: rotation grid, drag-drop, tech status, turn classification ───────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap, statusTimeHtml } from '../utils.js';
+import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap, statusTimeHtml, escHtml } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { canDo } from '../session.js';
-import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus } from './status.js';
+import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle } from './status.js';
 import { renderQueue, showGroupAssignModal } from './queue.js';
 import { serviceTimeInfo } from './servicetime.js';
 
@@ -397,16 +397,28 @@ export function renderTurnsQueue() {
     let serviceContent;
     if (assignments.length > 0) {
       serviceContent = assignments.map(a => {
-        const tech = staffById(a.techId), s = svc(a.serviceId), ss = getAssignmentStatus(e, a);
-        const dot = isPaidStatus(ss)?'✓ ':ss==='complete'?'◍ ':ss==='inservice'?'● ':'○ ';
-        const parts = [dot + (s ? s.label : '')];
-        let accept = '';
-        if (tech) parts.push('→ ' + tech.name); else if (es[a.serviceId]) { parts.push('→ ' + es[a.serviceId].techName + '?'); accept = acceptBtnHtml(e.id, a.serviceId, es[a.serviceId].techName); }
-        if (a.cost) parts.push('$' + a.cost);
-        return `<div class="text-[10px] text-on-surface-variant leading-tight">${parts.join(' ')}${accept}</div>`;
+        const tech = staffById(a.techId), s = svc(a.serviceId);
+        const ls = serviceLineStyle(getAssignmentStatus(e, a));
+        const hot = ls.key === 'inservice';
+        let techHtml = '', accept = '';
+        if (tech) techHtml = `<span class="text-on-surface-variant">→ ${escHtml(tech.name)}</span>`;
+        else if (es[a.serviceId]) { techHtml = `<span class="text-on-surface-variant">→ ${escHtml(es[a.serviceId].techName)}?</span>`; accept = acceptBtnHtml(e.id, a.serviceId, es[a.serviceId].techName); }
+        const rowStyle = `border-left:${hot ? 3 : 2}px solid ${ls.bar};padding-left:4px;${ls.tint ? `background:${ls.tint};` : ''}${ls.rowOpacity < 1 ? `opacity:${ls.rowOpacity};` : ''}`;
+        return `<div class="flex items-center gap-1 text-[10px] leading-tight rounded-r mt-0.5" style="${rowStyle}">
+          <span style="color:${ls.glyphColor}">${ls.glyph}</span>
+          <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
+          ${techHtml}${a.cost ? `<span class="font-semibold text-primary">$${a.cost}</span>` : ''}
+          <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>${accept}
+        </div>`;
       }).join('');
     } else {
-      serviceContent = e.services.map(sid => { const s = svc(sid), sug = es[sid]; return `<div class="text-[10px] text-on-surface-variant leading-tight">○ ${s?s.label:sid}${sug?` <span class="font-semibold" style="color:#1a5252">→ ${sug.techName}?</span>${acceptBtnHtml(e.id, sid, sug.techName)}`:''}</div>`; }).join('');
+      const ls = serviceLineStyle('waiting');
+      serviceContent = e.services.map(sid => { const s = svc(sid), sug = es[sid]; return `<div class="flex items-center gap-1 text-[10px] leading-tight rounded-r mt-0.5" style="border-left:2px solid ${ls.bar};padding-left:4px;opacity:${ls.rowOpacity}">
+        <span style="color:${ls.glyphColor}">${ls.glyph}</span>
+        <span class="font-semibold text-on-surface">${escHtml(s ? s.label : sid)}</span>
+        ${sug ? `<span class="text-on-surface-variant">→ ${escHtml(sug.techName)}?</span>${acceptBtnHtml(e.id, sid, sug.techName)}` : ''}
+        <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
+      </div>`; }).join('');
     }
     const borderColor = e.status==='inservice' ? '#2a7a4f' : e.status==='complete' ? '#1a5c7a' : '#d4860a';
     const bgTint = e.status==='inservice' ? 'rgba(200,230,197,0.25)' : e.status==='complete' ? 'rgba(207,227,239,0.45)' : 'rgba(255,224,178,0.25)';

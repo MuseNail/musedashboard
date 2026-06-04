@@ -5,10 +5,10 @@
 
 import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
-import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal } from '../utils.js';
+import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, escHtml } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui, canDo, getActiveUser } from '../session.js';
-import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus } from './status.js';
+import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
 import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote } from './square-customers.js';
@@ -286,18 +286,24 @@ function buildQueueRow(e) {
       if (bits.length) visitSub = `<div class="text-[10px] font-body font-semibold" style="color:#1a5252">${bits.join(' · ')}</div>`;
     }
   }
+  // Per-service ROWS (not a joined string): each carries its own status glyph + pill, and only
+  // the in-service row gets the bold green bar+tint — so a mixed-status customer reads at a glance.
   const assignSummary = (e.assignments || []).filter(a => a.techId || a.cost).map(a => {
     const tech = staffById(a.techId), s = svc(a.serviceId);
-    const st = getAssignmentStatus(e, a);
-    const dot = isPaidStatus(st) ? '✓ ' : st === 'complete' ? '◍ ' : st === 'inservice' ? '● ' : '○ ';
-    const parts = [dot + (s ? s.label : '')];
-    if (tech) parts.push('→ ' + tech.name);
-    if (a.station) parts.push('@ ' + a.station);
-    if (a.cost) parts.push('$' + Number(a.cost).toFixed(2));
+    const ls = serviceLineStyle(getAssignmentStatus(e, a));
+    const hot = ls.key === 'inservice';
     const sti = serviceTimeInfo(a);
-    if (sti) parts.push(`<span style="color:${sti.color};font-weight:700">${sti.text}</span>`);
-    return parts.join(' ');
-  }).join(' · ');
+    const tip = sti ? `<span class="flex-shrink-0" style="color:${sti.color};font-weight:700;margin-left:auto">${sti.text}</span>` : '';
+    const rowStyle = `border-left:${hot ? 3 : 2}px solid ${ls.bar};padding-left:5px;${ls.tint ? `background:${ls.tint};` : ''}${ls.rowOpacity < 1 ? `opacity:${ls.rowOpacity};` : ''}`;
+    return `<div class="flex items-center gap-1 leading-tight rounded-r" style="${rowStyle}">
+      <span style="color:${ls.glyphColor}">${ls.glyph}</span>
+      <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
+      ${tech ? `<span class="text-on-surface-variant">→ ${escHtml(tech.name)}${a.station ? ' @' + escHtml(String(a.station)) : ''}</span>` : (a.station ? `<span class="text-on-surface-variant">@${escHtml(String(a.station))}</span>` : '')}
+      ${a.cost ? `<span class="font-semibold text-primary">$${Number(a.cost).toFixed(2)}</span>` : ''}
+      ${tip}
+      <span class="text-[9px] font-bold px-1.5 rounded-full flex-shrink-0 ${tip ? '' : 'ml-auto'}" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
+    </div>`;
+  }).join('');
   const totalDisplay = e.totalCost ? `<span class="font-semibold text-primary ml-1">$${e.totalCost.toFixed(2)}</span>` : '';
   const cardBg = isPaidStatus(e.status)
     ? 'bg-surface-container-high border-surface-container-highest opacity-70'
@@ -318,7 +324,7 @@ function buildQueueRow(e) {
           <span class="text-[10px] font-body text-outline ml-auto" data-checkin-ts="${t.getTime()}">${formatElapsed(e.checkinTime)}</span>
         </div>
         <div class="text-[11px] font-body text-on-surface-variant truncate">${serviceLabels}</div>
-        ${assignSummary ? `<div class="text-[11px] font-body text-primary truncate">${assignSummary}</div>` : ''}
+        ${assignSummary ? `<div class="text-[11px] font-body mt-0.5 space-y-0.5">${assignSummary}</div>` : ''}
         ${visitSub}
         <div class="text-[10px] font-body text-outline">${timeStr}${e.phone ? ' · ' + e.phone : ''}</div>
       </div>
