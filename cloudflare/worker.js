@@ -584,6 +584,15 @@ export class MuseSalonDO {
           }
           break;
         }
+        case 'customer.bulkDelete': {
+          const ids = Array.isArray(payload.ids) ? payload.ids : [];
+          for (const id of ids) {
+            if (id == null) continue;
+            await this.state.storage.delete('customer:' + id);
+            await this.state.storage.put('custdeletion:' + id, { id, at: new Date().toISOString() });
+          }
+          break;
+        }
         case 'audit.log': {
           // Append-only activity log (who/when/device/action). Each event is its own key
           // so concurrent writes never clobber. Probabilistically prune to the last ~1000.

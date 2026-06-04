@@ -162,6 +162,14 @@ export function applyChange(op, payload, seq) {
       removeById(state.customers, payload.id);
       if (!state.customerDeletions.includes(String(payload.id))) state.customerDeletions.push(String(payload.id));
       break;
+    case 'customer.bulkDelete': {
+      const ids = Array.isArray(payload.ids) ? payload.ids : [];
+      for (const id of ids) {
+        removeById(state.customers, id);
+        if (!state.customerDeletions.includes(String(id))) state.customerDeletions.push(String(id));
+      }
+      break;
+    }
     case 'audit.log':       if (payload && payload.event) { state.audit.unshift(payload.event); if (state.audit.length > 500) state.audit.length = 500; } break;
     default: console.warn('[store] unknown op', op); return;
   }

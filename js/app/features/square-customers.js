@@ -417,12 +417,13 @@ export function renderCustomerCleanup() {
       </span></div>`;
   const groupCard = g => { const ids = g.customers.map(c => c.squareId).join(','); return `<div class="rounded-xl border border-surface-container-high mb-2 overflow-hidden"><div class="px-3 py-1.5 bg-surface-container text-[11px] font-body font-semibold text-on-surface-variant">${_cEsc(g.key)} · ${g.customers.length} profiles</div>${g.customers.map(c => memberRow(c, ids)).join('')}</div>`; };
   const section = (title, hint, html, n) => `<div class="text-xs font-headline font-bold text-on-surface uppercase tracking-widest mt-3 mb-1">${title} <span class="text-on-surface-variant">(${n})</span></div><div class="text-[11px] text-on-surface-variant mb-2">${hint}</div>${html || '<div class="text-xs text-on-surface-variant italic py-1">None. ✓</div>'}`;
-  const noPhoneHtml = noPhone.slice(0, 300).map(c => `<div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-surface-container-high mb-1"><div class="min-w-0"><div class="text-sm font-body font-semibold text-on-surface truncate">${_cName(c)}</div><div class="text-[11px] text-on-surface-variant truncate">no phone${c.email ? ' · ' + _cEsc(c.email) : ''}</div></div><button onclick="cleanupDeleteCustomer('${c.squareId}')" title="Delete" class="text-on-surface-variant hover:text-error flex items-center flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button></div>`).join('');
+  const noPhoneBtn = noPhone.length ? `<button onclick="cleanupDeleteAllNoPhone()" class="mb-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-error/10 text-error text-xs font-body font-bold hover:bg-error/20 transition-colors"><span class="material-symbols-outlined" style="font-size:16px">delete_sweep</span> Delete all ${noPhone.length} no-phone customer${noPhone.length !== 1 ? 's' : ''}</button>` : '';
+  const noPhoneHtml = noPhoneBtn + noPhone.slice(0, 300).map(c => `<div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-surface-container-high mb-1"><div class="min-w-0"><div class="text-sm font-body font-semibold text-on-surface truncate">${_cName(c)}</div><div class="text-[11px] text-on-surface-variant truncate">no phone${c.email ? ' · ' + _cEsc(c.email) : ''}</div></div><button onclick="cleanupDeleteCustomer('${c.squareId}')" title="Delete" class="text-on-surface-variant hover:text-error flex items-center flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button></div>`).join('');
   list.innerHTML = `
     <div class="flex items-center justify-between mb-2"><button onclick="renderCustomerDir('')" class="flex items-center gap-1 text-sm font-body font-semibold text-primary"><span class="material-symbols-outlined" style="font-size:18px">arrow_back</span> All customers</button><span class="text-[11px] text-on-surface-variant">${customerDirectory.length} total</span></div>
     ${section('Same phone', 'Profiles sharing a phone — usually one person (or family on one number). Tap "Keep, merge rest" on the right profile; the others are deleted (notes &amp; history stay, since they’re phone-keyed).', byPhone.map(groupCard).join(''), byPhone.length)}
     ${section('Same name', 'Identical name — could be the same person twice, or two different people. Review before merging.', byName.map(groupCard).join(''), byName.length)}
-    ${section('No phone', 'No phone on file. Delete placeholder/junk entries.', noPhoneHtml, noPhone.length)}`;
+    ${section('No phone', 'No phone on file. Delete placeholder/junk entries — or clear them all with one tap.', noPhoneHtml, noPhone.length)}`;
 }
 export async function cleanupMergeGroup(keepId, idsCsv) {
   const ids = (idsCsv || '').split(',').filter(Boolean);
@@ -442,6 +443,28 @@ export async function cleanupDeleteCustomer(id) {
   const nm = c ? ([c.firstName, c.lastName].filter(Boolean).join(' ') || '(no name)') : 'this customer';
   if (!confirm(`Delete "${nm}" from the directory? Past sales are not deleted — the profile is just removed.`)) return;
   if (await deleteSquareCustomer(id)) { showToast('Customer deleted'); window.logAudit?.('Customer delete', nm); renderCustomerCleanup(); }
+}
+// Bulk-delete every customer with no phone number on file (placeholder/junk). Uses the bulk op
+// (one apply per chunk) so a large set can't freeze the tab; best-effort Square cleanup runs in
+// the background. Past sales are unaffected (records aren't deleted).
+export async function cleanupDeleteAllNoPhone() {
+  const noPhone = customerDirectory.filter(c => !_custPhoneKey(c));
+  if (!noPhone.length) { showToast('No no-phone customers to delete.'); return; }
+  if (!confirm(`Delete all ${noPhone.length} customer${noPhone.length !== 1 ? 's' : ''} with no phone number?\n\nThis can't be undone. Past sales are not affected.`)) return;
+  const ids = noPhone.map(c => c.squareId);
+  const sqLinks = noPhone.map(c => c.sqLink).filter(Boolean);
+  const CHUNK = 500;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    dispatch('customer.bulkDelete', { ids: ids.slice(i, i + CHUNK) });
+    await new Promise(r => setTimeout(r, 20));
+  }
+  showToast(`Deleted ${ids.length} no-phone customer${ids.length !== 1 ? 's' : ''}`);
+  window.logAudit?.('Customer cleanup', `deleted ${ids.length} no-phone`);
+  // Best-effort Square cleanup (kept until Helcim) — fire-and-forget so it never blocks the UI.
+  if (cfg().square_config && sqLinks.length) {
+    (async () => { for (const sid of sqLinks) { try { await fetch(`${SQUARE_PROXY}/v2/customers/${sid}`, { method: 'DELETE' }); } catch (e) {} } })();
+  }
+  renderCustomerCleanup();
 }
 
 export function showEditCustomer(id) {

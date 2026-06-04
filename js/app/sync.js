@@ -184,7 +184,7 @@ function reapplyOutbox() { for (const msg of _outbox) { try { applyChange(msg.op
 // ── Public: dispatch a mutation (optimistic local apply + queued send) ──────────
 // op: 'config.set' | 'queue.upsert' | 'queue.remove' | 'record.save'
 //   | 'record.delete' | 'giftcard.save' | 'giftcard.delete' | 'audit.log'
-//   | 'customer.upsert' | 'customer.delete' | 'customer.bulkUpsert'
+//   | 'customer.upsert' | 'customer.delete' | 'customer.bulkUpsert' | 'customer.bulkDelete'
 export function dispatch(op, payload) {
   const mutationId = DEVICE_ID + '-' + Date.now() + '-' + (++_mutCounter);
   // Stamp queue + record writes with a wall-clock version so the stale-write guard (store.js
