@@ -37,6 +37,7 @@ const state = {
   deletions: [],   // array of deleted record ids (strings)
   audit:     [],   // universal activity log (newest first, capped) — synced via the DO
   seq:       0,
+  rev:       0,    // monotonic data-revision counter (bumped on hydrate + each applied change); lets consumers cheaply cache derived results and invalidate when state actually changes (records are mutated in place, so the array ref is not a reliable signal)
   // connection / sync status (set by sync.js, observed by the UI indicator)
   connected:    false,
   pendingCount: 0, // outbox length
@@ -98,6 +99,7 @@ export function hydrate(snap) {
   state.deletions = Array.isArray(incoming.deletions) ? incoming.deletions.map(d => String(d.id ?? d)) : [];
   state.audit     = Array.isArray(incoming.audit) ? incoming.audit : [];
   state.seq       = snap && snap.seq ? snap.seq : 0;
+  state.rev++;
   saveCache();
   notify('hydrate');
 }
@@ -140,6 +142,7 @@ export function applyChange(op, payload, seq) {
     default: console.warn('[store] unknown op', op); return;
   }
   if (typeof seq === 'number' && seq > state.seq) state.seq = seq;
+  state.rev++;
   saveCache();
   notify(op);
 }

@@ -220,9 +220,16 @@ export function scheduleWeekOffset(delta, goToToday = false) {
   renderSchedule();
 }
 
+// One-off "blank" sentinel: an explicit per-date entry that overrides a weekly _repeats
+// rule to mark that single day as off-schedule (i.e. Clear on a day driven by a repeat).
+// getScheduleStatus maps it back to null so the day reads as unset everywhere.
+export const SCHED_NONE = '__none__';
+
 export function getScheduleStatus(date, staffId) {
   const sched = cfg().schedule || {};
-  if (sched[date]?.[staffId]) return sched[date][staffId];
+  const explicit = sched[date]?.[staffId];
+  if (explicit === SCHED_NONE) return null;       // one-off blank overrides the weekly repeat
+  if (explicit) return explicit;
   const dayOfWeek = new Date(date + 'T12:00:00').getDay();
   return sched._repeats?.[staffId]?.[dayOfWeek] || null;
 }
@@ -293,12 +300,21 @@ export function openSchedulePicker(date, staffId) {
   const st = cfg().staff.find(s => s.id === staffId);
   const d  = new Date(date + 'T12:00:00');
   document.getElementById('schedule-picker-label').textContent = `${st?.name || ''} — ${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`;
+  // Default the repeat toggle to reflect reality: if this day is currently driven by a weekly
+  // repeat, start it ON so editing the day keeps the weekly pattern by default (turning it OFF
+  // makes a one-off exception). Avoids silently de-repeating a recurring day.
+  const hasRepeat = !!(cfg().schedule?._repeats?.[staffId]?.[d.getDay()]);
   const cb  = document.getElementById('repeat-toggle-cb');
   const box = document.getElementById('repeat-toggle-box');
   const chk = document.getElementById('repeat-toggle-check');
-  if (cb)  cb.checked = false;
-  if (box) { box.style.background = 'transparent'; box.style.borderColor = ''; }
-  if (chk) chk.classList.add('hidden');
+  if (cb)  cb.checked = hasRepeat;
+  if (box) { box.style.background = hasRepeat ? '#1a5252' : 'transparent'; box.style.borderColor = hasRepeat ? '#1a5252' : ''; }
+  if (chk) chk.classList.toggle('hidden', !hasRepeat);
+  const note = document.getElementById('schedule-picker-note');
+  if (note) {
+    if (hasRepeat) { note.textContent = 'This day repeats weekly. Turn off “Repeat weekly”, then tap Clear to blank just this one day; Clear with Repeat on removes the weekly repeat.'; note.classList.remove('hidden'); }
+    else { note.textContent = ''; note.classList.add('hidden'); }
+  }
   const m = document.getElementById('schedule-picker'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
 
@@ -331,8 +347,13 @@ export function setScheduleStatus(status) {
     if (sched._repeats?.[staffId]?.[dayOfWeek]) delete sched._repeats[staffId][dayOfWeek];
   }
   if (!sched[date]) sched[date] = {};
-  if (status === null) { delete sched[date][staffId]; if (Object.keys(sched[date]).length === 0) delete sched[date]; }
-  else sched[date][staffId] = status;
+  if (status === null) {
+    // Clearing a day. If a weekly repeat still covers this weekday (and we didn't just remove
+    // it above), store an explicit blank sentinel so the repeat doesn't make the day reappear;
+    // otherwise drop the entry entirely.
+    if (sched._repeats?.[staffId]?.[dayOfWeek]) sched[date][staffId] = SCHED_NONE;
+    else { delete sched[date][staffId]; if (Object.keys(sched[date]).length === 0) delete sched[date]; }
+  } else sched[date][staffId] = status;
 
   dispatch('config.set', { key: 'schedule', value: sched });
   closeSchedulePicker();
@@ -395,9 +416,12 @@ export function saveWeekFill() {
     const status = _weekFillDays[i];
     const d = new Date(scheduleWeekStart); d.setDate(d.getDate() + i);
     const key = localDateStr(d), dow = d.getDay();
-    if (status) { if (!sched[key]) sched[key] = {}; sched[key][staffId] = status; }
-    else if (sched[key]?.[staffId]) { delete sched[key][staffId]; if (!Object.keys(sched[key]).length) delete sched[key]; }
+    // Update the weekly repeat first (when the toggle is on) so the blank-day check below
+    // sees the post-edit repeat state.
     if (repeat) { if (status) sched._repeats[staffId][dow] = status; else if (sched._repeats[staffId]?.[dow]) delete sched._repeats[staffId][dow]; }
+    if (status) { if (!sched[key]) sched[key] = {}; sched[key][staffId] = status; }
+    else if (sched._repeats?.[staffId]?.[dow]) { if (!sched[key]) sched[key] = {}; sched[key][staffId] = SCHED_NONE; }  // blank a repeat-driven day → one-off sentinel
+    else if (sched[key]?.[staffId]) { delete sched[key][staffId]; if (!Object.keys(sched[key]).length) delete sched[key]; }
   }
   dispatch('config.set', { key: 'schedule', value: sched });
   closeWeekFill();
@@ -409,14 +433,20 @@ export function saveWeekFill() {
 export function copyLastWeekSchedule() {
   const sched = JSON.parse(JSON.stringify(cfg().schedule || {}));
   const prevStart = new Date(scheduleWeekStart); prevStart.setDate(prevStart.getDate() - 7);
+  const staffIds = (cfg().staff || []).map(s => s.id);
   let found = 0;
   const plan = [];
   for (let i = 0; i < 7; i++) {
     const src = new Date(prevStart); src.setDate(src.getDate() + i);
     const dst = new Date(scheduleWeekStart); dst.setDate(dst.getDate() + i);
-    const srcDay = sched[localDateStr(src)];
-    plan.push({ dstKey: localDateStr(dst), srcDay: srcDay && Object.keys(srcDay).length ? { ...srcDay } : null });
-    if (srcDay && Object.keys(srcDay).length) found++;
+    // Use each staff's EFFECTIVE status for last week's day (explicit entry OR weekly repeat),
+    // so a week driven entirely by repeats still copies instead of reporting "nothing to copy".
+    const srcKey = localDateStr(src);
+    const eff = {};
+    staffIds.forEach(id => { const stat = getScheduleStatus(srcKey, id); if (stat) eff[id] = stat; });
+    const has = Object.keys(eff).length > 0;
+    plan.push({ dstKey: localDateStr(dst), srcDay: has ? eff : null });
+    if (has) found++;
   }
   if (!found) { showToast('Last week has no schedule to copy.'); return; }
   if (!confirm("Copy last week's schedule into this week? This overwrites this week's entries.")) return;

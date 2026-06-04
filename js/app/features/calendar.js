@@ -63,7 +63,10 @@ function calColumnOff(cal) {
   const st = (cfg().staff || []).find(s => (s.name || '').trim().toLowerCase() === cal.name.trim().toLowerCase());
   if (!st) return false;
   const dstr = localDateStr(_calDate), sc = cfg().schedule || {};
-  const status = sc[dstr]?.[st.id] || sc._repeats?.[st.id]?.[new Date(dstr + 'T12:00:00').getDay()] || null;
+  const explicit = sc[dstr]?.[st.id];
+  // '__none__' is a one-off blank that overrides the weekly repeat (mirrors getScheduleStatus).
+  const status = explicit === '__none__' ? null
+    : (explicit || sc._repeats?.[st.id]?.[new Date(dstr + 'T12:00:00').getDay()] || null);
   return status === 'off' || status === 'sick' || status === 'vacation';
 }
 // Auto-hide active? (opt-in setting). Calendars filter + grid both consult this.
