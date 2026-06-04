@@ -8,7 +8,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, escHtml } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
-import { loadSquareCustomers } from './square-customers.js';
+import { importCustomersFromSquare } from './square-customers.js';
 
 const cfg = () => getState().config;
 const sqConfig = () => cfg().square_config || null;
@@ -106,13 +106,7 @@ export function renderTerminalStatus() {
 // Customers move to the Durable Object in a later step; until then they load from Square.
 export async function syncSquare() {
   if (!sqConfig()) { showSquareModal(); return; }
-  updateSyncLabel('pending', 'Syncing…');
-  showToast('Syncing customers with Square…');
-  try {
-    const ok = await loadSquareCustomers();
-    if (ok) { updateSyncLabel('ok', 'Square synced'); showToast('Customer sync complete'); }
-    else { updateSyncLabel('error', 'Sync incomplete'); }
-  } catch (e) { updateSyncLabel('error', 'Sync failed'); showToast('Customer sync failed. Check settings.'); }
+  await importCustomersFromSquare();   // one-time/again-safe import of Square customers into the DO
 }
 
 export function updateSyncLabel(state, label) {

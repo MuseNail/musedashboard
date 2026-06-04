@@ -2,7 +2,7 @@
 // Customers are owned by Square — kept as a device-local cache (localStorage
 // 'muse_customers'), NOT in the DO store. Staff import writes config.staff.
 
-import { getState } from '../store.js';
+import { getState, subscribe } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, formatPhone, autoCapitalize, dismissNumpad, escHtml, escAttrJs } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
@@ -25,70 +25,83 @@ export let customerDirectory = [];
 let _editCustSnapshot = '';
 const _editCustSig = () => ['edit-cust-first','edit-cust-last','edit-cust-phone','edit-cust-email','edit-cust-notes'].map(id => (document.getElementById(id)?.value || '').trim()).join('');
 
-// Pre-populate from the local cache on load (works offline + before Square sync).
-(function initFromCache() {
+// ── Directory source: the synced DO store (state.customers) ──────────────────
+// The directory is now app-owned (a DO entity), not Square. We derive the two legacy
+// shapes every reader already expects — customerDirectory ({squareId,firstName,...}) and
+// squareCustomers ({id,given_name,...}) — from getState().customers, and rebuild them on
+// every store change. Pre-import fallback: if the DO has no customers yet (right after the
+// migration deploy, before "Import from Square" has run), use the last cached Square list so
+// check-in autocomplete isn't empty; once the DO is seeded the store wins and we refresh the
+// offline cache from it. The customer's `id` IS the directory's `squareId` field (kept for
+// reader compatibility); a customer also carries a separate `squareId` link when known.
+function _storeCustomers() {
+  const fromStore = getState().customers || [];
+  if (fromStore.length) return { list: fromStore, fromStore: true };
   try {
-    const cached = localStorage.getItem('muse_customers');
-    if (cached) {
-      customerDirectory = JSON.parse(cached);
-      squareCustomers = customerDirectory.map(c => ({
-        id: c.squareId, given_name: c.firstName || '', family_name: c.lastName || '',
-        phone: c.phone || '', display: [c.firstName, c.lastName].filter(Boolean).join(' '),
-      })).filter(c => c.given_name);
-    }
-  } catch (e) {}
-})();
+    const cached = JSON.parse(localStorage.getItem('muse_customers') || '[]');
+    return { list: cached.map(c => ({ id: c.squareId, firstName: c.firstName || '', lastName: c.lastName || '', phone: c.phone || '', email: c.email || '', squareId: c.squareId })), fromStore: false };
+  } catch { return { list: [], fromStore: false }; }
+}
+function rebuildDirectory() {
+  const { list, fromStore } = _storeCustomers();
+  customerDirectory = list.map(c => ({ squareId: c.id, firstName: c.firstName || '', lastName: c.lastName || '', phone: c.phone || '', email: c.email || '', note: '', sqLink: c.squareId || null }));
+  squareCustomers = list.filter(c => c.firstName).map(c => ({
+    id: c.id, given_name: c.firstName || '', family_name: c.lastName || '',
+    phone: c.phone || '', display: [c.firstName, c.lastName].filter(Boolean).join(' '),
+  }));
+  if (fromStore) { try { localStorage.setItem('muse_customers', JSON.stringify(customerDirectory)); } catch (e) {} }
+  window.renderCustomersTab?.();   // live-refresh the Customers tab if it's the open panel
+}
+rebuildDirectory();
+subscribe(rebuildDirectory);   // keep the directory in lockstep with the synced store
 
-// ATOMIC refresh: the directory + cache (and therefore the phone/id anchors that
-// notes hang off) are replaced ONLY on a fully successful pull — every page OK and
-// the cursor exhausted. Any page error, a network throw, or a fully-"successful"
-// empty pull while we already hold data keeps the last-good list untouched and
-// returns false, so a single failed page can never blank the directory.
-export async function loadSquareCustomers() {
+// Fetch the full Square customer list (paginated) — used ONLY by the one-time import into the
+// DO. Returns an array of {id,firstName,lastName,phone,email} (Square id), or null on a failed
+// or partial pull (so the import never seeds from incomplete data).
+export async function fetchSquareCustomers() {
   let all = [], cursor = null;
   try {
     do {
       const url = `${SQUARE_PROXY}/v2/customers?limit=100&sort_field=CREATED_AT&sort_order=DESC${cursor ? '&cursor=' + cursor : ''}`;
       const res = await fetch(url);
-      if (!res.ok) {
-        console.warn(`Square customers: page failed (HTTP ${res.status}) — keeping last-good directory`);
-        showToast('Customer sync incomplete — kept last list');
-        return false;
-      }
+      if (!res.ok) { showToast('Square fetch failed (HTTP ' + res.status + ') — try again'); return null; }
       const data = await res.json();
       all = all.concat(data.customers || []);
       cursor = data.cursor || null;
     } while (cursor);
-  } catch (e) {
-    console.warn('Could not load Square customers:', e);
-    showToast('Customer sync incomplete — kept last list');
-    return false;
-  }
-
-  // Suspicious-shrink guard: a fully "successful" empty pull while the cache is
-  // populated is almost always a transient Square/proxy glitch, not a real wipe.
-  if (all.length === 0 && customerDirectory.length > 0) {
-    console.warn('Square returned 0 customers but cache has data — keeping last-good directory');
-    showToast('Customer sync incomplete — kept last list');
-    return false;
-  }
-
-  squareCustomers = all
+  } catch (e) { showToast('Could not reach Square'); return null; }
+  return all
     .filter(c => c.given_name && c.given_name.trim() !== '-' && c.given_name.trim() !== '')
     .map(c => ({
-      id: c.id,
-      given_name:  c.given_name?.trim() || '',
-      family_name: (c.family_name || '').trim().replace(/^-$/, ''),
-      phone:       c.phone_number || '',
-      display:     [c.given_name?.trim(), (c.family_name||'').trim().replace(/^-$/,'')].filter(Boolean).join(' '),
+      id: c.id, firstName: c.given_name?.trim() || '', lastName: (c.family_name || '').trim().replace(/^-$/, ''),
+      phone: c.phone_number || '', email: c.email_address || '',
     }));
-  customerDirectory = all.map(c => ({
-    squareId: c.id, firstName: c.given_name?.trim() || '', lastName: (c.family_name || '').trim().replace(/^-$/, ''),
-    phone: c.phone_number || '', email: c.email_address || '', note: c.note || '',
-  }));
-  localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
-  console.log(`Loaded ${squareCustomers.length} customers from Square`);
-  return true;
+}
+
+// One-time (re-runnable) import of the Square customer list into the DO customer store. Each
+// customer becomes a DO entity keyed by its Square id (so re-running updates rather than dups);
+// a customer already in the store (by id OR phone) is updated, not duplicated. Idempotent.
+export async function importCustomersFromSquare() {
+  if (!cfg().square_config) { showToast('Square not configured.'); return; }
+  showToast('Fetching customers from Square…');
+  const sq = await fetchSquareCustomers();
+  if (!sq) return;                              // already toasted
+  if (!sq.length) { showToast('No customers found in Square.'); return; }
+  if (!confirm(`Import ${sq.length} customer${sq.length !== 1 ? 's' : ''} from Square into the app directory?\n\nSafe to run again later — existing customers are updated, not duplicated.`)) return;
+  const have = getState().customers || [];
+  const byId = new Set(have.map(c => String(c.id)));
+  const byPhone = new Map(have.map(c => [notePhoneKey(c.phone), c]).filter(([k]) => k));
+  let added = 0, updated = 0;
+  sq.forEach(c => {
+    const pk = notePhoneKey(c.phone);
+    const match = byId.has(String(c.id)) ? have.find(x => String(x.id) === String(c.id)) : (pk ? byPhone.get(pk) : null);
+    const id = match ? match.id : c.id;
+    dispatch('customer.upsert', { customer: { id, firstName: c.firstName, lastName: c.lastName, phone: c.phone, email: c.email, squareId: c.id, createdAt: match?.createdAt || Date.now() } });
+    if (match) updated++; else added++;
+  });
+  showToast(`Imported from Square: ${added} added, ${updated} updated ✓`);
+  window.logAudit?.('Customer import', `${added} added · ${updated} updated from Square`);
+  window.renderCustomersTab?.();
 }
 
 export function filterCustomers(query, field) {
@@ -254,59 +267,95 @@ export function acSearchManual(input, idx, field) {
   if (other) { other.innerHTML = ''; other.classList.add('hidden'); }
 }
 
-// ── Customer Directory modal ──────────────────────
-export function showCustomerDir() {
-  const m = document.getElementById('customer-dir-modal');
-  m.classList.remove('hidden'); m.style.display = 'flex';
-  renderCustomerDir('');
-}
-export function closeCustomerDir() {
-  const m = document.getElementById('customer-dir-modal');
-  m.classList.add('hidden'); m.style.display = '';
-}
-export async function syncSquareCustomers() {
-  if (!cfg().square_config) { showToast('Square not configured.'); return; }
-  showToast('Syncing customers…');
-  const ok = await loadSquareCustomers();   // false → loadSquareCustomers already toasted "sync incomplete"
-  if (ok) showToast(`${customerDirectory.length} customers synced ✓`);
-  renderCustomerDir(document.getElementById('customer-dir-search')?.value || '');
-}
-export function filterCustomerDir(query) { renderCustomerDir(query); }
+// ── Customers tab (dedicated panel; replaces the old directory modal) ─────────
+// Back-compat shims: the Settings "Customer Directory" leaf + main.js closeAllModals
+// still reference these names. showCustomerDir now just navigates to the tab.
+export function showCustomerDir() { window.showDashPanel?.('customers'); }
+export function closeCustomerDir() {}   // no-op: the modal is gone (kept so closeAllModals is safe)
+export function syncSquareCustomers() { importCustomersFromSquare(); }   // legacy name → the one-time import
 
-export function renderCustomerDir(query) {
-  const list = document.getElementById('customer-dir-list');
-  if (!list) return;
-  const q = (query || '').trim().toLowerCase();
-  // Phone match compares DIGITS-to-DIGITS: the stored phone is formatted ("(555) 318-2244"),
-  // so comparing a typed number against that string failed the moment the query spanned a
-  // "(", ")", "-" or space — i.e. 4+ digits or a full number never matched (only the bare
-  // area code did). Strip non-digits from both sides instead.
+// Per-customer lifetime stats (visits / last visit / total spent), derived from transaction
+// records in ONE pass and keyed by phone (records link to customers by phone).
+function _custStatsByPhone() {
+  const m = new Map();
+  (getState().records || []).forEach(r => {
+    if (r.status === 'deleted') return;
+    const pk = notePhoneKey(r.phone);
+    if (!pk) return;
+    let s = m.get(pk); if (!s) { s = { visits: 0, last: 0, spent: 0 }; m.set(pk, s); }
+    s.visits++;
+    const t = new Date(r.checkinTime || r.completedAt || 0).getTime(); if (t > s.last) s.last = t;
+    const amt = Number(r.totalCost) || 0; if (r.status !== 'refund' && amt > 0) s.spent += amt;
+  });
+  return m;
+}
+
+export function filterCustomersTab(query) { renderCustomersTab(query); }
+export function renderCustomerDir(query) { renderCustomersTab(query); }   // legacy alias (cleanup back-button, saveEditCustomer)
+
+export function renderCustomersTab(query) {
+  const host = document.getElementById('customers-content');
+  if (!host) return;   // tab not open
+  const q = (query == null ? (document.getElementById('customers-search')?.value || '') : query).trim().toLowerCase();
   const qDigits = q.replace(/\D/g, '');
-  const filtered = customerDirectory.filter(c => {
+  const total = customerDirectory.length;
+  if (total === 0) {
+    host.innerHTML = `<div class="text-center py-16 text-on-surface-variant font-body">
+      <span class="material-symbols-outlined" style="font-size:48px;opacity:.4">contacts</span>
+      <div class="mt-3 text-lg font-headline font-bold text-on-surface">No customers yet</div>
+      <div class="text-sm mt-1">Tap <b>Import from Square</b> to bring in your existing customers, or <b>Add Customer</b> to start one.</div></div>`;
+    return;
+  }
+  const stats = _custStatsByPhone();
+  const sorted = [...customerDirectory].sort((a, b) => ([a.firstName, a.lastName].join(' ')).localeCompare([b.firstName, b.lastName].join(' ')));
+  const filtered = sorted.filter(c => {
     if (!q) return true;
-    if ((c.firstName + ' ' + c.lastName).toLowerCase().includes(q)) return true;
+    if (([c.firstName, c.lastName].join(' ')).toLowerCase().includes(q)) return true;
     if ((c.email || '').toLowerCase().includes(q)) return true;
     if (qDigits && (c.phone || '').replace(/\D/g, '').includes(qDigits)) return true;
     return false;
-  }).slice(0, 100);
-  if (filtered.length === 0) {
-    list.innerHTML = '<div class="text-sm font-body text-on-surface-variant text-center py-8">No customers found. Tap Sync Square to load.</div>';
-    return;
-  }
-  list.innerHTML = filtered.map(c => {
+  });
+  const rows = filtered.slice(0, 500).map(c => {
     const name = [c.firstName, c.lastName].filter(Boolean).join(' ') || 'Unknown';
-    return `
-      <div onclick="showEditCustomer('${escAttrJs(c.squareId)}')" title="Edit customer" class="flex items-center gap-3 px-4 py-3 border-b border-surface-container-high hover:bg-surface-container transition-colors cursor-pointer">
-        <div class="w-9 h-9 rounded-full bg-primary-container flex items-center justify-center flex-shrink-0">
-          <span class="text-sm font-headline font-bold text-primary">${escHtml(name.charAt(0).toUpperCase())}</span>
-        </div>
-        <div class="flex-grow min-w-0">
-          <div class="font-headline font-semibold text-on-surface text-sm">${escHtml(name)}</div>
-          <div class="text-xs font-body text-on-surface-variant">${escHtml(c.phone || '')}${c.email ? ' · ' + escHtml(c.email) : ''}</div>
-        </div>
-        <span class="material-symbols-outlined text-on-surface-variant flex-shrink-0" style="font-size:18px">chevron_right</span>
-      </div>`;
+    const s = stats.get(notePhoneKey(c.phone)) || { visits: 0, last: 0, spent: 0 };
+    const last = s.last ? new Date(s.last).toLocaleDateString() : '—';
+    return `<tr onclick="showEditCustomer('${escAttrJs(c.squareId)}')" class="cursor-pointer hover:bg-surface-container transition-colors">
+      <td class="font-headline font-semibold text-on-surface">${escHtml(name)}</td>
+      <td>${escHtml(c.phone || '—')}</td>
+      <td class="text-on-surface-variant">${escHtml(c.email || '—')}</td>
+      <td class="text-right">${s.visits || '—'}</td>
+      <td>${last}</td>
+      <td class="text-right">${s.spent ? '$' + s.spent.toFixed(0) : '—'}</td>
+    </tr>`;
   }).join('');
+  host.innerHTML = `
+    <div class="text-[11px] font-body text-on-surface-variant mb-2">${filtered.length} of ${total} customer${total !== 1 ? 's' : ''}${q ? ' (filtered)' : ''}</div>
+    <div class="overflow-x-auto"><table class="data-table w-full text-sm">
+      <thead><tr><th>Name</th><th>Phone</th><th>Email</th><th class="text-right">Visits</th><th>Last visit</th><th class="text-right">Total</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" class="text-center py-6 text-on-surface-variant">No matches.</td></tr>'}</tbody>
+    </table></div>`;
+}
+
+// New blank-customer entry — opens the shared edit modal in "add" mode (no id).
+export function showAddCustomer() {
+  ['edit-cust-id', 'edit-cust-square-id', 'edit-cust-first', 'edit-cust-last', 'edit-cust-phone', 'edit-cust-email', 'edit-cust-notes']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const t = document.getElementById('edit-customer-title'); if (t) t.textContent = 'Add Customer';
+  const hist = document.getElementById('edit-cust-history'); if (hist) hist.innerHTML = '<div class="text-xs text-on-surface-variant py-2">No visits yet.</div>';
+  const del = document.getElementById('edit-cust-delete-btn'); if (del) del.classList.add('hidden');
+  _editCustSnapshot = _editCustSig();
+  const m = document.getElementById('edit-customer-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
+}
+
+// Export the full directory to CSV (UTF-8 BOM + CRLF so Excel opens it cleanly).
+export function exportCustomersCSV() {
+  const rows = [['First', 'Last', 'Phone', 'Email', 'Note']];
+  customerDirectory.forEach(c => rows.push([c.firstName || '', c.lastName || '', c.phone || '', c.email || '', (customerNote(c.phone) || '').replace(/[\r\n]+/g, ' ')]));
+  const csv = '﻿' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const a = document.createElement('a'); a.href = url; a.download = 'muse-customers.csv'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast(`Exported ${customerDirectory.length} customers`);
 }
 
 // ── Customer cleanup / dedup ────────────────────────────────────────────────────
@@ -324,17 +373,17 @@ export function findDuplicateGroups(directory) {
   };
   return { byPhone: group(_custPhoneKey), byName: group(_custNameKey) };
 }
-// Delete one Square customer + drop it from the local caches. 404 (already gone) counts as success.
-export async function deleteSquareCustomer(squareId) {
-  if (!squareId) return false;
-  try {
-    const res = await fetch(`${SQUARE_PROXY}/v2/customers/${squareId}`, { method: 'DELETE' });
-    if (!res.ok && res.status !== 404) { const j = await res.json().catch(() => ({})); showToast('Delete failed: ' + (j.errors?.[0]?.detail || ('HTTP ' + res.status))); return false; }
-    const di = customerDirectory.findIndex(c => c.squareId === squareId); if (di >= 0) customerDirectory.splice(di, 1);
-    const si = squareCustomers.findIndex(c => c.id === squareId); if (si >= 0) squareCustomers.splice(si, 1);
-    try { localStorage.setItem('muse_customers', JSON.stringify(customerDirectory)); } catch (e) {}
-    return true;
-  } catch (e) { showToast('Could not reach Square'); return false; }
+// Delete a customer from the app directory (the DO is the source of truth). Best-effort also
+// removes the linked Square profile (kept until Helcim). `id` is the DO customer id.
+export async function deleteSquareCustomer(id) {
+  if (!id) return false;
+  const c = customerDirectory.find(x => x.squareId === id);
+  dispatch('customer.delete', { id });          // authoritative removal (the rebuild drops it from the caches)
+  const sqId = c?.sqLink;
+  if (sqId && cfg().square_config) {
+    try { await fetch(`${SQUARE_PROXY}/v2/customers/${sqId}`, { method: 'DELETE' }); } catch (e) {}
+  }
+  return true;
 }
 // Merge = keep one profile, delete the rest. (Square has no merge API; notes/history are phone-keyed
 // so the surviving profile keeps everything.) Returns the count successfully removed.
@@ -349,7 +398,7 @@ const _cEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</
 const _cName = c => _cEsc([c.firstName, c.lastName].filter(Boolean).join(' ') || '(no name)');
 export function openCustomerCleanup() { renderCustomerCleanup(); }
 export function renderCustomerCleanup() {
-  const list = document.getElementById('customer-dir-list'); if (!list) return;
+  const list = document.getElementById('customers-content'); if (!list) return;
   const { byPhone, byName } = findDuplicateGroups(customerDirectory);
   const noPhone = customerDirectory.filter(c => !_custPhoneKey(c));
   const memberRow = (c, ids) => `<div class="flex items-center justify-between gap-2 px-3 py-2 border-t border-surface-container first:border-t-0">
@@ -373,7 +422,7 @@ export async function cleanupMergeGroup(keepId, idsCsv) {
   if (!removeIds.length) return;
   const keep = customerDirectory.find(c => c.squareId === keepId);
   const keepName = keep ? ([keep.firstName, keep.lastName].filter(Boolean).join(' ') || 'this customer') : 'this customer';
-  if (!confirm(`Keep "${keepName}" and permanently delete the other ${removeIds.length} profile${removeIds.length !== 1 ? 's' : ''} in Square?\n\nNotes & visit history stay with the kept profile. Past sales are not deleted.`)) return;
+  if (!confirm(`Keep "${keepName}" and delete the other ${removeIds.length} profile${removeIds.length !== 1 ? 's' : ''} from the directory?\n\nNotes & visit history are phone-keyed, so they stay with the kept profile. Past sales are not deleted.`)) return;
   showToast('Merging…');
   const n = await mergeCustomers(keepId, removeIds);
   showToast(`Merged — removed ${n} duplicate${n !== 1 ? 's' : ''}`);
@@ -383,26 +432,40 @@ export async function cleanupMergeGroup(keepId, idsCsv) {
 export async function cleanupDeleteCustomer(id) {
   const c = customerDirectory.find(x => x.squareId === id);
   const nm = c ? ([c.firstName, c.lastName].filter(Boolean).join(' ') || '(no name)') : 'this customer';
-  if (!confirm(`Delete "${nm}" from Square? This is permanent.\n\nPast sales are not deleted — the profile is just unlinked.`)) return;
+  if (!confirm(`Delete "${nm}" from the directory? Past sales are not deleted — the profile is just removed.`)) return;
   if (await deleteSquareCustomer(id)) { showToast('Customer deleted'); window.logAudit?.('Customer delete', nm); renderCustomerCleanup(); }
 }
 
-export function showEditCustomer(squareId) {
-  const c = customerDirectory.find(x => x.squareId === squareId);
+export function showEditCustomer(id) {
+  const c = customerDirectory.find(x => x.squareId === id);   // .squareId here = the DO customer id
   if (!c) return;
-  document.getElementById('edit-cust-id').value        = c.squareId;
-  document.getElementById('edit-cust-square-id').value = c.squareId;
+  document.getElementById('edit-cust-id').value        = c.squareId;     // DO id
+  document.getElementById('edit-cust-square-id').value = c.sqLink || '';  // linked Square id (for the dual-write)
   document.getElementById('edit-cust-first').value     = c.firstName;
   document.getElementById('edit-cust-last').value      = c.lastName;
   document.getElementById('edit-cust-phone').value     = c.phone;
   document.getElementById('edit-cust-email').value     = c.email;
   document.getElementById('edit-cust-notes').value     = customerNote(c.phone);   // app-owned manual note, keyed by phone
+  const t = document.getElementById('edit-customer-title'); if (t) t.textContent = 'Edit Customer';
+  const del = document.getElementById('edit-cust-delete-btn'); if (del) del.classList.remove('hidden');
   // Local visit history (derived from transaction records) — kept in reports.js to avoid
   // a circular import; safe no-op if reports hasn't loaded.
   window.renderCustomerHistory?.(c.phone, [c.firstName, c.lastName].filter(Boolean).join(' '));
   _editCustSnapshot = _editCustSig();   // baseline for the unsaved-changes guard
   const m = document.getElementById('edit-customer-modal');
   m.classList.remove('hidden'); m.style.display = 'flex';
+}
+export async function deleteCustomerFromEdit() {
+  const id = document.getElementById('edit-cust-id').value;
+  if (!id) return;
+  const c = customerDirectory.find(x => x.squareId === id);
+  const nm = c ? ([c.firstName, c.lastName].filter(Boolean).join(' ') || 'this customer') : 'this customer';
+  if (!confirm(`Delete "${nm}"? Removes them from the directory. Past sales are not affected.`)) return;
+  await deleteSquareCustomer(id);
+  window.logAudit?.('Customer delete', nm);
+  showToast('Customer deleted');
+  closeEditCustomer(true);
+  renderCustomersTab();
 }
 export function closeEditCustomer(force) {
   // Warn before discarding unsaved edits (incl. the note). `force === true` skips it — used by
@@ -417,7 +480,8 @@ export function closeEditCustomer(force) {
 }
 
 export async function saveEditCustomer() {
-  const squareId = document.getElementById('edit-cust-square-id').value;
+  const id0    = document.getElementById('edit-cust-id').value;            // DO id ('' = adding)
+  const sqLink0 = document.getElementById('edit-cust-square-id').value || null;
   const first = document.getElementById('edit-cust-first').value.trim();
   const last  = document.getElementById('edit-cust-last').value.trim();
   const phone = document.getElementById('edit-cust-phone').value.trim();
@@ -425,9 +489,25 @@ export async function saveEditCustomer() {
   const note  = document.getElementById('edit-cust-notes').value.trim();
   if (!first) { showToast('First name is required.'); return; }
 
-  const local = customerDirectory.find(x => x.squareId === squareId);
-  if (local) { local.firstName = first; local.lastName = last; local.phone = phone; local.email = email; }
-  localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
+  const existing = id0 ? (getState().customers || []).find(c => String(c.id) === String(id0)) : null;
+  const id = id0 || ('cust-' + (notePhoneKey(phone) || (Date.now() + '-' + Math.floor(Math.random() * 1e4))));
+
+  // Square dual-write (kept until Helcim): PUT the linked profile, else create one and capture
+  // the link. Best-effort — the DO write below is the source of truth and always happens.
+  let sqLink = sqLink0 || existing?.squareId || null;
+  if (cfg().square_config && phone) {
+    try {
+      if (sqLink) {
+        await fetch(`${SQUARE_PROXY}/v2/customers/${sqLink}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ given_name: first, family_name: last, phone_number: phone, email_address: email }) });
+      } else {
+        const r = await fetch(`${SQUARE_PROXY}/v2/customers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotency_key: 'muse-cust-' + id, given_name: first, family_name: last, phone_number: phone, email_address: email }) });
+        if (r.ok) sqLink = (await r.json())?.customer?.id || null;
+      }
+    } catch (e) { /* best-effort; DO is the source of truth */ }
+  }
+
+  dispatch('customer.upsert', { customer: { id, firstName: first, lastName: last, phone, email, squareId: sqLink, createdAt: existing?.createdAt || Date.now() } });
+
   // Manual note → app-owned synced store, keyed by phone (kept out of Square's note).
   const phoneKey = notePhoneKey(phone);
   if (phoneKey) {
@@ -437,31 +517,20 @@ export async function saveEditCustomer() {
   } else if (note) {
     showToast('Add a phone number to save a note');
   }
-  const sc = squareCustomers.find(c => c.id === squareId);
-  if (sc) { sc.given_name = first; sc.family_name = last; sc.phone = phone; sc.display = `${first} ${last}`.trim(); }
 
-  // Update matching queue entries (match by phone) via the store.
+  // Keep matching queue entries' display name in sync (match by phone).
   const fullName = last ? `${first} ${last}` : first;
   getState().queue.forEach(e => {
-    if (e.phone && phone && e.phone.replace(/\D/g,'').endsWith(phone.replace(/\D/g,''))) {
+    if (e.phone && phone && e.phone.replace(/\D/g, '').endsWith(phone.replace(/\D/g, ''))) {
       dispatch('queue.upsert', { entry: { ...e, name: fullName } });
     }
   });
   window.renderQueue?.(); window.renderTurns?.();
 
-  if (cfg().square_config && squareId) {
-    try {
-      await fetch(`${SQUARE_PROXY}/v2/customers/${squareId}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ given_name: first, family_name: last, phone_number: phone, email_address: email }),   // note stays app-owned — the app never writes Square's own note field
-      });
-      showToast('Customer updated in Square ✓');
-    } catch (e) { showToast('Saved locally (Square update failed)'); }
-  } else { showToast('Customer updated locally ✓'); }
-
-  window.logAudit?.('Customer edit', `${fullName || '—'}${phone ? ' · ' + phone : ''}`);
+  window.logAudit?.('Customer ' + (existing ? 'edit' : 'add'), `${fullName || '—'}${phone ? ' · ' + phone : ''}`);
+  showToast(existing ? 'Customer updated ✓' : 'Customer added ✓');
   closeEditCustomer(true);   // already saved — skip the unsaved-changes guard
-  renderCustomerDir(document.getElementById('customer-dir-search')?.value || '');
+  renderCustomersTab();
 }
 
 export async function squarePullStaff() {
@@ -511,69 +580,66 @@ export function upsertPartyCustomers(entries) {
   });
 }
 
+// Ensure this entry's customer exists in the app's DO directory (found by phone; created if new).
+// The DO is the source of truth. Avoids flip-flopping the name on a shared phone (upsertPartyCustomers
+// already dedups by phone). When the linked Square id becomes known, attaches it. Returns the DO id.
+function ensureCustomerInStore(entry, squareLink) {
+  if (!entry || !entry.name || entry.name.trim() === '-') return null;
+  const pk = notePhoneKey(entry.phone);
+  if (!pk) return null;   // no phone → can't key reliably (Square also skips these)
+  const parts = entry.name.trim().split(/\s+/);
+  const firstName = parts[0] || '', lastName = parts.slice(1).join(' ') || '';
+  const existing = (getState().customers || []).find(c => notePhoneKey(c.phone) === pk);
+  if (existing) {
+    if (squareLink && existing.squareId !== squareLink) {   // only write when we actually learned something new (no name churn)
+      dispatch('customer.upsert', { customer: { ...existing, squareId: squareLink } });
+    }
+    return existing.id;
+  }
+  const id = 'cust-' + pk;
+  dispatch('customer.upsert', { customer: { id, firstName, lastName, phone: entry.phone, email: '', squareId: squareLink || null, createdAt: Date.now() } });
+  return id;
+}
+
+// On check-in/pay: capture the customer in the app directory (always), and — until the Helcim
+// cutover — mirror to Square so a card charge can be linked. Returns the SQUARE customer id (for
+// attaching the sale in Square), or null. The DO directory is updated regardless of Square.
 export async function squareUpsertCustomer(entry) {
   if (!entry.name || entry.name.trim() === '-') return null;
   const parts = entry.name.trim().split(/\s+/);
   const firstName = parts[0] || '', lastName = parts.slice(1).join(' ') || '';
   const rawPhone = (entry.phone || '').replace(/\D/g, '');
   if (!rawPhone) return null;
-  let resolvedId = null;
+
+  ensureCustomerInStore(entry);                 // app directory first — independent of Square
+  if (!cfg().square_config) return null;        // Square dual-write only when configured
+
+  let squareId = null;
   try {
-    let existingId = null;
-    if (squareCustomers.length > 0) {
-      const cached = squareCustomers.find(c => {
-        const cp = (c.phone||'').replace(/\D/g,'').replace(/^1(\d{10})$/,'$1');
-        return cp === rawPhone || cp === rawPhone.replace(/^1/,'');
-      });
-      if (cached) existingId = cached.id;
-    }
-    if (!existingId) {
+    // Prefer the Square link already on the DO customer (by phone); else search Square by phone.
+    const known = (getState().customers || []).find(c => notePhoneKey(c.phone) === notePhoneKey(entry.phone));
+    if (known?.squareId) squareId = known.squareId;
+    if (!squareId) {
       try {
         const phoneE164 = `+1${rawPhone.replace(/^1(\d{10})$/, '$1')}`;
         const sr = await fetch(`${SQUARE_PROXY}/v2/customers/search`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: { filter: { phone_number: { exact: phoneE164 } } } }),
         });
-        if (sr.ok) existingId = (await sr.json())?.customers?.[0]?.id || null;
+        if (sr.ok) squareId = (await sr.json())?.customers?.[0]?.id || null;
       } catch (e) {}
     }
-    resolvedId = existingId;   // the customer to attach a sale to (null until a create succeeds)
-    // The app no longer writes Square's own `note` field — it kept overwriting the
-    // salon's manual note box every check-in. Visit history is tracked app-side.
-    const payload = { given_name: firstName, family_name: lastName };
-    if (rawPhone) payload.phone_number = entry.phone;
-
-    if (existingId) {
-      const res = await fetch(`${SQUARE_PROXY}/v2/customers/${existingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-      if (res.ok) {
-        const c = (await res.json()).customer;
-        if (c) {
-          // Refresh the local caches so a name/phone fix shows immediately in-app
-          // (not only after the next full sync).
-          const sc = squareCustomers.find(x => x.id === c.id);
-          if (sc) { sc.given_name = c.given_name||''; sc.family_name = c.family_name||''; sc.phone = c.phone_number||''; sc.display = entry.name; }
-          else squareCustomers.push({ id: c.id, given_name: c.given_name||'', family_name: c.family_name||'', phone: c.phone_number||'', display: entry.name });
-          const dir = customerDirectory.find(x => x.squareId === c.id);
-          if (dir) { dir.firstName = c.given_name||''; dir.lastName = c.family_name||''; dir.phone = c.phone_number||''; }
-          else customerDirectory.push({ squareId: c.id, firstName: c.given_name||'', lastName: c.family_name||'', phone: c.phone_number||'', email: '', note: c.note||'' });
-          localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
-        }
-      } else console.warn('[Square] Customer update failed:', existingId, res.status);
+    const payload = { given_name: firstName, family_name: lastName, phone_number: entry.phone };
+    if (squareId) {
+      await fetch(`${SQUARE_PROXY}/v2/customers/${squareId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     } else {
-      const iKey = rawPhone ? `muse-customer-${rawPhone}` : `muse-customer-${firstName.toLowerCase()}-${lastName.toLowerCase()}`;
-      const res = await fetch(`${SQUARE_PROXY}/v2/customers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotency_key: iKey, ...payload }) });
-      if (res.ok) {
-        const c = (await res.json()).customer;
-        if (c) {
-          resolvedId = c.id;
-          squareCustomers.push({ id: c.id, given_name: c.given_name||'', family_name: c.family_name||'', phone: c.phone_number||'', display: entry.name });
-          customerDirectory.push({ squareId: c.id, firstName: c.given_name||'', lastName: c.family_name||'', phone: c.phone_number||'', email: '', note: c.note||'' });
-          localStorage.setItem('muse_customers', JSON.stringify(customerDirectory));
-        }
-      } else console.warn('[Square] Customer create failed:', res.status);
+      const res = await fetch(`${SQUARE_PROXY}/v2/customers`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotency_key: `muse-customer-${rawPhone}`, ...payload }) });
+      if (res.ok) squareId = (await res.json())?.customer?.id || null;
+      else console.warn('[Square] Customer create failed:', res.status);
     }
+    if (squareId) ensureCustomerInStore(entry, squareId);   // attach the Square link to the DO customer
   } catch (e) { console.warn('[Square] Customer upsert failed:', e); }
-  return resolvedId;
+  return squareId;
 }
 
 // ── Notes re-key migration + orphan finder ──────────────────────────────────

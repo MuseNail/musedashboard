@@ -229,6 +229,9 @@ tailwind.config = {
       <button class="dash-tab" id="nav-giftcards" onclick="showDashPanel('giftcards')">
         <span class="material-symbols-outlined" style="font-size:18px">card_giftcard</span> Gift Cards
       </button>
+      <button class="dash-tab" id="nav-customers" onclick="showDashPanel('customers')">
+        <span class="material-symbols-outlined" style="font-size:18px">contacts</span> Customers
+      </button>
       <button class="dash-tab" id="nav-settings" onclick="showDashPanel('settings')">
         <span class="material-symbols-outlined" style="font-size:18px">tune</span> Settings
       </button>
@@ -1281,6 +1284,25 @@ tailwind.config = {
       <!-- ═══════════════════════════════════════════════
            GIFT CARDS PANEL (inside dashboard)
       ═══════════════════════════════════════════════ -->
+      <div id="panel-customers" class="dash-panel">
+        <div class="dash-head flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 class="text-xl font-headline font-bold text-on-surface">Customers</h2>
+            <p class="text-sm font-body text-on-surface-variant mt-0.5">Your customer directory — search, edit, visit history</p>
+          </div>
+          <div class="flex gap-2 flex-wrap">
+            <button onclick="showAddCustomer()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary text-sm font-headline font-bold hover:bg-primary-dim transition-colors"><span class="material-symbols-outlined" style="font-size:16px">person_add</span> Add Customer</button>
+            <button onclick="openCustomerCleanup()" title="Find &amp; merge duplicates" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-container-high text-on-surface text-sm font-body font-semibold hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">cleaning_services</span> Clean up</button>
+            <button onclick="exportCustomersCSV()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-container-high text-on-surface text-sm font-body font-semibold hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">download</span> CSV</button>
+            <button onclick="importCustomersFromSquare()" title="One-time import of your existing Square customers" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary text-sm font-body font-semibold hover:bg-primary/5 transition-colors"><span class="material-symbols-outlined" style="font-size:16px">sync</span> Import from Square</button>
+          </div>
+        </div>
+        <div class="mb-3">
+          <input id="customers-search" type="text" placeholder="Search by name, phone, or email…" oninput="filterCustomersTab(this.value)" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2.5 text-sm font-body focus:border-primary outline-none">
+        </div>
+        <div id="customers-content"></div>
+      </div>
+
       <div id="panel-giftcards" class="dash-panel">
         <div class="dash-head flex items-center justify-between">
           <div>
@@ -2137,26 +2159,7 @@ tailwind.config = {
 <!-- ═══════════════════════════════════════════════
      CUSTOMER DIRECTORY MODAL
 ═══════════════════════════════════════════════ -->
-<div id="customer-dir-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-2xl shadow-2xl fade-up mx-4 max-h-[90vh] flex flex-col">
-    <div class="flex items-center justify-between mb-4">
-      <h2 class="text-xl font-headline font-bold text-on-surface">Customer Directory</h2>
-      <button onclick="closeCustomerDir()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
-    </div>
-    <div class="flex gap-2 mb-4">
-      <input id="customer-dir-search" type="text" placeholder="Search by name or phone…"
-        oninput="filterCustomerDir(this.value)"
-        class="flex-grow border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-body focus:border-primary outline-none">
-      <button onclick="syncSquareCustomers()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary text-sm font-body font-semibold hover:bg-primary/5 transition-colors">
-        <span class="material-symbols-outlined" style="font-size:16px">sync</span> Sync Square
-      </button>
-      <button onclick="openCustomerCleanup()" title="Find &amp; merge duplicate / junk customers" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-container-high text-on-surface text-sm font-body font-semibold hover:bg-surface-container transition-colors">
-        <span class="material-symbols-outlined" style="font-size:16px">cleaning_services</span> Clean up
-      </button>
-    </div>
-    <div id="customer-dir-list" class="overflow-y-auto flex-1" style="scrollbar-width:thin"></div>
-  </div>
-</div>
+<!-- (Customer Directory modal removed in v4.25 — replaced by the dedicated Customers tab.) -->
 
 <!-- ═══════════════════════════════════════════════
      EDIT CUSTOMER MODAL
@@ -2164,7 +2167,7 @@ tailwind.config = {
 <div id="edit-customer-modal" class="fixed inset-0 z-[60] hidden items-center justify-center bg-on-surface/40" onclick="if(event.target===this)closeEditCustomer()">
   <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-lg shadow-2xl fade-up mx-4 max-h-[92vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-5">
-      <h2 class="text-xl font-headline font-bold text-on-surface">Edit Customer</h2>
+      <h2 id="edit-customer-title" class="text-xl font-headline font-bold text-on-surface">Edit Customer</h2>
       <button onclick="closeEditCustomer()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
     </div>
     <div class="space-y-4">
@@ -2196,8 +2199,9 @@ tailwind.config = {
       </div>
     </div>
     <div class="flex gap-2 mt-5">
+      <button id="edit-cust-delete-btn" onclick="deleteCustomerFromEdit()" class="hidden px-4 py-3 rounded-xl border border-error/60 text-error font-headline font-semibold hover:bg-error/10 transition-colors"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
       <button onclick="closeEditCustomer()" class="flex-1 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-semibold">Cancel</button>
-      <button onclick="saveEditCustomer()" class="flex-1 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold hover:bg-primary-dim transition-all active:scale-95">Save to Square</button>
+      <button onclick="saveEditCustomer()" class="flex-1 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold hover:bg-primary-dim transition-all active:scale-95">Save</button>
     </div>
   </div>
 </div>

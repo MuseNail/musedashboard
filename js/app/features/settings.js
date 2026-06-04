@@ -7,7 +7,6 @@ import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION } from '../config.js';
 import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
 import { setLogo } from './photos.js';
 import { getTurnConfig, saveTurnConfig, isAlwaysBonusService, saveBonusServices } from './turns.js';
-import { loadSquareCustomers } from './square-customers.js';
 
 const cfg = () => getState().config;
 
@@ -110,7 +109,6 @@ export function saveSquareFromSettings() {
   const applicationId = document.getElementById('settings-app-id')?.value.trim() || '';
   dispatch('config.set', { key: 'square_config', value: { ...cfg().square_config, locationId, applicationId } });
   const status = document.getElementById('settings-square-status'); if (status) status.textContent = '✓ Connected — Location: ' + locationId;
-  loadSquareCustomers();
   showToast('Square connected ✓');
 }
 
@@ -161,7 +159,7 @@ export function completeSetup() {
   const locationId = document.getElementById('setup-location-id')?.value.trim();
   if (!locationId) { showToast('Please enter your Square Location ID.'); return; }
   dispatch('config.set', { key: 'square_config', value: { locationId } });
-  hideSetupWizard(); loadSquareCustomers();
+  hideSetupWizard();
   showToast('Connected to Square ✓');
 }
 export function skipSetup() { sessionStorage.setItem('muse_setup_skipped', '1'); hideSetupWizard(); showToast('Running without Square. You can connect later in Settings.'); }

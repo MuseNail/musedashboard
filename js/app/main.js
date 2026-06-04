@@ -110,7 +110,7 @@ function goTo(screenId, param) {
 }
 function showDashPanel(panel) {
   closeAllModals();
-  ['queue','reports','transactions','payroll','turns','settings','giftcards','calendar','floorplan'].forEach(p => {
+  ['queue','reports','transactions','payroll','turns','settings','giftcards','calendar','floorplan','customers'].forEach(p => {
     document.getElementById(`panel-${p}`)?.classList.remove('active');
     document.getElementById(`nav-${p}`)?.classList.remove('active');
   });
@@ -122,6 +122,7 @@ function showDashPanel(panel) {
   if (panel === 'payroll')      reports.renderPayrollPage();
   if (panel === 'settings')     settings.renderSettingsPanel();
   if (panel === 'giftcards')    giftcards.renderGiftCards();
+  if (panel === 'customers')    sqCust.renderCustomersTab();
   if (panel === 'calendar')     calendar.initCalendar();
   if (panel === 'turns') {
     const di = document.getElementById('turns-history-date'); if (di && !di.value) di.value = utils.todayStr();
@@ -206,22 +207,15 @@ function updateSyncIndicator(state) {
   if (state.connected) { dot.style.background = state.pendingCount > 0 ? '#f5c870' : '#2a7a4f'; if (text) text.textContent = state.pendingCount > 0 ? `Sync ${state.pendingCount}` : 'Synced'; }
   else { dot.style.background = '#fa746f'; if (text) text.textContent = state.pendingCount > 0 ? `Offline ${state.pendingCount}` : 'Offline'; }
 }
-let _custAutoLoaded = false;
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
   if (changed === 'connection') return;
   if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); }   // apply pending Square auto-paid + roll over the day if needed, once the queue loads
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync();
-    // T2.17: once Square is configured, auto-load the customer directory so
-    // check-in autofill works on every device without a manual Settings→Square
-    // sync. Once per session; non-blocking; no-ops offline (cache pre-populates).
-    // Guard set true synchronously to block parallel re-entry while the pull is in
-    // flight; reset on failure so a later config change retries this session.
-    if (!_custAutoLoaded && state.config.square_config?.locationId) {
-      _custAutoLoaded = true;
-      sqCust.loadSquareCustomers().then(ok => { if (!ok) _custAutoLoaded = false; });
-    }
+    // The customer directory is now a DO entity — it hydrates from the snapshot like records,
+    // so no Square auto-pull on boot. (A one-time "Import from Square" seeds it; see the
+    // Customers tab.) square-customers.js rebuilds its directory caches on every store change.
   }
   const desk = document.getElementById('screen-desk');
   if (!desk || !desk.classList.contains('active')) return;
