@@ -9,9 +9,9 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap, escHtml } from '../utils.js';
-import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle } from './status.js';
-import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef } from './queue.js';
-import { getActiveTurnsOrder, getTechStatusColor } from './turns.js';
+import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, applyAssignmentStatus, applyEntryStatus } from './status.js';
+import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef, categoryMaxTechs } from './queue.js';
+import { getActiveTurnsOrder, getTechStatusColor, getTechTurns } from './turns.js';
 import { serviceTimeInfo } from './servicetime.js';
 
 const cfg = () => getState().config;
@@ -93,14 +93,37 @@ function collectFloor() {
   return { byStation, unplaced };
 }
 function entryInservice(e) { return activeAssignments(e).some(a => getAssignmentStatus(e, a) === 'inservice'); }
+// Small tech avatar for a tile service row: photo if set, else a colored initial; a faint "?" when
+// the service still has no tech (waiting). Deterministic color per tech so it's recognizable.
+const _AV_COLORS = ['#7c5cbf', '#1a7aa8', '#2a7a4f', '#b0612a', '#8f1a5c', '#1a5252', '#7a4f1a'];
+function _techAvatar(tech, fs) {
+  const d = Math.round(15 * fs);
+  const box = `display:inline-flex;align-items:center;justify-content:center;width:${d}px;height:${d}px;border-radius:50%;flex-shrink:0;border:1.5px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,.18);font-size:${Math.round(8 * fs)}px;font-weight:700;line-height:1;overflow:hidden`;
+  if (!tech) return `<span style="${box};background:#cfd8d8;color:#8a98a0">?</span>`;
+  if (tech.photo) return `<img src="${escHtml(tech.photo)}" style="${box};object-fit:cover">`;
+  let h = 0; for (const ch of String(tech.id || tech.name || '')) h = (h * 31 + ch.charCodeAt(0)) % 9973;
+  return `<span style="${box};background:${_AV_COLORS[h % _AV_COLORS.length]};color:#fff">${escHtml((tech.name || '?').charAt(0).toUpperCase())}</span>`;
+}
+// ALL of the customer's services (this seat's + others + still-waiting), each as a row:
+// status dot + tech avatar + service · tech · $ , with the elapsed▸avg badge on the line below.
 function custLines(e, stationId, fs = 1) {
-  return activeAssignments(e).filter(a => a.station === stationId).map(a => {
-    const s = a.serviceId ? svc(a.serviceId) : null, t = a.techId ? staffById(a.techId) : null;
-    const ls = serviceLineStyle(getAssignmentStatus(e, a));   // leading status glyph (color = status)
-    const sti = serviceTimeInfo(a);
-    const stiHtml = sti ? `<div style="font-size:${Math.round(9 * fs)}px;font-weight:700;color:${sti.color}">${sti.text}</div>` : '';
-    return `<div class="truncate" style="font-size:${Math.round(10 * fs)}px;color:#374151"><span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;vertical-align:middle;${ls.dot}"></span> ${s ? escHtml(s.label) : 'Service'}${t ? ' · ' + escHtml(t.name.split(' ')[0]) : ''}${a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}</div>${stiHtml}`;
-  }).join('');
+  const assigns = e.assignments || [];
+  const sids = [...new Set([...(e.services || []), ...assigns.map(a => a.serviceId)])];
+  const dotPx = Math.round(9 * fs);
+  return sids.map(sid => {
+    const a = assigns.find(x => x.serviceId === sid);
+    const status = a ? getAssignmentStatus(e, a) : 'waiting';
+    if (a && isPaidStatus(status)) return '';   // drop a paid line (whole entry leaves the floor when all paid)
+    const ls = serviceLineStyle(status);
+    const s = svc(sid), t = a && a.techId ? staffById(a.techId) : null;
+    const dot = `<span style="display:inline-block;width:${dotPx}px;height:${dotPx}px;border-radius:50%;flex-shrink:0;box-sizing:border-box;${ls.dot}"></span>`;
+    const main = `<div style="display:flex;align-items:center;gap:${Math.round(3 * fs)}px;font-size:${Math.round(10.5 * fs)}px;color:#374151;min-width:0">
+      ${dot}${_techAvatar(t, fs)}<span class="truncate" style="min-width:0">${s ? escHtml(s.label) : 'Service'}${t ? ' · ' + escHtml(t.name.split(' ')[0]) : ''}${a && a.cost ? ' · $' + Number(a.cost).toFixed(0) : ''}${t ? '' : ' · Wait'}</span>
+    </div>`;
+    const sti = a ? serviceTimeInfo(a) : null;
+    const stiHtml = sti ? `<div style="font-size:${Math.round(9 * fs)}px;font-weight:700;color:${sti.color};padding-left:${Math.round(20 * fs)}px">${sti.text}</div>` : '';
+    return main + stiHtml;
+  }).filter(Boolean).join('');
 }
 
 function stationHtml(id, entry) {
@@ -154,8 +177,11 @@ function renderFloorStaffRow() {
     const avatar = st.photo
       ? `<img src="${st.photo}" draggable="false" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:2px solid ${c.bg};box-shadow:0 1px 3px rgba(0,0,0,.18)">`
       : `<div style="display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:${c.bg};color:${c.text};font-family:var(--font-headline);font-weight:700;font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,.18)">${escHtml((st.name||'?').charAt(0).toUpperCase())}</div>`;
+    const turns = getTechTurns(id).total;
+    const turnsTxt = Number.isInteger(turns) ? String(turns) : turns.toFixed(1);
+    const turnsBadge = `<span title="${turnsTxt} turns today" style="position:absolute;bottom:-3px;right:-3px;min-width:17px;height:17px;padding:0 3px;border-radius:9px;background:#1a5252;color:#fff;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface-container-lowest,#fff);box-sizing:border-box">${turnsTxt}</span>`;
     return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:64px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Tap for status · drag onto a station to assign"'}>
-      ${avatar}
+      <div style="position:relative">${avatar}${turnsBadge}</div>
       <span style="font-size:11px;font-weight:600;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px">${escHtml(st.name.split(' ')[0])}</span>
       <span style="font-size:9px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
     </div>`;
@@ -342,17 +368,62 @@ function assignTechToStation(techId, stationId) {
   const e = collectFloor().byStation[stationId];
   if (!e) { showToast(`No customer at ${stationLabel(stationId)}`); return; }
   if (isPaidStatus(e.status)) { showToast(`${e.name.split(' ')[0]} is already paid`); renderFloorPlan(); return; }
-  // Prefill the dropped tech onto the first service seated here that still needs one (pedicures
-  // can need several; drag again for the next), then open Assign & Price so the price can be set
-  // in the same motion. If every service here already has a tech, still open the modal to edit.
-  const a = activeAssignments(e).find(x => x.station === stationId && !x.techId);
-  if (a) {
-    a.techId = techId;
-    dispatch('queue.upsert', { entry: e });
-    renderFloorPlan();
-    window.renderQueue?.(); window.renderTurns?.();
+  // Capacity: how many DISTINCT techs are already on this customer at this station?
+  const techsHere = new Set((e.assignments || []).filter(a => a.station === stationId && a.techId).map(a => a.techId));
+  const cap = categoryMaxTechs(stationType(stationId));
+  if (!techsHere.has(techId) && techsHere.size >= cap) {
+    showToast(`${stationLabel(stationId)} is full (${cap} tech${cap !== 1 ? 's' : ''})`); renderFloorPlan(); return;
   }
-  window.showGroupAssignModal?.(String(e.id));
+  // Pool = the customer's services that still need a tech (any — incl. waiting / no station yet).
+  const assignedSids = new Set((e.assignments || []).map(a => a.serviceId));
+  const pool = [
+    ...(e.assignments || []).filter(a => !a.techId && !isPaidStatus(getAssignmentStatus(e, a))).map(a => ({ serviceId: a.serviceId, assignment: a })),
+    ...(e.services || []).filter(sid => !assignedSids.has(sid)).map(sid => ({ serviceId: sid, assignment: null })),
+  ];
+  if (pool.length === 0) { showToast('All services already have a tech'); renderFloorPlan(); return; }
+  if (pool.length === 1) { _assignTechToService(e, techId, stationId, pool[0]); return; }
+  _openServicePicker(e, techId, stationId, pool);   // 2+ → ask which
+}
+// Put `techId` on one of the customer's services at this station + start it (In Service). No price
+// prompt — price is set later. (Front-desk whole-entry write; the queue.upsert per-assignment merge
+// protects a concurrent tech change.)
+function _assignTechToService(e, techId, stationId, item) {
+  if (!e.assignments) e.assignments = [];
+  let a = item.assignment;
+  if (!a) { a = { serviceId: item.serviceId, station: '', status: 'waiting', cost: 0 }; e.assignments.push(a); }
+  a.techId = techId;
+  a.station = stationId;
+  applyAssignmentStatus(a, 'inservice');   // start the service + bank timing + stamp a.updatedAt
+  applyEntryStatus(e);                      // recompute entry status + statusSince
+  dispatch('queue.upsert', { entry: e });
+  renderFloorPlan(); window.renderQueue?.(); window.renderTurns?.();
+}
+// Lightweight picker (2+ un-teched services): tap a service to give it to the dragged tech.
+function _openServicePicker(e, techId, stationId, pool) {
+  document.getElementById('_floorSvcPicker')?.remove();
+  const tech = staffById(techId);
+  const m = document.createElement('div');
+  m.id = '_floorSvcPicker';
+  m.className = 'fixed inset-0 z-[80] flex items-center justify-center';
+  m.style.cssText = 'background:rgba(15,26,26,.45)';
+  const btns = pool.map((item, i) => {
+    const s = svc(item.serviceId);
+    return `<button data-i="${i}" class="w-full text-left px-4 py-3 rounded-xl border border-surface-container-high hover:bg-surface-container font-headline font-semibold text-on-surface flex items-center gap-2"><span class="material-symbols-outlined text-primary" style="font-size:18px">add_task</span>${escHtml(s ? s.label : item.serviceId)}</button>`;
+  }).join('');
+  m.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-72 shadow-2xl fade-up mx-4" onclick="event.stopPropagation()">
+      <div class="text-base font-headline font-bold text-on-surface mb-0.5">Assign ${escHtml((tech?.name || 'tech').split(' ')[0])} to…</div>
+      <div class="text-xs font-body text-on-surface-variant mb-3">${escHtml(e.name || 'Customer')} · ${escHtml(stationLabel(stationId))}</div>
+      <div class="space-y-2">${btns}</div>
+      <button id="_floorSvcCancel" class="w-full mt-3 py-2 rounded-xl text-on-surface-variant font-body">Cancel</button>
+    </div>`;
+  m.addEventListener('click', () => m.remove());
+  m.querySelector('#_floorSvcCancel').addEventListener('click', () => m.remove());
+  m.querySelectorAll('button[data-i]').forEach(btn => btn.addEventListener('click', () => {
+    const item = pool[parseInt(btn.dataset.i, 10)];
+    m.remove();
+    _assignTechToService(e, techId, stationId, item);
+  }));
+  document.body.appendChild(m);
 }
 
 // ── Alignment snapping (snap a dragged station's edges/centers to others) ─────

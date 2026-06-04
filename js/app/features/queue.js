@@ -28,8 +28,8 @@ const activeStaff = () => cfg().staff.filter(s => !cfg().inactive_staff.includes
 // list is empty we fall back to the original Pedicure/Manicure defaults, so existing
 // installs behave identically until the operator edits them.
 export const DEFAULT_CATEGORIES = [
-  { id: 'P', label: 'Pedicure', color: '#1a5c7a', w: 152, h: 116 },
-  { id: 'M', label: 'Manicure', color: '#785a1a', w: 108, h: 70  },
+  { id: 'P', label: 'Pedicure', color: '#1a5c7a', w: 152, h: 116, maxTechs: 3 },
+  { id: 'M', label: 'Manicure', color: '#785a1a', w: 108, h: 70,  maxTechs: 1 },
 ];
 export const DEFAULT_STATIONS = [
   ...Array.from({length:12}, (_,i)=>({ id:`P${i+1}`, type:'P', label:`P${i+1}` })),
@@ -52,7 +52,7 @@ export function addStationCategory() {
   let id = '';
   for (let i = 0; i < 26; i++) { const ch = String.fromCharCode(65 + i); if (!ids.has(ch)) { id = ch; break; } }
   if (!id) { let n = 1; while (ids.has(`C${n}`)) n++; id = `C${n}`; }
-  cats.push({ id, label: 'New Category', color: CATEGORY_PALETTE[cats.length % CATEGORY_PALETTE.length], w: 130, h: 90 });
+  cats.push({ id, label: 'New Category', color: CATEGORY_PALETTE[cats.length % CATEGORY_PALETTE.length], w: 130, h: 90, maxTechs: 1 });
   commitCategories(cats);
   return id;
 }
@@ -62,6 +62,13 @@ export function renameStationCategory(id, label) {
 export function setStationCategoryColor(id, color) {
   commitCategories(stationCategories().map(c => c.id === id ? { ...c, color: color || c.color } : { ...c }));
 }
+// Max concurrent techs a station of this category can hold (e.g. pedicure 3, manicure 1).
+// Drives the floor-plan capacity check on tech-drag + how many avatars a tile shows.
+export function setStationCategoryMaxTechs(id, n) {
+  const v = Math.max(1, Math.min(9, parseInt(n, 10) || 1));
+  commitCategories(stationCategories().map(c => c.id === id ? { ...c, maxTechs: v } : { ...c }));
+}
+export function categoryMaxTechs(typeId) { return Math.max(1, parseInt(categoryDef(typeId)?.maxTechs, 10) || 1); }
 export function deleteStationCategory(id) {
   if (stationCategories().length <= 1) { showToast('Keep at least one category'); return false; }
   const used = stationDefs().some(s => s.type === id);
@@ -128,6 +135,9 @@ export function renderStationsSettings() {
           class="w-7 h-7 rounded-lg border border-surface-container-high bg-transparent cursor-pointer flex-shrink-0 p-0">
         <input value="${(cat.label || cat.id).replace(/"/g,'&quot;')}" onchange="renameStationCategory('${cat.id}',this.value);renderStationsSettings()"
           class="flex-1 bg-transparent border-b border-surface-container-high py-1 text-sm font-headline font-semibold focus:border-primary outline-none">
+        <label class="text-[11px] font-body text-on-surface-variant flex items-center gap-1 flex-shrink-0" title="Max techs that can work one customer at this kind of station at once">techs
+          <input type="number" min="1" max="9" value="${cat.maxTechs || 1}" onchange="setStationCategoryMaxTechs('${cat.id}',this.value);renderStationsSettings()"
+            class="w-11 bg-transparent border border-surface-container-high rounded-lg px-1 py-1 text-xs font-body text-center focus:border-primary outline-none"></label>
         <span class="text-xs font-body text-on-surface-variant">(${list.length})</span>
         <button onclick="addStation('${cat.id}');renderStationsSettings()" class="text-xs font-headline font-bold text-primary flex items-center gap-1 hover:opacity-70"><span class="material-symbols-outlined" style="font-size:16px">add</span>Station</button>
         <button onclick="confirmDeleteStationCategory('${cat.id}')" title="Delete category" class="w-8 h-8 rounded-lg text-outline hover:text-error hover:bg-error/10 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">delete_sweep</span></button>
