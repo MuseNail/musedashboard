@@ -73,14 +73,14 @@ export function applyAssignmentStatus(a, newStatus) {
 // truth so all three surfaces match. Each status carries THREE redundant cues (color-blind safe):
 // a colored glyph shape, a tiny text pill, and a row accent. Only in-service gets the loud
 // bar+tint ("the hot row"); paid fades. Palette = the staff-app STATUS_CHIP values.
-// `dot` = the per-status fill/border for a CSS-DRAWN circle (not a text glyph): waiting/in-service
-// are filled, complete is a ring (the "Done" outline look), paid is filled grey. Drawing the circle
-// keeps every status the EXACT same diameter — Unicode glyphs (● vs ◍) render at different sizes.
+// `dot` = the per-status fill for a CSS-DRAWN circle (not a text glyph): a solid colored dot per
+// status (amber=waiting, green=in-service, blue=complete, grey=paid). Drawing the circle keeps
+// every status the EXACT same diameter — Unicode glyphs (● vs ◍) render at different sizes.
 // Render it as: <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;{dot}"></span>
 export function serviceLineStyle(status) {
   if (isPaidStatus(status))    return { key: 'paid',      dot: 'background:#b4bec2',                                bar: '#b4bec2', tint: '',                          pill: { bg: '#dde2e5', fg: '#555555', label: 'Paid'   }, rowOpacity: 0.6 };
   if (status === 'inservice')  return { key: 'inservice', dot: 'background:#2a7a4f',                                bar: '#2a7a4f', tint: 'rgba(200,230,197,.35)', pill: { bg: '#c8e6c5', fg: '#1b5e20', label: 'In Svc' }, rowOpacity: 1 };
-  if (status === 'complete')   return { key: 'complete',  dot: 'background:transparent;border:1.6px solid #1a5c7a', bar: '#1a5c7a', tint: '',                          pill: { bg: '#cfe3ef', fg: '#0a3a52', label: 'Done'   }, rowOpacity: 1 };
+  if (status === 'complete')   return { key: 'complete',  dot: 'background:#1a5c7a',                                bar: '#1a5c7a', tint: '',                          pill: { bg: '#cfe3ef', fg: '#0a3a52', label: 'Done'   }, rowOpacity: 1 };
   return                              { key: 'waiting',   dot: 'background:#d4860a',                                bar: '#d4860a', tint: '',                          pill: { bg: '#ffe0c2', fg: '#6d3200', label: 'Wait'   }, rowOpacity: 0.9 };
 }
 
