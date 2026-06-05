@@ -35,6 +35,12 @@
     box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.05);
   }
 
+  /* Turns waiting/active columns fill down to the viewport bottom instead of stopping at
+     content height. The side panel is a sticky flex row; giving it a definite height (same
+     calc the left tech-grid already uses) lets its two columns stretch (align-items:stretch)
+     and their inner lists (flex:1) fill the space below each header. */
+  #turns-side-panel { height: calc(100vh - var(--turns-offset, 210px)); }
+
   * { box-sizing: border-box; }
   body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
   h1,h2,h3,.font-headline { font-family: 'Manrope', sans-serif; }
@@ -360,7 +366,7 @@
   .data-table tbody tr:nth-child(even) .sticky-col, .data-table tbody tr:nth-child(odd) .sticky-col { background: var(--surface-container, #d0d6da); }
   .data-table thead .sticky-col { z-index: 3; background: #1a5252; }
   .data-table .section-row td { background: var(--surface-container, #d0d6da); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--on-surface-variant, #46555a); }
-  .data-table .sticky-col { width: 88px; max-width: 88px; padding-left: 8px; padding-right: 8px; font-size: 12px; }
+  .data-table .sticky-col { width: 120px; max-width: 120px; padding-left: 8px; padding-right: 8px; font-size: 12px; }
   /* Solid divider between column-groups (e.g. each staff on the Payroll table). */
   /* Thick solid divider between staff column-groups; thin dashed divider between This and
      Last. Both run up through the header — but the header is teal, so use a light border
