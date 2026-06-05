@@ -364,7 +364,7 @@ function _calWriteError(err, verb) {
 // missed its window while backgrounded) and refresh the grid. Registered once.
 function _hookCalFocusRefresh() {
   if (_calFocusHooked) return; _calFocusHooked = true;
-  const onActive = () => { if (!_calInitDone) return; if (!localStorage.getItem('gcal_token') && !cfg().gcal_token) return; ensureFreshToken().then(() => calSilentSync()).catch(() => {}); };
+  const onActive = () => { updateCalNowLine(); if (!_calInitDone) return; if (!localStorage.getItem('gcal_token') && !cfg().gcal_token) return; ensureFreshToken().then(() => calSilentSync()).catch(() => {}); };
   document.addEventListener('visibilitychange', () => { if (!document.hidden) onActive(); });
   window.addEventListener('focus', onActive);
   window.addEventListener('online', onActive);
@@ -526,7 +526,7 @@ export function calRenderGrid() {
     const off = calColumnOff(cal);   // #3: grey the column for a tech who's off this day
     body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;${off ? 'background:#e9ebed;opacity:0.6;' : ''}${isFirst?'border-left:2px solid rgba(0,0,0,0.12);':''}${isLast?'':'border-right:2px solid rgba(0,0,0,0.12);'}min-height:${SLOTS*SLOT_H}px"><div style="position:relative;height:${SLOTS*SLOT_H}px">`;
     for (let s = 0; s < SLOTS; s++) { const isHour = s % (60/SLOT_MINS) === 0; const h = START_HOUR + Math.floor(s*SLOT_MINS/60), m = (s*SLOT_MINS)%60; body += `<div style="position:absolute;left:0;right:0;top:${s*SLOT_H}px;height:${SLOT_H}px;border-top:${isHour?'1.5px solid rgba(0,0,0,0.12)':'1px solid rgba(0,0,0,0.05)'};cursor:pointer" onclick="calSlotClick('${cal.id}',${h},${m})"></div>`; }
-    if (isToday) { const lineTop = ((nowMin - START_HOUR*60)/SLOT_MINS)*SLOT_H; if (lineTop >= 0 && lineTop <= SLOTS*SLOT_H) body += `<div style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;border-top:2px dashed #e53935;z-index:5;pointer-events:none">${colIdx===0?`<div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>`:''}</div>`; }
+    if (isToday) { const lineTop = ((nowMin - START_HOUR*60)/SLOT_MINS)*SLOT_H; if (lineTop >= 0 && lineTop <= SLOTS*SLOT_H) body += `<div class="cal-now-line" data-start="${START_HOUR}" data-slotmins="${SLOT_MINS}" data-sloth="${SLOT_H}" data-slots="${SLOTS}" style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;border-top:2px dashed #e53935;z-index:5;pointer-events:none">${colIdx===0?`<div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div>`:''}</div>`; }
     // Group this column's events into bookings so a party checked in together (or
     // one guest with several services) renders as ONE bubble. Overlapping same-time
     // bubbles stacking on top of each other was the "piled-up / unreadable" bug.
@@ -625,9 +625,30 @@ export function calRenderGrid() {
   grid.innerHTML = `<div id="cal-scroll" style="height:100%;overflow:auto;position:relative;-webkit-overflow-scrolling:touch"><div style="min-width:${TIME_W + COL_W*visible.length}px;display:flex;flex-direction:column;min-height:100%">${hdr}${body}</div></div>`;
   const gb = document.getElementById('cal-scroll');
   if (gb) { const scrollToHour = Math.max(START_HOUR, now.getHours()-1); gb.scrollTop = Math.max(0, (scrollToHour-START_HOUR)*(60/SLOT_MINS)*SLOT_H - 10); }
+  startCalNowLine();
   } catch (_calErr) { console.warn('[calendar] grid render failed:', _calErr); }
 }
 function calRenderGridPreserveScroll() { const gb = document.getElementById('cal-scroll'); const saved = gb ? gb.scrollTop : null; calRenderGrid(); if (saved !== null) requestAnimationFrame(() => { const n = document.getElementById('cal-scroll'); if (n) n.scrollTop = saved; }); }
+
+// ── "Now" line keep-alive ─────────────────────────
+// The red current-time line is positioned at grid-render time, so on its own it only moves when
+// the grid re-renders (every CAL_SYNC_INTERVAL) and FREEZES while a backgrounded / asleep iPad
+// throttles timers — that's the "lags behind" report. This repositions the existing line(s)
+// cheaply (no re-render) on a short timer, and onActive() snaps it the instant the iPad wakes.
+// Geometry (start hour / slot size) is read from the line's data-attrs so it tracks the zoom.
+let _calNowTimer = null;
+function updateCalNowLine() {
+  const lines = document.querySelectorAll('.cal-now-line');
+  if (!lines.length) return;
+  const now = new Date();
+  if (now.toDateString() !== _calDate.toDateString()) return;   // not viewing today — a re-render owns the line's presence
+  const g = lines[0].dataset, startHour = +g.start, slotMins = +g.slotmins || 30, slotH = +g.sloth || 52, slots = +g.slots;
+  const nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
+  const lineTop = ((nowMin - startHour*60)/slotMins)*slotH;
+  const vis = lineTop >= 0 && lineTop <= slots*slotH;
+  lines.forEach(el => { el.style.display = vis ? '' : 'none'; if (vis) el.style.top = lineTop + 'px'; });
+}
+function startCalNowLine() { if (_calNowTimer) return; _calNowTimer = setInterval(updateCalNowLine, 30000); }
 
 // ── Sync ──────────────────────────────────────────
 async function calSilentSync() {
