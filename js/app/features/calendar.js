@@ -887,6 +887,45 @@ export async function calMarkNoShow(calId, eventId) {
   } catch (err) { _calWriteError(err, 'Update'); }
 }
 
+// ── Auto no-show ──────────────────────────────────────────────────────────────
+// An appointment more than AUTO_NOSHOW_MIN minutes past its start that was never
+// checked in is a de-facto no-show; mark it automatically (same museNoShow flag as
+// the manual button) so it drops off the Turns "Next up" strip and shows as No Show
+// on the calendar. Quiet variant of calMarkNoShow — no "Saving…" toast and no
+// customer-account popup. Candidates come straight from apptsForTurns(), which
+// already excludes checked-in / already-no-show / future bookings, so we just take
+// the very-late ones (one PATCH per booking, deduped by primary event id).
+// Idempotent and race-safe: the per-session attempted set + the running guard stop
+// re-marking and recursion, and the museNoShow flag makes cross-device writes harmless.
+const AUTO_NOSHOW_MIN = 60;
+const _autoNoShowAttempted = new Set();   // primary eventIds attempted this session
+let _autoNoShowRunning = false;
+export async function autoNoShowStaleAppts() {
+  if (_autoNoShowRunning) return;
+  if (!localStorage.getItem('gcal_token') && !cfg().gcal_token) return;   // calendar not connected
+  if (typeof gapi === 'undefined' || !gapi.client?.calendar) return;
+  const stale = new Map();   // primary eventId -> { calId, eventId }
+  apptsForTurns().forEach(a => {
+    if (a.minsLate > AUTO_NOSHOW_MIN && a.eventId && !_autoNoShowAttempted.has(a.eventId)) stale.set(a.eventId, { calId: a.calId, eventId: a.eventId });
+  });
+  if (!stale.size) return;
+  _autoNoShowRunning = true;
+  let marked = 0;
+  try {
+    await ensureFreshToken();
+    for (const { calId, eventId } of stale.values()) {
+      _autoNoShowAttempted.add(eventId);   // before the await: never retry a failing event in a tight loop
+      const refs = _eventGroupRefs(calId, eventId);
+      await Promise.all(refs.map(r => gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museNoShow: '1' } } } })));
+      marked++;
+    }
+    await calLoadAndRender(true);
+    window.renderTurns?.();
+    if (marked) showToast(`${marked} appointment${marked > 1 ? 's' : ''} auto-marked No Show (60+ min late)`);
+  } catch (err) { /* silent — a later tick retries the events still unattempted */ }
+  finally { _autoNoShowRunning = false; }
+}
+
 // Build a queue entry from one calendar event (returns null if that person is
 // already checked in). queueGroupId links party members in the queue.
 function _buildCheckinEntry(ev, fallbackCalId, queueGroupId) {

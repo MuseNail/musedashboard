@@ -159,7 +159,7 @@ function acceptBtnHtml(entryId, serviceId, techName) {
 }
 
 // ── Render ────────────────────────────────────────
-export function renderTurns() { renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
+export function renderTurns() { renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); if (!turnsViewingHistory) window.autoNoShowStaleAppts?.(); }
 
 // ── Upcoming appointments (Google Calendar) on the Turns sheet ────────────────
 // Strip = the "Next up" row (toggled by the Appointments button, device-local).
@@ -239,6 +239,7 @@ function startTurnsApptRefresh() {
     if (!p || !p.classList.contains('active')) return;
     if (_turnsApptShow && !turnsViewingHistory) renderTurnsApptStrip();
     renderTurnsTechGrid();   // refresh the 30-min in-grid notes + countdowns
+    if (!turnsViewingHistory) window.autoNoShowStaleAppts?.();   // auto no-show 60+ min late
   }, 60000);
 }
 
