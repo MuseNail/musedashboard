@@ -309,7 +309,7 @@ function buildQueueRow(e) {
       <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;flex-shrink:0;${ls.dot}"></span>
       <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
       ${tech ? `<span class="text-on-surface-variant">→ ${escHtml(tech.name)}${a.station ? ' @' + escHtml(String(a.station)) : ''}</span>` : (a.station ? `<span class="text-on-surface-variant">@${escHtml(String(a.station))}</span>` : '')}
-      ${a.cost ? `<span class="font-semibold text-primary">$${Number(a.cost).toFixed(2)}</span>` : ''}
+      ${a.comped ? `<span class="font-semibold" style="color:#7a5a00">${escHtml(a.compReason || 'Comp')}</span>` : (a.cost ? `<span class="font-semibold text-primary">$${Number(a.cost).toFixed(2)}</span>` : '')}
       ${tip}
       <span class="text-[9px] font-bold px-1.5 rounded-full flex-shrink-0 ${tip ? '' : 'ml-auto'}" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
     </div>`;
@@ -398,7 +398,7 @@ export function updateStats() {
 
 export function validateAssignments(entry) {
   if (!entry.assignments || entry.assignments.length === 0) return false;
-  return entry.assignments.every(a => a.techId && a.cost > 0);
+  return entry.assignments.every(a => a.techId && (a.cost > 0 || a.comped));
 }
 
 // Front desk (no markPaidDirect permission) can't finalize a sale outside the Pay flow —
@@ -750,11 +750,23 @@ export function cycleServiceStatus(entryId, serviceId, newStatus) {
   if (newStatus === 'inservice' && (!a || !a.techId)) { showToast('Assign a technician before marking In Service.'); return; }
   if (newStatus === 'complete' || newStatus === 'paid') {
     if (!a || !a.techId) { showToast('Assign a technician first.'); return; }
-    if (!a.cost || a.cost <= 0) { showToast('Enter a price first.'); return; }
+    if ((!a.cost || a.cost <= 0) && !a.comped) { showToast('Enter a price first (or mark it Comp / No charge).'); return; }
   }
   if (newStatus === 'paid' && _blockDirectPaid(entryId)) return;
   setAssignmentStatus(entry, serviceId, newStatus);
   renderGroupAssignContent();
+}
+
+// Comp / No-charge toggle on a service row: marks the service free ON PURPOSE (a Comp or a
+// Fix/redo), which is distinct from "not priced yet" — so it passes validation and the ticket
+// can close out at $0. Disables the cost field and reveals the reason picker; the actual flags
+// (a.comped / a.compReason, cost forced to 0) are committed in saveCurrentGroupTabInputs.
+export function toggleCompRow(cb) {
+  const row = cb.closest('[data-service-id]'); if (!row) return;
+  const cost = row.querySelector('.assign-cost'), reason = row.querySelector('.assign-comp-reason');
+  if (cb.checked) { if (cost) { cost.value = ''; cost.disabled = true; cost.classList.add('opacity-50'); } reason?.classList.remove('hidden'); }
+  else { if (cost) { cost.disabled = false; cost.classList.remove('opacity-50'); } reason?.classList.add('hidden'); }
+  updateGroupTotal();
 }
 
 // Move a service's status BACK to correct a mistake (e.g. accidentally In Service →
@@ -804,7 +816,10 @@ export function saveCurrentGroupTabInputs() {
     const prevTech = a.techId;
     a.techId  = row.querySelector('.assign-tech')?.value || '';
     a.station = row.querySelector('.assign-station')?.value || '';
-    a.cost    = parseFloat(row.querySelector('.assign-cost')?.value) || 0;
+    const comped = !!row.querySelector('.assign-comp')?.checked;   // free ON PURPOSE (Comp / Fix), distinct from unpriced
+    a.comped = comped;
+    a.compReason = comped ? (row.querySelector('.assign-comp-reason')?.value || 'Comp') : '';
+    a.cost    = comped ? 0 : (parseFloat(row.querySelector('.assign-cost')?.value) || 0);
     if (a.techId && !prevTech) a.assignedAt = Date.now();
   });
   entry.services = entry.assignments.map(a => a.serviceId);
@@ -921,9 +936,18 @@ export function renderGroupAssignContent() {
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Station</label>
             <select class="assign-station w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"><option value="">— None —</option>${stationOptions(a.station || entry.station)}</select></div>
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
-            <input type="text" inputmode="none" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.cost != null && a.cost !== 0 ? a.cost : ''}"
-              class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer"
+            <input type="text" inputmode="none" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.comped ? '' : (a.cost != null && a.cost !== 0 ? a.cost : '')}" ${a.comped ? 'disabled' : ''}
+              class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer${a.comped ? ' opacity-50' : ''}"
               onfocus="openNumpad(this,'Cost — ' + '${s.label}')" onclick="openNumpad(this,'Cost — ' + '${s.label}')" oninput="updateGroupTotal()"></div>
+        </div>
+        <div class="flex items-center gap-2 mt-2">
+          <label class="flex items-center gap-1.5 text-[11px] font-body text-on-surface-variant cursor-pointer select-none">
+            <input type="checkbox" class="assign-comp" ${a.comped ? 'checked' : ''} onchange="toggleCompRow(this)" style="accent-color:#1a5252;width:15px;height:15px;flex-shrink:0"> Comp / No charge
+          </label>
+          <select class="assign-comp-reason bg-surface-container border border-surface-container-high rounded-lg px-2 py-1 text-[11px] font-body text-on-surface focus:outline-none focus:border-primary${a.comped ? '' : ' hidden'}" onchange="updateGroupTotal()">
+            <option value="Comp"${a.compReason === 'Comp' ? ' selected' : ''}>Comp</option>
+            <option value="Fix"${a.compReason === 'Fix' ? ' selected' : ''}>Fix / Redo</option>
+          </select>
         </div>
       </div>`;
   }).join('');
@@ -1080,7 +1104,7 @@ export function splitFromAssignModal() {
 }
 
 function collectGroupAssignments() { saveCurrentGroupTabInputs(); return groupAssignEntries.map(id => q().find(e => String(e.id) === id)).filter(Boolean); }
-function validateGroupAssignments(entries) { return entries.filter(e => !e.assignments || e.assignments.length === 0 || e.assignments.some(a => !a.techId || a.cost <= 0)); }
+function validateGroupAssignments(entries) { return entries.filter(e => !e.assignments || e.assignments.length === 0 || e.assignments.some(a => !a.techId || (a.cost <= 0 && !a.comped))); }
 
 export function saveGroupAssignments(force) {
   if (force !== true) {

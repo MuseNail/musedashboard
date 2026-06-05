@@ -1488,7 +1488,7 @@ export function showTxnDetail(recordId) {
   const line = (label, val, o = {}) => `<div class="flex justify-between items-baseline gap-3 py-1.5 ${o.border ? 'border-t border-surface-container-high mt-1 pt-2' : ''}"><span class="text-sm font-body ${o.strong ? 'font-headline font-bold text-on-surface' : 'text-on-surface-variant'} min-w-0">${_eTxn(label)}</span><span class="text-sm font-body whitespace-nowrap ${o.neg ? 'text-error' : o.strong ? 'font-headline font-bold text-on-surface' : 'text-on-surface'}">${o.neg ? '-' : ''}${money(val)}</span></div>`;
   const rows = [], drillRows = [];
   const add = (label, val, o) => { rows.push(line(label, val, o)); drillRows.push([label, (o?.neg ? '-' : '') + money(val)]); };
-  (r.assignments || []).forEach(a => add(`${svc(a.serviceId)?.label || a.serviceId || 'Service'}${a.techId ? ' · ' + (staffById(a.techId)?.name || '—') : ''}${a.station ? ' @ ' + a.station : ''}`, a.cost || 0));
+  (r.assignments || []).forEach(a => add(`${svc(a.serviceId)?.label || a.serviceId || 'Service'}${a.techId ? ' · ' + (staffById(a.techId)?.name || '—') : ''}${a.station ? ' @ ' + a.station : ''}${a.comped ? ' · ' + (a.compReason || 'Comp') : ''}`, a.cost || 0));
   if (!(r.assignments || []).length && !isRefund) (r.services || []).forEach(sid => add(svc(sid)?.label || sid, 0));
   (r.items || []).forEach(it => add(`${cfg().items.find(i => i.id === it.itemId)?.label || 'Item'} × ${it.qty || 1}`, (it.price || 0) * (it.qty || 0)));
   (r.fees || []).forEach(f => add(cfg().fees.find(x => x.id === f.feeId)?.label || 'Fee', f.amount || 0));
@@ -1539,7 +1539,7 @@ export function renderTransactions() {
     const isRefund = r.status === 'refund';
     const badgeClass = isRefund ? 'badge-refund' : ({ waiting:'badge-waiting', inservice:'badge-inservice', complete:'badge-complete', paid:'badge-done', done:'badge-done' }[r.status] || 'badge-done');
     const serviceLabels = (r.services||[]).map(sid => svc(sid)?.label||sid).join(', ') || '—';
-    const assignRows = !isRefund && (r.assignments||[]).filter(a=>a.techId||a.cost).map(a=>`<div class="text-[11px] font-body text-primary">${svc(a.serviceId)?.label||''} → ${staffById(a.techId)?.name||'—'}${a.station?' @ '+a.station:''} ${a.cost?'· $'+a.cost.toFixed(2):''}</div>`).join('');
+    const assignRows = !isRefund && (r.assignments||[]).filter(a=>a.techId||a.cost||a.comped).map(a=>`<div class="text-[11px] font-body text-primary">${svc(a.serviceId)?.label||''} → ${staffById(a.techId)?.name||'—'}${a.station?' @ '+a.station:''} ${a.comped?'· '+(a.compReason||'Comp'):(a.cost?'· $'+a.cost.toFixed(2):'')}</div>`).join('');
     const refundNote = isRefund && r.discountNote ? `<div class="text-[11px] font-body text-error mt-1">Reason: ${r.discountNote}</div>` : '';
     const isPast = new Date(r.checkinTime) < new Date(new Date().setHours(0,0,0,0));
     const editable = !isRefund && canDo('historicalEntry') && isPast;   // whole card opens the edit modal
