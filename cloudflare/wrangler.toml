@@ -40,6 +40,11 @@ new_sqlite_classes = ["MuseSalonDO"]
 #                       Flip live with `wrangler secret put ORIGIN_GATE_ENABLED` — no redeploy. Built-in
 #                       allowed origin: https://musenail.github.io. Add more via ALLOWED_ORIGINS.
 # ALLOWED_ORIGINS     — (optional) extra comma-separated origins to allow (e.g. a future custom domain)
+# GCAL_CLIENT_SECRET  — Google OAuth client secret for the server-side Calendar refresh-token flow
+#                       (fixes the iPad "loses sync" problem). Set once:
+#                         wrangler secret put GCAL_CLIENT_SECRET
+#                       ALSO add this Authorized redirect URI to that OAuth client in Google Cloud Console:
+#                         https://musedashboard.musenailandspa.workers.dev/gcal/callback
 
 # ── Environment variables ──────────────────────────────────────────────────────
 [vars]
@@ -47,6 +52,8 @@ new_sqlite_classes = ["MuseSalonDO"]
 # + the contact subject sent in the VAPID JWT. The PRIVATE key is a secret (above).
 VAPID_PUBLIC_KEY = "BCoL00zoZ6BMiurBxzhh05439KLXdDCgmd6z6bQzOl4r30VYBq7Xzvf5Xl5DqsuqUchNE7xnfcaCrvgUvfJ2uKk"
 VAPID_SUBJECT    = "mailto:info@musenailandspa.com"
+# Google Calendar OAuth client id (public, not secret). Matches js/app/features/calendar.js.
+GCAL_CLIENT_ID   = "174518644579-5vgt7vvllm2ekpk0gb8l4sa4f3va9r9l.apps.googleusercontent.com"
 # SQUARE_BASE_URL = "https://connect.squareup.com"
 # Uncomment and set to the sandbox URL during testing:
 # SQUARE_BASE_URL = "https://connect.squareupsandbox.com"

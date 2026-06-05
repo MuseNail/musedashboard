@@ -295,6 +295,89 @@ export default {
       } catch (e) { return json({ error: 'SMS service unreachable' }, 502); }
     }
 
+    // ── Google Calendar OAuth (server-side refresh-token flow) ──────────────────
+    // Fixes "calendar loses sync on iPad": the browser GIS token flow can't silently
+    // renew under Safari ITP / a standalone PWA / the pay-deep-link bounce into Chrome.
+    // Here the Worker holds the salon's Google REFRESH token (DO storage key 'gcal:blob',
+    // NOT part of buildSnapshot → never sent to clients) and mints short-lived access
+    // tokens on demand, so any browser context just calls /gcal/token. Owner setup:
+    //   wrangler secret put GCAL_CLIENT_SECRET   (the OAuth client's secret)
+    //   + add  <worker>/gcal/callback  as an Authorized redirect URI on that OAuth client.
+    // GCAL_CLIENT_ID is a [vars] entry (defaults below). Auth: rides the same origin gate
+    // as everything else (proper token auth comes with the §13 backend-auth pass).
+    if (path.startsWith('/gcal/')) {
+      const GOOGLE_TOKEN_URI = 'https://oauth2.googleapis.com/token';
+      const clientId = env.GCAL_CLIENT_ID || '174518644579-5vgt7vvllm2ekpk0gb8l4sa4f3va9r9l.apps.googleusercontent.com';
+      const scopes   = env.GCAL_SCOPES || 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks';
+      const redirect = url.origin + '/gcal/callback';
+      const stub = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
+      const readBlob  = async () => { try { const r = await stub.fetch('https://do/gcal/blob'); return r.ok ? await r.json() : {}; } catch { return {}; } };
+      const writeBlob = async (b) => { await stub.fetch('https://do/gcal/blob', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); };
+      const htmlMsg = (m, status = 200) => new Response(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui;padding:2rem;text-align:center;color:#0f3d3d">${m}</body>`, { status, headers: { 'Content-Type': 'text/html' } });
+
+      // One-time consent (authorization-code flow, offline access → refresh token).
+      if (path === '/gcal/connect') {
+        if (!env.GCAL_CLIENT_SECRET) return json({ error: 'GCAL_CLIENT_SECRET not set on the Worker' }, 503);
+        const state = crypto.randomUUID();
+        const blob = await readBlob();
+        blob.pending = { state, return: url.searchParams.get('return') || '', ts: Date.now() };
+        await writeBlob(blob);
+        const auth = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+          client_id: clientId, redirect_uri: redirect, response_type: 'code', scope: scopes,
+          access_type: 'offline', prompt: 'consent', include_granted_scopes: 'true', state,
+        }).toString();
+        return Response.redirect(auth, 302);
+      }
+
+      // Google redirects back with ?code&state — exchange for tokens, store the refresh token.
+      if (path === '/gcal/callback') {
+        const code = url.searchParams.get('code'), state = url.searchParams.get('state');
+        const blob = await readBlob(), pending = blob.pending;
+        const okState = pending && pending.state && pending.state === state && (Date.now() - pending.ts) < 10 * 60 * 1000;
+        if (!code || !okState) return htmlMsg('Calendar connect failed (expired or invalid). Close this and tap Connect again.', 400);
+        const r = await fetch(GOOGLE_TOKEN_URI, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ code, client_id: clientId, client_secret: env.GCAL_CLIENT_SECRET, redirect_uri: redirect, grant_type: 'authorization_code' }).toString() });
+        const tok = await r.json().catch(() => ({}));
+        if (!r.ok || !tok.refresh_token) { console.warn('[gcal] code exchange failed', r.status, tok.error); return htmlMsg('Calendar connect failed (' + (tok.error || r.status) + '). Close this and tap Connect again — be sure to tap "Allow".', 400); }
+        const ret = pending.return;
+        await writeBlob({ refresh: tok.refresh_token, access: { token: tok.access_token, expires: Date.now() + (tok.expires_in || 3600) * 1000 } });
+        if (ret) return Response.redirect(ret + (ret.includes('?') ? '&' : '?') + 'gcal=connected', 302);
+        return htmlMsg('✓ Google Calendar connected. You can close this window.<script>try{window.opener&&window.opener.postMessage("gcal-connected","*")}catch(e){};setTimeout(function(){window.close&&window.close()},800)<\/script>');
+      }
+
+      // Mint/return a fresh access token from the stored refresh token (cached until ~5 min before expiry).
+      if (path === '/gcal/token') {
+        const blob = await readBlob();
+        if (blob.access?.token && Date.now() < blob.access.expires - 5 * 60 * 1000) return json({ access_token: blob.access.token, expires: blob.access.expires });
+        if (!blob.refresh) return json({ error: 'not_connected' }, 401);
+        if (!env.GCAL_CLIENT_SECRET) return json({ error: 'GCAL_CLIENT_SECRET not set on the Worker' }, 503);
+        const r = await fetch(GOOGLE_TOKEN_URI, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ refresh_token: blob.refresh, client_id: clientId, client_secret: env.GCAL_CLIENT_SECRET, grant_type: 'refresh_token' }).toString() });
+        const tok = await r.json().catch(() => ({}));
+        if (!r.ok || !tok.access_token) {
+          console.warn('[gcal] refresh failed', r.status, tok.error);
+          if (tok.error === 'invalid_grant') { await writeBlob({}); return json({ error: 'reauth_required' }, 401); }   // refresh revoked/expired → reconnect needed
+          return json({ error: tok.error || 'refresh_failed' }, 502);
+        }
+        const access = { token: tok.access_token, expires: Date.now() + (tok.expires_in || 3600) * 1000 };
+        await writeBlob({ refresh: blob.refresh, access });
+        return json({ access_token: access.token, expires: access.expires });
+      }
+
+      // Has a refresh token been stored? (no token returned)
+      if (path === '/gcal/status') { const blob = await readBlob(); return json({ connected: !!blob.refresh }); }
+
+      // Disconnect: revoke at Google + clear the stored tokens.
+      if (path === '/gcal/disconnect' && method === 'POST') {
+        const blob = await readBlob();
+        if (blob.refresh) { try { await fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(blob.refresh), { method: 'POST' }); } catch {} }
+        await writeBlob({});
+        return json({ ok: true });
+      }
+
+      return json({ error: 'Not found' }, 404);
+    }
+
     // ── Square Proxy ──────────────────────────────────────────────────────────
     if (path.startsWith('/square')) {
       const squareBase = env.SQUARE_BASE_URL || 'https://connect.squareup.com';
@@ -417,6 +500,16 @@ export class MuseSalonDO {
       if (this.env.RESTORE_TOKEN && body.token !== this.env.RESTORE_TOKEN) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
       const res = await this.factoryReset();
       return new Response(JSON.stringify(res), { status: res.error ? 400 : 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // ── Google Calendar token store (server-only) ───────────────────────────────
+    // Single blob { refresh, access, pending }. Only the Worker's /gcal/* handlers call
+    // this (via the stub). 'gcal:blob' is NOT a buildSnapshot prefix, so the refresh
+    // token never reaches clients.
+    if (url.pathname === '/gcal/blob') {
+      if (request.method === 'PUT') { let b = {}; try { b = await request.json(); } catch {} await this.state.storage.put('gcal:blob', b); return new Response('{"ok":true}', { headers: { 'Content-Type': 'application/json' } }); }
+      const b = (await this.state.storage.get('gcal:blob')) || {};
+      return new Response(JSON.stringify(b), { headers: { 'Content-Type': 'application/json' } });
     }
 
     // ── Web Push subscriptions (per tech) ───────────────────────────────────────

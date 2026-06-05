@@ -8,6 +8,13 @@ const GCAL_CLIENT_ID = '174518644579-5vgt7vvllm2ekpk0gb8l4sa4f3va9r9l.apps.googl
 const GCAL_SCOPES    = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks';
 const GCAL_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
 const GTASK_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest';
+const GCAL_PROXY = 'https://musedashboard.musenailandspa.workers.dev/gcal';
+// Server-side refresh-token auth: the Worker holds the Google refresh token and mints access
+// tokens, so the iPad never depends on Safari/Chrome silent renewal (the "loses sync" fix).
+// Flip to true ONLY AFTER the Worker /gcal endpoints are deployed, GCAL_CLIENT_SECRET is set,
+// and <worker>/gcal/callback is an authorized redirect URI in Google Cloud — then bump the
+// version trio and tap Connect once. While false, the original GIS browser flow is unchanged.
+const GCAL_SERVER_AUTH = false;
 
 const cfg = () => getState().config;
 const queue = () => getState().queue;
@@ -314,7 +321,20 @@ export function renderTodaysAppointments() {
 function scheduleCalTokenRefresh(expires) {
   clearTimeout(_calRefreshTimer);
   const delay = Math.max(10000, expires - Date.now() - 5 * 60 * 1000);
-  _calRefreshTimer = setTimeout(() => { if (_calTokenClient) _calTokenClient.requestAccessToken({ prompt: '' }); }, delay);
+  _calRefreshTimer = setTimeout(() => { if (GCAL_SERVER_AUTH) _fetchWorkerToken().catch(() => {}); else if (_calTokenClient) _calTokenClient.requestAccessToken({ prompt: '' }); }, delay);
+}
+// Server-side token acquisition: ask the Worker (which holds the refresh token) for a fresh
+// access token. Always works regardless of browser context (PWA / Safari / Chrome) — no GIS,
+// no ITP. Throws on not_connected / reauth_required so the caller can show the Connect button.
+async function _fetchWorkerToken() {
+  const r = await fetch(`${GCAL_PROXY}/token`);
+  if (!r.ok) { let e = 'token-' + r.status; try { e = (await r.json()).error || e; } catch {} throw new Error(e); }
+  const j = await r.json();
+  const saved = { token: j.access_token, expires: j.expires };
+  localStorage.setItem('gcal_token', JSON.stringify(saved));
+  if (window.gapi?.client) gapi.client.setToken({ access_token: saved.token });
+  scheduleCalTokenRefresh(saved.expires);
+  return saved;
 }
 
 // ── On-demand token freshness ─────────────────────
@@ -331,6 +351,7 @@ function _tokenFresh(skewMs = 120000) {
 }
 function ensureFreshToken() {
   if (_tokenFresh()) return Promise.resolve();
+  if (GCAL_SERVER_AUTH) return _fetchWorkerToken().then(() => {});
   if (!_calTokenClient) return Promise.reject(new Error('calendar-not-ready'));
   return new Promise((resolve, reject) => {
     let done = false;
@@ -356,7 +377,8 @@ function _calWriteError(err, verb) {
   if (auth) {
     localStorage.removeItem('gcal_token');
     document.getElementById('cal-signin-btn')?.classList.remove('hidden');
-    if (_calTokenClient) _calTokenClient.requestAccessToken({ prompt: '' });   // silent reconnect for the retry
+    if (GCAL_SERVER_AUTH) _fetchWorkerToken().catch(() => {});                  // server-side: just re-mint from the refresh token
+    else if (_calTokenClient) _calTokenClient.requestAccessToken({ prompt: '' });   // GIS silent reconnect for the retry
     showToast('Calendar session expired — reconnecting. Please try again in a moment.');
   } else showToast(verb + ' failed: ' + (msg || 'Unknown error'));
 }
@@ -376,6 +398,7 @@ export function loadGCalScripts() {
   const s1 = document.createElement('script'); s1.id = 'gapi-script'; s1.src = 'https://apis.google.com/js/api.js';
   s1.onload = () => gapi.load('client', async () => { await gapi.client.init({ discoveryDocs: [GCAL_DISCOVERY, GTASK_DISCOVERY] }); _calGapiLoaded = true; _calTryReady(); });
   document.head.appendChild(s1);
+  if (GCAL_SERVER_AUTH) return;   // server-side flow needs gapi (calendar API) but not GIS (no browser token client)
   const s2 = document.createElement('script'); s2.id = 'gis-script'; s2.src = 'https://accounts.google.com/gsi/client';
   s2.onload = () => {
     _calTokenClient = google.accounts.oauth2.initTokenClient({ client_id: GCAL_CLIENT_ID, scope: GCAL_SCOPES, callback: (resp) => {
@@ -401,7 +424,15 @@ function _useToken(saved) {
   calSetStatus(''); _calInitialLoad();
 }
 function _calTryReady() {
-  if (!_calGapiLoaded || !_calGisLoaded) return;
+  if (!_calGapiLoaded) return;
+  if (GCAL_SERVER_AUTH) {
+    // Bootstrap from the Worker: succeeds if a refresh token is stored, else show Connect.
+    _fetchWorkerToken()
+      .then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); _calInitialLoad(); })
+      .catch(() => { document.getElementById('cal-signin-btn')?.classList.remove('hidden'); calSetStatus('Click "Connect Google Calendar" to get started'); });
+    return;
+  }
+  if (!_calGisLoaded) return;
   const local = localStorage.getItem('gcal_token');
   if (local) { try { const s = JSON.parse(local); if (Date.now() < s.expires - 60000) { _useToken(s); return; } } catch (e) {} }
   // Token shared via the DO (another device signed in)
@@ -412,11 +443,22 @@ function _calTryReady() {
 }
 
 export function initCalendar() { _calDate = new Date(); calUpdateDateLabel(); loadGCalScripts(); }
-export function calSignIn(silent) { if (!_calTokenClient) { showToast('Still loading — try again in a moment'); return; } _calTokenClient.requestAccessToken({ prompt: silent ? '' : 'consent' }); }
+export function calSignIn(silent) {
+  if (GCAL_SERVER_AUTH) {
+    // Silent = re-mint from the stored refresh token (no user action). Interactive = send the
+    // owner to Google's consent via the Worker; on return the app reloads and auto-connects.
+    if (silent) { _fetchWorkerToken().then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); if (_calInitDone) calSilentSync(); else _calInitialLoad(); }).catch(() => {}); return; }
+    location.href = `${GCAL_PROXY}/connect?return=${encodeURIComponent(location.href.split('#')[0])}`;
+    return;
+  }
+  if (!_calTokenClient) { showToast('Still loading — try again in a moment'); return; }
+  _calTokenClient.requestAccessToken({ prompt: silent ? '' : 'consent' });
+}
 export function calSignOut() {
-  const token = gapi.client.getToken();
-  if (token) google.accounts.oauth2.revoke(token.access_token, () => {});
-  gapi.client.setToken(null); localStorage.removeItem('gcal_token');
+  if (GCAL_SERVER_AUTH) { fetch(`${GCAL_PROXY}/disconnect`, { method: 'POST' }).catch(() => {}); }
+  else { const token = gapi.client.getToken(); if (token) google.accounts.oauth2.revoke(token.access_token, () => {}); }
+  if (window.gapi?.client) gapi.client.setToken(null);
+  localStorage.removeItem('gcal_token');
   _calInitDone = false;   // so a fresh sign-in re-runs the initial load
   _calCalendars = []; _calEvents = {};
   document.getElementById('cal-grid').classList.add('hidden');
