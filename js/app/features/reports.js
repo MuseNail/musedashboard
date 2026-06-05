@@ -994,7 +994,12 @@ export function reconcileSquareData(payments, recs, giftSales, refunds) {
   (giftSales || []).forEach(g => (g.squarePaymentIds || []).forEach(id => appIds.add(id)));
   const sqIds = new Set(completed.map(p => p.id));
   const inSquareNotApp = live.filter(p => !appIds.has(p.id));
-  const inAppNotSquare = (recs || []).filter(r => !(r.squarePaymentIds || []).some(id => sqIds.has(id)));
+  // A record is a real "in app, not Square" discrepancy only if it carried money that SHOULD be in
+  // Square (card + cash + Zelle > 0) yet has no matching Square payment. A sale paid entirely by gift
+  // card is a REDEMPTION — that money was collected when the card was sold, so it never hits Square
+  // again and isn't a discrepancy. Tender-less legacy records fall back to their full total.
+  const expectsSquare = r => r.tenders ? ((r.tenders.card || 0) + (r.tenders.cash || 0) + (r.tenders.zelle || 0)) > 0.005 : (r.totalCost || 0) > 0.005;
+  const inAppNotSquare = (recs || []).filter(r => expectsSquare(r) && !(r.squarePaymentIds || []).some(id => sqIds.has(id)));
   // App's view of what SHOULD be in Square = card + cash + Zelle + tips (gift-card REDEMPTIONS never
   // hit Square, so excluded; tips ARE in Square; gift-card SALES paid via Square are added; refunds
   // are subtracted to match Square's net). A tender-less record (older / deep-link era) has no
@@ -1003,7 +1008,10 @@ export function reconcileSquareData(payments, recs, giftSales, refunds) {
     const sq = r.tenders ? ((r.tenders.card || 0) + (r.tenders.cash || 0) + (r.tenders.zelle || 0)) : (r.totalCost || 0);
     return s + Math.round((sq + (r.tip || 0)) * 100);
   }, 0);
-  const giftCents = (giftSales || []).reduce((s, g) => s + Math.round((g.amount || 0) * 100), 0);
+  // Count a gift-card SALE only when its Square payment actually appears in this batch — matching by
+  // the real payment id (not the card's recorded purchase date, which can be blank or back-dated) and
+  // naturally scoping the total to the period, since the fetched payments ARE the period.
+  const giftCents = (giftSales || []).reduce((s, g) => ((g.squarePaymentIds || []).some(id => sqIds.has(id)) ? s + Math.round((g.amount || 0) * 100) : s), 0);
   const refundCents = (refunds || []).reduce((s, r) => s + Math.round(Math.abs(r.totalCost || 0) * 100), 0);
   return {
     squareCount: live.length,
@@ -1053,8 +1061,10 @@ export async function openSquareReconcile() {
     const d = new Date(r.completedAt || r.checkinTime);
     return d >= from && d <= to;
   });
-  // Gift-card SALES paid through Square in this period (their payment ids match Square's payments).
-  const giftSales = giftCards().filter(g => (g.squarePaymentIds || []).length && g.datePurchased && g.datePurchased >= localDateStr(from) && g.datePurchased <= localDateStr(to));
+  // Every gift-card SALE charged through Square (has a payment id). The matcher scopes these to the
+  // period by matching their ids against the fetched Square payments — more reliable than the card's
+  // recorded purchase date (which defaults to today but can be edited / left blank).
+  const giftSales = giftCards().filter(g => (g.squarePaymentIds || []).length);
   // Refunds in this period — subtracted from the app side so it nets like Square's deposit.
   const refundRecs = buildCombinedRecords().filter(r => { if (r.status !== 'refund') return false; const d = new Date(r.completedAt || r.checkinTime); return d >= from && d <= to; });
   const R = reconcileSquareData(payments, recs, giftSales, refundRecs);

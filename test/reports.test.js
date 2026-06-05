@@ -108,3 +108,26 @@ test('reconcileSquareData: fully-refunded payments are not flagged; refunds net 
   assert.equal(R.squareTotalCents, 0 + 5000 + 3000);    // net: p1=0, p2=5000, p3=3000
   assert.equal(R.appTotalCents, 5000 - 4600);           // record $50 − refund $46
 });
+
+test('reconcileSquareData: a fully gift-redeemed sale is NOT flagged as in-app-not-Square', () => {
+  const payments = [{ id: 'p1', total: 5000, status: 'COMPLETED' }];
+  const recs = [
+    { name: 'CardSale', totalCost: 50, status: 'paid', squarePaymentIds: ['p1'], tenders: { card: 50 } },
+    { name: 'GiftOnly', totalCost: 35, status: 'paid', squarePaymentIds: [], tenders: { card: 0, cash: 0, gift: 35, zelle: 0 } },
+  ];
+  const R = reconcileSquareData(payments, recs);
+  assert.equal(R.inAppNotSquare.length, 0);   // gift redemption never hits Square → not a discrepancy
+  assert.equal(R.appTotalCents, 5000);          // the $35 gift redemption is excluded from the app total
+});
+
+test('reconcileSquareData: gift sale matched by payment id regardless of its recorded date; total scoped to the batch', () => {
+  const payments = [{ id: 'gc_now', total: 5600, status: 'COMPLETED' }];   // a cash gift-card sale in this period
+  const giftSales = [
+    { amount: 56, datePurchased: '',           squarePaymentIds: ['gc_now'] },   // linked, blank date — still matched by id
+    { amount: 99, datePurchased: '2020-01-01', squarePaymentIds: ['gc_old'] },   // a different period; its id isn't in the batch
+  ];
+  const R = reconcileSquareData(payments, [], giftSales);
+  assert.equal(R.inSquareNotApp.length, 0);    // the gift-card-sale payment is matched, not flagged
+  assert.equal(R.matchedCount, 1);
+  assert.equal(R.appTotalCents, 5600);          // only the in-batch gift sale counts; the old one is excluded
+});
