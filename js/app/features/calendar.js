@@ -14,7 +14,7 @@ const GCAL_PROXY = 'https://musedashboard.musenailandspa.workers.dev/gcal';
 // Flip to true ONLY AFTER the Worker /gcal endpoints are deployed, GCAL_CLIENT_SECRET is set,
 // and <worker>/gcal/callback is an authorized redirect URI in Google Cloud — then bump the
 // version trio and tap Connect once. While false, the original GIS browser flow is unchanged.
-const GCAL_SERVER_AUTH = false;
+const GCAL_SERVER_AUTH = true;
 
 const cfg = () => getState().config;
 const queue = () => getState().queue;
