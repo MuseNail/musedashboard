@@ -164,8 +164,8 @@ export async function saveGiftCard() {
     let res;
     if (payMethod === 'card') res = await chargeOnTerminal(cents, note, idem);
     else if (!loc) res = { ok: false, error: 'Add your Square Location ID in Settings → Square first.' };
-    else if (payMethod === 'cash') { const id = await recordCashPayment(cents, cents, loc, idem, null); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square cash record failed.' }; }
-    else { const id = await recordExternalPayment(cents, 'Zelle', loc, idem, null); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square Zelle record failed.' }; }
+    else if (payMethod === 'cash') { const id = await recordCashPayment(cents, cents, loc, idem, null, note); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square cash record failed.' }; }
+    else { const id = await recordExternalPayment(cents, 'Zelle', loc, idem, null, note); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square Zelle record failed.' }; }
     if (btn) { btn.disabled = false; btn.textContent = 'Save Gift Card'; }
     if (!res.ok) { showToast('Gift-card payment failed: ' + (res.error || 'error') + ' — card not created.'); return; }
     squarePaymentIds = res.paymentId ? [res.paymentId] : null;

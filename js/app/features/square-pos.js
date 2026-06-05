@@ -313,7 +313,7 @@ export async function chargeOnTerminal(amountCents, note, idemKey) {
 
 // Record the cash portion as a CASH payment in Square (so Square's totals include it).
 // A failure here does NOT block marking the ticket Paid — the cash was physically received.
-export async function recordCashPayment(appliedCents, receivedCents, locationId, idemKey, customerId) {
+export async function recordCashPayment(appliedCents, receivedCents, locationId, idemKey, customerId, note) {
   try {
     const r = await fetch(`${SQUARE_PROXY}/v2/payments`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -324,6 +324,7 @@ export async function recordCashPayment(appliedCents, receivedCents, locationId,
         cash_details: { buyer_supplied_money: { amount: Math.max(receivedCents, appliedCents), currency: 'USD' } },   // cash handed over → Square computes change_back
         location_id: locationId,
         ...(customerId ? { customer_id: customerId } : {}),
+        ...(note ? { note: String(note).slice(0, 500) } : {}),
       }),
     });
     const j = await r.json();
@@ -335,7 +336,7 @@ export async function recordCashPayment(appliedCents, receivedCents, locationId,
 // Record an EXTERNAL (non-card, non-cash) payment in Square — e.g. Zelle — so Square's totals
 // include it. Uses source_id 'EXTERNAL' with external_details. A failure here does NOT block
 // marking the ticket Paid (the money was received out-of-band); it's tracked in the app either way.
-export async function recordExternalPayment(appliedCents, label, locationId, idemKey, customerId) {
+export async function recordExternalPayment(appliedCents, label, locationId, idemKey, customerId, note) {
   try {
     const r = await fetch(`${SQUARE_PROXY}/v2/payments`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -346,6 +347,7 @@ export async function recordExternalPayment(appliedCents, label, locationId, ide
         external_details: { type: 'BANK_TRANSFER', source: label },   // Zelle = a bank transfer
         location_id: locationId,
         ...(customerId ? { customer_id: customerId } : {}),
+        ...(note ? { note: String(note).slice(0, 500) } : {}),
       }),
     });
     const j = await r.json();
