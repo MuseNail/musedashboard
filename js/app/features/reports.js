@@ -1136,6 +1136,13 @@ function buildDrillHtml(d) {
 // pay period (▲ green / ▼ red + %). Check = staff paycheck setting (set $, set % of
 // commission, or variable=manual entry here, stored per tech per period). Cash = comm − check.
 let _payrollOffset = 0;   // 0 = current pay period, -1 = previous, +1 = next
+// Device-local: show the prior-pay-period comparison columns (This | Last + Δ). Default on.
+let _payrollCompare = localStorage.getItem('muse_payroll_compare') !== '0';
+export function payrollToggleCompare() {
+  _payrollCompare = !_payrollCompare;
+  localStorage.setItem('muse_payroll_compare', _payrollCompare ? '1' : '0');
+  renderPayrollPage();
+}
 function prevPayPeriod({ from }) {
   const pp = cfg().pay_period || {}, type = pp.type || 'weekly', msDay = 86400000;
   if (type === 'bimonthly') {
@@ -1266,20 +1273,25 @@ export function renderPayrollPage() {
   // the prior period (one arrow, not one per number). Compact whole dollars in the dense
   // day grid; cents on the summary rows.
   const m0 = n => '$' + Math.round(n || 0);
+  const cmp = _payrollCompare;   // show the prior-pay-period comparison columns (This | Last + Δ)?
+  const colsPer = cmp ? 5 : 2;   // columns each tech spans
   const quad = (cb, cc, pb, pc) =>
-      `<td class="num staff-sep">${_m2(cb)}</td><td class="num">${_m2(cc)}</td><td class="arrow-col">${_pcmp(cb, pb)}</td>`
-    + `<td class="num last thislast-sep">${_m2(pb)}</td><td class="num last">${_m2(pc)}</td>`;
+      `<td class="num staff-sep">${_m2(cb)}</td><td class="num">${_m2(cc)}</td>`
+    + (cmp ? `<td class="arrow-col">${_pcmp(cb, pb)}</td><td class="num last thislast-sep">${_m2(pb)}</td><td class="num last">${_m2(pc)}</td>` : '');
   const dquad = (cd, pd) =>
-      `<td class="num staff-sep">${m0(cd.billed)}</td><td class="num">${m0(cd.commission)}</td><td class="arrow-col">${_pcmp(cd.billed, pd.billed)}</td>`
-    + `<td class="num last thislast-sep">${m0(pd.billed)}</td><td class="num last">${m0(pd.commission)}</td>`;
+      `<td class="num staff-sep">${m0(cd.billed)}</td><td class="num">${m0(cd.commission)}</td>`
+    + (cmp ? `<td class="arrow-col">${_pcmp(cd.billed, pd.billed)}</td><td class="num last thislast-sep">${m0(pd.billed)}</td><td class="num last">${m0(pd.commission)}</td>` : '');
   // Check / Cash are single payouts per period (no billed/comm split) → span the "This" side
   // (billed + comm + Δ) and the "Last" side (billed + comm).
-  const span2 = (cVal, pVal) => `<td class="num staff-sep" colspan="3">${cVal}</td><td class="num last thislast-sep" colspan="2">${_m2(pVal)}</td>`;
+  const span2 = (cVal, pVal) => cmp
+    ? `<td class="num staff-sep" colspan="3">${cVal}</td><td class="num last thislast-sep" colspan="2">${_m2(pVal)}</td>`
+    : `<td class="num staff-sep" colspan="2">${cVal}</td>`;
   const checkCell = x => x.isVar
-    ? `<td class="num staff-sep" colspan="3"><input type="number" min="0" step="1" value="${x.cChk || ''}" placeholder="0" onchange="payrollSetCheck('${x.tech.id}',this.value)" style="width:62px" class="bg-surface-container border border-surface-container-high rounded px-1 py-0.5 text-sm font-headline text-right text-on-surface focus:outline-none focus:border-primary"></td><td class="num last thislast-sep" colspan="2">${_m2(x.pChk)}</td>`
+    ? `<td class="num staff-sep" colspan="${cmp ? 3 : 2}"><input type="number" min="0" step="1" value="${x.cChk || ''}" placeholder="0" onchange="payrollSetCheck('${x.tech.id}',this.value)" style="width:62px" class="bg-surface-container border border-surface-container-high rounded px-1 py-0.5 text-sm font-headline text-right text-on-surface focus:outline-none focus:border-primary"></td>${cmp ? `<td class="num last thislast-sep" colspan="2">${_m2(x.pChk)}</td>` : ''}`
     : span2(_m2(x.cChk), x.pChk);
   const refCells = (c, p) =>
-    `<td class="num staff-sep" style="color:#dc2626">${c.refund ? '-$' + Math.abs(c.refund).toFixed(0) : '—'}${_refNote(c.refundNotes)}</td><td class="num" style="color:#dc2626">${c.refundComm ? '-$' + Math.abs(c.refundComm).toFixed(0) : '—'}</td><td class="arrow-col"></td><td class="num last thislast-sep" style="color:#dc2626">${p.refund ? '-$' + Math.abs(p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${p.refundComm ? '-$' + Math.abs(p.refundComm).toFixed(0) : '—'}</td>`;
+    `<td class="num staff-sep" style="color:#dc2626">${c.refund ? '-$' + Math.abs(c.refund).toFixed(0) : '—'}${_refNote(c.refundNotes)}</td><td class="num" style="color:#dc2626">${c.refundComm ? '-$' + Math.abs(c.refundComm).toFixed(0) : '—'}</td>`
+    + (cmp ? `<td class="arrow-col"></td><td class="num last thislast-sep" style="color:#dc2626">${p.refund ? '-$' + Math.abs(p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${p.refundComm ? '-$' + Math.abs(p.refundComm).toFixed(0) : '—'}</td>` : '');
   const info = `<span onclick="showToast('Day cells show billed and commission, this period vs last. The Δ column is the change in billed vs the same weekday in the previous pay period.')" title="Day cells = billed and commission, this period vs last. Δ = change in billed vs the same weekday in the previous pay period." class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;cursor:help;color:var(--md-on-surface-variant)">info</span>`;
   const rows = [
     `<tr><td class="sticky-col">Total</td>${T.map(x => quad(x.c.billed, x.c.commission, x.p.billed, x.p.commission)).join('')}</tr>`,
@@ -1288,24 +1300,36 @@ export function renderPayrollPage() {
     ] : []),
     `<tr><td class="sticky-col">Check</td>${T.map(checkCell).join('')}</tr>`,
     ...(T.some(x => x.cDed || x.pDed) ? [
-      `<tr><td class="sticky-col">Cash deduction</td>${T.map(x => `<td class="num staff-sep" colspan="3" style="color:#dc2626">${x.cDed ? '-' + _m2(x.cDed) : '—'}</td><td class="num last thislast-sep" colspan="2" style="color:#dc2626">${x.pDed ? '-' + _m2(x.pDed) : '—'}</td>`).join('')}</tr>`,
+      `<tr><td class="sticky-col">Cash deduction</td>${T.map(x => `<td class="num staff-sep" colspan="${cmp ? 3 : 2}" style="color:#dc2626">${x.cDed ? '-' + _m2(x.cDed) : '—'}</td>${cmp ? `<td class="num last thislast-sep" colspan="2" style="color:#dc2626">${x.pDed ? '-' + _m2(x.pDed) : '—'}</td>` : ''}`).join('')}</tr>`,
     ] : []),
     `<tr><td class="sticky-col">Cash</td>${T.map(x => span2(_m2(x.cCash), x.pCash)).join('')}</tr>`,
     `<tr style="font-weight:700"><td class="sticky-col">Total paid</td>${T.map(x => span2(_m2(x.cTotal), x.pTotal)).join('')}</tr>`,
-    `<tr class="section-row"><td class="sticky-col">By day ${info}</td><td colspan="${T.length * 5}"></td></tr>`,
+    `<tr class="section-row"><td class="sticky-col">By day ${info}</td><td colspan="${T.length * colsPer}"></td></tr>`,
     ...curDays.map((day, i) => {
       const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
       return `<tr><td class="sticky-col" style="font-weight:500">${dl}</td>${T.map(x => dquad(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`;
     }),
   ];
-  const head1 = T.map(x => `<th colspan="5" class="staff-sep" style="text-align:center"><span style="text-decoration:underline">${x.tech.name}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</span></th>`).join('');
+  const head1 = T.map(x => `<th colspan="${colsPer}" class="staff-sep" style="text-align:center"><span style="text-decoration:underline">${x.tech.name}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</span></th>`).join('');
   const head2 = T.map(() => `<th colspan="2" class="staff-sep" style="text-align:center;font-weight:600">This</th><th class="arrow-col"></th><th colspan="2" class="thislast-sep" style="text-align:center;font-weight:600">Last</th>`).join('');
-  const head3 = T.map(() => `<th class="num staff-sep">Billed</th><th class="num">Comm</th><th class="arrow-col"></th><th class="num thislast-sep">Billed</th><th class="num">Comm</th>`).join('');
-  wrap.innerHTML = `<table class="data-table"><thead>
-      <tr><th class="sticky-col" rowspan="3"></th>${head1}</tr>
-      <tr>${head2}</tr>
-      <tr>${head3}</tr></thead>
+  const head3 = T.map(() => cmp
+    ? `<th class="num staff-sep">Billed</th><th class="num">Comm</th><th class="arrow-col"></th><th class="num thislast-sep">Billed</th><th class="num">Comm</th>`
+    : `<th class="num staff-sep">Billed</th><th class="num">Comm</th>`).join('');
+  wrap.innerHTML = `<table class="data-table"><thead>${cmp
+      ? `<tr><th class="sticky-col" rowspan="3"></th>${head1}</tr><tr>${head2}</tr><tr>${head3}</tr>`
+      : `<tr><th class="sticky-col" rowspan="2"></th>${head1}</tr><tr>${head3}</tr>`}</thead>
     <tbody>${rows.join('')}</tbody></table>`;
+  // Reflect the toggle state on the header button.
+  const _cbtn = document.getElementById('payroll-compare-btn');
+  if (_cbtn) {
+    _cbtn.classList.toggle('border-primary', cmp);
+    _cbtn.classList.toggle('text-primary', cmp);
+    _cbtn.classList.toggle('bg-primary/10', cmp);
+    _cbtn.classList.toggle('border-outline-variant/60', !cmp);
+    _cbtn.classList.toggle('text-on-surface', !cmp);
+    const _clbl = document.getElementById('payroll-compare-label');
+    if (_clbl) _clbl.textContent = cmp ? 'Comparing: Last' : 'Compare: Off';
+  }
 }
 function payrollExportRows() {
   const cur = payrollPeriodAt(_payrollOffset), data = payrollRange(cur.from, cur.to), perKey = localDateStr(cur.from);
