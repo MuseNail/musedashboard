@@ -116,6 +116,10 @@ function showDashPanel(panel) {
   });
   document.getElementById(`panel-${panel}`)?.classList.add('active');
   document.getElementById(`nav-${panel}`)?.classList.add('active');
+  // Re-render the panel being shown so it reflects the latest state. onStateChange only
+  // re-renders the ACTIVE panel, so a queue change that landed while another tab was open
+  // left the Queue panel stale (a check-in showed in Turns but not Queue until a refresh).
+  if (panel === 'queue')        { queue.renderQueue(); queue.updateStats(); }
   if (panel === 'floorplan')    floorplan.renderFloorPlan();
   if (panel === 'reports')      reports.setReportRange('today');
   if (panel === 'transactions') reports.renderTransactions();
