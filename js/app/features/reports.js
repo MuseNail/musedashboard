@@ -11,6 +11,7 @@ import { squareUpsertCustomer } from './square-customers.js';
 import { avgServiceTime, fmtDur } from './servicetime.js';
 import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS, SQUARE_PROXY } from '../config.js';
 import { gcRedemptions, gcTotalUsed } from './giftcards.js';
+import { fdPaidHours, fdPunches, fdSetPunches, roundQuarterHours } from './timeclock.js';
 
 const cfg = () => getState().config;
 const records = () => getState().records;
@@ -1325,10 +1326,29 @@ export function renderPayrollPage() {
   const head3 = T.map(() => cmp
     ? `<th class="num staff-sep">Billed</th><th class="num">Comm</th><th class="arrow-col"></th><th class="num thislast-sep">Billed</th><th class="num">Comm</th>`
     : `<th class="num staff-sep">Billed</th><th class="num">Comm</th>`).join('');
+  // ── Front-desk hourly pay (clocked hours × rate). Tap a row → adjust times. ──
+  const _fdFrom = new Date(cur.from); _fdFrom.setHours(0, 0, 0, 0);
+  const _fdTo   = new Date(cur.to);   _fdTo.setHours(23, 59, 59, 999);
+  const _fdEdit = ['admin', 'manager'].includes(getActiveUser()?.role);
+  const _fdRows = (cfg().fd_users || []).map(u => {
+    const r = fdPaidHours(u.id, +_fdFrom, +_fdTo);
+    return { u, hours: r.hours, open: r.openShift, rate: u.hourlyRate || 0, pay: r.hours * (u.hourlyRate || 0) };
+  }).filter(r => r.rate > 0 || r.hours > 0 || r.open);
+  let _fdHtml = '';
+  if (_fdRows.length) {
+    const _fdTotal = _fdRows.reduce((s, r) => s + r.pay, 0);
+    _fdHtml = `<div class="mt-6">
+      <div class="flex items-center gap-2 mb-2"><h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest">Front Desk — Hourly</h3>${_fdEdit ? '<span class="text-[11px] font-body text-on-surface-variant">tap a row to adjust times</span>' : ''}</div>
+      <div class="overflow-x-auto rounded-xl border border-surface-container-high"><table class="data-table">
+        <thead><tr><th class="sticky-col">Staff</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Pay</th></tr></thead>
+        <tbody>${_fdRows.map(r => `<tr ${_fdEdit ? `onclick="openTimecard('${r.u.id}')" style="cursor:pointer"` : ''}><td class="sticky-col">${_eTxn(r.u.name)}${r.open ? ' <span title="Still clocked in" style="color:#c77700">⏱</span>' : ''}</td><td class="num">${r.hours.toFixed(2)}</td><td class="num">$${r.rate.toFixed(2)}</td><td class="num">$${r.pay.toFixed(2)}</td></tr>`).join('')}
+        <tr style="font-weight:700"><td class="sticky-col">Total</td><td class="num"></td><td class="num"></td><td class="num">$${_fdTotal.toFixed(2)}</td></tr></tbody>
+      </table></div></div>`;
+  }
   wrap.innerHTML = `<table class="data-table"><thead>${cmp
       ? `<tr><th class="sticky-col" rowspan="3"></th>${head1}</tr><tr>${head2}</tr><tr>${head3}</tr>`
       : `<tr><th class="sticky-col" rowspan="2"></th>${head1}</tr><tr>${head3}</tr>`}</thead>
-    <tbody>${rows.join('')}</tbody></table>`;
+    <tbody>${rows.join('')}</tbody></table>${_fdHtml}`;
   // Reflect the toggle state on the header button.
   const _cbtn = document.getElementById('payroll-compare-btn');
   if (_cbtn) {
@@ -1340,6 +1360,73 @@ export function renderPayrollPage() {
     const _clbl = document.getElementById('payroll-compare-label');
     if (_clbl) _clbl.textContent = cmp ? 'Comparing: Last' : 'Compare: Off';
   }
+}
+
+// ── Front-desk timecard editor (admin/manager) ───────────────────────────────
+// Opened from a Front-Desk row in Payroll. Lists the user's clock punches for the
+// selected pay period with editable in/out times, add a missed punch, delete, and
+// close a forgotten clock-out. Edits replace the user's punch list via fdSetPunches.
+const _tcCanEdit = () => ['admin', 'manager'].includes(getActiveUser()?.role);
+const _tc2 = n => String(n).padStart(2, '0');
+const _tcDate = ms => { const d = new Date(ms); return d.getFullYear() + '-' + _tc2(d.getMonth() + 1) + '-' + _tc2(d.getDate()); };
+const _tcTime = ms => { const d = new Date(ms); return _tc2(d.getHours()) + ':' + _tc2(d.getMinutes()); };
+const _tcCombine = (dateStr, timeStr) => { if (!dateStr || !timeStr) return null; const t = new Date(dateStr + 'T' + timeStr); return isNaN(t) ? null : t.getTime(); };
+
+export function openTimecard(userId) {
+  if (!_tcCanEdit()) { showToast('Only an admin or manager can adjust times.'); return; }
+  const u = (cfg().fd_users || []).find(x => x.id === userId); if (!u) return;
+  const cur = payrollPeriodAt(_payrollOffset);
+  const from = new Date(cur.from); from.setHours(0, 0, 0, 0);
+  const to = new Date(cur.to); to.setHours(23, 59, 59, 999);
+  const rows = fdPunches(userId).map((p, idx) => ({ p, idx })).filter(({ p }) => p.in && p.in >= +from && p.in <= +to).sort((a, b) => a.p.in - b.p.in);
+  const inp = 'bg-surface-container border border-surface-container-high rounded px-2 py-1 text-xs font-body text-on-surface';
+  const body = rows.map(({ p, idx }) => {
+    const hrs = p.out ? roundQuarterHours(p.out - p.in) : 0;
+    return `<div class="flex items-center gap-1.5 py-2 border-b border-surface-container-high flex-wrap">
+      <input type="date" id="tc-date-${idx}" value="${_tcDate(p.in)}" onchange="tcUpdate('${userId}',${idx})" class="${inp}">
+      <input type="time" id="tc-in-${idx}" value="${_tcTime(p.in)}" onchange="tcUpdate('${userId}',${idx})" class="${inp}">
+      <span class="text-on-surface-variant text-xs">→</span>
+      <input type="time" id="tc-out-${idx}" value="${p.out ? _tcTime(p.out) : ''}" onchange="tcUpdate('${userId}',${idx})" class="${inp}">
+      <span class="text-xs font-body font-semibold ml-auto" style="${p.out ? '' : 'color:#c77700'}">${p.out ? hrs.toFixed(2) + 'h' : 'open'}</span>
+      <button onclick="tcDeletePunch('${userId}',${idx})" title="Delete punch" class="text-on-surface-variant hover:text-error"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
+    </div>`;
+  }).join('') || '<p class="text-sm font-body text-on-surface-variant py-3">No punches in this pay period. Use “Add punch” to enter one.</p>';
+  const total = rows.reduce((s, { p }) => s + (p.out ? roundQuarterHours(p.out - p.in) : 0), 0);
+  const html = `<div class="text-[11px] font-body text-on-surface-variant mb-2">${_eTxn(u.name)} · ${u.hourlyRate ? '$' + u.hourlyRate.toFixed(2) + '/hr' : 'no rate set'} · hours round to the nearest 15 min</div>
+    ${body}
+    <div class="flex items-center justify-between mt-3">
+      <button onclick="tcAddPunch('${userId}')" class="text-sm font-body font-semibold text-primary flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:18px">add</span> Add punch</button>
+      <span class="text-sm font-headline font-bold text-on-surface">${total.toFixed(2)} h · $${(total * (u.hourlyRate || 0)).toFixed(2)}</span>
+    </div>`;
+  showDrillPanel('Timecard — ' + (u.name || ''), html);
+}
+export function tcUpdate(userId, idx) {
+  if (!_tcCanEdit()) return;
+  const date = document.getElementById('tc-date-' + idx)?.value;
+  const inMs = _tcCombine(date, document.getElementById('tc-in-' + idx)?.value);
+  if (!inMs) { showToast('Enter a clock-in date and time.'); return; }
+  const outT = document.getElementById('tc-out-' + idx)?.value;
+  let outMs = _tcCombine(date, outT);
+  if (outMs != null && outMs <= inMs) outMs += 24 * 3600 * 1000;   // out before in → shift ended after midnight
+  const list = [...fdPunches(userId)];
+  if (!list[idx]) return;
+  list[idx] = { in: inMs, out: outT ? outMs : null };
+  fdSetPunches(userId, list);
+  openTimecard(userId); renderPayrollPage();
+}
+export function tcAddPunch(userId) {
+  if (!_tcCanEdit()) return;
+  const start = new Date(payrollPeriodAt(_payrollOffset).from); start.setHours(9, 0, 0, 0);
+  fdSetPunches(userId, [...fdPunches(userId), { in: +start, out: null }]);
+  openTimecard(userId);
+}
+export function tcDeletePunch(userId, idx) {
+  if (!_tcCanEdit()) return;
+  const list = [...fdPunches(userId)];
+  if (idx < 0 || idx >= list.length) return;
+  list.splice(idx, 1);
+  fdSetPunches(userId, list);
+  openTimecard(userId); renderPayrollPage();
 }
 function payrollExportRows() {
   const cur = payrollPeriodAt(_payrollOffset), data = payrollRange(cur.from, cur.to), perKey = localDateStr(cur.from);

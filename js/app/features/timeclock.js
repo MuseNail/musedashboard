@@ -18,6 +18,8 @@ export function fdIsClockedIn(userId) { const last = fdPunches(userId).slice(-1)
 export function fdClockedSince(userId) { const last = fdPunches(userId).slice(-1)[0]; return (last && last.in && !last.out) ? last.in : null; }
 
 function _save(userId, list) { dispatch('config.set', { key: _key(userId), value: list }); }
+// Manager/admin timecard editing (reports.js) replaces a user's whole punch list.
+export function fdSetPunches(userId, list) { _save(userId, Array.isArray(list) ? list : []); }
 
 export function fdClockIn(userId) {
   if (!userId || fdIsClockedIn(userId)) return;
