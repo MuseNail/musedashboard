@@ -181,7 +181,13 @@ export function renderPayPeriodSettings() {
     </select>
     ${needsStart ? `<label class="${lbl}">Period start date</label>
       <input type="date" id="pp-start" value="${pp.startDate||''}" onchange="savePayPeriod()" class="${inp}">
-      <p class="text-[11px] font-body text-on-surface-variant mt-1">Repeats every ${type==='biweekly'?'14':'7'} days from this date — e.g., a Monday start runs Mon–Sun.</p>` : ''}`;
+      <p class="text-[11px] font-body text-on-surface-variant mt-1">Repeats every ${type==='biweekly'?'14':'7'} days from this date — e.g., a Monday start runs Mon–Sun.</p>` : ''}
+    <div class="mt-5 pt-4 border-t border-surface-container-high">
+      <label class="${lbl}">Time-Clock Station</label>
+      <p class="text-xs font-body text-on-surface-variant mb-2">Front-desk staff can clock in/out <strong>only on the designated station device</strong> — so nobody can clock in from a personal phone. Set this on the salon's front-desk device.</p>
+      <div id="timeclock-station-status"></div>
+    </div>`;
+  window.renderClockStationSetting?.();
 }
 export function savePayPeriod() {
   const type = document.getElementById('pp-type')?.value || 'weekly';

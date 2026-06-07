@@ -38,6 +38,7 @@ export function toggleMyClock() {
   if (!u || !u.id || u.id === 'fallback' || !(cfg().fd_users || []).some(x => x.id === u.id)) {
     showToast('Log in as a front-desk user to clock in.'); return;
   }
+  if (!isClockStation()) { showToast('Clock in/out is only available on the salon time-clock station.'); return; }
   if (fdIsClockedIn(u.id)) { fdClockOut(u.id); showToast(`Clocked out — ${u.name}`); }
   else { fdClockIn(u.id); showToast(`Clocked in — ${u.name}`); }
   renderClockButton();
@@ -46,7 +47,8 @@ export function toggleMyClock() {
 export function renderClockButton() {
   const btn = document.getElementById('clock-btn'); if (!btn) return;
   const u = getActiveUser();
-  const show = !!(u && u.id && u.id !== 'fallback' && (cfg().fd_users || []).some(x => x.id === u.id));
+  // Only on the designated salon station (so staff can't clock in from a personal phone).
+  const show = !!(u && u.id && u.id !== 'fallback' && (cfg().fd_users || []).some(x => x.id === u.id)) && isClockStation();
   btn.style.display = show ? 'inline-flex' : 'none';
   if (!show) return;
   const inNow = fdIsClockedIn(u.id), since = fdClockedSince(u.id);
@@ -57,6 +59,36 @@ export function renderClockButton() {
   if (lbl) lbl.textContent = inNow ? `Clock Out · in ${_hhmm(since)}` : 'Clock In';
 }
 function _hhmm(ms) { try { return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch { return ''; } }
+
+// ── Time-clock station (one designated device) ───────────────────────────────
+// Clocking only works on the device an admin designated as the salon station — so a
+// front-desk user can't clock in from a personal phone. The chosen device's id is stored
+// in synced config (timeclock_device_id) and compared against this device's muse_device_id.
+function _myDeviceId() { try { return localStorage.getItem('muse_device_id') || ''; } catch { return ''; } }
+export function clockStationDeviceId() { return cfg().timeclock_device_id || ''; }
+export function isClockStation() { const s = clockStationDeviceId(); return !!s && s === _myDeviceId(); }
+export function setThisClockStation() {
+  if (getActiveUser()?.role !== 'admin') { showToast('Only an admin can set the time-clock station.'); return; }
+  const id = _myDeviceId();
+  if (!id) { showToast('This device has no id yet — reload and try again.'); return; }
+  dispatch('config.set', { key: 'timeclock_device_id', value: id });
+  showToast('This device is now the time-clock station ✓');
+  renderClockButton(); renderClockStationSetting();
+}
+export function clearClockStation() {
+  if (getActiveUser()?.role !== 'admin') { showToast('Only an admin can change the time-clock station.'); return; }
+  dispatch('config.set', { key: 'timeclock_device_id', value: '' });
+  showToast('Time-clock station cleared');
+  renderClockButton(); renderClockStationSetting();
+}
+// Fills #timeclock-station-status inside the Pay Period settings section.
+export function renderClockStationSetting() {
+  const el = document.getElementById('timeclock-station-status'); if (!el) return;
+  const setId = clockStationDeviceId(), isThis = isClockStation(), isSet = !!setId;
+  el.innerHTML = isThis
+    ? `<div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg" style="background:rgba(42,122,79,.12)"><span class="text-sm font-body" style="color:#1b5e20"><strong>This device</strong> is the time-clock station ✓</span><button onclick="clearClockStation()" class="text-xs font-body text-error underline flex-shrink-0">Remove</button></div>`
+    : `<div class="flex items-center justify-between gap-2 flex-wrap"><span class="text-sm font-body text-on-surface-variant">${isSet ? 'Another device is the station.' : 'No station set yet — staff can’t clock in until one is set.'}</span><button onclick="setThisClockStation()" class="px-3 py-2 rounded-xl bg-primary text-on-primary text-sm font-body font-semibold flex-shrink-0">Make this device the station</button></div>`;
+}
 
 // ── Pay computation (used by payroll) ────────────────────────────────────────
 // Round a duration (ms) to the nearest quarter hour → hours (e.g. 7 min → 0, 8 → 0.25).
