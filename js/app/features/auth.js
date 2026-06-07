@@ -30,6 +30,7 @@ export function updateLoggedInDisplay() {
   window.updateHistoricalButtonVisibility?.();
   window.updatePermissionGatedUI?.();
   window.applyUserTheme?.();   // load the logged-in user's per-login theme
+  window.renderClockButton?.();   // show the time-clock button for a front-desk user
 }
 
 // ── PIN modal ─────────────────────────────────────
@@ -244,6 +245,7 @@ export function showAddFdUser() {
   document.getElementById('fduser-modal-title').textContent = 'Add Front Desk User';
   document.getElementById('fduser-name-input').value = '';
   document.getElementById('fduser-pin-input').value = '';
+  const rateEl = document.getElementById('fduser-rate-input'); if (rateEl) rateEl.value = '';
   document.getElementById('fduser-edit-id').value = '';
   selectRole('frontdesk');
   const m = document.getElementById('fduser-modal');
@@ -258,6 +260,7 @@ export function showEditFdUser(id) {
   document.getElementById('fduser-modal-title').textContent = 'Edit User';
   document.getElementById('fduser-name-input').value = u.name;
   document.getElementById('fduser-pin-input').value = u.pin;
+  const rateEl = document.getElementById('fduser-rate-input'); if (rateEl) rateEl.value = u.hourlyRate != null ? u.hourlyRate : '';
   document.getElementById('fduser-edit-id').value = id;
   selectRole(u.role);
   const m = document.getElementById('fduser-modal');
@@ -278,13 +281,14 @@ export function saveFdUser() {
   if (!name) { showToast('Please enter a name.'); return; }
   if (!pin || pin.length < 4) { showToast('PIN must be at least 4 digits.'); return; }
   if (!/^\d+$/.test(pin)) { showToast('PIN must be numbers only.'); return; }
+  const hourlyRate = Math.max(0, parseFloat(document.getElementById('fduser-rate-input')?.value) || 0);
   const fd = cfg().fd_users;
   const dup = fd.find(u => u.pin === pin && u.id !== editId);
   if (dup) { showToast(`PIN already used by ${dup.name}.`); return; }
 
   let next;
-  if (editId) next = fd.map(u => u.id === editId ? { ...u, name, pin, role } : u);
-  else        next = [...fd, { id: `fd-${Date.now()}`, name, pin, role }];
+  if (editId) next = fd.map(u => u.id === editId ? { ...u, name, pin, role, hourlyRate } : u);
+  else        next = [...fd, { id: `fd-${Date.now()}`, name, pin, role, hourlyRate }];
   setFdUsers(next);
   closeFdUserModal();
   renderFdUsersList();

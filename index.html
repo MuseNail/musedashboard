@@ -249,6 +249,10 @@ tailwind.config = {
         <span id="cal-sync-text">Calendar</span>
       </div>
       <span id="app-version-badge" class="text-[10px] font-body text-outline-variant select-none" title="musedashboard"></span>
+      <button onclick="toggleMyClock()" id="clock-btn" title="Clock in / out for time-clock pay" class="items-center gap-1.5 px-3 rounded-full border text-xs font-body font-semibold transition-colors" style="display:none;height:32px;border-color:var(--primary);color:var(--primary)">
+        <span class="material-symbols-outlined" style="font-size:16px">schedule</span>
+        <span id="clock-btn-label">Clock In</span>
+      </button>
       <button onclick="toggleChat()" id="chat-btn" title="Staff chat" class="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">chat</span>
         <span id="chat-badge" class="hidden absolute flex items-center justify-center font-bold text-white" style="top:-2px;right:-2px;min-width:16px;height:16px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1">0</span>
@@ -1688,6 +1692,11 @@ tailwind.config = {
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">PIN (4–6 digits)</label>
         <input id="fduser-pin-input" type="password" inputmode="numeric" maxlength="6" placeholder="••••"
+          class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary outline-none transition-colors placeholder:text-outline-variant">
+      </div>
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Hourly Rate ($/hr) <span class="text-outline-variant normal-case">— for time-clock pay</span></label>
+        <input id="fduser-rate-input" type="text" inputmode="decimal" placeholder="0.00"
           class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary outline-none transition-colors placeholder:text-outline-variant">
       </div>
       <div>

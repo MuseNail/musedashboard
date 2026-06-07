@@ -32,9 +32,10 @@ import * as recovery from './features/recovery.js';
 import * as audit from './features/audit.js';
 import * as cashdrawer from './features/cashdrawer.js';
 import * as sms from './features/sms.js';
+import * as timeclock from './features/timeclock.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -216,7 +217,7 @@ function onStateChange(state, changed) {
   if (changed === 'connection') return;
   if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); }   // apply pending Square auto-paid + roll over the day if needed, once the queue loads
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
-    photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync();
+    photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync(); timeclock.renderClockButton();
     // The customer directory is now a DO entity — it hydrates from the snapshot like records,
     // so no Square auto-pull on boot. (A one-time "Import from Square" seeds it; see the
     // Customers tab.) square-customers.js rebuilds its directory caches on every store change.
