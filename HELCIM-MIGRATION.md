@@ -1,6 +1,6 @@
 # Square → Helcim migration plan (musedashboard)
 
-**Status:** IN PROGRESS — customers + catalog DONE; payments/auth/reconcile REMAIN · **Created:** 2026-06-03 · **Updated:** 2026-06-04 (prod v4.33) · **Decision:** in-repo replacement (NOT TurnDesk's multi-processor adapter — keep it a simple swap; see CLAUDE.md "Product line" box).
+**Status:** IN PROGRESS — customers + catalog DONE; **Helcim API research DONE (2026-06-08, see "Helcim API research findings" below)**; payments/auth/reconcile build REMAIN (gated on Smart Terminal hardware) · **Created:** 2026-06-03 · **Updated:** 2026-06-08 (prod v4.50) · **Decision:** in-repo replacement (NOT TurnDesk's multi-processor adapter — keep it a simple swap; see CLAUDE.md "Product line" box).
 
 ## ✅ PROGRESS (2026-06-04) — what's done vs what remains
 **DONE (shipped v4.23–v4.27):**
@@ -14,7 +14,7 @@
 - **Pay-path P0 consolidation** (do FIRST, hardware-independent): one "→ paid"/reopen path incl. the **cancelled-processor-transaction** + **reopen-leaves-record** cases (see `PRIORITIES.md`).
 - **E. Retire Square:** stop the customer dual-write, remove `/square` proxy + `SQUARE_TOKEN` + the Square config UI; keep historical Square ids on old records.
 
-**Hardware-independent first steps (can start anytime):** the **Helcim-API research pass** (below) + the **pay-path P0 consolidation**.
+**Hardware-independent first steps:** ~~the Helcim-API research pass~~ **✅ DONE 2026-06-08** (findings + proposed Worker design + open questions below) · the **pay-path P0 consolidation** (still to do) · ordering hardware = the **Helcim Smart Terminal** (API mode), then build payments + §13 Worker auth together.
 
 ## Scope (owner-confirmed 2026-06-03)
 Remove **most** Square connections. The app becomes the **source of truth** for:
@@ -90,12 +90,58 @@ Net: Square is fully retired except possibly a one-time customer export during m
 3. **§13 full-auth + Worker** — the Helcim proxy/webhook/secret land in the same Worker pass as the auth work.
 4. Then A (payments) + D (reconcile) together; B (customers) can run in parallel; C (catalog) + E (cleanup) last.
 
-## ⚠️ Research needed before building (Helcim API specifics — verify, don't assume)
-- Smart Terminal API: exact start-purchase request, the webhook payload shape + how to correlate it to our ticket (reference_id?), and whether a status-poll fallback exists.
-- Refund API + idempotency model.
-- Transaction-list/reporting API for reconcile (filtering by date/location).
-- Whether tips are captured on the terminal or passed in the request (affects the tip flow).
-- Customer/invoice API (only if we ever attach a customer to a transaction).
+## ✅ Helcim API research findings (verified 2026-06-08, from devdocs.helcim.com)
+
+**Base URL:** `https://api.helcim.com/v2`. **Auth:** single `api-token` request header (→ the Worker's `HELCIM_API_TOKEN` secret; token stays server-side, never in the client — same pattern as today's Square proxy). The API is now called the **"Payment Hardware API"** (was "Smart Terminal API"). Terminal must have **API mode ON** and be **registered/paired** (gives a **4-digit `deviceCode`**, e.g. `NBL7`).
+
+### The core pay flow is POLL → WEBHOOK (the structural change)
+1. **Start a purchase** — `POST /v2/devices/{deviceCode}/payment/purchase`
+   - Headers: `api-token`. Body: `{ "currency": "USD", "transactionAmount": <number, dollars>, "invoiceNumber": "<our unique ref>", "customerCode": "<optional>" }`.
+   - Returns **`202 Accepted`** = "queued on the device," NOT a result. The terminal then prompts the customer (tap / chip+PIN) **and shows the tip screen on-device**.
+   - ⚠️ **No `tipAmount` and no `idempotency-key` in this endpoint's schema** (idempotency IS required on refund/reverse — see below). `transactionAmount` is **dollars** (e.g. `100.99`), not cents.
+2. **Result comes back via webhook** (configured in Helcim → All Tools → Integrations → Webhooks; URL must be https and must NOT contain the word "helcim"). Two event types:
+   - **`cardTransaction`** — payload is only `{ "id": "25764674", "type": "cardTransaction" }`. You must then **`GET /v2/card-transactions/{id}`** for the full object → `{ transactionId, dateCreated, type, amount, currency, cardType, approvalCode, cardToken, invoiceNumber, customerCode, status (APPROVED|DECLINED) }`.
+   - **`terminalCancel`** — payload `{ "type":"terminalCancel", "data": { invoiceNumber, deviceCode, transactionAmount, currency, customerCode, cancelledAt } }` (fires when the customer cancels on the device before processing). **This cleanly covers the pay-path-P0 "cancelled-processor-transaction" case.**
+   - **Webhook security:** HMAC-SHA256. Headers `webhook-id`, `webhook-timestamp`, `webhook-signature`. Sign `"${webhook-id}.${webhook-timestamp}.${rawBody}"` with the **base64-decoded `verifierToken`** (from webhook settings) as the key; base64 the result; it must match one of the space-delimited values in `webhook-signature`. (This is the Svix scheme.)
+3. **Correlation = `invoiceNumber`** (our ticket ref). ⚠️ Caveat: if the `invoiceNumber` already exists in Helcim it LINKS to that invoice; if not, Helcim **auto-creates** an invoice with that number. → use a **unique** ref per charge (e.g. `T<ticketId>-<nonce>`) so reopen/re-charge doesn't collide.
+
+### Tips: collected ON the terminal (NOT passed in the request)
+The tip screen is shown by the device (configured in Helcim POS/terminal settings), so the **customer enters the tip on the terminal**, not in our app. Implication: we send `transactionAmount = card balance due (bill, no tip)`; the **final charged `amount` returned by `GET /card-transactions/{id}` includes the tip**. → **derive tip = `amount` (charged) − `transactionAmount` (requested).** (Open Q1 below confirms `amount` is the tip-inclusive total / whether a discrete tip field exists.) This is actually simpler UX than today (no in-app tip entry) and keeps payroll tip attribution working via the subtraction.
+
+### Refund / void
+- **Refund** (after batch settlement; supports partial): `POST /v2/payment/refund`, headers `api-token` + **`idempotency-key`** (UUID-ish, 25–36 chars incl. `-`/`_`), body `{ "originalTransactionId": <int>, "amount": <number>, "ipAddress": "<str, required>", "ecommerce": <bool optional> }` → 200 `SuccessfulPaymentResponse`. (`originalTransactionId` = the Helcim `transactionId` we stored on the record.)
+- **Reverse/void** (before settlement; full only, no amount): `POST /v2/payment/reverse`, headers `api-token` + `idempotency-key`, body `{ "cardTransactionId": <int>, "ipAddress": "<str>", "ecommerce": <bool> }`.
+- → replaces `refundInSquare`. Note both need a customer `ipAddress` (the Worker can supply the request IP).
+
+### Reconcile / reporting
+- **List transactions:** `GET /v2/card-transactions/` with query params `dateFrom`, `dateTo`, `invoiceNumber`, `customerCode`, `cardToken`, `cardBatchId`, `search`, `limit` (max **1000**), `page`. Returns an array of transaction objects (incl. `transactionId`, `amount`, `status`, `invoiceNumber`, `dateCreated`, …).
+- ⚠️ **`dateCreated` and the `dateFrom`/`dateTo` filters are Mountain Time** — must TZ-convert for reconcile matching against our local records.
+- → replaces `fetchSquarePayments`/`reconcileSquareData`; match our records to Helcim by `invoiceNumber` (and store the Helcim `transactionId`). Reports must tolerate BOTH processors during the transition.
+
+### Devices
+- `GET /v2/devices/` (query `code`, `limit`, `page`, `offset`) to list/verify paired terminals. Device identified everywhere by the 4-digit `deviceCode`.
+
+## ▶ Proposed Worker + flow design (server-side finalize — recommended)
+Because the result is a webhook to the Worker, the cleanest model is **server-side finalize** (vs the client inline-poll Square uses today):
+- **New Worker endpoints** (all in the §13 auth pass): `POST /helcim/purchase` (auth-gated proxy → start purchase), `POST /helcim/refund`, `GET /helcim/transactions` (reconcile), and **`POST /helcim/webhook`** (HMAC-verified, NO app auth — it's Helcim calling us).
+- **Flow:** app computes split tenders (gift/cash/zelle subtracted, as today) → calls `/helcim/purchase` with the **card-due bill** + a unique `invoiceNumber` → shows a "charging on terminal — customer is paying & tipping…" modal. The customer pays+tips on the device → Helcim webhooks the Worker → Worker GETs the full txn, derives tip, and **the DO marks the ticket Paid (tenders + tip + `processor:'helcim'` + Helcim `transactionId`/`paymentIds`) and broadcasts** → every device updates; the initiating modal flips to Paid off the broadcast. `terminalCancel` → Worker broadcasts a cancel → modal clears.
+- **Why this is better:** the Worker/DO is the single finalize point, which also resolves the pay-path-P0 "reopen-leaves-record" + "cancelled-transaction" cases. Keep a **fallback poll** (`GET /helcim/transactions?invoiceNumber=…`) for a missed/slow webhook.
+- **Keep unchanged (processor-agnostic):** the `tenders` map + tip shape, cash-drawer gating, the card-tip→drawer Cash Out — payroll/reports/cash-drawer keep working.
+
+## ❓ Open questions to confirm on real hardware / with Helcim support
+1. **(Critical for payroll)** Does `GET /card-transactions/{id}` return the **tip-inclusive total** in `amount` (so tip = amount − requested), and/or a **discrete tip field**? If the customer tips on-device, our derivation must hold.
+2. Does the **`cardTransaction` webhook also fire on DECLINE** (status `DECLINED`) so we can show "declined, try again"? (And on a timeout/no-card?)
+3. **Concurrency / cancel-from-software:** behavior if `/payment/purchase` is sent while the terminal is mid-transaction; is there an API to **cancel an in-progress prompt** (vs only the customer cancelling on-device)?
+4. **`invoiceNumber`**: max length, and can we **suppress the auto-created invoice** (or is accumulating invoice objects fine)?
+5. **Webhook delivery guarantees / retries** — confirm we should reconcile a missed webhook by polling `card-transactions?invoiceNumber=`.
+6. **Account currency = USD** confirmed for the live account; receipts print from the terminal (is there a digital/emailed-receipt API if wanted?).
+
+## Sources (verified 2026-06-08)
+- Smart Terminal / Payment Hardware API overview & purchase: https://devdocs.helcim.com/docs/overview-of-payment-hardware-api · https://devdocs.helcim.com/reference/startpurchase.md
+- Webhooks (payload + HMAC) & enabling: https://devdocs.helcim.com/docs/webhooks · https://devdocs.helcim.com/docs/enabling-webhooks-for-transactions
+- Get / list card transactions: https://devdocs.helcim.com/reference/getcardtransaction.md · https://devdocs.helcim.com/reference/getcardtransactions.md
+- Refund / reverse: https://devdocs.helcim.com/reference/refund.md · https://devdocs.helcim.com/reference/reverse.md
+- Devices: https://devdocs.helcim.com/reference/getdevices · Tips on terminal: https://learn.helcim.com/docs/enable-configure-tips
 
 ## What is NOT affected
 Queue, turns/rotation, floor plan, check-in, scheduling, staff/payroll, cash drawer, gift-card balances, the Durable Object sync, Google Calendar, httpSMS. The swap is contained to the payment/customer/catalog/reconcile seams.
