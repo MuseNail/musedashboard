@@ -12,6 +12,8 @@ import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr } from './utils.js';
 import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, APP_VERSION } from './config.js';
+import { getFdShift, fdShiftLabel } from './features/fd-schedule.js';
+import { fdPaidHours, fdPunches, roundQuarterHours } from './features/timeclock.js';
 
 const cfg     = () => store.getState().config;
 const queue   = () => store.getState().queue;
@@ -20,6 +22,8 @@ const svc     = id => (cfg().services || []).find(s => s.id === id);
 
 const MY_KEY = 'muse_staff_id';            // device-local: which tech is signed in on THIS device
 let myId = localStorage.getItem(MY_KEY) || null;
+const MY_FD_KEY = 'muse_staff_fd_id';      // device-local: a front-desk user signed in here (read-only schedule/hours)
+let myFdId = localStorage.getItem(MY_FD_KEY) || null;
 let _view = 'active';                      // 'active' | 'history'
 let _updateVer = null;                     // newer published version detected → show the update banner
 const _priceDraft = {};                    // `${entryId}:${serviceId}` -> typed price (survives re-render)
@@ -66,6 +70,8 @@ export function myHistory(queueArr, recordsArr, deletions, techId) {
 }
 
 const me = () => (cfg().staff || []).find(s => s.id === myId) || null;
+const meFd = () => (cfg().fd_users || []).find(u => u.id === myFdId) || null;
+const fdByPin = pin => { const p = String(pin == null ? '' : pin).trim(); return p ? ((cfg().fd_users || []).find(u => u.pin && String(u.pin) === p) || null) : null; };
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 function parsePrice(v) { if (v == null || String(v).trim() === '') return null; const n = parseFloat(v); return (isFinite(n) && n >= 0) ? n : null; }
 
@@ -82,9 +88,67 @@ function statusChip(status) {
 
 // ── Render ────────────────────────────────────────
 function render() {
+  const fd = meFd();
+  if (fd) return renderFdView(fd);
   const meStaff = me();
   if (!meStaff) return renderLogin();
   renderMain(meStaff);
+}
+
+// ── Front-desk view (read-only: this week's schedule + this period's clocked hours) ──
+function _fdWeekStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; }
+function _fdHM(ms) { try { return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch { return ''; } }
+// Current pay period (mirrors reports.js payPeriodDates: weekly / biweekly / bimonthly).
+function _fdPayPeriod() {
+  const pp = cfg().pay_period || {}, type = pp.type || 'weekly';
+  const now = new Date(); now.setHours(0, 0, 0, 0);
+  if (type === 'bimonthly') {
+    const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
+    return d <= 15 ? { from: new Date(y, m, 1), to: new Date(y, m, 15, 23, 59, 59, 999) } : { from: new Date(y, m, 16), to: new Date(y, m + 1, 0, 23, 59, 59, 999) };
+  }
+  const len = type === 'biweekly' ? 14 : 7;
+  const anchor = pp.startDate ? new Date(pp.startDate + 'T00:00:00') : new Date('2024-01-07T00:00:00');
+  const periods = Math.floor((now - anchor) / 86400000 / len);
+  const from = new Date(anchor); from.setDate(anchor.getDate() + periods * len);
+  const to = new Date(from); to.setDate(from.getDate() + len - 1); to.setHours(23, 59, 59, 999);
+  return { from, to };
+}
+function renderFdView(fdUser) {
+  document.getElementById('staff-login').classList.add('hidden');
+  document.getElementById('staff-main').classList.remove('hidden');
+  document.getElementById('staff-tech-name').textContent = fdUser.name;
+  const dot = document.getElementById('staff-conn'); if (dot) dot.style.background = store.getState().connected ? '#2a7a4f' : '#e8730a';
+  const ws = _fdWeekStart(new Date()), dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], today = todayStr();
+  const sched = dayNames.map((dn, i) => {
+    const d = new Date(ws); d.setDate(d.getDate() + i);
+    const key = localDateStr(d), sh = getFdShift(key, fdUser.id), isToday = key === today;
+    const val = sh === 'off' ? '<span style="color:#a05000">Off</span>' : (sh && sh.s) ? esc(fdShiftLabel(sh)) : '<span class="text-on-surface-variant">—</span>';
+    return `<div class="flex items-center justify-between px-4 py-3 ${isToday ? 'bg-primary/10' : ''} border-b border-surface-container-high last:border-0"><span class="font-body text-lg ${isToday ? 'font-bold text-primary' : 'text-on-surface'}">${dn} ${d.getDate()}</span><span class="font-headline font-bold text-lg">${val}</span></div>`;
+  }).join('');
+  const per = _fdPayPeriod();
+  const { hours, openShift } = fdPaidHours(fdUser.id, +per.from, +per.to);
+  const punches = fdPunches(fdUser.id).filter(p => p.in >= +per.from && p.in <= +per.to).sort((a, b) => b.in - a.in);
+  const punchHtml = punches.length ? punches.map(p => {
+    const dur = p.out ? roundQuarterHours(p.out - p.in).toFixed(2) + 'h' : '<span style="color:#c77700">open</span>';
+    return `<div class="flex items-center justify-between px-4 py-2.5 border-b border-surface-container-high last:border-0"><span class="font-body text-on-surface">${new Date(p.in).toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' })}</span><span class="font-body text-on-surface-variant text-sm">${_fdHM(p.in)} – ${p.out ? _fdHM(p.out) : '…'}</span><span class="font-headline font-bold">${dur}</span></div>`;
+  }).join('') : '<div class="px-4 py-5 text-center font-body text-on-surface-variant">No clock punches this period.</div>';
+  const fmtD = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  document.getElementById('staff-list').innerHTML = `
+    <div class="rounded-2xl bg-primary text-on-primary px-5 py-4 mb-4 shadow-sm">
+      <div class="text-xs font-body uppercase tracking-widest opacity-80">Hours this pay period · ${fmtD(per.from)}–${fmtD(per.to)}</div>
+      <div class="font-headline font-extrabold leading-none mt-1" style="font-size:40px">${hours.toFixed(2)}<span class="text-2xl"> h</span></div>
+      ${fdUser.hourlyRate ? `<div class="text-sm font-body opacity-90 mt-0.5">≈ $${(hours * fdUser.hourlyRate).toFixed(2)} at $${fdUser.hourlyRate.toFixed(2)}/hr</div>` : ''}
+      ${openShift ? '<div class="text-sm font-body opacity-90 mt-0.5">⏱ currently clocked in</div>' : ''}
+    </div>
+    <div class="mb-4">
+      <div class="text-sm font-headline font-bold uppercase tracking-widest text-on-surface-variant mb-2 px-1">My schedule · this week</div>
+      <div class="bg-surface-container-lowest rounded-2xl border border-surface-container-high overflow-hidden">${sched}</div>
+    </div>
+    <div>
+      <div class="text-sm font-headline font-bold uppercase tracking-widest text-on-surface-variant mb-2 px-1">Clock punches · this period</div>
+      <div class="bg-surface-container-lowest rounded-2xl border border-surface-container-high overflow-hidden">${punchHtml}</div>
+    </div>
+    <p class="text-xs font-body text-on-surface-variant text-center mt-4">Clock in/out happens at the front-desk station.</p>`;
 }
 
 // True while a tech is actively typing in a price field. A sync-driven re-render rebuilds
@@ -406,13 +470,17 @@ window.staffCalcClose = () => { const m = document.getElementById('staff-calc-mo
 window.staffPinSubmit = () => {
   const input = document.getElementById('staff-pin-entry');
   const pin = (input?.value || '').trim();
-  if ((cfg().staff || []).length === 0) { renderLogin('Connecting… try again in a moment'); return; }
+  if ((cfg().staff || []).length === 0 && (cfg().fd_users || []).length === 0) { renderLogin('Connecting… try again in a moment'); return; }
   const match = staffByPin(cfg().staff, cfg().inactive_staff, pin);
-  if (!match) { if (input) input.value = ''; renderLogin('Incorrect PIN'); return; }
-  myId = match.id; localStorage.setItem(MY_KEY, myId);
-  if (input) input.value = '';
-  render();
-  registerPush();   // re-tag this device's push subscription to the signed-in tech (no-op if alerts off)
+  if (match) {
+    myId = match.id; myFdId = null; localStorage.setItem(MY_KEY, myId); localStorage.removeItem(MY_FD_KEY);
+    if (input) input.value = ''; render();
+    registerPush();   // re-tag this device's push subscription to the signed-in tech (no-op if alerts off)
+    return;
+  }
+  const fd = fdByPin(pin);   // front-desk user → read-only schedule/hours view
+  if (fd) { myFdId = fd.id; myId = null; localStorage.setItem(MY_FD_KEY, myFdId); localStorage.removeItem(MY_KEY); if (input) input.value = ''; render(); return; }
+  if (input) input.value = ''; renderLogin('Incorrect PIN');
 };
 window.staffPinKey = (ev) => { if (ev.key === 'Enter') window.staffPinSubmit(); };
 // Auto-login as soon as a correct PIN is fully entered (no Enter needed) — but wait if
@@ -420,12 +488,13 @@ window.staffPinKey = (ev) => { if (ev.key === 'Enter') window.staffPinSubmit(); 
 window.staffPinInput = () => {
   const pin = (document.getElementById('staff-pin-entry')?.value || '').trim();
   if (!pin) return;
-  if (!staffByPin(cfg().staff, cfg().inactive_staff, pin)) return;
+  if (!staffByPin(cfg().staff, cfg().inactive_staff, pin) && !fdByPin(pin)) return;
   const inactive = new Set(cfg().inactive_staff || []);
-  const ambiguous = (cfg().staff || []).some(s => s.pin && !inactive.has(s.id) && String(s.pin) !== pin && String(s.pin).startsWith(pin));
+  const ambiguous = (cfg().staff || []).some(s => s.pin && !inactive.has(s.id) && String(s.pin) !== pin && String(s.pin).startsWith(pin))
+    || (cfg().fd_users || []).some(u => u.pin && String(u.pin) !== pin && String(u.pin).startsWith(pin));
   if (!ambiguous) window.staffPinSubmit();
 };
-window.staffSwitch = () => { unregisterPush(); localStorage.removeItem(MY_KEY); myId = null; render(); };
+window.staffSwitch = () => { unregisterPush(); localStorage.removeItem(MY_KEY); localStorage.removeItem(MY_FD_KEY); myId = null; myFdId = null; render(); };
 window.staffLogout = window.staffSwitch;
 
 // ── Push notifications (assignment alerts) ────────
