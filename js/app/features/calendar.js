@@ -4,17 +4,12 @@ import { dispatch } from '../sync.js';
 import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer } from './square-customers.js';
 
-const GCAL_CLIENT_ID = '174518644579-5vgt7vvllm2ekpk0gb8l4sa4f3va9r9l.apps.googleusercontent.com';
-const GCAL_SCOPES    = 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks';
 const GCAL_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
 const GTASK_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest';
-const GCAL_PROXY = 'https://musedashboard.musenailandspa.workers.dev/gcal';
 // Server-side refresh-token auth: the Worker holds the Google refresh token and mints access
-// tokens, so the iPad never depends on Safari/Chrome silent renewal (the "loses sync" fix).
-// Flip to true ONLY AFTER the Worker /gcal endpoints are deployed, GCAL_CLIENT_SECRET is set,
-// and <worker>/gcal/callback is an authorized redirect URI in Google Cloud — then bump the
-// version trio and tap Connect once. While false, the original GIS browser flow is unchanged.
-const GCAL_SERVER_AUTH = true;
+// tokens on demand, so the iPad never depends on Safari/Chrome silent renewal. gapi (below) is
+// still loaded for the Calendar/Tasks API calls; the access token comes from the Worker, not GIS.
+const GCAL_PROXY = 'https://musedashboard.musenailandspa.workers.dev/gcal';
 
 const cfg = () => getState().config;
 const queue = () => getState().queue;
@@ -28,7 +23,7 @@ const queue = () => getState().queue;
 const _escHtml = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const _escAttrJs = s => (s == null ? '' : String(s)).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-let _calGapiLoaded = false, _calGisLoaded = false, _calTokenClient = null, _calRefreshTimer = null;
+let _calGapiLoaded = false, _calRefreshTimer = null;
 let _calDate = new Date(), _calCalendars = [], _calEvents = {}, _calPrimaryId = '';
 // Today's appointment events, loaded INDEPENDENTLY of the calendar's viewed day (_calDate) so
 // the Turns "upcoming" strip + appointment reminders always reflect TODAY even when the Calendar
@@ -321,7 +316,7 @@ export function renderTodaysAppointments() {
 function scheduleCalTokenRefresh(expires) {
   clearTimeout(_calRefreshTimer);
   const delay = Math.max(10000, expires - Date.now() - 5 * 60 * 1000);
-  _calRefreshTimer = setTimeout(() => { if (GCAL_SERVER_AUTH) _fetchWorkerToken().catch(() => {}); else if (_calTokenClient) _calTokenClient.requestAccessToken({ prompt: '' }); }, delay);
+  _calRefreshTimer = setTimeout(() => { _fetchWorkerToken().catch(() => {}); }, delay);
 }
 // Server-side token acquisition: ask the Worker (which holds the refresh token) for a fresh
 // access token. Always works regardless of browser context (PWA / Safari / Chrome) — no GIS,
@@ -338,32 +333,17 @@ async function _fetchWorkerToken() {
 }
 
 // ── On-demand token freshness ─────────────────────
-// The proactive refresh above is a single setTimeout, which desktop browsers THROTTLE in a
-// background tab — so it can fire late and the access token lapses unnoticed. Reads keep
-// showing the last-loaded events (calendar LOOKS fine), but the next WRITE 401s and surfaces
-// as a raw "authentication" error. ensureFreshToken() refreshes silently on demand right
-// before any Google call when the token is expired/near expiry, de-duping concurrent callers,
-// so writes always run on a valid token. The GIS callback settles the waiters.
-let _tokenWaiters = [], _calInitDone = false, _calFocusHooked = false;
-function _settleTokenWaiters(err) { const ws = _tokenWaiters; _tokenWaiters = []; ws.forEach(w => err ? w.reject(err) : w.resolve()); }
+// The proactive refresh above is a single setTimeout, which browsers THROTTLE in a backgrounded
+// tab — so it can fire late and the access token lapses. ensureFreshToken() re-mints from the
+// Worker on demand right before any Google call when the token is expired/near expiry, so reads
+// and writes always run on a valid token.
+let _calInitDone = false, _calFocusHooked = false;
 function _tokenFresh(skewMs = 120000) {
   try { const s = JSON.parse(localStorage.getItem('gcal_token') || 'null'); return !!(s && s.token && Date.now() < s.expires - skewMs); } catch (e) { return false; }
 }
 function ensureFreshToken() {
   if (_tokenFresh()) return Promise.resolve();
-  if (GCAL_SERVER_AUTH) return _fetchWorkerToken().then(() => {});
-  if (!_calTokenClient) return Promise.reject(new Error('calendar-not-ready'));
-  return new Promise((resolve, reject) => {
-    let done = false;
-    const w = { resolve: () => settle(), reject: settle };
-    // settle must remove THIS waiter from _tokenWaiters — otherwise a timeout leaves a dead
-    // entry, the `length === 1` gate below never becomes true again, and every later refresh
-    // silently stops firing requestAccessToken (writes hang 20s for the rest of the session).
-    const settle = err => { if (done) return; done = true; clearTimeout(to); const i = _tokenWaiters.indexOf(w); if (i >= 0) _tokenWaiters.splice(i, 1); err ? reject(err) : resolve(); };
-    const to = setTimeout(() => settle(new Error('token-refresh-timeout')), 20000);
-    _tokenWaiters.push(w);
-    if (_tokenWaiters.length === 1) { try { _calTokenClient.requestAccessToken({ prompt: '' }); } catch (e) { _settleTokenWaiters(e); } }
-  });
+  return _fetchWorkerToken().then(() => {});
 }
 // First-connect side effects, run once (not on every silent refresh — that would reload the
 // grid and yank the view mid-use).
@@ -372,13 +352,11 @@ function _calInitialLoad() { if (_calInitDone) return; _calInitDone = true; star
 // Drop the stale token, kick a silent reconnect so the NEXT attempt works, and tell the user.
 function _calWriteError(err, verb) {
   const msg = err?.result?.error?.message || err?.message || '';
-  const auth = err?.status === 401 || err?.result?.error?.status === 'UNAUTHENTICATED'
-    || ['calendar-not-ready', 'token-refresh-timeout'].includes(err?.message) || /auth|credential|invalid.?token/i.test(msg);
+  const auth = err?.status === 401 || err?.result?.error?.status === 'UNAUTHENTICATED' || /auth|credential|invalid.?token/i.test(msg);
   if (auth) {
     localStorage.removeItem('gcal_token');
     document.getElementById('cal-signin-btn')?.classList.remove('hidden');
-    if (GCAL_SERVER_AUTH) _fetchWorkerToken().catch(() => {});                  // server-side: just re-mint from the refresh token
-    else if (_calTokenClient) _calTokenClient.requestAccessToken({ prompt: '' });   // GIS silent reconnect for the retry
+    _fetchWorkerToken().catch(() => {});   // re-mint from the Worker's refresh token for the retry
     showToast('Calendar session expired — reconnecting. Please try again in a moment.');
   } else showToast(verb + ' failed: ' + (msg || 'Unknown error'));
 }
@@ -395,68 +373,30 @@ function _hookCalFocusRefresh() {
 export function loadGCalScripts() {
   _hookCalFocusRefresh();
   if (document.getElementById('gapi-script')) return;
+  // Only gapi (the Calendar/Tasks API). The access token comes from the Worker (/gcal/token),
+  // not the browser GIS sign-in — so there's no gsi/client script anymore.
   const s1 = document.createElement('script'); s1.id = 'gapi-script'; s1.src = 'https://apis.google.com/js/api.js';
   s1.onload = () => gapi.load('client', async () => { await gapi.client.init({ discoveryDocs: [GCAL_DISCOVERY, GTASK_DISCOVERY] }); _calGapiLoaded = true; _calTryReady(); });
   document.head.appendChild(s1);
-  if (GCAL_SERVER_AUTH) return;   // server-side flow needs gapi (calendar API) but not GIS (no browser token client)
-  const s2 = document.createElement('script'); s2.id = 'gis-script'; s2.src = 'https://accounts.google.com/gsi/client';
-  s2.onload = () => {
-    _calTokenClient = google.accounts.oauth2.initTokenClient({ client_id: GCAL_CLIENT_ID, scope: GCAL_SCOPES, callback: (resp) => {
-      if (resp.error) { calSetStatus('Sign-in failed: ' + resp.error); _settleTokenWaiters(new Error(resp.error)); return; }
-      const expires = Date.now() + (resp.expires_in * 1000);
-      localStorage.setItem('gcal_token', JSON.stringify({ token: resp.access_token, expires }));
-      dispatch('config.set', { key: 'gcal_token', value: { token: resp.access_token, expires } });
-      gapi.client.setToken({ access_token: resp.access_token });
-      scheduleCalTokenRefresh(expires);
-      document.getElementById('cal-signin-btn')?.classList.add('hidden');
-      calSetStatus(''); _settleTokenWaiters();   // unblock any write awaiting this refresh
-      _calInitialLoad();                          // first connect only — silent refreshes don't reload the grid
-    } });
-    _calGisLoaded = true; _calTryReady();
-  };
-  document.head.appendChild(s2);
 }
 
-function _useToken(saved) {
-  gapi.client.setToken({ access_token: saved.token });
-  scheduleCalTokenRefresh(saved.expires);
-  document.getElementById('cal-signin-btn')?.classList.add('hidden');
-  calSetStatus(''); _calInitialLoad();
-}
 function _calTryReady() {
   if (!_calGapiLoaded) return;
-  if (GCAL_SERVER_AUTH) {
-    // Bootstrap from the Worker: succeeds if a refresh token is stored, else show Connect.
-    _fetchWorkerToken()
-      .then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); _calInitialLoad(); })
-      .catch(() => { document.getElementById('cal-signin-btn')?.classList.remove('hidden'); calSetStatus('Click "Connect Google Calendar" to get started'); });
-    return;
-  }
-  if (!_calGisLoaded) return;
-  const local = localStorage.getItem('gcal_token');
-  if (local) { try { const s = JSON.parse(local); if (Date.now() < s.expires - 60000) { _useToken(s); return; } } catch (e) {} }
-  // Token shared via the DO (another device signed in)
-  const shared = cfg().gcal_token;
-  if (shared && Date.now() < shared.expires - 60000) { localStorage.setItem('gcal_token', JSON.stringify(shared)); _useToken(shared); return; }
-  document.getElementById('cal-signin-btn')?.classList.remove('hidden');
-  calSetStatus('Click "Connect Google Calendar" to get started');
+  // Bootstrap from the Worker: succeeds if a refresh token is stored, else show Connect.
+  _fetchWorkerToken()
+    .then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); _calInitialLoad(); })
+    .catch(() => { document.getElementById('cal-signin-btn')?.classList.remove('hidden'); calSetStatus('Click "Connect Google Calendar" to get started'); });
 }
 
 export function initCalendar() { _calDate = new Date(); calUpdateDateLabel(); loadGCalScripts(); }
 export function calSignIn(silent) {
-  if (GCAL_SERVER_AUTH) {
-    // Silent = re-mint from the stored refresh token (no user action). Interactive = send the
-    // owner to Google's consent via the Worker; on return the app reloads and auto-connects.
-    if (silent) { _fetchWorkerToken().then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); if (_calInitDone) calSilentSync(); else _calInitialLoad(); }).catch(() => {}); return; }
-    location.href = `${GCAL_PROXY}/connect?return=${encodeURIComponent(location.href.split('#')[0])}`;
-    return;
-  }
-  if (!_calTokenClient) { showToast('Still loading — try again in a moment'); return; }
-  _calTokenClient.requestAccessToken({ prompt: silent ? '' : 'consent' });
+  // Silent = re-mint from the Worker's stored refresh token (no user action). Interactive = send
+  // the owner to Google's consent via the Worker; on return the app reloads and auto-connects.
+  if (silent) { _fetchWorkerToken().then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); if (_calInitDone) calSilentSync(); else _calInitialLoad(); }).catch(() => {}); return; }
+  location.href = `${GCAL_PROXY}/connect?return=${encodeURIComponent(location.href.split('#')[0])}`;
 }
 export function calSignOut() {
-  if (GCAL_SERVER_AUTH) { fetch(`${GCAL_PROXY}/disconnect`, { method: 'POST' }).catch(() => {}); }
-  else { const token = gapi.client.getToken(); if (token) google.accounts.oauth2.revoke(token.access_token, () => {}); }
+  fetch(`${GCAL_PROXY}/disconnect`, { method: 'POST' }).catch(() => {});   // revoke + clear the refresh token server-side
   if (window.gapi?.client) gapi.client.setToken(null);
   localStorage.removeItem('gcal_token');
   _calInitDone = false;   // so a fresh sign-in re-runs the initial load
