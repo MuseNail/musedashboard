@@ -1372,6 +1372,27 @@ const _tc2 = n => String(n).padStart(2, '0');
 const _tcDate = ms => { const d = new Date(ms); return d.getFullYear() + '-' + _tc2(d.getMonth() + 1) + '-' + _tc2(d.getDate()); };
 const _tcTime = ms => { const d = new Date(ms); return _tc2(d.getHours()) + ':' + _tc2(d.getMinutes()); };
 const _tcCombine = (dateStr, timeStr) => { if (!dateStr || !timeStr) return null; const t = new Date(dateStr + 'T' + timeStr); return isNaN(t) ? null : t.getTime(); };
+// Hour : Min : AM/PM dropdowns (15-min) — same picker as the front-desk schedule. `allowBlank`
+// lets the OUT side be empty ("—") to represent a still-open punch.
+const _tcSel = 'bg-surface-container border border-surface-container-high rounded px-1.5 py-1.5 text-xs font-body text-on-surface focus:outline-none focus:border-primary';
+function _tcTrio(which, idx, userId, ms, allowBlank) {
+  const has = typeof ms === 'number';
+  let h12 = 9, mm = '00', ap = 'AM';
+  if (has) { const d = new Date(ms); const total = (d.getHours() * 60 + Math.round(d.getMinutes() / 15) * 15) % 1440; const h = Math.floor(total / 60); ap = h >= 12 ? 'PM' : 'AM'; const x = h % 12; h12 = x === 0 ? 12 : x; mm = _tc2(total % 60); }
+  const oc = `onchange="tcUpdate('${userId}',${idx})"`;
+  const hOpts = (allowBlank ? `<option value="" ${has ? '' : 'selected'}>—</option>` : '') + Array.from({ length: 12 }, (_, i) => `<option value="${i + 1}" ${has && h12 === i + 1 ? 'selected' : ''}>${i + 1}</option>`).join('');
+  const mOpts = ['00', '15', '30', '45'].map(m => `<option value="${m}" ${has && mm === m ? 'selected' : ''}>${m}</option>`).join('');
+  const apOpts = ['AM', 'PM'].map(a => `<option value="${a}" ${has && ap === a ? 'selected' : ''}>${a}</option>`).join('');
+  return `<select id="tc-${which}h-${idx}" ${oc} class="${_tcSel}" style="min-width:46px">${hOpts}</select><span class="text-on-surface-variant text-xs">:</span><select id="tc-${which}m-${idx}" ${oc} class="${_tcSel}" style="min-width:46px">${mOpts}</select><select id="tc-${which}ap-${idx}" ${oc} class="${_tcSel}" style="min-width:54px">${apOpts}</select>`;
+}
+function _tcReadTrio(which, idx) {
+  const h = document.getElementById(`tc-${which}h-${idx}`)?.value;
+  if (!h) return null;                       // blank OUT → still open
+  const m = document.getElementById(`tc-${which}m-${idx}`)?.value || '00';
+  const ap = document.getElementById(`tc-${which}ap-${idx}`)?.value || 'AM';
+  const h24 = (parseInt(h, 10) % 12) + (ap === 'PM' ? 12 : 0);
+  return `${_tc2(h24)}:${m}`;
+}
 
 export function openTimecard(userId) {
   if (!_tcCanEdit()) { showToast('Only an admin or manager can adjust times.'); return; }
@@ -1380,14 +1401,14 @@ export function openTimecard(userId) {
   const from = new Date(cur.from); from.setHours(0, 0, 0, 0);
   const to = new Date(cur.to); to.setHours(23, 59, 59, 999);
   const rows = fdPunches(userId).map((p, idx) => ({ p, idx })).filter(({ p }) => p.in && p.in >= +from && p.in <= +to).sort((a, b) => a.p.in - b.p.in);
-  const inp = 'bg-surface-container border border-surface-container-high rounded px-2 py-1 text-xs font-body text-on-surface';
+  const dateInp = 'bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer';
   const body = rows.map(({ p, idx }) => {
     const hrs = p.out ? roundQuarterHours(p.out - p.in) : 0;
     return `<div class="flex items-center gap-1.5 py-2 border-b border-surface-container-high flex-wrap">
-      <input type="date" id="tc-date-${idx}" value="${_tcDate(p.in)}" onchange="tcUpdate('${userId}',${idx})" class="${inp}">
-      <input type="time" id="tc-in-${idx}" value="${_tcTime(p.in)}" onchange="tcUpdate('${userId}',${idx})" class="${inp}">
+      <input type="date" id="tc-date-${idx}" value="${_tcDate(p.in)}" onchange="tcUpdate('${userId}',${idx})" class="${dateInp}" style="min-width:150px">
+      <span class="inline-flex items-center gap-0.5">${_tcTrio('in', idx, userId, p.in, false)}</span>
       <span class="text-on-surface-variant text-xs">→</span>
-      <input type="time" id="tc-out-${idx}" value="${p.out ? _tcTime(p.out) : ''}" onchange="tcUpdate('${userId}',${idx})" class="${inp}">
+      <span class="inline-flex items-center gap-0.5">${_tcTrio('out', idx, userId, p.out, true)}</span>
       <span class="text-xs font-body font-semibold ml-auto" style="${p.out ? '' : 'color:#c77700'}">${p.out ? hrs.toFixed(2) + 'h' : 'open'}</span>
       <button onclick="tcDeletePunch('${userId}',${idx})" title="Delete punch" class="text-on-surface-variant hover:text-error"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
     </div>`;
@@ -1404,9 +1425,9 @@ export function openTimecard(userId) {
 export function tcUpdate(userId, idx) {
   if (!_tcCanEdit()) return;
   const date = document.getElementById('tc-date-' + idx)?.value;
-  const inMs = _tcCombine(date, document.getElementById('tc-in-' + idx)?.value);
+  const inMs = _tcCombine(date, _tcReadTrio('in', idx));
   if (!inMs) { showToast('Enter a clock-in date and time.'); return; }
-  const outT = document.getElementById('tc-out-' + idx)?.value;
+  const outT = _tcReadTrio('out', idx);                            // null when the OUT hour is "—" (open)
   let outMs = _tcCombine(date, outT);
   if (outMs != null && outMs <= inMs) outMs += 24 * 3600 * 1000;   // out before in → shift ended after midnight
   const list = [...fdPunches(userId)];

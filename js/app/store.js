@@ -118,8 +118,13 @@ function mergeNewerAssignments(incoming, stored) {
 export function hydrate(snap) {
   const incoming = (snap && snap.state) || {};
   const cfg = incoming.config || {};
+  // Start from defaults, then overlay EVERY incoming config key — including dynamically-named
+  // ones that aren't declared in emptyConfig(): the front-desk time-clock punches (fd_clock_<id>),
+  // fd_schedule, and timeclock_device_id. Iterating emptyConfig()'s static keys here (the old bug)
+  // silently dropped those on every hydrate/resync, so clock-ins + manual punches vanished a few
+  // minutes after they synced (the server still held them — only the client lost them).
   const merged = emptyConfig();
-  for (const k of Object.keys(merged)) {
+  for (const k of Object.keys(cfg)) {
     if (cfg[k] !== undefined && cfg[k] !== null) merged[k] = cfg[k];
   }
   state.config    = merged;

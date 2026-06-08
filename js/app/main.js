@@ -151,6 +151,19 @@ function showStaffListView() {
 }
 Object.assign(window, { goTo, showDashPanel, toggleStaffScheduleView, showStaffListView });
 
+// Let a mouse wheel scroll the top nav horizontally when it overflows a narrow desktop window
+// (touch already pans it; the scrollbar is hidden via .no-scroll). justify-content:safe center
+// keeps both ends reachable when it overflows.
+(() => {
+  const nav = document.getElementById('dash-nav');
+  if (!nav) return;
+  nav.addEventListener('wheel', (e) => {
+    if (!e.deltaY || nav.scrollWidth <= nav.clientWidth) return;   // only hijack a vertical wheel when it actually overflows
+    e.preventDefault();
+    nav.scrollLeft += e.deltaY;
+  }, { passive: false });
+})();
+
 // Live-sync status pill: tapping it forces a reconnect + fresh snapshot (catches up any
 // changes missed while the socket was asleep), then reports state.
 window.forceSyncNow = () => { sync.resync?.(); utils.showToast(store.getState().connected ? 'Live — syncing…' : 'Reconnecting…'); };
