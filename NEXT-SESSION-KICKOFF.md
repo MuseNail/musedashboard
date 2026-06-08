@@ -1,10 +1,22 @@
 # Next-session strategy + kickoff prompt (musedashboard)
 
-**Created 2026-06-03 · Updated 2026-06-04.** Authoritative plan for the post-audit work. The phased strategy is below; the **copy-paste kickoff prompt** for a fresh chat is at the very bottom.
+**Created 2026-06-03 · Updated 2026-06-07.** Authoritative plan for the post-audit work. The phased strategy is below; the **copy-paste kickoff prompt** for a fresh chat is at the very bottom.
 
 ---
 
-## ✅ STATUS (2026-06-04) — Phases 1–3 DONE; prod = v4.33 LIVE; next = Helcim migration
+## ✅ STATUS (2026-06-07) — prod = v4.49 LIVE, ALL PUSHED. Two big features shipped since v4.33; Helcim still next.
+
+**Since v4.33, a long session shipped v4.34→v4.49 (all client-only except the calendar Worker deploy):**
+
+- **🆕 Server-side Google Calendar auth — SHIPPED (fixes the iPad "loses sync").** The plan in `CALENDAR-AUTH-PLAN.md` is now LIVE. The **Worker holds the Google refresh token** (DO key `gcal:blob`) and mints access tokens via `/gcal/connect|callback|token|status|disconnect`; the browser GIS sign-in is gone (v4.49 removed the dead code). `GCAL_CLIENT_SECRET` is set, the Google OAuth client is **Internal (Workspace)** with the `/gcal/callback` redirect URI, and the **Worker was redeployed** this session. ⚠️ **`/gcal/token` is unauthenticated** — anyone with the Worker URL can pull a calendar token; the fix folds into **§13** (auth-gate it with the rest of the open backend).
+- **🆕 Full front-desk system — SHIPPED (v4.44–v4.48).** New modules `timeclock.js` (clock in/out, **station-locked** via `config.timeclock_device_id`, per-user `fd_clock_<id>` punches, 15-min/7-grace rounding) + `fd-schedule.js` (`config.fd_schedule` weekly grid **with start/end hours**). Plus an **hourly rate** on the FD profile, a Payroll **"Front Desk — Hourly"** section, a **manager timecard editor** (add/edit/delete/close punches), and **staff-app FD login** → read-only schedule + hours. All client-only + config-key based (no Worker change).
+- **Other:** white theme + soft cards (v4.34), per-service **Comp / No-charge** close-out (v4.40), reconcile gift-card fixes (v4.38), calendar **auto-No-Show after 60 min** (v4.36), now-line lag fix (v4.41), **Queue tab render-on-switch** fix (v4.43).
+
+**NEXT is unchanged: the Square→Helcim migration (Phase 4)** + the §13 backend-auth gate (now also covering `/gcal/token`). Everything below this block is the original (still-valid) phased history + plan.
+
+---
+
+## ✅ STATUS (2026-06-04) — Phases 1–3 DONE; prod = v4.33 LIVE [SUPERSEDED by the 2026-06-07 block above]
 
 **Prod = v4.33 (all pushed). Worker deployed at Version `51b000b0-363c-411b-ab5e-b63deb9f5608`** (has all the new ops). **Every audit HIGH is closed.** `RESTORE_TOKEN` is set (§13 anonymous reset/restore closed).
 
@@ -82,9 +94,9 @@ Acquire + pair the **Helcim Smart Terminal** first; do a short Helcim-API resear
 
 ## 📋 COPY-PASTE KICKOFF PROMPT (paste into a fresh chat)
 
-> We're continuing on the **musedashboard** salon PWA. Phases 1–3 of the post-audit plan are DONE and **prod = v4.33 LIVE; every audit HIGH is closed.** **Read first, in order:** `CLAUDE.md` (architecture + rules + the Helcim/TurnDesk direction box), `NEXT-SESSION-KICKOFF.md` (the ✅ STATUS block at the top = current state + what's next), `HELCIM-MIGRATION.md` (the Square→Helcim plan — the teed-up next project), `AUDIT-2026-06.md` (findings + what shipped v4.11–v4.33 + what's still deferred). Auto-loaded memory has a "START HERE / LATEST" block.
+> We're continuing on the **musedashboard** salon PWA. **Prod = v4.49 LIVE, all pushed; every audit HIGH is closed.** **Read first, in order:** `CLAUDE.md` (architecture + rules + the Helcim/TurnDesk direction box), `NEXT-SESSION-KICKOFF.md` (the top ✅ STATUS (2026-06-07) block = current state + what's next), `HELCIM-MIGRATION.md` (the Square→Helcim plan — the teed-up next project), `CALENDAR-AUTH-PLAN.md` (the server-side calendar auth — now SHIPPED). Auto-loaded memory has a top "LATEST (2026-06-07)" block — read it FIRST.
 >
-> **Current state:** customers are OFF Square — a synced Durable-Object entity (`customer:<id>`) with a dedicated **Customers tab** (Square customer dual-write is KEPT until the Helcim cutover); catalog is app-owned (Square catalog sync + Bookings removed); per-service status dots/pills on queue/turns/floor; floor-plan shows all services + tech avatars + turn badges + smart tech-drag + per-station-type tech capacity (Settings → Stations). Worker deployed at Version `51b000b0-…`; `RESTORE_TOKEN` is set.
+> **Current state (key things since v4.33):** **(1) Server-side Google Calendar auth is LIVE** — the Worker holds the Google refresh token (DO `gcal:blob`) and mints access tokens via `/gcal/*`; the browser GIS sign-in was removed (calendar.js loads only gapi). ⚠️ `/gcal/token` is currently **unauthenticated** (anyone with the Worker URL can pull a calendar token) — fold the gate into §13. **(2) Full front-desk system** — `timeclock.js` (clock in/out, station-locked via `config.timeclock_device_id`, `fd_clock_<id>` punches, 15-min rounding) + `fd-schedule.js` (`config.fd_schedule` weekly grid with hours) + hourly rate on the FD profile + Payroll "Front Desk — Hourly" + a manager timecard editor + staff-app read-only FD schedule/hours. **(3)** white theme, comp/no-charge close-out, reconcile gift-card fixes, calendar auto-No-Show + now-line fix, Queue render-on-switch fix. Customers + catalog are still app-owned (off Square; Square customer dual-write KEPT until the Helcim cutover). `RESTORE_TOKEN` is set; the Worker was redeployed this session for the /gcal endpoints.
 >
 > **THIS chat is gearing up for the Square→Helcim migration (Phase 4)** — read **`HELCIM-MIGRATION.md`** (the current plan). Customers + catalog are already off Square; what remains = the Terminal pay swap (**poll→webhook**), the pay-path **P0** consolidation (incl. cancelled-processor-transaction + reopen-leaves-record), the **§13** full Worker auth, Helcim reconcile, and retiring the Square customer dual-write. The live Terminal swap is **gated on the Smart Terminal hardware**, but two things can start NOW without it: (a) a **Helcim-API research pass** (Smart Terminal start-purchase + webhook payload/correlation, refunds, transaction-list for reconcile, tip handling), and (b) the **pay-path P0 consolidation** (funnel every "→ paid" + reopen through ONE path = one clean swap point). Keep it a SIMPLE single-processor swap — no multi-processor abstraction.
 >
