@@ -1742,23 +1742,40 @@ tailwind.config = {
 </div>
 
 <!-- Front-desk shift picker (schedule with hours) -->
-<div id="fd-shift-picker" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-xs shadow-2xl fade-up mx-4">
+<div id="fd-shift-picker" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40 px-4">
+  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl fade-up">
     <div class="flex items-center justify-between mb-4">
       <h2 id="fd-shift-picker-label" class="text-base font-headline font-bold text-on-surface"></h2>
       <button onclick="closeFdShiftPicker()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
     </div>
-    <div class="grid grid-cols-2 gap-3 mb-3">
-      <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Start</label>
-        <input type="time" id="fd-shift-start" value="09:00" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"></div>
-      <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">End</label>
-        <input type="time" id="fd-shift-end" value="17:00" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"></div>
+    <div class="mb-3">
+      <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Start</label>
+      <div class="flex items-center gap-1.5">
+        <select id="fd-start-hour" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"></select>
+        <span class="font-headline font-bold text-on-surface-variant">:</span>
+        <select id="fd-start-min" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"></select>
+        <select id="fd-start-ampm" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"><option value="AM">AM</option><option value="PM">PM</option></select>
+      </div>
     </div>
-    <label onclick="fdToggleRepeat()" class="flex items-center gap-2 cursor-pointer mb-4 select-none">
-      <span id="fd-repeat-box" class="w-5 h-5 rounded border-2 border-surface-container-high flex items-center justify-center flex-shrink-0"><span id="fd-repeat-check" class="hidden material-symbols-outlined text-white" style="font-size:16px">check</span></span>
-      <input type="checkbox" id="fd-repeat-cb" class="hidden">
-      <span class="text-sm font-body text-on-surface">Repeat weekly</span>
-    </label>
+    <div class="mb-2">
+      <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">End</label>
+      <div class="flex items-center gap-1.5">
+        <select id="fd-end-hour" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"></select>
+        <span class="font-headline font-bold text-on-surface-variant">:</span>
+        <select id="fd-end-min" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"></select>
+        <select id="fd-end-ampm" onchange="fdSyncShiftTime()" class="flex-1 min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-2 py-2.5 text-sm font-body focus:border-primary outline-none"><option value="AM">AM</option><option value="PM">PM</option></select>
+      </div>
+    </div>
+    <div id="fd-shift-hours" class="text-center text-xs font-body text-on-surface-variant mb-4"></div>
+
+    <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1.5">Apply to</label>
+    <div id="fd-day-chips" class="flex gap-1.5 mb-4"></div>
+
+    <div class="flex bg-surface-container rounded-xl p-1 mb-5">
+      <button type="button" onclick="fdSetShiftMode('week')" id="fd-mode-week" class="flex-1 py-2 rounded-lg text-xs font-body font-semibold transition-colors">Just this week</button>
+      <button type="button" onclick="fdSetShiftMode('every')" id="fd-mode-every" class="flex-1 py-2 rounded-lg text-xs font-body font-semibold transition-colors">Every week</button>
+    </div>
+
     <div class="flex gap-2">
       <button onclick="setFdShiftOff()" class="flex-1 py-2.5 rounded-xl font-body font-semibold text-sm" style="background:#f5c870;color:#3a2800">Off</button>
       <button onclick="clearFdShift()" class="flex-1 py-2.5 rounded-xl border border-surface-container-high text-on-surface-variant font-body font-semibold text-sm">Clear</button>

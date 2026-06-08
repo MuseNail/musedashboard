@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Front-desk schedule rework</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+<style>
+  :root{ --primary:#15514f; --primary-dim:#0f3e3c; --on-primary:#fff; --surface:#f6f8f8;
+         --surface-lowest:#ffffff; --surface-container:#e9efef; --surface-container-high:#dfe7e6;
+         --on-surface:#1a1c1c; --on-surface-variant:#3f4948; --outline:#6f7978; --outline-variant:#bfc9c8; }
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--surface);color:var(--on-surface);margin:0;padding:24px;line-height:1.5}
+  h2{font-size:15px;margin:26px 0 8px}
+  .desc{font-size:12px;color:var(--on-surface-variant);margin:0 0 12px;max-width:720px}
+  .material-symbols-outlined{font-size:18px;line-height:1;vertical-align:middle}
+  .panel{background:var(--surface-lowest);border:1px solid var(--surface-container-high);border-radius:14px;padding:16px;max-width:860px}
+  /* schedule header */
+  .schedhead{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+  .navbtn{width:34px;height:34px;border-radius:9px;border:none;background:var(--surface-container);color:var(--on-surface-variant);display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+  .pill{padding:6px 12px;border-radius:9999px;font-size:12px;font-weight:600;background:var(--surface-container);color:var(--on-surface);cursor:pointer;border:none}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--on-surface-variant)}
+  .sw{width:12px;height:12px;border-radius:9999px;display:inline-block;vertical-align:middle;margin-right:4px}
+  /* grid */
+  .grid{border:1px solid var(--surface-container-high);border-radius:12px;overflow:auto}
+  .grow{display:flex;align-items:stretch;border-bottom:1px solid var(--surface-container-high)}
+  .grow:last-child{border-bottom:none}
+  .ghead{background:var(--surface);font-weight:600}
+  .namecol{width:170px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 10px;border-right:1px solid var(--surface-container-high);position:sticky;left:0;background:var(--surface-lowest)}
+  .ghead .namecol{background:var(--surface)}
+  .avatar{width:30px;height:30px;border-radius:9999px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0}
+  .nm{font-size:13px;font-weight:600;min-width:0}
+  .hrs{font-size:11px;color:var(--on-surface-variant)}
+  .daycol{width:96px;flex-shrink:0;padding:5px;text-align:center}
+  .dlabel{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--on-surface-variant)}
+  .dnum{font-size:13px;font-weight:700}
+  .today .dnum{color:var(--primary)}
+  .cell{width:100%;height:38px;border-radius:8px;font-size:11px;font-weight:600;border:1px dashed var(--outline-variant);background:transparent;color:var(--on-surface-variant);cursor:pointer;position:relative}
+  .cell.work{background:#dcebea;color:#0a3a3a;border:1px solid transparent}
+  .cell.off{background:#f5c870;color:#3a2800;border:1px solid transparent}
+  .rep{position:absolute;top:3px;right:3px;width:6px;height:6px;border-radius:50%;background:#15514f;box-shadow:0 0 0 1px rgba(255,255,255,.7)}
+  /* modal */
+  .backdrop{background:rgba(26,28,28,.4);border-radius:14px;padding:30px;display:flex;justify-content:center;margin-top:8px}
+  .modal{background:var(--surface-lowest);border-radius:18px;box-shadow:0 20px 50px rgba(0,0,0,.25);width:360px;max-width:100%;padding:22px}
+  .modal h3{margin:0;font-size:15px;font-weight:700}
+  .mhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+  .lab{font-size:11px;font-weight:600;color:var(--outline);text-transform:uppercase;letter-spacing:.12em;display:block;margin-bottom:6px}
+  .timegrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:6px}
+  .tsel{display:flex;align-items:center;gap:5px}
+  select{flex:1;min-width:0;border:2px solid var(--surface-container-high);background:transparent;border-radius:11px;padding:9px 6px;font-size:13px;font-family:inherit;outline:none;color:var(--on-surface)}
+  select:focus{border-color:var(--primary)}
+  .colon{font-weight:700;color:var(--on-surface-variant)}
+  .hourcalc{font-size:12px;color:var(--on-surface-variant);margin:6px 0 16px;text-align:center}
+  .hourcalc b{color:var(--primary)}
+  .chips{display:flex;gap:6px;margin-bottom:14px}
+  .chip{flex:1;height:36px;border-radius:9px;border:1.5px solid var(--surface-container-high);background:transparent;font-size:12px;font-weight:700;color:var(--on-surface-variant);cursor:pointer}
+  .chip.on{background:var(--primary);border-color:var(--primary);color:#fff}
+  .chip.cur{box-shadow:0 0 0 2px rgba(21,81,79,.25)}
+  .seg{display:flex;background:var(--surface-container);border-radius:11px;padding:3px;margin-bottom:18px}
+  .seg button{flex:1;border:none;background:transparent;border-radius:8px;padding:8px;font-size:12px;font-weight:600;color:var(--on-surface-variant);cursor:pointer}
+  .seg button.on{background:var(--surface-lowest);color:var(--on-surface);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  .actions{display:flex;gap:8px}
+  .actions button{flex:1;padding:11px;border-radius:11px;font-size:13px;font-weight:600;cursor:pointer;border:none}
+  .b-off{background:#f5c870;color:#3a2800}
+  .b-clear{background:transparent;border:1px solid var(--surface-container-high);color:var(--on-surface-variant)}
+  .b-save{background:var(--primary);color:#fff}
+  .note{font-size:12px;color:var(--on-surface-variant);max-width:360px;margin:10px auto 0;text-align:center}
+</style>
+</head>
+<body>
+
+<h2>1 · The schedule grid (polished)</h2>
+<p class="desc">Per-person <strong>weekly hours</strong> now show under each name. Cells unchanged in spirit (teal = shift, amber = off, dashed = unset, dot = repeats weekly). Tap any cell to open the reworked editor.</p>
+<div class="panel">
+  <div class="schedhead">
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="navbtn"><span class="material-symbols-outlined">chevron_left</span></button>
+      <span style="font-size:13px;font-weight:600;min-width:150px;text-align:center">Jun 8 – Jun 14</span>
+      <button class="navbtn"><span class="material-symbols-outlined">chevron_right</span></button>
+      <button class="pill">Today</button>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="background:#dcebea;border:1px solid #b6d2d0"></span>Shift</span>
+      <span><span class="sw" style="background:#f5c870"></span>Off</span>
+      <span><span class="sw" style="background:#dcebea;border:1px solid #b6d2d0;border-radius:4px;position:relative"></span>Repeats weekly</span>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="grow ghead">
+      <div class="namecol"></div>
+      <div class="daycol"><div class="dlabel">Sun</div><div class="dnum">8</div></div>
+      <div class="daycol today"><div class="dlabel">Mon</div><div class="dnum">9</div></div>
+      <div class="daycol"><div class="dlabel">Tue</div><div class="dnum">10</div></div>
+      <div class="daycol"><div class="dlabel">Wed</div><div class="dnum">11</div></div>
+      <div class="daycol"><div class="dlabel">Thu</div><div class="dnum">12</div></div>
+      <div class="daycol"><div class="dlabel">Fri</div><div class="dnum">13</div></div>
+      <div class="daycol"><div class="dlabel">Sat</div><div class="dnum">14</div></div>
+    </div>
+    <div class="grow">
+      <div class="namecol"><div class="avatar">S</div><div><div class="nm">Sarah</div><div class="hrs">38h this week</div></div></div>
+      <div class="daycol"><button class="cell off">Off</button></div>
+      <div class="daycol"><button class="cell work">9a–5p<span class="rep"></span></button></div>
+      <div class="daycol"><button class="cell work">9a–5p<span class="rep"></span></button></div>
+      <div class="daycol"><button class="cell work">9a–5p<span class="rep"></span></button></div>
+      <div class="daycol"><button class="cell work">9a–5p<span class="rep"></span></button></div>
+      <div class="daycol"><button class="cell work">11a–7p</button></div>
+      <div class="daycol"><button class="cell"></button></div>
+    </div>
+    <div class="grow">
+      <div class="namecol"><div class="avatar">H</div><div><div class="nm">Hien</div><div class="hrs">24h this week</div></div></div>
+      <div class="daycol"><button class="cell work">12p–8p</button></div>
+      <div class="daycol"><button class="cell off">Off</button></div>
+      <div class="daycol"><button class="cell off">Off</button></div>
+      <div class="daycol"><button class="cell work">12p–8p</button></div>
+      <div class="daycol"><button class="cell work">12p–8p</button></div>
+      <div class="daycol"><button class="cell"></button></div>
+      <div class="daycol"><button class="cell"></button></div>
+    </div>
+  </div>
+</div>
+
+<h2>2 · The reworked shift editor (replaces the awkward time fields)</h2>
+<p class="desc">Same Hour : Min : AM/PM dropdowns as the appointment modal — minutes are <strong>15-min only</strong> (00/15/30/45). It shows the computed hours live. Then "<strong>Apply to</strong>" day chips + a <strong>Just this week / Every week</strong> switch handle both copy needs: stamp this person's shift across multiple days (day-to-day), and "Every week" makes it the repeating default (week-to-week).</p>
+<div class="backdrop">
+  <div class="modal">
+    <div class="mhead">
+      <h3>Sarah — Mon, Jun 9</h3>
+      <span class="material-symbols-outlined" style="color:var(--on-surface-variant);cursor:pointer">close</span>
+    </div>
+    <div class="timegrid">
+      <div>
+        <span class="lab">Start</span>
+        <div class="tsel">
+          <select><option>8</option><option selected>9</option><option>10</option></select>
+          <span class="colon">:</span>
+          <select><option selected>00</option><option>15</option><option>30</option><option>45</option></select>
+          <select><option selected>AM</option><option>PM</option></select>
+        </div>
+      </div>
+      <div>
+        <span class="lab">End</span>
+        <div class="tsel">
+          <select><option>4</option><option selected>5</option><option>6</option></select>
+          <span class="colon">:</span>
+          <select><option selected>00</option><option>15</option><option>30</option><option>45</option></select>
+          <select><option>AM</option><option selected>PM</option></select>
+        </div>
+      </div>
+    </div>
+    <div class="hourcalc"><b>8.0 hours</b></div>
+
+    <span class="lab">Apply to</span>
+    <div class="chips">
+      <button class="chip">S</button>
+      <button class="chip on cur">M</button>
+      <button class="chip on">T</button>
+      <button class="chip on">W</button>
+      <button class="chip">T</button>
+      <button class="chip">F</button>
+      <button class="chip">S</button>
+    </div>
+
+    <div class="seg">
+      <button class="on">Just this week</button>
+      <button>Every week (repeating)</button>
+    </div>
+
+    <div class="actions">
+      <button class="b-off">Off</button>
+      <button class="b-clear">Clear</button>
+      <button class="b-save">Save</button>
+    </div>
+  </div>
+</div>
+<p class="note">Here Sarah's 9a–5p shift will be stamped on <strong>Mon, Tue, Wed</strong> of this week. Flip to "Every week" and those weekdays become her recurring default (auto-fills every week) — that's the week-to-week part, via the existing repeat. <strong>Off</strong> and <strong>Clear</strong> also honor the selected day chips.</p>
+
+</body>
+</html>
