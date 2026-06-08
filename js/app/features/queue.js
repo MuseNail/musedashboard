@@ -841,13 +841,19 @@ export function saveCurrentGroupTabInputs() {
     const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
     if (price > 0 && qty > 0) partyItems.push({ itemId: row.dataset.itemId, qty, price });
   });
+  // Fees are entered at CHECKOUT (Confirm Payment), not here (v4.51). Preserve whatever the ticket
+  // already carries (merged across the party) and re-home it on the anchor; recompute a percent fee
+  // against the current service subtotal so editing services keeps it accurate.
+  const _feeMerge = new Map();
+  party.forEach(e => (e.fees || []).forEach(f => {
+    const cur = _feeMerge.get(f.feeId);
+    if (cur) cur.amount += (f.amount || 0); else _feeMerge.set(f.feeId, { feeId: f.feeId, amount: f.amount || 0, type: f.type });
+  }));
   const partyFees = [];
-  document.querySelectorAll('#group-assign-content [data-fee-id]').forEach(row => {
-    const feeType = row.dataset.feeType, feeVal = parseFloat(row.dataset.feeValue) || 0;
-    const rawInput = row.querySelector('.fee-amount')?.value;
-    if (feeType !== 'percent' && (!rawInput || rawInput.trim() === '')) return;   // a percent fee is auto-computed even when its field is blank
-    const amount = feeType === 'percent' ? Math.round(partySvcSubtotal * feeVal / 100 * 100) / 100 : parseFloat(rawInput) || 0;
-    if (amount > 0) partyFees.push({ feeId: row.dataset.feeId, amount, type: feeType });
+  _feeMerge.forEach(f => {
+    const def = cfg().fees.find(x => x.id === f.feeId);
+    const amount = (f.type === 'percent' && def) ? Math.round(partySvcSubtotal * (def.value || 0) / 100 * 100) / 100 : f.amount;
+    if (amount > 0) partyFees.push({ feeId: f.feeId, amount, type: f.type });
   });
   const partyItemTotal = partyItems.reduce((s, i) => s + i.price * (i.qty || 0), 0);
   const partyFeeTotal  = partyFees.reduce((s, f) => s + (f.amount || 0), 0);
@@ -887,10 +893,9 @@ export function renderGroupAssignContent() {
   // same section renders on every guest tab (it's whole-ticket), labelled accordingly.
   const party = groupAssignEntries.map(id => q().find(e => String(e.id) === id)).filter(Boolean);
   const isParty = party.length > 1;
-  const gItems = new Map(), gFees = new Map(); let gDiscount = 0, gNote = '';
+  const gItems = new Map(); let gDiscount = 0, gNote = '';   // fees moved to checkout (v4.51) — not gathered here
   party.forEach(e => {
     (e.items || []).forEach(it => { const c = gItems.get(it.itemId); if (c) c.qty += (it.qty || 0); else gItems.set(it.itemId, { qty: it.qty || 0, price: it.price || 0 }); });
-    (e.fees  || []).forEach(f => { const c = gFees.get(f.feeId); if (c) c.amount += (f.amount || 0); else gFees.set(f.feeId, { amount: f.amount || 0 }); });
     gDiscount += e.discount || 0;
     if (!gNote && e.discountNote) gNote = e.discountNote;
   });
@@ -975,19 +980,7 @@ export function renderGroupAssignContent() {
           </div></div></div>`;
   }).join('');
 
-  const feeRows = cfg().fees.map(fee => {
-    const existing = gFees.get(fee.id) || {};
-    const feeLabel = fee.type === 'percent' ? `${fee.value}%` : `$${fee.value.toFixed(2)}`;
-    return `<div class="bg-surface-container-low rounded-xl p-4 border border-surface-container-high mb-3" data-fee-id="${fee.id}" data-fee-type="${fee.type}" data-fee-value="${fee.value}">
-        <div class="flex items-center justify-between">
-          <div><div class="font-headline font-semibold text-on-surface text-sm">${fee.label}<span class="ml-2 text-[10px] font-body text-outline-variant uppercase tracking-widest">${fee.type === 'percent' ? 'Percent Fee' : 'Flat Fee'}</span></div>
-            ${fee.type === 'percent' ? `<div class="text-xs text-on-surface-variant mt-0.5">${feeLabel} of service subtotal</div>` : ''}</div>
-          <div class="flex items-center gap-2"><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">$</label>
-            <input type="text" inputmode="none" value="${existing.amount != null && existing.amount !== 0 ? existing.amount : ''}" placeholder="${fee.type==='flat'?fee.value.toFixed(2):'auto'}" class="fee-amount w-20 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" ${fee.type==='percent' ? 'readonly' : ''} onfocus="if(!this.readOnly) openNumpad(this,'${fee.label}')" onclick="if(!this.readOnly) openNumpad(this,'${fee.label}')" oninput="updateGroupTotal()">
-          </div></div></div>`;
-  }).join('');
-
-  const hasSupplement = cfg().items.length > 0 || cfg().fees.length > 0;
+  const hasSupplement = cfg().items.length > 0;   // fees moved to checkout (v4.51)
   const _nm = (entry.name||'').trim().split(/\s+/), _first = _nm[0] || '', _last = _nm.slice(1).join(' ') || '';
   content.innerHTML = `
     <div class="flex items-center gap-2 mb-3 flex-wrap"><span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${color}"></span>
@@ -1001,8 +994,8 @@ export function renderGroupAssignContent() {
     <div class="mb-1"><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Services</label>
       <div class="grid grid-cols-4 gap-2 mb-4">${svcPicker}</div></div>
     ${serviceRows}
-    ${isParty ? `<div class="border-t border-surface-container-high mt-2 pt-2 -mb-1 flex items-center gap-1.5 text-[11px] font-body text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:14px;color:${color}">receipt_long</span>The items, fee &amp; discount below apply to the <strong>whole party</strong> (entered once).</div>` : ''}
-    ${hasSupplement ? `<div class="border-t border-surface-container-high mt-2 pt-3 mb-2"><div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-3">${isParty ? 'Whole-ticket ' : ''}Items &amp; Fees</div>${itemRows}${feeRows}</div>` : ''}
+    ${isParty ? `<div class="border-t border-surface-container-high mt-2 pt-2 -mb-1 flex items-center gap-1.5 text-[11px] font-body text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:14px;color:${color}">receipt_long</span>The items &amp; discount below apply to the <strong>whole party</strong> (entered once). The service fee is added at checkout.</div>` : ''}
+    ${hasSupplement ? `<div class="border-t border-surface-container-high mt-2 pt-3 mb-2"><div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-3">${isParty ? 'Whole-ticket ' : ''}Items</div>${itemRows}</div>` : ''}
     <div class="border-t border-surface-container-high pt-3 mb-2"><div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2">${isParty ? 'Whole-ticket ' : ''}Discount</div>
       <div class="bg-surface-container-low rounded-xl p-3 border border-surface-container-high">
         <div class="flex items-center gap-2 mb-2">
@@ -1056,12 +1049,15 @@ export function updateGroupTotal() {
     const qty = parseInt(row.querySelector('.item-qty')?.value)||0, price = parseFloat(row.querySelector('.item-price')?.value)||0;
     return sum + price*qty;
   },0);
+  // Fees are entered at checkout now (v4.51); the live total still reflects any fee already on the
+  // ticket — recompute a percent fee against the current service subtotal.
   let feeTotal = 0;
-  document.querySelectorAll('#group-assign-content [data-fee-id]').forEach(row=>{
-    const feeType = row.dataset.feeType, feeVal = parseFloat(row.dataset.feeValue)||0, inp = row.querySelector('.fee-amount');
-    if (feeType === 'percent') { const computed = Math.round(partySvc*feeVal)/100; if (inp) inp.value = computed>0?computed.toFixed(2):''; feeTotal += computed; }
-    else feeTotal += parseFloat(inp?.value)||0;
-  });
+  const _seenFee = new Set();
+  groupAssignEntries.forEach(id => { const e = q().find(x => String(x.id) === id); (e?.fees || []).forEach(f => {
+    if (_seenFee.has(f.feeId)) return; _seenFee.add(f.feeId);
+    const def = cfg().fees.find(x => x.id === f.feeId);
+    feeTotal += (f.type === 'percent' && def) ? Math.round(partySvc * (def.value || 0)) / 100 : (f.amount || 0);
+  }); });
   const discountType = document.querySelector('#group-assign-content .discount-type-select')?.value || 'flat';
   const discountInput = parseFloat(document.querySelector('#group-assign-content .discount-input')?.value) || 0;
   const discountAmt = discountType === 'percent' ? Math.round(partySvc * discountInput / 100 * 100) / 100 : discountInput;

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Service fee at checkout</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+<style>
+  :root{ --primary:#15514f; --on-primary:#fff; --surface:#f6f8f8; --surface-lowest:#ffffff;
+         --surface-container:#e9efef; --surface-container-low:#eef3f3; --surface-container-high:#dfe7e6;
+         --on-surface:#1a1c1c; --on-surface-variant:#3f4948; --outline:#6f7978; --outline-variant:#bfc9c8; --error:#b3261e; }
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--surface);color:var(--on-surface);margin:0;padding:24px;line-height:1.5}
+  h2{font-size:15px;margin:24px 0 8px}
+  .desc{font-size:12px;color:var(--on-surface-variant);margin:0 0 12px;max-width:680px}
+  .material-symbols-outlined{font-size:18px;line-height:1;vertical-align:middle}
+  .modal{background:var(--surface-lowest);border-radius:16px;box-shadow:0 16px 44px rgba(0,0,0,.2);width:420px;max-width:100%;overflow:hidden}
+  .mhead{padding:16px 20px;border-bottom:1px solid var(--surface-container-high);display:flex;align-items:center;justify-content:space-between}
+  .mhead h3{margin:0;font-size:17px;font-weight:700}
+  .mbody{padding:14px 20px;display:flex;flex-direction:column;gap:10px}
+  .cust{background:var(--surface-container);border-radius:12px;padding:12px 14px}
+  .cust .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+  .cust .top .nm{font-weight:700}
+  .cust .top .tot{font-weight:700;color:var(--primary)}
+  .row{display:flex;justify-content:space-between;font-size:13px}
+  .row .l{color:var(--on-surface-variant)}
+  .feeline .l{display:flex;align-items:center;gap:5px}
+  .feeline .l .tag{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#0a7a52;background:#dcefe6;border-radius:5px;padding:1px 5px}
+  /* fee control */
+  .feectrl{border:1px dashed var(--outline-variant);border-radius:12px;padding:12px 14px;display:flex;align-items:center;gap:12px}
+  .toggle{width:44px;height:26px;border-radius:9999px;background:var(--primary);position:relative;flex-shrink:0;cursor:pointer;transition:background .15s}
+  .toggle.off{background:var(--surface-container-high)}
+  .toggle .knob{position:absolute;top:3px;left:21px;width:20px;height:20px;border-radius:9999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:left .15s}
+  .toggle.off .knob{left:3px}
+  .feectrl .meta{flex:1;min-width:0}
+  .feectrl .meta .t{font-weight:600;font-size:14px}
+  .feectrl .meta .s{font-size:11px;color:var(--on-surface-variant)}
+  .feectrl .amt{display:flex;align-items:center;gap:3px;border:1.5px solid var(--surface-container-high);border-radius:9px;padding:6px 9px;font-size:14px;font-weight:600;cursor:pointer}
+  .feectrl .amt .d{color:var(--on-surface-variant)}
+  .breakdown{border-top:1px solid var(--surface-container-high);margin-top:4px;padding-top:10px;font-size:13px;display:flex;flex-direction:column;gap:5px}
+  .breakdown .r{display:flex;justify-content:space-between;color:var(--on-surface-variant)}
+  .breakdown .big{font-weight:700;font-size:15px}
+  .breakdown .big .v{color:var(--primary)}
+  .breakdown .card{border-top:1px solid var(--surface-container-high);margin-top:6px;padding-top:8px;font-weight:700;font-size:15px;display:flex;justify-content:space-between}
+  .breakdown .card .v{color:var(--primary)}
+  .mfoot{padding:14px 20px;border-top:1px solid var(--surface-container-high);display:flex;flex-direction:column;gap:10px}
+  .btn{padding:12px;border-radius:12px;font-size:14px;font-weight:700;border:none;cursor:pointer}
+  .btn.primary{background:var(--primary);color:#fff}
+  .btn.ghost{background:transparent;border:1px solid var(--surface-container-high);color:var(--on-surface)}
+  .note{font-size:12px;color:var(--on-surface-variant);max-width:420px;margin:8px auto 0;text-align:center}
+</style>
+</head>
+<body>
+
+<h2>Checkout — Confirm Payment, with the Service Fee now applied here (default ON)</h2>
+<p class="desc">The $2 Service Fee is auto-added at checkout (once per checkout, on the highest-priced ticket) and shown as a toggle you can flip off or re-price. It flows through the existing line items, "Fee Total," ticket total, and Card-on-Terminal amount exactly as before — only the place you set it has changed.</p>
+
+<div class="modal">
+  <div class="mhead"><h3>Confirm Payment</h3><span class="material-symbols-outlined" style="color:var(--on-surface-variant)">close</span></div>
+  <div class="mbody">
+    <div class="cust">
+      <div class="top"><span class="nm">Maria</span><span class="tot">$47.00</span></div>
+      <div class="row"><span class="l">Gel Manicure</span><span>$45.00</span></div>
+      <div class="row feeline"><span class="l">Service Fee <span class="tag">fee</span></span><span>$2.00</span></div>
+    </div>
+
+    <div class="feectrl">
+      <div class="toggle"><div class="knob"></div></div>
+      <div class="meta"><div class="t">Service Fee</div><div class="s">Applied to this checkout · tap to remove</div></div>
+      <div class="amt"><span class="d">$</span>2.00</div>
+    </div>
+
+    <div class="breakdown">
+      <div class="r"><span>Services total</span><span>$45.00</span></div>
+      <div class="r"><span>Fee Total</span><span>$2.00</span></div>
+      <div class="big" style="display:flex;justify-content:space-between;margin-top:3px"><span>Sales Total</span><span class="v">$47.00</span></div>
+      <div class="card"><span>Card on Terminal</span><span class="v">$47.00</span></div>
+    </div>
+  </div>
+  <div class="mfoot">
+    <button class="btn primary">Pay on Terminal</button>
+    <button class="btn ghost">Pay in Square app</button>
+  </div>
+</div>
+
+<p class="note">Toggling the Service Fee OFF instantly drops it from the line items, the Fee Total, the Sales Total, and Card on Terminal (→ $45.00). Tapping the amount opens the numpad to charge a one-off different amount.</p>
+
+<h2 style="margin-top:30px">The Assign &amp; Price modal — Fees row removed</h2>
+<p class="desc">The "Items &amp; Fees" section there becomes just <strong>Items</strong>; the Service-Fee row is gone (it now lives at checkout). Services, items, and the discount are unchanged. Any fee already applied to a ticket is preserved if you re-open pricing.</p>
+
+</body>
+</html>

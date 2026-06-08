@@ -54,6 +54,86 @@ function _payParts() {
   return { svc, items, fees, discount };
 }
 
+// ── Service fee at checkout (moved here from the Assign & Price modal, v4.51) ──────────────
+// Fees live on entry.fees (anchor ticket), exactly as before — only the place they're entered
+// changed. Default-ON: each configured fee is auto-applied to the anchor when the pay modal opens.
+const _payParty = () => (_pendingPay?.ids || []).map(id => queue().find(e => String(e.id) === String(id))).filter(Boolean);
+const _entrySvc = e => (e.assignments || []).reduce((s, a) => s + (a.cost || 0), 0);
+const _paySvcSubtotal = () => _payParty().reduce((s, e) => s + _entrySvc(e), 0);
+function _payAnchor() {                 // the ticket the whole-checkout fee attaches to = largest service subtotal
+  const party = _payParty(); if (!party.length) return null;
+  let anchor = party[0], best = -1;
+  party.forEach(e => { const sub = _entrySvc(e); if (sub > best) { best = sub; anchor = e; } });
+  return anchor;
+}
+const _feeAmount = (fee, svcSubtotal) => fee.type === 'percent' ? Math.round(svcSubtotal * (fee.value || 0)) / 100 : (fee.value || 0);
+function _payApplyDefaultFees(party) {  // default-ON: add each configured fee to the anchor if the party doesn't already carry it
+  if (!party.length) return;
+  const svc = party.reduce((s, e) => s + _entrySvc(e), 0);
+  let anchor = party[0], best = -1;
+  party.forEach(e => { const sub = _entrySvc(e); if (sub > best) { best = sub; anchor = e; } });
+  (cfg().fees || []).forEach(fee => {
+    if (party.some(e => (e.fees || []).some(f => f.feeId === fee.id))) return;   // already applied → idempotent
+    const amount = _feeAmount(fee, svc);
+    if (amount > 0) anchor.fees = [...(anchor.fees || []), { feeId: fee.id, amount, type: fee.type }];
+  });
+}
+function _payRecomputeBill() { if (_pendingPay) _pendingPay.cents = Math.round(_payParty().reduce((s, e) => s + ticketTotal(e), 0) * 100); }
+function _refreshPayBody() {            // re-render the per-customer blocks (separate node from the numpad-bearing summary)
+  const body = document.getElementById('square-confirm-body');
+  if (body) body.innerHTML = _payParty().map(payCustomerBlock).join('');
+  const totalEl = document.getElementById('square-confirm-total'); if (totalEl) totalEl.textContent = `$${((_pendingPay?.cents || 0) / 100).toFixed(2)}`;
+}
+function _refreshPayBreakdown() {       // re-render just the totals block (keeps an open numpad on the fee field)
+  const el = document.getElementById('sq-pay-breakdown'); if (el) el.innerHTML = _breakdownRows();
+  sqUpdatePayBreakdown();
+}
+// Toggle a fee on/off for this checkout; off → remove from every party member, on → add to the anchor.
+export function payToggleFee(feeId) {
+  const fee = (cfg().fees || []).find(f => f.id === feeId); if (!fee) return;
+  const party = _payParty(); if (!party.length) return;
+  if (party.some(e => (e.fees || []).some(f => f.feeId === feeId))) {
+    party.forEach(e => { if ((e.fees || []).some(f => f.feeId === feeId)) { e.fees = e.fees.filter(f => f.feeId !== feeId); dispatch('queue.upsert', { entry: e }); } });
+  } else {
+    const anchor = _payAnchor(); const amount = _feeAmount(fee, _paySvcSubtotal());
+    if (anchor && amount > 0) { anchor.fees = [...(anchor.fees || []), { feeId, amount, type: fee.type }]; dispatch('queue.upsert', { entry: anchor }); }
+  }
+  _payRecomputeBill(); renderPayGc(); _refreshPayBody();
+}
+// Edit a flat fee's amount (numpad). Updates the holder entry + the totals WITHOUT re-rendering the
+// summary host, so the open numpad isn't yanked (mirrors the price-modal pattern).
+export function payFeeAmountInput(feeId, val) {
+  const n = parseFloat(val); const amount = isFinite(n) && n > 0 ? n : 0;
+  const fee = (cfg().fees || []).find(f => f.id === feeId);
+  let target = _payParty().find(e => (e.fees || []).some(f => f.feeId === feeId)) || _payAnchor();
+  if (!target) return;
+  if (amount > 0) target.fees = (target.fees || []).some(f => f.feeId === feeId)
+    ? target.fees.map(f => f.feeId === feeId ? { ...f, amount } : f)
+    : [...(target.fees || []), { feeId, amount, type: fee?.type }];
+  else target.fees = (target.fees || []).filter(f => f.feeId !== feeId);
+  dispatch('queue.upsert', { entry: target });
+  _payRecomputeBill(); _refreshPayBody(); _refreshPayBreakdown();
+}
+
+// The Confirm Payment totals block (rows only; the wrapper #sq-pay-breakdown carries the id so a
+// fee edit can refresh it without re-rendering the summary host / yanking an open numpad).
+function _breakdownRows() {
+  const P = _payParts();
+  const sm = (label, amt, neg) => `<div class="flex justify-between text-on-surface-variant"><span>${label}</span><span>${neg ? '−' : ''}$${Math.abs(amt).toFixed(2)}</span></div>`;
+  const BIG = 'flex justify-between items-center font-headline font-semibold', BIGS = 'font-size:1.05rem';
+  return `${P.svc > 0 ? sm('Services total', P.svc) : ''}
+      ${P.items > 0 ? sm('Items total', P.items) : ''}
+      ${P.fees > 0 ? sm('Fee Total', P.fees) : ''}
+      ${P.discount > 0 ? sm('Discount', P.discount, true) : ''}
+      <div id="sq-row-tip" class="flex justify-between text-on-surface-variant" style="display:none"><span>Tip Total</span><span id="sq-tip">$0.00</span></div>
+      ${_payGiftDollars() > 0 ? sm('Gift card used', _payGiftDollars(), true) : ''}
+      <div id="sq-row-cashrcv" class="flex justify-between text-on-surface-variant" style="display:none"><span>Cash received</span><span id="sq-cash-rcv">$0.00</span></div>
+      <div id="sq-row-zelle" class="flex justify-between text-on-surface-variant" style="display:none"><span>Zelle received</span><span id="sq-zelle-rcv">$0.00</span></div>
+      <div class="${BIG} mt-1.5" style="${BIGS}"><span class="text-on-surface">Sales Total</span><span class="text-primary">$${_payTotalDollars().toFixed(2)}</span></div>
+      <div id="sq-row-change" class="${BIG}" style="${BIGS};display:none"><span class="text-on-surface">Change due</span><span class="text-primary" id="sq-change">$0.00</span></div>
+      <div class="${BIG} border-t border-surface-container-high mt-2 pt-2" style="${BIGS}"><span class="text-on-surface">Card on Terminal</span><span class="text-primary" id="sq-card-due">$${_payCardDueDollars().toFixed(2)}</span></div>`;
+}
+
 // A single entry's charge is computed from its parts via ticketTotal() (utils.js) — the one
 // source of truth — so a possibly-stale entry.totalCost can't make the group total wrong.
 function payLine(label, amt) {
@@ -79,6 +159,9 @@ export function openSquarePOS(entryId) {
   // Group check-in → the whole party is on one ticket. To pay separately, split the
   // ticket in-app first (then each member is its own non-grouped entry).
   const party = entry.groupId ? queue().filter(e => e.groupId === entry.groupId) : [entry];
+  // Default-ON service fee: applied to the anchor ticket at checkout (was the Assign & Price modal).
+  // Persisted with the party just below; toggle it off in the Confirm Payment modal.
+  _payApplyDefaultFees(party);
   const cents = Math.round(party.reduce((s, e) => s + ticketTotal(e), 0) * 100);
   if (cents <= 0) { showToast('No total — assign a price first.'); return; }
   // Persist each ticket to the server BEFORE charging, and recompute its total from
@@ -494,23 +577,22 @@ function renderPayGc() {
   // Sales Total (the bill), Change due, and Card on Terminal (last, divided off) — each ~1.2×
   // the detail rows with a teal amount. Tip Total / Cash received / Change due / Card on
   // Terminal carry ids so sqUpdatePayBreakdown can live-patch them as cash/tip are typed.
-  const P = _payParts();
-  const sm = (label, amt, neg) => `<div class="flex justify-between text-on-surface-variant"><span>${label}</span><span>${neg ? '−' : ''}$${Math.abs(amt).toFixed(2)}</span></div>`;
-  const BIG = 'flex justify-between items-center font-headline font-semibold', BIGS = 'font-size:1.05rem';
-  const breakdown = `<div class="mt-3 pt-2 border-t border-surface-container-high text-sm font-body space-y-1">
-      ${P.svc > 0 ? sm('Services total', P.svc) : ''}
-      ${P.items > 0 ? sm('Items total', P.items) : ''}
-      ${P.fees > 0 ? sm('Fee Total', P.fees) : ''}
-      ${P.discount > 0 ? sm('Discount', P.discount, true) : ''}
-      <div id="sq-row-tip" class="flex justify-between text-on-surface-variant" style="display:none"><span>Tip Total</span><span id="sq-tip">$0.00</span></div>
-      ${_payGiftDollars() > 0 ? sm('Gift card used', _payGiftDollars(), true) : ''}
-      <div id="sq-row-cashrcv" class="flex justify-between text-on-surface-variant" style="display:none"><span>Cash received</span><span id="sq-cash-rcv">$0.00</span></div>
-      <div id="sq-row-zelle" class="flex justify-between text-on-surface-variant" style="display:none"><span>Zelle received</span><span id="sq-zelle-rcv">$0.00</span></div>
-      <div class="${BIG} mt-1.5" style="${BIGS}"><span class="text-on-surface">Sales Total</span><span class="text-primary">$${_payTotalDollars().toFixed(2)}</span></div>
-      <div id="sq-row-change" class="${BIG}" style="${BIGS};display:none"><span class="text-on-surface">Change due</span><span class="text-primary" id="sq-change">$0.00</span></div>
-      <div class="${BIG} border-t border-surface-container-high mt-2 pt-2" style="${BIGS}"><span class="text-on-surface">Card on Terminal</span><span class="text-primary" id="sq-card-due">$${_payCardDueDollars().toFixed(2)}</span></div>
-    </div>`;
-  host.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}${zelleRow}${tipRow}${tipDrawerRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${newGcBtn}${picker}${newGcForm}${breakdown}`;
+  // Fees (default-on toggles; moved here from the Assign & Price modal — v4.51). Each configured
+  // fee shows a toggle + amount; off removes it from the ticket, a flat fee's amount is editable.
+  const feeRowsHtml = (cfg().fees || []).map(fee => {
+    const holder = _payParty().find(e => (e.fees || []).some(f => f.feeId === fee.id));
+    const applied = holder ? holder.fees.find(f => f.feeId === fee.id) : null;
+    const on = !!applied;
+    const amt = on ? (applied.amount || 0) : _feeAmount(fee, _paySvcSubtotal());
+    const knob = `<button type="button" onclick="payToggleFee('${fee.id}')" aria-label="Toggle ${fee.label}" style="width:44px;height:26px;border-radius:9999px;flex-shrink:0;border:none;cursor:pointer;position:relative;transition:background .15s;background:${on ? '#1a5252' : 'var(--surface-container-high,#dfe7e6)'}"><span style="position:absolute;top:3px;left:${on ? '21px' : '3px'};width:20px;height:20px;border-radius:9999px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:left .15s"></span></button>`;
+    const amtField = fee.type === 'percent'
+      ? `<span class="text-sm font-body font-semibold ${on ? 'text-on-surface' : 'text-on-surface-variant'}">$${amt.toFixed(2)}</span>`
+      : `<span class="flex items-center gap-1 border border-surface-container-high rounded-lg px-2 py-1.5 ${on ? '' : 'opacity-50'}"><span class="text-on-surface-variant text-sm">$</span><input type="text" inputmode="none" value="${amt > 0 ? amt.toFixed(2) : ''}" ${on ? '' : 'disabled'} onfocus="openNumpad(this,'${fee.label}','cost')" onclick="openNumpad(this,'${fee.label}','cost')" oninput="payFeeAmountInput('${fee.id}',this.value)" class="w-14 bg-transparent text-sm text-right text-on-surface focus:outline-none"></span>`;
+    return `<div class="flex items-center gap-3 mb-3">${knob}<div class="flex-1 min-w-0"><div class="text-sm font-body font-semibold text-on-surface">${fee.label}</div><div class="text-[11px] font-body text-on-surface-variant">${on ? 'Applied · tap to remove' : 'Off · tap to add'}</div></div>${amtField}</div>`;
+  }).join('');
+  const feeSection = (cfg().fees || []).length ? `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Fees</div>${feeRowsHtml}` : '';
+  const breakdown = `<div id="sq-pay-breakdown" class="mt-3 pt-2 border-t border-surface-container-high text-sm font-body space-y-1">${_breakdownRows()}</div>`;
+  host.innerHTML = `${feeSection}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2 mt-1">Split payment — optional</div>${cashRow}${zelleRow}${tipRow}${tipDrawerRow}<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Gift card used (recorded; keeps balances in sync)</div>${lines}${addBtn}${newGcBtn}${picker}${newGcForm}${breakdown}`;
   sqUpdatePayBreakdown();
 }
 export function sqCashInput(v) {
