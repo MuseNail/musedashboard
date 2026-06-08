@@ -48,10 +48,14 @@ export function toggleFdScheduleView() {
   const listV = document.getElementById('fdusers-list-view'), schedV = document.getElementById('fdusers-schedule-view'), btn = document.getElementById('fd-schedule-view-btn');
   if (!listV || !schedV) return;
   const showingSched = !schedV.classList.contains('hidden');
-  listV.classList.toggle('hidden', !showingSched);
-  schedV.classList.toggle('hidden', showingSched);
-  if (btn) { btn.style.background = showingSched ? '' : '#1a5252'; btn.style.color = showingSched ? '' : '#fff'; }
-  if (!showingSched) renderFdSchedule();
+  const nowSched = showingSched ? false : true;   // after the toggle below
+  listV.classList.toggle('hidden', nowSched);
+  schedV.classList.toggle('hidden', !nowSched);
+  // Make the button say what it DOES next, so it's clear how to get back (was: same label both ways).
+  if (btn) btn.innerHTML = nowSched
+    ? `<span class="material-symbols-outlined" style="font-size:16px">arrow_back</span> Front Desk Users`
+    : `<span class="material-symbols-outlined" style="font-size:16px">calendar_month</span> Schedule`;
+  if (nowSched) renderFdSchedule();
 }
 
 export function renderFdSchedule() {

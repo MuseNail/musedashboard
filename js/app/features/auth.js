@@ -207,7 +207,7 @@ export function renderFdUsersList() {
       ? `<img src="${escHtml(u.photo)}" class="w-10 h-10 rounded-full object-cover border-2 border-surface-container-high">`
       : `<div class="w-10 h-10 rounded-full bg-primary flex items-center justify-center"><span class="text-sm font-headline font-bold text-on-primary">${escHtml(u.name.charAt(0).toUpperCase())}</span></div>`;
     return `
-      <div class="bg-surface-container-lowest rounded-xl px-5 py-4 border border-surface-container-high flex items-center justify-between">
+      <div onclick="showEditFdUser('${u.id}')" title="Edit ${escHtml(u.name)}" class="bg-surface-container-lowest rounded-xl px-5 py-4 border border-surface-container-high flex items-center justify-between cursor-pointer hover:bg-surface-container transition-colors">
         <div class="flex items-center gap-4">
           ${photoHtml}
           <div>
@@ -216,13 +216,10 @@ export function renderFdUsersList() {
           </div>
         </div>
         <div class="flex items-center gap-1">
-          <button onclick="showPhotoUpload('fduser','${u.id}')" title="Photo" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors">
+          <button onclick="event.stopPropagation();showPhotoUpload('fduser','${u.id}')" title="Photo" class="w-9 h-9 rounded-full hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors">
             <span class="material-symbols-outlined" style="font-size:18px">photo_camera</span>
           </button>
-          <button onclick="showEditFdUser('${u.id}')" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors">
-            <span class="material-symbols-outlined" style="font-size:18px">edit</span>
-          </button>
-          <button onclick="deleteFdUser('${u.id}')" class="w-9 h-9 rounded-full hover:bg-error/10 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors">
+          <button onclick="event.stopPropagation();deleteFdUser('${u.id}')" title="Delete" class="w-9 h-9 rounded-full hover:bg-error/10 flex items-center justify-center text-on-surface-variant hover:text-error transition-colors">
             <span class="material-symbols-outlined" style="font-size:18px">delete</span>
           </button>
         </div>

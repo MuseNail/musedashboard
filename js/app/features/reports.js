@@ -1372,6 +1372,13 @@ const _tc2 = n => String(n).padStart(2, '0');
 const _tcDate = ms => { const d = new Date(ms); return d.getFullYear() + '-' + _tc2(d.getMonth() + 1) + '-' + _tc2(d.getDate()); };
 const _tcTime = ms => { const d = new Date(ms); return _tc2(d.getHours()) + ':' + _tc2(d.getMinutes()); };
 const _tcCombine = (dateStr, timeStr) => { if (!dateStr || !timeStr) return null; const t = new Date(dateStr + 'T' + timeStr); return isNaN(t) ? null : t.getTime(); };
+const _tcDateLabel = ms => new Date(ms).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+// The date field is a button → opens the native calendar popup only (no typing, no separate icon).
+export function tcOpenDate(idx) {
+  const el = document.getElementById('tc-date-' + idx); if (!el) return;
+  if (typeof el.showPicker === 'function') { try { el.showPicker(); return; } catch {} }
+  el.focus(); el.click();   // fallback for browsers without showPicker
+}
 // Hour : Min : AM/PM dropdowns (15-min) — same picker as the front-desk schedule. `allowBlank`
 // lets the OUT side be empty ("—") to represent a still-open punch.
 const _tcSel = 'bg-surface-container border border-surface-container-high rounded px-1.5 py-1.5 text-xs font-body text-on-surface focus:outline-none focus:border-primary';
@@ -1401,11 +1408,11 @@ export function openTimecard(userId) {
   const from = new Date(cur.from); from.setHours(0, 0, 0, 0);
   const to = new Date(cur.to); to.setHours(23, 59, 59, 999);
   const rows = fdPunches(userId).map((p, idx) => ({ p, idx })).filter(({ p }) => p.in && p.in >= +from && p.in <= +to).sort((a, b) => a.p.in - b.p.in);
-  const dateInp = 'bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer';
   const body = rows.map(({ p, idx }) => {
     const hrs = p.out ? roundQuarterHours(p.out - p.in) : 0;
     return `<div class="flex items-center gap-1.5 py-2 border-b border-surface-container-high flex-wrap">
-      <input type="date" id="tc-date-${idx}" value="${_tcDate(p.in)}" onchange="tcUpdate('${userId}',${idx})" class="${dateInp}" style="min-width:150px">
+      <button type="button" onclick="tcOpenDate(${idx})" class="bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface hover:bg-surface-container-high flex items-center gap-2" style="min-width:150px"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">calendar_today</span>${_tcDateLabel(p.in)}</button>
+      <input type="date" id="tc-date-${idx}" value="${_tcDate(p.in)}" onchange="tcUpdate('${userId}',${idx})" style="position:absolute;width:1px;height:1px;opacity:0;border:0;padding:0;margin:-1px;overflow:hidden">
       <span class="inline-flex items-center gap-0.5">${_tcTrio('in', idx, userId, p.in, false)}</span>
       <span class="text-on-surface-variant text-xs">→</span>
       <span class="inline-flex items-center gap-0.5">${_tcTrio('out', idx, userId, p.out, true)}</span>
@@ -1550,15 +1557,15 @@ export function payrollExportStaffPDF() {
     </div>`;
   }).join('');
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Staff Billing — ${_eTxn(period)}</title><style>
-    @page{size:11in 8.5in;margin:.4in} body{font-family:Arial,sans-serif;margin:0;color:#222}
-    .hd{font-size:12px;color:#666;margin:0 0 8px}.hd b{color:#1a5252;font-size:15px}
-    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-    .card{border:1px dashed #9aa;border-radius:8px;padding:8px 10px;break-inside:avoid;page-break-inside:avoid}
-    .cname{font-size:14px;font-weight:800;color:#1a5252;line-height:1.1}
-    .ctot{font-size:17px;font-weight:800;color:#1a5252;margin:2px 0 6px}.ctl{font-size:9px;font-weight:600;color:#888;text-transform:uppercase}
-    .cdays{width:100%;border-collapse:collapse;font-size:9px}.cdays td{padding:1px 2px;border-bottom:1px solid #eee}.cdays td.n{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+    @page{size:11in 8.5in;margin:.4in} body{font-family:Arial,sans-serif;margin:0;color:#222;font-size:11pt}
+    .hd{font-size:11pt;color:#666;margin:0 0 8px}.hd b{color:#1a5252;font-size:13pt}
+    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+    .card{border:1px dashed #9aa;border-radius:8px;padding:6px 7px;break-inside:avoid;page-break-inside:avoid}
+    .cname{font-size:13pt;font-weight:800;color:#1a5252;line-height:1.1}
+    .ctot{font-size:13pt;font-weight:800;color:#1a5252;margin:2px 0 5px}.ctl{font-size:9pt;font-weight:600;color:#888;text-transform:uppercase}
+    .cdays{width:100%;border-collapse:collapse;font-size:11pt}.cdays td{padding:1px 1px;border-bottom:1px solid #eee}.cdays td.n{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
     .cdays tfoot td{border-top:1.5px solid #1a5252;border-bottom:none;font-weight:800;padding-top:3px}
-    .crf{margin-top:5px;font-size:9px;color:#a01818;font-weight:600}
+    .crf{margin-top:5px;font-size:11pt;color:#a01818;font-weight:600}
   </style></head><body>
     <div class="hd"><b>Muse Nails &amp; Spa</b> — Staff Billing · ${_eTxn(period)}</div>
     <div class="grid">${cards}</div>

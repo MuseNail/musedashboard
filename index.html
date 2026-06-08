@@ -579,10 +579,18 @@ tailwind.config = {
 
       <!-- ── TRANSACTIONS PANEL ── -->
       <div class="dash-panel" id="panel-transactions">
-        <div class="dash-head flex items-center justify-between">
+        <div class="dash-head flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h2 class="text-xl font-headline font-bold text-on-surface">Transaction History</h2>
             <p class="text-sm font-body text-on-surface-variant mt-0.5">All check-ins with service and payment details</p>
+            <div class="flex items-center gap-2 mt-2">
+              <button onclick="shiftReportRange(-1)" title="Previous period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_left</span></button>
+              <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
+                <span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">calendar_today</span>
+                <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
+              </button>
+              <button onclick="shiftReportRange(1)" title="Next period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>
+            </div>
           </div>
           <div class="flex items-center gap-2 flex-wrap justify-end">
             <button onclick="openCashRegister()" title="Open the cash drawer / register"
@@ -605,12 +613,6 @@ tailwind.config = {
               class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">merge</span> Merge</button>
             <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
             <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
-            <button onclick="shiftReportRange(-1)" title="Previous period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_left</span></button>
-            <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
-              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">calendar_today</span>
-              <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
-            </button>
-            <button onclick="shiftReportRange(1)" title="Next period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>
           </div>
         </div>
         <div id="txn-total-bar" class="mb-3 flex items-center justify-between gap-3 px-5 py-3 rounded-xl bg-primary/10 border border-primary/30">

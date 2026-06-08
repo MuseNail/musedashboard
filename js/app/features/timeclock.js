@@ -194,10 +194,24 @@ export function clockedInNow() {
     .map(u => ({ u, since: fdClockedSince(u.id) }))
     .sort((a, b) => a.since - b.since);
 }
-function _elapsed(since) {
-  const ms = Date.now() - since; if (ms < 0) return '';
+function _fmtDur(ms) {
+  if (!(ms > 0)) return '0m';
   const m = Math.floor(ms / 60000), h = Math.floor(m / 60);
   return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
+}
+// Total time worked TODAY (sum of today's segments — completed + the open one up to now), so a
+// staff member with a mid-day break still shows their real worked time for the day. Counts only
+// the portion that falls within today (a shift spanning midnight contributes today's part).
+export function fdWorkedTodayMs(userId) {
+  const start = new Date(); start.setHours(0, 0, 0, 0); const s = +start;
+  let ms = 0;
+  for (const p of fdPunches(userId)) {
+    if (!p.in) continue;
+    const end = p.out || Date.now();
+    const from = Math.max(p.in, s);
+    if (end > from) ms += end - from;
+  }
+  return ms;
 }
 export function renderClockedInNow() {
   const el = document.getElementById('clocked-in-now'); if (!el) return;
@@ -212,7 +226,7 @@ export function renderClockedInNow() {
         <div class="w-7 h-7 rounded-full flex items-center justify-center text-on-primary text-xs font-headline font-bold flex-shrink-0" style="background:var(--primary);overflow:hidden">${u.photo ? `<img src="${escHtml(u.photo)}" class="w-full h-full object-cover">` : escHtml((u.name || '?').charAt(0).toUpperCase())}</div>
         <span class="font-semibold text-on-surface">${escHtml(u.name || '—')}</span>
         <span style="color:#2a7a4f;font-weight:600">● in</span>
-        <span class="ml-auto text-xs text-on-surface-variant">since ${_hhmm(since)} · ${_elapsed(since)}</span>
+        <span class="ml-auto text-xs text-on-surface-variant">since ${_hhmm(since)} · ${_fmtDur(fdWorkedTodayMs(u.id))} today</span>
         ${canOut ? `<button onclick="clockOutUser('${u.id}')" class="px-2.5 py-1 rounded-lg border border-surface-container-high text-xs font-body font-semibold text-on-surface hover:bg-surface-container flex-shrink-0">Clock out</button>` : ''}</div>`).join('')
     : `<div class="py-2 text-sm font-body text-on-surface-variant">Nobody is clocked in right now.</div>`;
   el.innerHTML = `<div class="mb-4 bg-surface-container-lowest rounded-xl border border-surface-container-high p-4">
