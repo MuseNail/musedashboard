@@ -33,9 +33,10 @@ import * as audit from './features/audit.js';
 import * as cashdrawer from './features/cashdrawer.js';
 import * as sms from './features/sms.js';
 import * as timeclock from './features/timeclock.js';
+import * as fdSchedule from './features/fd-schedule.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;

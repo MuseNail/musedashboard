@@ -1198,13 +1198,17 @@ tailwind.config = {
         <!-- Leaf: Front Desk Users -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="fdusers-merged-section" class="hidden px-5 py-4">
-            <div class="flex items-center justify-between mb-3">
-              <p class="text-sm font-body text-on-surface-variant">Staff who sign in to the dashboard with a PIN.</p>
+            <div class="flex items-center gap-2 mb-3 flex-wrap">
+              <p class="text-sm font-body text-on-surface-variant mr-auto">Staff who sign in to the dashboard with a PIN.</p>
+              <button onclick="toggleFdScheduleView()" id="fd-schedule-view-btn" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary hover:text-on-primary transition-colors flex-shrink-0">
+                <span class="material-symbols-outlined" style="font-size:16px">calendar_month</span> Schedule
+              </button>
               <button onclick="showAddFdUser()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors flex-shrink-0">
                 <span class="material-symbols-outlined" style="font-size:16px">add</span> Add
               </button>
             </div>
-            <div id="fdusers-list" class="space-y-2"></div>
+            <div id="fdusers-list-view">
+              <div id="fdusers-list" class="space-y-2"></div>
             <!-- Manager-only: view all PINs -->
             <div id="pin-viewer-section" class="mt-4 hidden">
               <button onclick="togglePinViewer()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/60 text-on-surface-variant text-sm font-body hover:bg-surface-container transition-colors">
@@ -1212,6 +1216,23 @@ tailwind.config = {
                 <span id="pin-viewer-label">View Login PINs</span>
               </button>
               <div id="pin-viewer-list" class="hidden mt-3 bg-surface-container rounded-xl overflow-hidden border border-surface-container-high"></div>
+            </div>
+            </div><!-- /fdusers-list-view -->
+            <div id="fdusers-schedule-view" class="hidden">
+              <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div class="flex items-center gap-2">
+                  <button onclick="fdScheduleWeek(-1)" class="q-action-btn bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
+                  <span id="fd-schedule-week-label" class="text-sm font-body font-semibold text-on-surface min-w-40 text-center"></span>
+                  <button onclick="fdScheduleWeek(1)" class="q-action-btn bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+                  <button onclick="fdScheduleWeek(0, true)" class="px-3 py-1.5 rounded-full text-xs font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
+                </div>
+                <div class="flex gap-3 flex-wrap text-xs font-body text-on-surface-variant">
+                  <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-full" style="background:#dcebea;border:1px solid #b6d2d0"></div>Shift hours</div>
+                  <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-full" style="background:#f5c870"></div>Off</div>
+                  <div class="flex items-center gap-1.5"><div class="w-3 h-3 rounded-md relative flex-shrink-0" style="background:#dcebea;border:1px solid #b6d2d0"><span style="position:absolute;top:-2px;right:-2px;width:5px;height:5px;border-radius:50%;background:#15514f;box-shadow:0 0 0 1px #fff"></span></div>Repeats weekly</div>
+                </div>
+              </div>
+              <div class="overflow-auto no-scroll rounded-xl border border-surface-container-high" style="max-height:calc(100vh - 320px)"><div id="fd-schedule-grid" class="min-w-max"></div></div>
             </div>
           </div>
         </div>
@@ -1714,6 +1735,32 @@ tailwind.config = {
     </div>
     <input type="hidden" id="fduser-edit-id">
     <button onclick="saveFdUser()" class="w-full mt-6 bg-primary hover:bg-primary-dim text-on-primary py-4 rounded-xl font-headline font-bold tracking-tight transition-all active:scale-95">Save</button>
+  </div>
+</div>
+
+<!-- Front-desk shift picker (schedule with hours) -->
+<div id="fd-shift-picker" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
+  <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-xs shadow-2xl fade-up mx-4">
+    <div class="flex items-center justify-between mb-4">
+      <h2 id="fd-shift-picker-label" class="text-base font-headline font-bold text-on-surface"></h2>
+      <button onclick="closeFdShiftPicker()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Start</label>
+        <input type="time" id="fd-shift-start" value="09:00" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"></div>
+      <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">End</label>
+        <input type="time" id="fd-shift-end" value="17:00" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"></div>
+    </div>
+    <label onclick="fdToggleRepeat()" class="flex items-center gap-2 cursor-pointer mb-4 select-none">
+      <span id="fd-repeat-box" class="w-5 h-5 rounded border-2 border-surface-container-high flex items-center justify-center flex-shrink-0"><span id="fd-repeat-check" class="hidden material-symbols-outlined text-white" style="font-size:16px">check</span></span>
+      <input type="checkbox" id="fd-repeat-cb" class="hidden">
+      <span class="text-sm font-body text-on-surface">Repeat weekly</span>
+    </label>
+    <div class="flex gap-2">
+      <button onclick="setFdShiftOff()" class="flex-1 py-2.5 rounded-xl font-body font-semibold text-sm" style="background:#f5c870;color:#3a2800">Off</button>
+      <button onclick="clearFdShift()" class="flex-1 py-2.5 rounded-xl border border-surface-container-high text-on-surface-variant font-body font-semibold text-sm">Clear</button>
+      <button onclick="saveFdShift()" class="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm">Save</button>
+    </div>
   </div>
 </div>
 
