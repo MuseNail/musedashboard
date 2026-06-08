@@ -203,17 +203,31 @@ export function renderClockedInNow() {
   const el = document.getElementById('clocked-in-now'); if (!el) return;
   if (!canDo('viewClockedIn')) { el.innerHTML = ''; el.classList.add('hidden'); return; }
   el.classList.remove('hidden');
+  // A manager/admin can clock anyone out from here (any device) — closes a forgotten/leftover
+  // shift without logging in as that person. Clock-OUT isn't station-locked (only clock-IN is).
+  const canOut = ['admin', 'manager'].includes(getActiveUser()?.role);
   const list = clockedInNow();
   const rows = list.length
     ? list.map(({ u, since }) => `<div class="flex items-center gap-3 py-2 border-b border-surface-container-high last:border-0 text-sm font-body">
         <div class="w-7 h-7 rounded-full flex items-center justify-center text-on-primary text-xs font-headline font-bold flex-shrink-0" style="background:var(--primary);overflow:hidden">${u.photo ? `<img src="${escHtml(u.photo)}" class="w-full h-full object-cover">` : escHtml((u.name || '?').charAt(0).toUpperCase())}</div>
         <span class="font-semibold text-on-surface">${escHtml(u.name || '—')}</span>
         <span style="color:#2a7a4f;font-weight:600">● in</span>
-        <span class="ml-auto text-xs text-on-surface-variant">since ${_hhmm(since)} · ${_elapsed(since)}</span></div>`).join('')
+        <span class="ml-auto text-xs text-on-surface-variant">since ${_hhmm(since)} · ${_elapsed(since)}</span>
+        ${canOut ? `<button onclick="clockOutUser('${u.id}')" class="px-2.5 py-1 rounded-lg border border-surface-container-high text-xs font-body font-semibold text-on-surface hover:bg-surface-container flex-shrink-0">Clock out</button>` : ''}</div>`).join('')
     : `<div class="py-2 text-sm font-body text-on-surface-variant">Nobody is clocked in right now.</div>`;
   el.innerHTML = `<div class="mb-4 bg-surface-container-lowest rounded-xl border border-surface-container-high p-4">
     <div class="flex items-center gap-2 mb-1"><span class="material-symbols-outlined" style="font-size:18px;color:#2a7a4f">schedule</span><h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest">Clocked in now</h3><span class="text-[10px] font-body text-on-surface-variant border border-surface-container-high rounded px-1.5 py-0.5">live</span></div>
     ${rows}</div>`;
+}
+// Manager/admin clock-out of another front-desk user from the "Clocked in now" card.
+export function clockOutUser(userId) {
+  if (!['admin', 'manager'].includes(getActiveUser()?.role)) { showToast('Only a manager or admin can clock staff out.'); return; }
+  const u = (cfg().fd_users || []).find(x => x.id === userId); if (!u) return;
+  if (!fdIsClockedIn(userId)) { showToast(`${u.name} isn’t clocked in.`); renderClockedInNow(); return; }
+  const since = fdClockedSince(userId);
+  const doIt = () => { fdClockOut(userId); showToast(`Clocked out — ${u.name}`); renderClockedInNow(); };
+  if (window.showWarnModal) window.showWarnModal(`Clock out ${u.name}?`, `This closes their open shift (clocked in since ${_hhmm(since)}) at the current time.`, doIt, 'Clock out');
+  else doIt();
 }
 // Refresh the live elapsed time + button tooltip once a minute while Payroll is open.
 setInterval(() => {
