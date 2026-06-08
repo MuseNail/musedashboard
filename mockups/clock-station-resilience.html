@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clock station resilience — icon-only + popover</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+<style>
+  :root{ --primary:#15514f; --on-primary:#fff; --surface:#f6f8f8; --surface-container:#e9efef;
+         --surface-container-high:#dfe7e6; --on-surface:#1a1c1c; --on-surface-variant:#3f4948;
+         --error:#b3261e; --warn-bg:#fef3c7; --warn-border:#f59e0b; --warn-text:#7c4a03; }
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--surface);
+       color:var(--on-surface);margin:0;padding:24px;line-height:1.5}
+  h2{font-size:15px;margin:30px 0 6px;color:var(--on-surface)}
+  .desc{font-size:12px;color:var(--on-surface-variant);margin:0 0 10px;max-width:680px}
+  .material-symbols-outlined{font-size:18px;line-height:1}
+  /* fake header bar */
+  .header{display:flex;align-items:center;gap:8px;justify-content:flex-end;background:#fff;
+          border:1px solid var(--surface-container-high);border-radius:14px;padding:10px 12px;flex-wrap:wrap;position:relative}
+  .pill{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:9999px;
+        font-size:12px;font-weight:600;white-space:nowrap}
+  .version{font-size:10px;color:#8a9695}
+  .userchip{background:var(--surface-container);color:var(--on-surface-variant)}
+  .live{background:var(--surface-container);color:#1b5e20}
+  /* the single clock ICON button (all states share this footprint) */
+  .clk{position:relative;display:inline-flex;align-items:center;justify-content:center;
+       width:32px;height:32px;border-radius:9999px;border:1px solid var(--primary);
+       color:var(--primary);background:#fff;cursor:pointer}
+  .clk.in{background:#2a7a4f;border-color:#2a7a4f;color:#fff}        /* clocked in */
+  .clk.muted{border-color:var(--surface-container-high);color:#94a3a1;background:var(--surface-container)} /* unavailable */
+  .clk.warn{border-color:var(--warn-border);color:var(--warn-border);background:var(--warn-bg)} /* admin mismatch */
+  /* tiny status dot on the icon */
+  .clk .dot{position:absolute;top:-2px;right:-2px;width:10px;height:10px;border-radius:9999px;border:2px solid #fff}
+  .clk .dot.amber{background:var(--warn-border)}
+  /* popover */
+  .pop{position:absolute;top:48px;right:96px;width:260px;background:#fff;border:1px solid var(--surface-container-high);
+       border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.16);padding:14px;z-index:5;font-size:13px}
+  .pop:before{content:"";position:absolute;top:-7px;right:18px;width:12px;height:12px;background:#fff;
+              border-left:1px solid var(--surface-container-high);border-top:1px solid var(--surface-container-high);transform:rotate(45deg)}
+  .pop h4{margin:0 0 6px;font-size:13px;display:flex;align-items:center;gap:6px}
+  .pop p{margin:0;color:var(--on-surface-variant);font-size:12.5px}
+  .pop .acts{display:flex;gap:8px;margin-top:12px}
+  .btn{background:var(--primary);color:#fff;border:none;border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+  .btn.ghost{background:none;color:var(--on-surface-variant);border:1px solid var(--surface-container-high)}
+  /* settings card */
+  .card{max-width:560px;background:#fff;border:1px solid var(--surface-container-high);border-radius:14px;padding:16px;margin-top:6px}
+  .card label{font-weight:700;font-size:13px;display:block;margin-bottom:4px}
+  .card .sub{font-size:12px;color:var(--on-surface-variant);margin:0 0 12px}
+  .statusrow{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:10px 12px;border-radius:10px;font-size:13px}
+  .statusrow.ok{background:rgba(42,122,79,.12);color:#1b5e20}
+  .statusrow.warn{background:var(--warn-bg);color:var(--warn-text)}
+  .statusrow.none{background:var(--surface-container);color:var(--on-surface-variant)}
+  .sbtn{background:var(--primary);color:#fff;border:none;border-radius:12px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0}
+  .sbtn.link{background:none;color:var(--error);text-decoration:underline;font-weight:600;padding:0}
+  .ids{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--on-surface-variant);margin-top:8px;background:var(--surface);border-radius:8px;padding:8px 10px}
+  .ids b{color:var(--on-surface)}
+  /* live "clocked in now" card */
+  .clockcard{max-width:560px;background:#fff;border:1px solid var(--surface-container-high);border-radius:14px;padding:14px 16px;margin-top:6px}
+  .clockcard .row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--surface-container-high);font-size:13px}
+  .clockcard .row:last-child{border-bottom:none}
+  .avatar{width:28px;height:28px;border-radius:9999px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px}
+  .since{margin-left:auto;color:var(--on-surface-variant);font-size:12px}
+  .green{color:#2a7a4f;font-weight:600}
+  .label{display:inline-block;font-size:10px;color:#8a9695;margin-left:6px;border:1px solid var(--surface-container-high);border-radius:6px;padding:1px 5px}
+</style>
+</head>
+<body>
+
+<p class="desc" style="max-width:none"><strong>Header stays compact:</strong> just one clock <span class="material-symbols-outlined" style="font-size:14px;vertical-align:middle">schedule</span> icon.
+Its colour tells the state; tapping it opens a small popover with the message (and any action). Hovering shows the same text as a tooltip.</p>
+
+<h2>1 · Front-desk user, ON the station — functional clock button</h2>
+<p class="desc">Tap = clock in / out directly (no popover). Outline = clocked out; solid green = clocked in. The "since" time shows in the tooltip + popover.</p>
+<div class="header">
+  <span class="pill live"><span class="material-symbols-outlined" style="font-size:9px">circle</span>Live</span>
+  <span class="version">v4.50</span>
+  <span class="clk" title="Clock In — tap to start your shift"><span class="material-symbols-outlined">schedule</span></span>
+  <span class="clk in" title="Clocked in since 9:02 AM — tap to clock out" style="margin-left:4px"><span class="material-symbols-outlined">schedule</span></span>
+  <span class="pill userchip">Jamie ▾</span>
+</div>
+<p class="desc" style="margin-top:6px">(two shown side-by-side only to compare the clocked-out vs clocked-in colour — in reality there's just one.)</p>
+
+<h2>2 · (A) Front-desk user, NOT the station — muted icon + popover</h2>
+<p class="desc">Icon is greyed with a small amber dot. Tapping opens the explanation; nothing is silently missing.</p>
+<div class="header">
+  <span class="pill live"><span class="material-symbols-outlined" style="font-size:9px">circle</span>Live</span>
+  <span class="version">v4.50</span>
+  <span class="clk muted" title="Clock-in unavailable on this device — ask an admin to make this the time-clock station">
+    <span class="material-symbols-outlined">schedule</span><span class="dot amber"></span></span>
+  <span class="pill userchip">Jamie ▾</span>
+  <div class="pop">
+    <h4><span class="material-symbols-outlined" style="font-size:16px;color:#c08a00">schedule</span> Clock-in unavailable here</h4>
+    <p>This device isn’t the salon’s time-clock station, so clock in/out is turned off here. Ask an admin to make this device the station (Settings → Pay&nbsp;Period).</p>
+  </div>
+</div>
+
+<h2>3 · (B) Admin, station saved but it isn’t this device — warning icon + popover with actions</h2>
+<p class="desc">Amber icon + dot. Tapping shows the cause and two buttons: <strong>Fix</strong> (jump to Settings → Pay Period) and <strong>Dismiss</strong> (hide until the station changes again).</p>
+<div class="header">
+  <span class="pill live"><span class="material-symbols-outlined" style="font-size:9px">circle</span>Live</span>
+  <span class="version">v4.50</span>
+  <span class="clk warn" title="Time-clock station changed — this device is no longer recognised. Tap to fix.">
+    <span class="material-symbols-outlined">schedule</span><span class="dot amber"></span></span>
+  <span class="pill userchip">Owner ▾</span>
+  <div class="pop">
+    <h4><span class="material-symbols-outlined" style="font-size:16px;color:var(--warn-border)">warning</span> Time-clock station changed</h4>
+    <p>A station device is saved, but it isn’t this one — its ID likely changed (app reinstalled or storage cleared). Staff can’t clock in until a station is set.</p>
+    <div class="acts"><button class="btn">Fix in Settings</button><button class="btn ghost">Dismiss</button></div>
+  </div>
+</div>
+
+<h2>4 · (B) Settings → Pay Period — diagnostic station status</h2>
+<p class="desc">Spells out the state and shows both device IDs so the cause is obvious.</p>
+<div class="card">
+  <label>Time-Clock Station</label>
+  <p class="sub">Front-desk staff can clock in/out <strong>only on the designated station device</strong> — so nobody can clock in from a personal phone.</p>
+  <div class="statusrow ok"><span><strong>This device</strong> is the time-clock station ✓</span><button class="sbtn link">Remove</button></div>
+  <div class="ids"><b>This device:</b> dev-7f3a9c &nbsp;·&nbsp; <b>Saved station:</b> dev-7f3a9c</div>
+</div>
+<div class="card">
+  <label>Time-Clock Station</label>
+  <p class="sub">Front-desk staff can clock in/out <strong>only on the designated station device</strong>.</p>
+  <div class="statusrow warn"><span>⚠️ A station is saved, but it’s <strong>not this device</strong>. If this should be the station (e.g. the ID changed after a reinstall), make it the station again.</span><button class="sbtn">Make this device the station</button></div>
+  <div class="ids"><b>This device:</b> dev-b21e44 &nbsp;·&nbsp; <b>Saved station:</b> dev-7f3a9c (not this device)</div>
+</div>
+<div class="card">
+  <label>Time-Clock Station</label>
+  <p class="sub">Front-desk staff can clock in/out <strong>only on the designated station device</strong>.</p>
+  <div class="statusrow none"><span>No station set yet — staff can’t clock in until one is set.</span><button class="sbtn">Make this device the station</button></div>
+  <div class="ids"><b>This device:</b> dev-b21e44 &nbsp;·&nbsp; <b>Saved station:</b> — none —</div>
+</div>
+
+<h2>5 · (Optional) “Clocked in now” live list — Payroll page</h2>
+<p class="desc">A glanceable companion: front-desk staff with an open punch and how long they’ve been clocked in. This is the only real “who’s working right now” view; it answers your question directly. (Dashboard <em>login</em> sessions are per-device and not tracked — separate from clocking in.)</p>
+<div class="clockcard">
+  <label style="font-weight:700;font-size:13px;display:block;margin-bottom:6px">Clocked in now <span class="label">live</span></label>
+  <div class="row"><span class="avatar">J</span><span>Jamie</span><span class="green">● in</span><span class="since">since 9:02 AM · 3h 41m</span></div>
+  <div class="row"><span class="avatar">M</span><span>Maria</span><span class="green">● in</span><span class="since">since 12:15 PM · 28m</span></div>
+  <div class="row" style="color:var(--on-surface-variant)"><span class="avatar" style="background:var(--surface-container-high);color:var(--on-surface-variant)">—</span><span>Nobody else is clocked in.</span></div>
+</div>
+
+</body>
+</html>

@@ -1255,6 +1255,7 @@ const _refNote   = notes => (notes && notes.length)
   ? ` <span title="${notes.map(n => String(n).replace(/"/g, '&quot;')).join(' · ')}" style="cursor:help;color:var(--md-on-surface-variant);font-size:11px">&#9432;</span>` : '';
 const _refCells  = (cur, prev) => `<td class="num staff-sep" style="color:#dc2626">${cur.refund ? '-$' + Math.abs(cur.refund).toFixed(2) : '—'}${_refNote(cur.refundNotes)}</td><td class="num last" style="color:#dc2626">${prev.refund ? '-$' + Math.abs(prev.refund).toFixed(2) : '—'}</td>`;
 export function renderPayrollPage() {
+  window.renderClockedInNow?.();   // live "clocked in now" card (gated by viewClockedIn)
   const wrap = document.getElementById('payroll-cards'); if (!wrap) return;
   const cur = payrollPeriodAt(_payrollOffset), prev = prevPayPeriod(cur);
   const fmtD = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });

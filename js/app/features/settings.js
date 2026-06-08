@@ -25,6 +25,7 @@ const _PERM_LABELS = {
   refund: 'Issue Refunds', viewReports: 'View Reports & Transactions',
   manageStaff: 'Manage Staff', manageServices: 'Manage Services & Catalog',
   markPaidDirect: 'Mark Paid without the Pay flow (skips Square)',
+  viewClockedIn: 'See Who’s Clocked In',
 };
 function rolePerms() {
   const stored = cfg().role_permissions;

@@ -249,10 +249,12 @@ tailwind.config = {
         <span id="cal-sync-text">Calendar</span>
       </div>
       <span id="app-version-badge" class="text-[10px] font-body text-outline-variant select-none" title="musedashboard"></span>
-      <button onclick="toggleMyClock()" id="clock-btn" title="Clock in / out for time-clock pay" class="items-center gap-1.5 px-3 rounded-full border text-xs font-body font-semibold transition-colors" style="display:none;height:32px;border-color:var(--primary);color:var(--primary)">
-        <span class="material-symbols-outlined" style="font-size:16px">schedule</span>
-        <span id="clock-btn-label">Clock In</span>
+      <button onclick="onClockBtn()" id="clock-btn" title="Clock in / out" class="relative items-center justify-center rounded-full border transition-colors" style="display:none;width:32px;height:32px;border-color:var(--primary);color:var(--primary)">
+        <span class="material-symbols-outlined" style="font-size:18px">schedule</span>
+        <span id="clock-btn-dot" class="hidden absolute" style="top:-2px;right:-2px;width:10px;height:10px;border-radius:9999px;border:2px solid var(--surface);background:#f59e0b"></span>
       </button>
+      <!-- Popover for the clock icon's notice / admin nudge (filled by timeclock.js). -->
+      <div id="clock-popover" class="hidden bg-surface-container-lowest border border-surface-container-high rounded-2xl shadow-xl p-4" style="position:fixed;z-index:60;width:264px"></div>
       <button onclick="toggleChat()" id="chat-btn" title="Staff chat" class="relative flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">chat</span>
         <span id="chat-badge" class="hidden absolute flex items-center justify-center font-bold text-white" style="top:-2px;right:-2px;min-width:16px;height:16px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1">0</span>
@@ -648,6 +650,7 @@ tailwind.config = {
             <button onclick="payrollExportCSV()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
           </div>
         </div>
+        <div id="clocked-in-now" class="hidden"></div>
         <div class="flex items-center justify-center gap-3 mb-4">
           <button onclick="payrollNav(-1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
           <span id="payroll-period-label" class="font-headline font-bold text-on-surface text-sm min-w-[180px] text-center">Pay Period</span>
