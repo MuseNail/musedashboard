@@ -350,8 +350,9 @@ function buildQueueRow(e) {
           <button onclick="tryAdvanceStatus('${id}','complete')" title="Complete" class="${btnCls}" style="background:#1a5c7a;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">task_alt</span></button>` : ''}
         ${e.status === 'complete' ? `
           <button onclick="updateStatus('${id}','inservice')" title="Back to In Service" class="${btnCls}" style="background:#c8e6c5;color:#1b5e20;"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
-          ${hasSquare && e.totalCost > 0 ? `<button onclick="openSquarePOS('${id}')" title="Pay in Square POS" class="${btnCls}" style="background:#1b5e3b;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">point_of_sale</span></button>` : ''}
-          ${(canDo('markPaidDirect') || !(hasSquare && e.totalCost > 0)) ? `<button onclick="tryAdvanceStatus('${id}','paid')" title="Mark Paid" class="${btnCls}" style="background:#2a7a4f;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">paid</span></button>` : ''}` : ''}
+          ${ticketTotal(e) > 0
+            ? `<button onclick="openSquarePOS('${id}')" title="Take payment" class="${btnCls}" style="background:#1b5e3b;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">point_of_sale</span></button>`
+            : `<button onclick="tryAdvanceStatus('${id}','paid')" title="Mark Paid (no charge)" class="${btnCls}" style="background:#2a7a4f;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">paid</span></button>`}` : ''}
         ${isPaidStatus(e.status) ? `<button onclick="confirmReopen('${id}')" title="Reopen" class="${btnCls} bg-surface-container hover:bg-secondary-container text-outline-variant"><span class="material-symbols-outlined" style="font-size:19px">undo</span></button>` : ''}
         <button onclick="removeFromQueue('${id}')" title="Remove" class="${btnCls} bg-surface-container hover:bg-error/20 text-outline hover:text-error"><span class="material-symbols-outlined" style="font-size:17px">close</span></button>
       </div>
@@ -401,16 +402,14 @@ export function validateAssignments(entry) {
   return entry.assignments.every(a => a.techId && (a.cost > 0 || a.comped));
 }
 
-// Front desk (no markPaidDirect permission) can't finalize a sale outside the Pay flow —
-// route them there so the payment (cash or card) is recorded in Square. Managers/admins
-// keep the quick mark-paid. $0 tickets (nothing to record) and no-Square setups pass through.
-// Returns true if it handled (redirected) the action, meaning the caller should stop.
+// Pay-path consolidation (v4.55): a ticket with a real total (> $0) ALWAYS goes through the Pay
+// screen so the tender (cash / card / zelle / gift) is recorded — no more no-tender quick "mark
+// paid" that's invisible to the drawer + tender reports. $0 / comp tickets (nothing to tender)
+// still pass straight through. Returns true if it redirected (caller should stop).
 function _blockDirectPaid(entryId) {
   const entry = q().find(e => String(e.id) === String(entryId));
   if (!entry) return false;
-  if (canDo('markPaidDirect')) return false;
-  if (!cfg().square_config || ticketTotal(entry) <= 0) return false;
-  showToast('Use Pay to record the payment in Square.');
+  if (ticketTotal(entry) <= 0) return false;   // $0 / comp — nothing to record
   window.openSquarePOS?.(String(entryId));
   return true;
 }
@@ -1250,8 +1249,11 @@ export function confirmReopen(entryId) {
     entry.completedAt = null;
     // R6: reopening a paid ticket must restore the gift-card balances it drew down.
     if (entry.giftcardRedemptions && entry.giftcardRedemptions.length) { window.gcReverseTicket?.(String(entry.id)); entry.giftcardRedemptions = []; }
+    // Pay-path P0 (v4.55): drop the saved transaction so the sale stops counting until re-paid
+    // (reversible — re-paying re-saves it; see voidRecordOnReopen). Do this BEFORE upsert.
+    window.voidRecordOnReopen?.(String(entry.id));
     upsert(entry);
-    window.logAudit?.('Reopen', `${entry.name || '—'} reopened (was paid)`);
+    window.logAudit?.('Reopen', `${entry.name || '—'} reopened — sale voided until re-paid`);
     renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
     showToast(`${entry.name}'s ticket reopened`);
   });

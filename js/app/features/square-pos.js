@@ -342,8 +342,8 @@ export async function proceedTerminalPayment() {
       if (!coRes.ok) throw new Error(coJson.errors?.[0]?.detail || 'Could not start the Terminal checkout');
       _termCheckoutId = coJson.checkout?.id;
       const co = await _pollTerminalCheckout(_termCheckoutId);
-      if (co.status === 'TIMEOUT')  { hideTerminalModal(); showToast('Terminal timed out — check the device, then try again.'); return; }
-      if (co.status === 'CANCELED') { hideTerminalModal(); try { localStorage.removeItem('muse_term_pending'); } catch (e) {} showToast('Payment canceled on the Terminal.'); return; }
+      if (co.status === 'TIMEOUT')  { hideTerminalModal(); _unstageGift(ticketId); showToast('Terminal timed out — check the device, then try again.'); return; }
+      if (co.status === 'CANCELED') { hideTerminalModal(); _unstageGift(ticketId); try { localStorage.removeItem('muse_term_pending'); } catch (e) {} showToast('Payment canceled on the Terminal.'); return; }
       cardPaymentId = (co.payment_ids || [])[0] || null;
     }
     // 2) Only AFTER the card succeeds, record the cash portion in Square.
@@ -367,8 +367,16 @@ export async function proceedTerminalPayment() {
     _finalizeTerminalPaid(partyIds, tenders, [cardPaymentId, cashPaymentId, zellePaymentId].filter(Boolean), tipCents / 100, unrecorded);
     // Pay the card tip to the tech in cash from the drawer (no-op if no drawer is open).
     if (tipPayout > 0) window.cdRecordCashOut?.(tipPayout, ('Card tip — ' + payNames).slice(0, 80), 'tip');
-  } catch (e) { hideTerminalModal(); showToast('Square: ' + (e.message || 'error')); }
+  } catch (e) { hideTerminalModal(); _unstageGift(ticketId); showToast('Square: ' + (e.message || 'error')); }
   finally { _charging = false; }
+}
+// Pay-path P0 (v4.55): a cancelled / timed-out / errored charge must leave NO trace — the gift
+// redemptions were staged on the ticket before the charge (so they'd draw down when paid); un-stage
+// them so a cancelled attempt doesn't leave a dangling redemption to commit on a later pay.
+function _unstageGift(ticketId) {
+  if (!ticketId) return;
+  const ge = queue().find(x => String(x.id) === String(ticketId));
+  if (ge && (ge.giftcardRedemptions || []).length) { ge.giftcardRedemptions = []; dispatch('queue.upsert', { entry: ge }); }
 }
 
 // Reusable one-off Terminal charge (e.g. a gift-card sale) — NOT tied to a queue ticket. Shows the

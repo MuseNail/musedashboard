@@ -44,6 +44,17 @@ export function saveRecord(entry) {
   dispatch('record.save', { record });
 }
 
+// On REOPEN, drop the saved transaction so the sale stops counting in Reports/Payroll/Transactions
+// until it's re-paid. Sets status:'deleted' via record.save (NOT record.delete) so NO deletion
+// tombstone is written — buildCombinedRecords excludes every 'deleted' record everywhere, and
+// re-paying the ticket cleanly re-saves a fresh 'paid' record (the deletion-guard would otherwise
+// block a re-save forever). Reversible by design. No-op if there's no counted record for the id.
+export function voidRecordOnReopen(id) {
+  const rec = getState().records.find(r => String(r.id) === String(id));
+  if (!rec || rec.status === 'deleted' || !(isPaidStatus(rec.status) || rec.status === 'refund')) return;
+  dispatch('record.save', { record: { ...rec, status: 'deleted', voidedReason: 'reopened', voidedAt: new Date().toISOString() } });
+}
+
 // Combine stored records with the live queue. Records are the SINGLE SOURCE OF TRUTH for
 // finished sales: a paid queue entry is included only when no record exists for its id yet.
 export function buildCombinedRecords() {
