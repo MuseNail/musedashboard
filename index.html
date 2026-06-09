@@ -2628,26 +2628,29 @@ tailwind.config = {
           <option value="120">2 hours</option>
         </select>
       </div>
-      <!-- Service lines: each row = service + technician (primary guest) -->
+      <!-- Service lines: each row = service + technician (primary guest). "Add service" is a
+           full-width TEAL button right under the rows — clearly part of THIS guest's services. -->
       <div>
-        <div class="flex items-center justify-between mb-2">
-          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest">Primary Guest — Services &amp; Technicians</label>
-          <button type="button" onclick="addApptServiceLine()" class="flex items-center gap-1 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
-            <span class="material-symbols-outlined" style="font-size:14px">add</span> Add service
-          </button>
-        </div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Services &amp; Technicians</label>
         <div id="appt-service-lines" class="space-y-2"></div>
+        <button type="button" onclick="addApptServiceLine()" class="w-full mt-2 flex items-center justify-center gap-1.5 border-2 border-dashed border-primary/60 text-primary hover:bg-primary/5 rounded-xl py-2.5 text-sm font-body font-semibold transition-colors">
+          <span class="material-symbols-outlined" style="font-size:16px">add</span> Add service
+        </button>
       </div>
-
-      <!-- Additional guests — each with their own name/phone + services -->
-      <div id="appt-extra-guests"></div>
-      <button type="button" onclick="apptAddGuest()" class="flex items-center gap-1.5 text-xs font-body font-semibold text-primary hover:text-primary-dim transition-colors">
-        <span class="material-symbols-outlined" style="font-size:14px">person_add</span> Add another guest
-      </button>
 
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Notes</label>
         <input type="text" id="appt-notes" placeholder="Optional notes" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2.5 text-sm font-body focus:border-primary outline-none">
+      </div>
+
+      <!-- Additional guests — a SEPARATE zone (distinct amber colour, divided off) so "Add another
+           guest" can't be confused with the teal "Add service" above. Each guest carries their own
+           name/phone + service lines. -->
+      <div class="border-t border-surface-container-high pt-4">
+        <div id="appt-extra-guests"></div>
+        <button type="button" onclick="apptAddGuest()" class="w-full flex items-center justify-center gap-2 border-2 rounded-xl py-3 text-sm font-body font-semibold transition-colors" style="border-color:#a07c2a;color:#7a5c1a;background:rgba(120,90,26,.05)">
+          <span class="material-symbols-outlined" style="font-size:18px">group_add</span> Add another guest
+        </button>
       </div>
       <input type="hidden" id="appt-event-id">
       <input type="hidden" id="appt-cal-id">

@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create Appointment — 3 ergonomic options</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+<style>
+  :root{ --primary:#15514f; --primary-dim:#0f3e3c; --on-primary:#fff; --surface:#f6f8f8; --surface-lowest:#ffffff;
+         --surface-container:#e9efef; --surface-container-low:#eef3f3; --surface-container-high:#dfe7e6;
+         --on-surface:#1a1c1c; --on-surface-variant:#3f4948; --outline:#6f7978; --outline-variant:#bfc9c8; --error:#b3261e;
+         --accent:#785a1a; }
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#dfe5e5;color:var(--on-surface);margin:0;padding:24px;line-height:1.5}
+  .material-symbols-outlined{font-size:18px;line-height:1;vertical-align:middle}
+  .wrap{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;justify-content:center}
+  .col{width:380px;max-width:100%}
+  .col > h2{font-size:14px;margin:0 0 4px;color:#16302f}
+  .col > .why{font-size:12px;color:#41504f;margin:0 0 10px;min-height:48px}
+  .modal{background:var(--surface-lowest);border-radius:18px;box-shadow:0 14px 40px rgba(0,0,0,.18);padding:18px}
+  .mhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+  .mhead h3{margin:0;font-size:17px;font-weight:800}
+  .lbl{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--outline);margin-bottom:5px}
+  .lbl.pri{color:var(--primary)}
+  .inp{width:100%;border:none;border-bottom:1px solid var(--surface-container-high);background:transparent;padding:6px 0;font-size:14px;font-weight:600;outline:none;margin-bottom:8px}
+  .sel{border:2px solid var(--surface-container-high);background:transparent;border-radius:10px;padding:7px 8px;font-size:13px;flex:1;min-width:0;color:var(--on-surface)}
+  .sel.sm{border-width:1px;padding:6px;font-size:12px}
+  .svcrow{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .rm{width:30px;height:30px;border:none;background:none;color:var(--outline);cursor:pointer;flex-shrink:0}
+  .row2{display:flex;gap:8px}
+  .row3{display:flex;gap:8px}
+  .field{flex:1}
+  .save{width:100%;background:var(--primary);color:#fff;border:none;border-radius:12px;padding:13px;font-size:15px;font-weight:800;margin-top:12px;cursor:pointer}
+  .note{font-size:11px;color:var(--on-surface-variant);margin-top:10px}
+  .divider{height:1px;background:var(--surface-container-high);margin:14px -18px}
+  /* guest card */
+  .gcard{border:1px solid var(--surface-container-high);border-radius:14px;padding:12px;margin-bottom:10px;background:var(--surface-container-low)}
+  .gcard.primary{background:#eaf3f2;border-color:#cfe2e0}
+  .gtag{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--primary)}
+  .gcardhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  /* buttons */
+  .addsvc{width:100%;border:1.5px dashed var(--primary);color:var(--primary);background:rgba(21,81,79,.04);border-radius:10px;padding:9px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:4px}
+  .addsvc.solid{border-style:solid;background:rgba(21,81,79,.08)}
+  .addguest-card{width:100%;border:1.5px dashed var(--outline-variant);color:var(--on-surface-variant);background:transparent;border-radius:14px;padding:14px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px}
+  .addguest-btn{width:100%;border:1.5px solid var(--accent);color:var(--accent);background:rgba(120,90,26,.06);border-radius:12px;padding:11px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+  .addguest-link{display:block;width:100%;text-align:center;background:none;border:none;color:var(--outline);font-size:12px;font-weight:600;cursor:pointer;padding:8px;margin-top:6px}
+  .addguest-link .material-symbols-outlined{font-size:14px}
+  .miniadd{display:inline-flex;align-items:center;gap:4px;color:var(--primary);font-size:11px;font-weight:700;background:none;border:none;cursor:pointer;padding:2px 0}
+  .bigsvc{width:100%;border:2px dashed var(--primary);color:var(--primary);background:rgba(21,81,79,.05);border-radius:12px;padding:13px;font-size:14px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:6px}
+  .scopehint{font-size:10px;color:var(--outline);margin:-2px 0 6px}
+</style>
+</head>
+<body>
+<p style="text-align:center;max-width:900px;margin:0 auto 18px;font-size:13px;color:#36433f">
+<strong>Problem:</strong> today “Add service” and “Add another guest” are two near-identical small blue text-buttons stacked together — easy to tap the wrong one.
+Three different fixes below (each shows just the guest/services area + Save; the phone/date/time fields are the same in all).</p>
+
+<div class="wrap">
+
+  <!-- ───────── OPTION 1 ───────── -->
+  <div class="col">
+    <h2>Option 1 — Everyone in a card</h2>
+    <p class="why">Each guest is a self-contained card with its <em>own</em> “Add service” button inside it. “Add another guest” becomes one big <strong>dashed card</strong> at the very bottom — looks nothing like the in-card service buttons.</p>
+    <div class="modal">
+      <div class="mhead"><h3>New Appointment</h3><span class="material-symbols-outlined" style="color:var(--outline)">close</span></div>
+      <div class="gcard primary">
+        <div class="gcardhead"><span class="gtag">Guest 1 · primary</span></div>
+        <input class="inp" placeholder="Phone" style="margin-bottom:6px">
+        <div class="row2"><input class="inp field" placeholder="First name *"><input class="inp field" placeholder="Last name"></div>
+        <div class="lbl" style="margin-top:6px">Services &amp; technicians</div>
+        <div class="svcrow"><select class="sel sm"><option>Gel Manicure</option></select><select class="sel sm"><option>Tech</option></select><button class="rm"><span class="material-symbols-outlined" style="font-size:15px">remove</span></button></div>
+        <button class="addsvc"><span class="material-symbols-outlined" style="font-size:15px">add</span> Add service</button>
+      </div>
+      <div class="gcard">
+        <div class="gcardhead"><span class="gtag">Guest 2</span><span class="material-symbols-outlined" style="font-size:16px;color:var(--outline)">close</span></div>
+        <div class="row2"><input class="inp field" placeholder="First name *"><input class="inp field" placeholder="Last name"></div>
+        <button class="addsvc" style="margin-top:8px"><span class="material-symbols-outlined" style="font-size:15px">add</span> Add service</button>
+      </div>
+      <button class="addguest-card"><span class="material-symbols-outlined">group_add</span> Add another guest to this time slot</button>
+      <button class="save">Save Appointment</button>
+    </div>
+  </div>
+
+  <!-- ───────── OPTION 2 ───────── -->
+  <div class="col">
+    <h2>Option 2 — Separate &amp; colour-code</h2>
+    <p class="why">Keep the flat layout but make the two actions unmistakable: “Add service” is a full-width <strong>teal</strong> button right under the service rows; “Add another guest” is moved <strong>down past Notes</strong>, with a divider and a different <strong>amber outline</strong> colour + bigger target.</p>
+    <div class="modal">
+      <div class="mhead"><h3>New Appointment</h3><span class="material-symbols-outlined" style="color:var(--outline)">close</span></div>
+      <div class="lbl pri">Primary guest</div>
+      <input class="inp" placeholder="Phone">
+      <div class="row2"><input class="inp field" placeholder="First name *"><input class="inp field" placeholder="Last name"></div>
+      <div class="lbl" style="margin-top:8px">Services &amp; technicians</div>
+      <div class="svcrow"><select class="sel"><option>Gel Manicure</option></select><select class="sel"><option>Tech</option></select><button class="rm"><span class="material-symbols-outlined">remove</span></button></div>
+      <button class="addsvc solid"><span class="material-symbols-outlined" style="font-size:15px">add</span> Add service</button>
+      <div class="divider"></div>
+      <div class="lbl">Notes</div>
+      <input class="inp" placeholder="Optional notes">
+      <div class="divider"></div>
+      <button class="addguest-btn"><span class="material-symbols-outlined">group_add</span> Add another guest</button>
+      <button class="save">Save Appointment</button>
+    </div>
+  </div>
+
+  <!-- ───────── OPTION 3 ───────── -->
+  <div class="col">
+    <h2>Option 3 — Common action big, rare action tiny</h2>
+    <p class="why">Most appointments are one guest, several services. So “Add another service” becomes a <strong>big prominent</strong> button; multi-guest is rare, so “book another guest” is demoted to a small <strong>grey text link</strong> at the very bottom — far away and visually quiet.</p>
+    <div class="modal">
+      <div class="mhead"><h3>New Appointment</h3><span class="material-symbols-outlined" style="color:var(--outline)">close</span></div>
+      <div class="lbl pri">Guest</div>
+      <input class="inp" placeholder="Phone">
+      <div class="row2"><input class="inp field" placeholder="First name *"><input class="inp field" placeholder="Last name"></div>
+      <div class="lbl" style="margin-top:8px">Services &amp; technicians</div>
+      <div class="svcrow"><select class="sel"><option>Gel Manicure</option></select><select class="sel"><option>Tech</option></select><button class="rm"><span class="material-symbols-outlined">remove</span></button></div>
+      <div class="svcrow"><select class="sel"><option>Pedicure</option></select><select class="sel"><option>Tech</option></select><button class="rm"><span class="material-symbols-outlined">remove</span></button></div>
+      <button class="bigsvc"><span class="material-symbols-outlined">add</span> Add another service</button>
+      <div class="lbl" style="margin-top:12px">Notes</div>
+      <input class="inp" placeholder="Optional notes">
+      <button class="save">Save Appointment</button>
+      <button class="addguest-link"><span class="material-symbols-outlined">group_add</span> Booking 2 people in this slot? Add a guest</button>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
