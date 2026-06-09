@@ -1200,7 +1200,7 @@ function showDrillPanel(title, html) {
   document.getElementById('rpt-drill-list').innerHTML = html || '<p class="text-sm font-body text-on-surface-variant">No detail available.</p>';
   const m = document.getElementById('rpt-drill-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
 }
-export function closeDrillDown() { const m = document.getElementById('rpt-drill-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } }
+export function closeDrillDown() { _tcDraft = null; _tcUser = null; _tcOrig = ''; const m = document.getElementById('rpt-drill-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } }
 export function exportDrillCSV() {
   if (!_drill || !_drill.rows.length) { showToast('Nothing to export.'); return; }
   const matrix = [ [_drill.title.replace(/—/g,'-')], [`Showing: ${rangeLabel()}`], ..._drill.summary, [], _drill.columns, ..._drill.rows ];
@@ -1493,13 +1493,26 @@ function _tcReadTrio(which, idx) {
   return `${_tc2(h24)}:${m}`;
 }
 
+// The timecard is a DRAFT editor (v4.57): edits mutate a local copy and only commit to the synced
+// store on Save. Cancel / closing the panel discards them. _tcDraft is the full punch list (the
+// shown rows are this period's subset, edited by their index in the draft); _tcOrig snapshots the
+// opened state to detect unsaved changes.
+let _tcDraft = null, _tcUser = null, _tcOrig = '';
 export function openTimecard(userId) {
   if (!_tcCanEdit()) { showToast('Only an admin or manager can adjust times.'); return; }
   const u = (cfg().fd_users || []).find(x => x.id === userId); if (!u) return;
+  _tcUser = userId;
+  _tcDraft = JSON.parse(JSON.stringify(fdPunches(userId)));   // fresh working copy from the store
+  _tcOrig = JSON.stringify(_tcDraft);
+  _renderTimecard();
+}
+function _renderTimecard() {
+  const userId = _tcUser, u = (cfg().fd_users || []).find(x => x.id === userId);
+  if (!u || !_tcDraft) return;
   const cur = payrollPeriodAt(_payrollOffset);
   const from = new Date(cur.from); from.setHours(0, 0, 0, 0);
   const to = new Date(cur.to); to.setHours(23, 59, 59, 999);
-  const rows = fdPunches(userId).map((p, idx) => ({ p, idx })).filter(({ p }) => p.in && p.in >= +from && p.in <= +to).sort((a, b) => a.p.in - b.p.in);
+  const rows = _tcDraft.map((p, idx) => ({ p, idx })).filter(({ p }) => p.in && p.in >= +from && p.in <= +to).sort((a, b) => a.p.in - b.p.in);
   let _tcFlagged = 0;
   const body = rows.map(({ p, idx }) => {
     const suspect = fdPunchSuspect(p); if (suspect) _tcFlagged++;
@@ -1515,43 +1528,54 @@ export function openTimecard(userId) {
     </div>`;
   }).join('') || '<p class="text-sm font-body text-on-surface-variant py-3">No punches in this pay period. Use “Add punch” to enter one.</p>';
   const total = rows.reduce((s, { p }) => s + (fdPunchSuspect(p) ? 0 : (p.out ? roundQuarterHours(p.out - p.in) : 0)), 0);
-  const html = `<div class="text-[11px] font-body text-on-surface-variant mb-2">${_eTxn(u.name)} · ${u.hourlyRate ? '$' + u.hourlyRate.toFixed(2) + '/hr' : 'no rate set'} · hours round to the nearest 15 min</div>
+  const dirty = _tcOrig !== JSON.stringify(_tcDraft);
+  const html = `<div class="text-[11px] font-body text-on-surface-variant mb-2">${_eTxn(u.name)} · ${u.hourlyRate ? '$' + u.hourlyRate.toFixed(2) + '/hr' : 'no rate set'} · hours round to the nearest 15 min · changes aren’t saved until you tap Save</div>
     ${_tcFlagged ? `<div class="text-xs font-body mb-2 px-3 py-2 rounded-lg" style="background:rgba(192,57,43,.08);color:#a02318">⚠ ${_tcFlagged} punch${_tcFlagged > 1 ? 'es' : ''} over 16h or left open — excluded from pay. Fix the clock-out time (or delete) to count it.</div>` : ''}
     ${body}
     <div class="flex items-center justify-between mt-3">
       <button onclick="tcAddPunch('${userId}')" class="text-sm font-body font-semibold text-primary flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:18px">add</span> Add punch</button>
       <span class="text-sm font-headline font-bold text-on-surface">${total.toFixed(2)} h · $${(total * (u.hourlyRate || 0)).toFixed(2)}</span>
+    </div>
+    <div class="flex items-center justify-between mt-4 pt-3 border-t border-surface-container-high">
+      <button onclick="tcCancel()" class="px-4 py-2 rounded-xl border border-surface-container-high text-on-surface-variant font-body font-semibold text-sm">Cancel</button>
+      <div class="flex items-center gap-3">${dirty ? '<span class="text-xs font-body" style="color:#c77700">● Unsaved changes</span>' : '<span class="text-xs font-body text-on-surface-variant">No changes</span>'}
+        <button onclick="tcSave()" class="px-5 py-2 rounded-xl ${dirty ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'} font-body font-semibold text-sm">Save</button></div>
     </div>`;
   showDrillPanel('Timecard — ' + (u.name || ''), html);
 }
 export function tcUpdate(userId, idx) {
-  if (!_tcCanEdit()) return;
+  if (!_tcCanEdit() || !_tcDraft) return;
   const date = document.getElementById('tc-date-' + idx)?.value;
   const inMs = _tcCombine(date, _tcReadTrio('in', idx));
   if (!inMs) { showToast('Enter a clock-in date and time.'); return; }
   const outT = _tcReadTrio('out', idx);                            // null when the OUT hour is "—" (open)
   let outMs = _tcCombine(date, outT);
   if (outMs != null && outMs <= inMs) outMs += 24 * 3600 * 1000;   // out before in → shift ended after midnight
-  const list = [...fdPunches(userId)];
-  if (!list[idx]) return;
-  list[idx] = { in: inMs, out: outT ? outMs : null };
-  fdSetPunches(userId, list);
-  openTimecard(userId); renderPayrollPage();
+  if (!_tcDraft[idx]) return;
+  _tcDraft[idx] = { in: inMs, out: outT ? outMs : null };          // draft only — not committed until Save
+  _renderTimecard();
 }
 export function tcAddPunch(userId) {
-  if (!_tcCanEdit()) return;
+  if (!_tcCanEdit() || !_tcDraft) return;
   const start = new Date(payrollPeriodAt(_payrollOffset).from); start.setHours(9, 0, 0, 0);
-  fdSetPunches(userId, [...fdPunches(userId), { in: +start, out: null }]);
-  openTimecard(userId);
+  _tcDraft.push({ in: +start, out: null });
+  _renderTimecard();
 }
 export function tcDeletePunch(userId, idx) {
-  if (!_tcCanEdit()) return;
-  const list = [...fdPunches(userId)];
-  if (idx < 0 || idx >= list.length) return;
-  list.splice(idx, 1);
-  fdSetPunches(userId, list);
-  openTimecard(userId); renderPayrollPage();
+  if (!_tcCanEdit() || !_tcDraft) return;
+  if (idx < 0 || idx >= _tcDraft.length) return;
+  _tcDraft.splice(idx, 1);
+  _renderTimecard();
 }
+// Commit the draft to the synced store, or discard it. Closing the panel (X / backdrop) also discards.
+export function tcSave() {
+  if (!_tcDraft || !_tcUser) return;
+  fdSetPunches(_tcUser, _tcDraft);
+  showToast('Timecard saved ✓');
+  _tcDraft = null; _tcUser = null; _tcOrig = '';
+  closeDrillDown(); renderPayrollPage();
+}
+export function tcCancel() { _tcDraft = null; _tcUser = null; _tcOrig = ''; closeDrillDown(); }
 function payrollExportRows() {
   const cur = payrollPeriodAt(_payrollOffset), data = payrollRange(cur.from, cur.to), perKey = localDateStr(cur.from);
   const order = cfg().turns_order || [];
