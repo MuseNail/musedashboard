@@ -253,15 +253,29 @@ setInterval(() => {
 // Round a duration (ms) to the nearest quarter hour → hours (e.g. 7 min → 0, 8 → 0.25).
 export function roundQuarterHours(ms) { return Math.round((ms / 60000) / 15) * 15 / 60; }
 
-// Paid hours for a user whose shifts STARTED within [fromMs, toMs] — each completed
-// segment rounded to the nearest 15 min, then summed. Open (not-yet-clocked-out) punches
-// are ignored. Returns { hours, openShift } where openShift flags an in-progress punch.
+// Forgotten-clock-out / -in guards (v4.56): nobody works a single stretch this long, so a segment
+// over 16h (or an open punch older than 18h) is almost certainly a missed clock-out/in. It is
+// EXCLUDED from paid hours and FLAGGED for a manager to fix, so one forgotten punch can't silently
+// inflate someone's pay (e.g. a clock-in left open for 2 weeks → a 320h "segment").
+export const MAX_SEGMENT_MS = 16 * 3600000;
+export const STALE_OPEN_MS  = 18 * 3600000;
+// True if a punch looks like a missed clock-out (>16h) / missed clock-in (open >18h) / bad (out≤in).
+export function fdPunchSuspect(p) {
+  if (!p || !p.in) return false;
+  if (p.out == null) return (Date.now() - p.in) > STALE_OPEN_MS;
+  const dur = p.out - p.in;
+  return dur <= 0 || dur > MAX_SEGMENT_MS;
+}
+// Paid hours for a user whose shifts STARTED within [fromMs, toMs] — each completed segment rounded
+// to the nearest 15 min, then summed. Open punches and suspect (forgotten) punches are NOT paid.
+// Returns { hours, openShift, flagged } — flagged counts the suspect punches in range (needs review).
 export function fdPaidHours(userId, fromMs, toMs) {
-  let hours = 0, openShift = false;
+  let hours = 0, openShift = false, flagged = 0;
   for (const p of fdPunches(userId)) {
     if (!p.in || p.in < fromMs || p.in > toMs) continue;
-    if (!p.out) { openShift = true; continue; }
+    if (fdPunchSuspect(p)) { flagged++; continue; }   // forgotten clock-out/in → exclude from pay, flag it
+    if (!p.out) { openShift = true; continue; }        // a normal in-progress shift (not stale)
     hours += roundQuarterHours(p.out - p.in);
   }
-  return { hours, openShift };
+  return { hours, openShift, flagged };
 }

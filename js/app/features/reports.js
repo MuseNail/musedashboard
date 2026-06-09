@@ -11,7 +11,7 @@ import { squareUpsertCustomer } from './square-customers.js';
 import { avgServiceTime, fmtDur } from './servicetime.js';
 import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS, SQUARE_PROXY } from '../config.js';
 import { gcRedemptions, gcTotalUsed } from './giftcards.js';
-import { fdPaidHours, fdPunches, fdSetPunches, roundQuarterHours } from './timeclock.js';
+import { fdPaidHours, fdPunches, fdSetPunches, roundQuarterHours, fdPunchSuspect } from './timeclock.js';
 
 const cfg = () => getState().config;
 const records = () => getState().records;
@@ -1425,8 +1425,8 @@ export function renderPayrollPage() {
   const _fdEdit = ['admin', 'manager'].includes(getActiveUser()?.role);
   const _fdRows = (cfg().fd_users || []).map(u => {
     const r = fdPaidHours(u.id, +_fdFrom, +_fdTo);
-    return { u, hours: r.hours, open: r.openShift, rate: u.hourlyRate || 0, pay: r.hours * (u.hourlyRate || 0) };
-  }).filter(r => r.rate > 0 || r.hours > 0 || r.open);
+    return { u, hours: r.hours, open: r.openShift, flagged: r.flagged, rate: u.hourlyRate || 0, pay: r.hours * (u.hourlyRate || 0) };
+  }).filter(r => r.rate > 0 || r.hours > 0 || r.open || r.flagged);
   let _fdHtml = '';
   if (_fdRows.length) {
     const _fdTotal = _fdRows.reduce((s, r) => s + r.pay, 0);
@@ -1434,7 +1434,7 @@ export function renderPayrollPage() {
       <div class="flex items-center gap-2 mb-2"><h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest">Front Desk — Hourly</h3>${_fdEdit ? '<span class="text-[11px] font-body text-on-surface-variant">tap a row to adjust times</span>' : ''}</div>
       <div class="overflow-x-auto rounded-xl border border-surface-container-high"><table class="data-table">
         <thead><tr><th class="sticky-col">Staff</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Pay</th></tr></thead>
-        <tbody>${_fdRows.map(r => `<tr ${_fdEdit ? `onclick="openTimecard('${r.u.id}')" style="cursor:pointer"` : ''}><td class="sticky-col">${_eTxn(r.u.name)}${r.open ? ' <span title="Still clocked in" style="color:#c77700">⏱</span>' : ''}</td><td class="num">${r.hours.toFixed(2)}</td><td class="num">$${r.rate.toFixed(2)}</td><td class="num">$${r.pay.toFixed(2)}</td></tr>`).join('')}
+        <tbody>${_fdRows.map(r => `<tr ${_fdEdit ? `onclick="openTimecard('${r.u.id}')" style="cursor:pointer"` : ''}><td class="sticky-col">${_eTxn(r.u.name)}${r.open ? ' <span title="Still clocked in" style="color:#c77700">⏱</span>' : ''}${r.flagged ? ` <span title="${r.flagged} punch(es) need review — a forgotten clock-out/in, not counted. Tap to fix." style="color:#c0392b">⚠${r.flagged}</span>` : ''}</td><td class="num">${r.hours.toFixed(2)}</td><td class="num">$${r.rate.toFixed(2)}</td><td class="num">$${r.pay.toFixed(2)}</td></tr>`).join('')}
         <tr style="font-weight:700"><td class="sticky-col">Total</td><td class="num"></td><td class="num"></td><td class="num">$${_fdTotal.toFixed(2)}</td></tr></tbody>
       </table></div></div>`;
   }
@@ -1500,20 +1500,23 @@ export function openTimecard(userId) {
   const from = new Date(cur.from); from.setHours(0, 0, 0, 0);
   const to = new Date(cur.to); to.setHours(23, 59, 59, 999);
   const rows = fdPunches(userId).map((p, idx) => ({ p, idx })).filter(({ p }) => p.in && p.in >= +from && p.in <= +to).sort((a, b) => a.p.in - b.p.in);
+  let _tcFlagged = 0;
   const body = rows.map(({ p, idx }) => {
+    const suspect = fdPunchSuspect(p); if (suspect) _tcFlagged++;
     const hrs = p.out ? roundQuarterHours(p.out - p.in) : 0;
-    return `<div class="flex items-center gap-1.5 py-2 border-b border-surface-container-high flex-wrap">
+    return `<div class="flex items-center gap-1.5 py-2 border-b border-surface-container-high flex-wrap rounded-lg" ${suspect ? 'style="background:rgba(192,57,43,.08)"' : ''}>
       <button type="button" onclick="tcOpenDate(${idx})" class="bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface hover:bg-surface-container-high flex items-center gap-2" style="min-width:150px"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">calendar_today</span>${_tcDateLabel(p.in)}</button>
       <input type="date" id="tc-date-${idx}" value="${_tcDate(p.in)}" onchange="tcUpdate('${userId}',${idx})" style="position:absolute;width:1px;height:1px;opacity:0;border:0;padding:0;margin:-1px;overflow:hidden">
       <span class="inline-flex items-center gap-0.5">${_tcTrio('in', idx, userId, p.in, false)}</span>
       <span class="text-on-surface-variant text-xs">→</span>
       <span class="inline-flex items-center gap-0.5">${_tcTrio('out', idx, userId, p.out, true)}</span>
-      <span class="text-xs font-body font-semibold ml-auto" style="${p.out ? '' : 'color:#c77700'}">${p.out ? hrs.toFixed(2) + 'h' : 'open'}</span>
+      <span class="text-xs font-body font-semibold ml-auto" style="${suspect ? 'color:#c0392b' : (p.out ? '' : 'color:#c77700')}">${suspect ? '⚠ not paid' : (p.out ? hrs.toFixed(2) + 'h' : 'open')}</span>
       <button onclick="tcDeletePunch('${userId}',${idx})" title="Delete punch" class="text-on-surface-variant hover:text-error"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
     </div>`;
   }).join('') || '<p class="text-sm font-body text-on-surface-variant py-3">No punches in this pay period. Use “Add punch” to enter one.</p>';
-  const total = rows.reduce((s, { p }) => s + (p.out ? roundQuarterHours(p.out - p.in) : 0), 0);
+  const total = rows.reduce((s, { p }) => s + (fdPunchSuspect(p) ? 0 : (p.out ? roundQuarterHours(p.out - p.in) : 0)), 0);
   const html = `<div class="text-[11px] font-body text-on-surface-variant mb-2">${_eTxn(u.name)} · ${u.hourlyRate ? '$' + u.hourlyRate.toFixed(2) + '/hr' : 'no rate set'} · hours round to the nearest 15 min</div>
+    ${_tcFlagged ? `<div class="text-xs font-body mb-2 px-3 py-2 rounded-lg" style="background:rgba(192,57,43,.08);color:#a02318">⚠ ${_tcFlagged} punch${_tcFlagged > 1 ? 'es' : ''} over 16h or left open — excluded from pay. Fix the clock-out time (or delete) to count it.</div>` : ''}
     ${body}
     <div class="flex items-center justify-between mt-3">
       <button onclick="tcAddPunch('${userId}')" class="text-sm font-body font-semibold text-primary flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:18px">add</span> Add punch</button>

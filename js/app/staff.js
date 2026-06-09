@@ -13,7 +13,7 @@ import { showToast, localDateStr, todayStr } from './utils.js';
 import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, APP_VERSION } from './config.js';
 import { getFdShift, fdShiftLabel } from './features/fd-schedule.js';
-import { fdPaidHours, fdPunches, roundQuarterHours } from './features/timeclock.js';
+import { fdPaidHours, fdPunches, roundQuarterHours, fdPunchSuspect } from './features/timeclock.js';
 
 const cfg     = () => store.getState().config;
 const queue   = () => store.getState().queue;
@@ -106,11 +106,16 @@ function _fdPayPeriod() {
     const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
     return d <= 15 ? { from: new Date(y, m, 1), to: new Date(y, m, 15, 23, 59, 59, 999) } : { from: new Date(y, m, 16), to: new Date(y, m + 1, 0, 23, 59, 59, 999) };
   }
+  // weekly / biweekly — mirror reports.js payPeriodDates EXACTLY so the staff app and the manager's
+  // Payroll always agree. UTC-midnight day count → a DST transition between the anchor and today
+  // can't shift the boundary by a day (the old (now-anchor)/86400000 floor could).
   const len = type === 'biweekly' ? 14 : 7;
-  const anchor = pp.startDate ? new Date(pp.startDate + 'T00:00:00') : new Date('2024-01-07T00:00:00');
-  const periods = Math.floor((now - anchor) / 86400000 / len);
-  const from = new Date(anchor); from.setDate(anchor.getDate() + periods * len);
-  const to = new Date(from); to.setDate(from.getDate() + len - 1); to.setHours(23, 59, 59, 999);
+  const anchor = pp.startDate ? new Date(pp.startDate + 'T00:00:00') : new Date(2024, 0, 7);
+  const utcMid = x => Date.UTC(x.getFullYear(), x.getMonth(), x.getDate());
+  const daysSince = Math.round((utcMid(now) - utcMid(anchor)) / 86400000);
+  const mod = ((daysSince % len) + len) % len;
+  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mod);
+  const to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + (len - 1), 23, 59, 59, 999);
   return { from, to };
 }
 function renderFdView(fdUser) {
@@ -126,11 +131,12 @@ function renderFdView(fdUser) {
     return `<div class="flex items-center justify-between px-4 py-3 ${isToday ? 'bg-primary/10' : ''} border-b border-surface-container-high last:border-0"><span class="font-body text-lg ${isToday ? 'font-bold text-primary' : 'text-on-surface'}">${dn} ${d.getDate()}</span><span class="font-headline font-bold text-lg">${val}</span></div>`;
   }).join('');
   const per = _fdPayPeriod();
-  const { hours, openShift } = fdPaidHours(fdUser.id, +per.from, +per.to);
+  const { hours, openShift, flagged } = fdPaidHours(fdUser.id, +per.from, +per.to);
   const punches = fdPunches(fdUser.id).filter(p => p.in >= +per.from && p.in <= +per.to).sort((a, b) => b.in - a.in);
   const punchHtml = punches.length ? punches.map(p => {
-    const dur = p.out ? roundQuarterHours(p.out - p.in).toFixed(2) + 'h' : '<span style="color:#c77700">open</span>';
-    return `<div class="flex items-center justify-between px-4 py-2.5 border-b border-surface-container-high last:border-0"><span class="font-body text-on-surface">${new Date(p.in).toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' })}</span><span class="font-body text-on-surface-variant text-sm">${_fdHM(p.in)} – ${p.out ? _fdHM(p.out) : '…'}</span><span class="font-headline font-bold">${dur}</span></div>`;
+    const suspect = fdPunchSuspect(p);
+    const dur = suspect ? '<span style="color:#c0392b;font-weight:700">⚠ review</span>' : (p.out ? roundQuarterHours(p.out - p.in).toFixed(2) + 'h' : '<span style="color:#c77700">open</span>');
+    return `<div class="flex items-center justify-between px-4 py-2.5 border-b border-surface-container-high last:border-0${suspect ? ' bg-error/5' : ''}"><span class="font-body text-on-surface">${new Date(p.in).toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' })}</span><span class="font-body text-on-surface-variant text-sm">${_fdHM(p.in)} – ${p.out ? _fdHM(p.out) : '…'}</span><span class="font-headline font-bold">${dur}</span></div>`;
   }).join('') : '<div class="px-4 py-5 text-center font-body text-on-surface-variant">No clock punches this period.</div>';
   const fmtD = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   document.getElementById('staff-list').innerHTML = `
@@ -139,6 +145,7 @@ function renderFdView(fdUser) {
       <div class="font-headline font-extrabold leading-none mt-1" style="font-size:40px">${hours.toFixed(2)}<span class="text-2xl"> h</span></div>
       ${fdUser.hourlyRate ? `<div class="text-sm font-body opacity-90 mt-0.5">≈ $${(hours * fdUser.hourlyRate).toFixed(2)} at $${fdUser.hourlyRate.toFixed(2)}/hr</div>` : ''}
       ${openShift ? '<div class="text-sm font-body opacity-90 mt-0.5">⏱ currently clocked in</div>' : ''}
+      ${flagged ? `<div class="text-sm font-body mt-1 px-2 py-1 rounded-lg" style="background:rgba(0,0,0,.18)">⚠ ${flagged} punch${flagged > 1 ? 'es' : ''} need a manager to fix (not counted)</div>` : ''}
     </div>
     <div class="mb-4">
       <div class="text-sm font-headline font-bold uppercase tracking-widest text-on-surface-variant mb-2 px-1">My schedule · this week</div>
