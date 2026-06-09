@@ -181,7 +181,7 @@ const RANGE_PRESETS = [
   ['month','This Month'], ['lastmonth','Last Month'], ['payperiod','Pay Period'],
   ['thisyear','This Year'], ['lastyear','Last Year'], ['custom','Custom Range'],
 ];
-const COMPARE_OPTS = [['prior','Prior period'], ['year','Prior year'], ['none','No comparison']];
+const COMPARE_OPTS = [['prior','Previous period'], ['lastweek','Same period last week'], ['lastmonth','Same period last month'], ['lastyear','Same period last year'], ['none','No comparison']];
 const _rangeLabels = { today:'Today', yesterday:'Yesterday', week:'This Week', lastweek:'Last Week', month:'This Month', lastmonth:'Last Month', thisyear:'This Year', lastyear:'Last Year' };
 
 export function setReportRange(type) {
@@ -291,7 +291,12 @@ function getReportDates() {
 function getCompareDates() {
   if (!reportRange.compare || reportRange.compare === 'none') return null;
   const cur = getReportDates(); if (!cur) return null;
-  if (reportRange.compare === 'year') { const from = new Date(cur.from); from.setFullYear(from.getFullYear()-1); const to = new Date(cur.to); to.setFullYear(to.getFullYear()-1); return { from, to }; }
+  const C = reportRange.compare;
+  // Fixed offsets — shift the SAME window back by a week / month / year.
+  if (C === 'lastyear' || C === 'year') { const from = new Date(cur.from); from.setFullYear(from.getFullYear()-1); const to = new Date(cur.to); to.setFullYear(to.getFullYear()-1); return { from, to }; }
+  if (C === 'lastweek') return { from: _sod(_addDays(cur.from, -7)), to: _eod(_addDays(cur.to, -7)) };
+  if (C === 'lastmonth') { const from = new Date(cur.from); from.setMonth(from.getMonth()-1); const to = new Date(cur.to); to.setMonth(to.getMonth()-1); return { from: _sod(from), to: _eod(to) }; }
+  // 'prior' = the natural period immediately preceding the current selection.
   const T = reportRange.type;
   if (T === 'month' || T === 'lastmonth') return { from: new Date(cur.from.getFullYear(), cur.from.getMonth()-1, 1), to: _eod(new Date(cur.from.getFullYear(), cur.from.getMonth(), 0)) };
   if (T === 'thisyear' || T === 'lastyear') return { from: new Date(cur.from.getFullYear()-1, 0, 1), to: _eod(new Date(cur.from.getFullYear()-1, 11, 31)) };
@@ -299,6 +304,15 @@ function getCompareDates() {
   const days = Math.round((_sod(cur.to) - _sod(cur.from)) / 86400000) + 1;
   return { from: _sod(_addDays(cur.from, -days)), to: _eod(_addDays(cur.from, -1)) };
 }
+// Short label for a compare window, e.g. "Jun 1 – 7" or "Jun 8 – 14, 2025".
+function _cmpRangeShort(c) {
+  if (!c) return '';
+  const fmt = x => x.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const yr = c.from.getFullYear() !== new Date().getFullYear() ? ', ' + c.from.getFullYear() : '';
+  if (_sod(c.from).getTime() === _sod(c.to).getTime()) return fmt(c.from) + yr;
+  return `${fmt(c.from)} – ${fmt(c.to)}${yr}`;
+}
+function compareDatesLabel() { return _cmpRangeShort(getCompareDates()); }
 
 // ── Date picker popup ─────────────────────────────
 let _dpDragging = false, _dpDragStart = null, _dpDragEnd = null, _dpGridWired = false;
@@ -379,7 +393,15 @@ function _wireDatePickerGrid() {
 // ── Comparison menu ───────────────────────────────
 export function openCompareMenu(ev) {
   const wrap = document.getElementById('compare-menu-list');
-  if (wrap) wrap.innerHTML = COMPARE_OPTS.map(([k,l]) => `<button onclick="setReportCompare('${k}')" class="cmp-opt${reportRange.compare===k?' active':''}">${l}</button>`).join('');
+  if (wrap) {
+    const saved = reportRange.compare;   // probe each option's resolved dates without changing state
+    wrap.innerHTML = COMPARE_OPTS.map(([k, l]) => {
+      reportRange.compare = k;
+      const when = k === 'none' ? 'off' : (_cmpRangeShort(getCompareDates()) || '—');
+      return `<button onclick="setReportCompare('${k}')" class="cmp-opt${saved === k ? ' active' : ''}" style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left"><span>${l}</span><span class="text-on-surface-variant" style="font-size:11px;white-space:nowrap">${when}</span></button>`;
+    }).join('');
+    reportRange.compare = saved;
+  }
   const m = document.getElementById('compare-menu'); if (m) m.classList.remove('hidden');
   _anchorPanel('compare-panel', ev);
 }
@@ -428,8 +450,9 @@ function renderDayPicker() {
 function updateDateButtons() {
   const lbl = rangeLabel(), cmp = compareLabel();
   document.querySelectorAll('.date-btn-label').forEach(el => el.textContent = lbl);
-  document.querySelectorAll('.compare-btn-label').forEach(el => el.textContent = cmp);
-  const rl = document.getElementById('report-range-label'); if (rl) rl.textContent = `Showing: ${rangeLabel()}${reportRange.compare !== 'none' ? ` · vs ${cmp}` : ''}`;
+  const cmpDates = reportRange.compare !== 'none' ? compareDatesLabel() : '';
+  document.querySelectorAll('.compare-btn-label').forEach(el => el.textContent = reportRange.compare === 'none' ? 'No comparison' : `${cmp}${cmpDates ? ' · ' + cmpDates : ''}`);
+  const rl = document.getElementById('report-range-label'); if (rl) rl.textContent = `Showing: ${rangeLabel()}${reportRange.compare !== 'none' ? ` · vs ${cmp}${cmpDates ? ' (' + cmpDates + ')' : ''}` : ''}`;
 }
 
 export function runReport() {
@@ -576,7 +599,7 @@ export function runReport() {
   }
 
   renderDeltas({ totalIncome, grossIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, gcSold: gcSoldValue, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix });
-  renderPerformance(filtered);
+  renderPerformance(filtered, from, to);
   updateDateButtons();
   window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix };
 }
@@ -676,42 +699,100 @@ function renderDeltas(cur) {
   _DELTA_CARDS.forEach(([id, key]) => setDelta(id, cur[key], prev ? prev[key] : null));
 }
 
-// ── Performance: by-hour graph + computed insights (no AI; pure stats) ─────
+// ── Performance: bar graph with selectable time-grouping + metric + $/# unit ─────
 const _DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const _fmtHour = h => { const ap = h < 12 ? 'a' : 'p'; const hh = h % 12 === 0 ? 12 : h % 12; return `${hh}${ap}`; };
-function renderPerformance(filtered) {
+let perfGran = 'hour', perfMetric = 'revenue', perfUnit = 'amount';   // device-local chart prefs
+// units: '$' dollars-only · '#' count-only · '$#' either (the $/# toggle applies). gc:'sold'|'redeemed'
+// pulls from the gift-card ledger (by date) instead of records; avg:true = per-bucket avg ticket.
+const PERF_METRICS = [
+  { key:'revenue',    label:'Total revenue',       units:'$',  val: r => r.totalCost || 0 },
+  { key:'services',   label:'Services',            units:'$',  val: r => (r.assignments || []).reduce((s, a) => s + (a.cost || 0), 0) },
+  { key:'guests',     label:'Guests served',       units:'#',  cnt: () => 1 },
+  { key:'avg',        label:'Avg ticket',          units:'$',  avg: true },
+  { key:'tips',       label:'Tips collected',      units:'$',  val: r => r.tip || 0 },
+  { key:'fees',       label:'Fees collected',      units:'$',  val: r => (r.fees || []).reduce((s, f) => s + (f.amount || 0), 0) },
+  { key:'items',      label:'Items sold',          units:'$#', val: r => (r.items || []).reduce((s, i) => s + (i.price || 0) * (i.qty || 0), 0), cnt: r => (r.items || []).reduce((s, i) => s + (i.qty || 0), 0) },
+  { key:'card',       label:'Card',                units:'$#', val: r => (r.tenders && r.tenders.card) || 0,  cnt: r => (r.tenders && r.tenders.card  > 0) ? 1 : 0 },
+  { key:'cash',       label:'Cash',                units:'$#', val: r => (r.tenders && r.tenders.cash) || 0,  cnt: r => (r.tenders && r.tenders.cash  > 0) ? 1 : 0 },
+  { key:'zelle',      label:'Zelle',               units:'$#', val: r => (r.tenders && r.tenders.zelle) || 0, cnt: r => (r.tenders && r.tenders.zelle > 0) ? 1 : 0 },
+  { key:'gcSold',     label:'Gift cards sold',     units:'$#', gc: 'sold' },
+  { key:'gcRedeemed', label:'Gift cards redeemed', units:'$#', gc: 'redeemed' },
+];
+const _perfMetric = () => PERF_METRICS.find(m => m.key === perfMetric) || PERF_METRICS[0];
+const _perfEffUnit = m => m.units === '$' ? 'amount' : m.units === '#' ? 'count' : perfUnit;
+export function setPerfGran(g)   { perfGran = g;   runReport(); }
+export function setPerfMetric(k) { perfMetric = k; runReport(); }
+export function setPerfUnit(u)   { perfUnit = u;   runReport(); }
+
+const _weekStart = d => { const x = _sod(d); const dow = x.getDay() === 0 ? 6 : x.getDay() - 1; return _addDays(x, -dow); };   // Monday-anchored
+// Ordered bucket axis for a granularity over [from,to]: keys + display labels + a keyOf(date)→key.
+function _perfAxis(from, to, gran) {
+  const order = [], label = {};
+  const add = (k, l) => { if (!(k in label)) { order.push(k); label[k] = l; } };
+  if (gran === 'hour') { for (let h = 0; h < 24; h++) add(String(h), _fmtHour(h)); return { order, label, keyOf: d => String(d.getHours()), trim: true }; }
+  if (gran === 'day')  { let d = _sod(from); while (d <= to) { add(localDateStr(d), d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })); d = _addDays(d, 1); } return { order, label, keyOf: d => localDateStr(d) }; }
+  if (gran === 'week') { let d = _weekStart(from); while (d <= to) { add(localDateStr(d), d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })); d = _addDays(d, 7); } return { order, label, keyOf: d => localDateStr(_weekStart(d)) }; }
+  if (gran === 'month'){ let d = new Date(from.getFullYear(), from.getMonth(), 1); while (d <= to) { const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); add(k, d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' })); d = new Date(d.getFullYear(), d.getMonth() + 1, 1); } return { order, label, keyOf: d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') }; }
+  for (let y = from.getFullYear(); y <= to.getFullYear(); y++) add(String(y), String(y));
+  return { order, label, keyOf: d => String(d.getFullYear()) };
+}
+function _syncPerfControls(metric, unit) {
+  document.querySelectorAll('#perf-gran button').forEach(b => { const on = b.dataset.g === perfGran; b.style.background = on ? 'var(--surface-container-lowest,#fff)' : 'transparent'; b.style.boxShadow = on ? '0 1px 3px rgba(0,0,0,.12)' : 'none'; b.style.color = on ? 'var(--on-surface)' : 'var(--on-surface-variant)'; });
+  const sel = document.getElementById('perf-metric');
+  if (sel) { if (sel.options.length !== PERF_METRICS.length) sel.innerHTML = PERF_METRICS.map(m => `<option value="${m.key}">${m.label}</option>`).join(''); sel.value = perfMetric; }
+  const dual = metric.units === '$#';
+  document.querySelectorAll('#perf-unit button').forEach(b => { const on = b.dataset.u === unit; b.disabled = !dual; b.style.opacity = dual ? '1' : '.4'; b.style.background = on ? 'var(--primary)' : 'transparent'; b.style.color = on ? '#fff' : 'var(--on-surface-variant)'; });
+}
+function renderPerformance(filtered, from, to) {
   const wrap = document.getElementById('rpt-perf'); if (!wrap) return;
-  const byHour = Array.from({ length: 24 }, () => ({ rev: 0, n: 0 }));
-  const byDow  = Array.from({ length: 7 },  () => ({ rev: 0, n: 0 }));
-  filtered.forEach(r => {
-    if (!isPaidStatus(r.status)) return;   // activity chart = completed sales only (refunds excluded)
-    const d = new Date(r.checkinTime), rev = r.totalCost || 0;
-    byHour[d.getHours()].rev += rev; byHour[d.getHours()].n++;
-    byDow[d.getDay()].rev += rev; byDow[d.getDay()].n++;
-  });
-  const hoursWithData = byHour.map((b, i) => ({ i, ...b })).filter(b => b.n > 0);
-  if (!hoursWithData.length) { wrap.innerHTML = '<p class="text-sm font-body text-on-surface-variant py-2">No sales in this period yet.</p>'; return; }
-  const minH = Math.min(...hoursWithData.map(b => b.i)), maxH = Math.max(...hoursWithData.map(b => b.i));
-  const maxRev = Math.max(...byHour.map(b => b.rev), 1);
-  let bars = '';
-  for (let h = minH; h <= maxH; h++) {
-    const b = byHour[h], pct = Math.round(b.rev / maxRev * 100);
-    bars += `<div class="perf-col" title="${_fmtHour(h)}: $${b.rev.toFixed(2)} · ${b.n} guest${b.n !== 1 ? 's' : ''}"><div class="perf-bar" style="height:${pct}%"></div><div class="perf-x">${_fmtHour(h)}</div></div>`;
+  if (!from || !to) { const d = getReportDates(); if (d) { from = d.from; to = d.to; } }
+  if (!from || !to) return;
+  const metric = _perfMetric(), unit = _perfEffUnit(metric);
+  _syncPerfControls(metric, unit);
+  const axis = _perfAxis(from, to, perfGran);
+  const acc = {}; axis.order.forEach(k => acc[k] = { v: 0, rev: 0, g: 0 });
+  if (metric.gc) {
+    giftCards().forEach(g => {
+      if (metric.gc === 'sold') { if (g.datePurchased) { const d = new Date(g.datePurchased + 'T12:00:00'); if (d >= from && d <= to) { const k = axis.keyOf(d); if (acc[k]) acc[k].v += unit === 'count' ? 1 : (g.amount || 0); } } }
+      else gcRedemptions(g).forEach(rd => { if (rd.date) { const d = new Date(rd.date + 'T12:00:00'); if (d >= from && d <= to) { const k = axis.keyOf(d); if (acc[k]) acc[k].v += unit === 'count' ? 1 : (rd.amount || 0); } } });
+    });
+  } else {
+    filtered.filter(r => isPaidStatus(r.status)).forEach(r => {
+      const k = axis.keyOf(new Date(r.checkinTime)); if (!acc[k]) return;
+      if (metric.avg) { acc[k].rev += r.totalCost || 0; acc[k].g += 1; }
+      else acc[k].v += unit === 'count' ? (metric.cnt ? metric.cnt(r) : 0) : (metric.val ? metric.val(r) : 0);
+    });
+    if (metric.avg) axis.order.forEach(k => { acc[k].v = acc[k].g > 0 ? acc[k].rev / acc[k].g : 0; });
   }
-  const busiestHour = hoursWithData.reduce((a, b) => b.rev > a.rev ? b : a);
-  const dowWithData = byDow.map((b, i) => ({ i, ...b })).filter(b => b.n > 0);
-  const busiestDow = dowWithData.reduce((a, b) => b.rev > a.rev ? b : a, dowWithData[0]);
-  const slowestDow = dowWithData.length > 1 ? dowWithData.reduce((a, b) => b.rev < a.rev ? b : a) : null;
-  const card = (label, val) => `<div class="bg-surface-container-lowest rounded-xl px-4 py-2.5 border border-surface-container-high"><div class="text-[10px] font-body uppercase tracking-widest text-on-surface-variant">${label}</div><div class="text-sm font-headline font-bold text-on-surface mt-0.5">${val}</div></div>`;
-  // Vertical (revenue) axis: max at top → $0 at the bar baseline.
-  const yLab = v => v >= 1000 ? '$' + (v/1000).toFixed(1) + 'k' : '$' + Math.round(v);
-  const yAxis = `<div class="perf-yaxis"><span>${yLab(maxRev)}</span><span>${yLab(maxRev/2)}</span><span>$0</span></div>`;
-  wrap.innerHTML = `<div class="perf-plot">${yAxis}<div class="perf-chart">${bars}</div></div>
-    <div class="grid grid-cols-3 gap-2 mt-4">
-      ${card('Busiest time', `${_fmtHour(busiestHour.i)}–${_fmtHour((busiestHour.i + 1) % 24)}`)}
-      ${busiestDow ? card('Busiest day', _DOW[busiestDow.i]) : ''}
-      ${slowestDow ? card('Slowest day', _DOW[slowestDow.i]) : ''}
-    </div>`;
+  // 'hour' = hour-of-day profile, trimmed to active hours; the rest = a continuous timeline.
+  let keys = axis.order;
+  if (axis.trim) {
+    const active = axis.order.filter(k => acc[k].v > 0 || acc[k].g > 0).map(k => parseInt(k, 10));
+    if (active.length) { const mn = Math.min(...active), mx = Math.max(...active); keys = []; for (let h = mn; h <= mx; h++) keys.push(String(h)); }
+  }
+  const vals = keys.map(k => acc[k].v);
+  if (!vals.some(v => v > 0)) { wrap.innerHTML = '<p class="text-sm font-body text-on-surface-variant py-2">No data in this period yet.</p>'; return; }
+  const maxV = Math.max(...vals, 1);
+  const fmtFull = v => unit === 'count' ? String(Math.round(v)) : '$' + v.toFixed(2);
+  const yLab = v => unit === 'count' ? String(Math.round(v)) : (v >= 1000 ? '$' + (v / 1000).toFixed(1) + 'k' : '$' + Math.round(v));
+  const bars = keys.map(k => { const v = acc[k].v, pct = Math.round(v / maxV * 100); return `<div class="perf-col" style="min-width:24px" title="${axis.label[k]}: ${fmtFull(v)}"><div class="perf-bar" style="height:${pct}%"></div><div class="perf-x">${axis.label[k]}</div></div>`; }).join('');
+  const yAxis = `<div class="perf-yaxis"><span>${yLab(maxV)}</span><span>${yLab(maxV / 2)}</span><span>${unit === 'count' ? '0' : '$0'}</span></div>`;
+  const withData = keys.map(k => ({ k, v: acc[k].v })).filter(x => x.v > 0);
+  const best = withData.reduce((a, b) => b.v > a.v ? b : a, withData[0]);
+  const total = vals.reduce((s, v) => s + v, 0);
+  const gNoun = perfGran;
+  const card = (l, v) => `<div class="bg-surface-container-lowest rounded-xl px-4 py-2.5 border border-surface-container-high"><div class="text-[10px] font-body uppercase tracking-widest text-on-surface-variant">${l}</div><div class="text-sm font-headline font-bold text-on-surface mt-0.5">${v}</div></div>`;
+  let insights;
+  if (metric.avg) {
+    let rev = 0, g = 0; keys.forEach(k => { rev += acc[k].rev; g += acc[k].g; });
+    insights = card(`Best ${gNoun}`, axis.label[best.k]) + card('Overall avg', '$' + (g > 0 ? rev / g : 0).toFixed(2)) + card(`${gNoun}s with sales`, String(withData.length));
+  } else {
+    insights = card(`Best ${gNoun}`, axis.label[best.k]) + card('Total', fmtFull(total)) + card(`Avg / ${gNoun}`, fmtFull(withData.length ? total / withData.length : 0));
+  }
+  const yTitle = `${metric.label} ${unit === 'count' ? '(#)' : '($)'} — by ${gNoun}`;
+  wrap.innerHTML = `<div class="text-xs font-body text-on-surface-variant mb-2">${yTitle}</div><div class="perf-plot">${yAxis}<div class="perf-chart" style="overflow-x:auto">${bars}</div></div>
+    <div class="grid grid-cols-3 gap-2 mt-4">${insights}</div>`;
 }
 
 // ── Drill-downs (popup modal + CSV/PDF export) ────

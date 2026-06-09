@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reports analytics — comparison + performance chart</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet">
+<style>
+  :root{ --primary:#15514f; --on-primary:#fff; --surface:#f6f8f8; --surface-lowest:#ffffff;
+         --surface-container:#e9efef; --surface-container-high:#dfe7e6; --on-surface:#1a1c1c;
+         --on-surface-variant:#3f4948; --outline:#6f7978; --outline-variant:#bfc9c8; }
+  *{box-sizing:border-box}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--surface);color:var(--on-surface);margin:0;padding:22px;line-height:1.5}
+  h2{font-size:14px;margin:22px 0 6px}.desc{font-size:12px;color:var(--on-surface-variant);margin:0 0 12px;max-width:760px}
+  .material-symbols-outlined{font-size:18px;line-height:1;vertical-align:middle}
+  .panel{background:var(--surface-lowest);border:1px solid var(--surface-container-high);border-radius:14px;padding:16px;max-width:880px}
+  .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--surface-container-high);background:var(--surface-lowest);border-radius:11px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer;color:var(--on-surface)}
+  .btn .sub{color:var(--on-surface-variant);font-weight:500}
+  .pop{border:1px solid var(--surface-container-high);background:var(--surface-lowest);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.14);width:300px;padding:6px;margin-top:6px}
+  .pop .opt{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 11px;border-radius:8px;font-size:13px;cursor:pointer}
+  .pop .opt:hover{background:var(--surface-container)}
+  .pop .opt.sel{background:rgba(21,81,79,.10)}
+  .pop .opt .when{font-size:11px;color:var(--on-surface-variant)}
+  .pop .opt.sel .when{color:var(--primary)}
+  /* perf controls */
+  .ctrlbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .seg{display:inline-flex;background:var(--surface-container);border-radius:10px;padding:3px}
+  .seg button{border:none;background:transparent;border-radius:7px;padding:6px 11px;font-size:12px;font-weight:600;color:var(--on-surface-variant);cursor:pointer}
+  .seg button.on{background:var(--surface-lowest);color:var(--on-surface);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  select{border:1.5px solid var(--surface-container-high);background:transparent;border-radius:10px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--on-surface);font-weight:600}
+  .unit{display:inline-flex;background:var(--surface-container);border-radius:9px;padding:3px}
+  .unit button{border:none;background:transparent;border-radius:6px;width:34px;padding:5px 0;font-size:13px;font-weight:700;color:var(--on-surface-variant);cursor:pointer}
+  .unit button.on{background:var(--primary);color:#fff}
+  .unit button:disabled{opacity:.35;cursor:not-allowed}
+  /* chart */
+  .chartwrap{display:flex;align-items:flex-end;gap:6px;height:200px;border-bottom:2px solid var(--surface-container-high);padding-top:6px;overflow-x:auto}
+  .col{flex:1;min-width:26px;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end}
+  .bar{width:60%;max-width:34px;background:var(--primary);border-radius:5px 5px 0 0;transition:height .2s}
+  .x{font-size:10px;color:var(--on-surface-variant);margin-top:5px;white-space:nowrap}
+  .ylab{font-size:11px;color:var(--on-surface-variant);margin-bottom:4px}
+  .insights{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+  .ins{background:var(--surface-container-lowest,#fff);border:1px solid var(--surface-container-high);border-radius:10px;padding:8px 10px}
+  .ins .l{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--on-surface-variant)}
+  .ins .v{font-size:14px;font-weight:800;color:var(--primary)}
+  .card{display:inline-block;border:1px solid var(--surface-container-high);border-radius:12px;padding:12px 14px;min-width:150px;margin:0 8px 8px 0;vertical-align:top}
+  .card .l{font-size:11px;color:var(--on-surface-variant)}
+  .card .v{font-size:20px;font-weight:800;color:var(--on-surface)}
+  .delta{font-size:11px;font-weight:700;margin-left:6px}
+  .delta.up{color:#1b7a3f}.delta.down{color:#c0392b}
+</style>
+</head>
+<body>
+
+<h2>1 · Clearer, selectable comparison</h2>
+<p class="desc">Today the button just says "Comparing: Last" with no hint of <em>what</em>. New: the button spells out the comparison and its exact dates, and the dropdown lets you choose the offset (each option shows the dates it resolves to for the range you're viewing — here "This Week, Jun 8–14").</p>
+<div class="panel" style="max-width:520px">
+  <button class="btn"><span class="material-symbols-outlined" style="font-size:16px">compare_arrows</span> Comparing vs <strong>&nbsp;Last week</strong> <span class="sub">· Jun 1–7</span> <span class="material-symbols-outlined" style="font-size:16px">expand_more</span></button>
+  <div class="pop">
+    <div class="opt"><span>Previous period</span><span class="when">Jun 1–7</span></div>
+    <div class="opt sel"><span>Same period last week</span><span class="when">Jun 1–7</span></div>
+    <div class="opt"><span>Same period last month</span><span class="when">May 8–14</span></div>
+    <div class="opt"><span>Same period last year</span><span class="when">Jun 8–14, 2025</span></div>
+    <div class="opt"><span>No comparison</span><span class="when">off</span></div>
+  </div>
+  <div style="margin-top:14px">
+    <span class="card"><div class="l">Money collected</div><div class="v">$4,820 <span class="delta up">▲ 12%</span></div></span>
+    <span class="card"><div class="l">Guests</div><div class="v">96 <span class="delta down">▼ 4%</span></div></span>
+  </div>
+  <p class="desc" style="margin:8px 0 0">The ▲/▼ deltas on every card now compare against whatever you picked above — and you always know what that is.</p>
+</div>
+
+<h2>2 · Performance chart — pick the time grouping AND the metric</h2>
+<p class="desc">A control bar above the chart: <strong>time grouping</strong> (Hour / Day / Week / Month / Year), the <strong>metric</strong> (dropdown), and a <strong>$ / #</strong> toggle for metrics that can be either dollars or a count (guests, items, gift cards, cash/card/zelle). Dollar-only metrics (tips, fees, services, avg ticket) lock the toggle to $.</p>
+<div class="panel">
+  <div class="ctrlbar">
+    <div class="seg">
+      <button>Hour</button><button class="on">Day</button><button>Week</button><button>Month</button><button>Year</button>
+    </div>
+    <select>
+      <option>Total revenue</option><option>Services</option><option selected>Card</option><option>Cash</option>
+      <option>Zelle</option><option>Tips collected</option><option>Fees collected</option><option>Guests served</option>
+      <option>Avg ticket</option><option>Items sold</option><option>Gift cards sold</option><option>Gift cards redeemed</option>
+    </select>
+    <span class="unit"><button class="on">$</button><button>#</button></span>
+  </div>
+  <div class="ylab">Card collected ($) — by day</div>
+  <div class="chartwrap">
+    <div class="col"><div class="bar" style="height:42%"></div><div class="x">Sun 8</div></div>
+    <div class="col"><div class="bar" style="height:70%"></div><div class="x">Mon 9</div></div>
+    <div class="col"><div class="bar" style="height:55%"></div><div class="x">Tue 10</div></div>
+    <div class="col"><div class="bar" style="height:88%"></div><div class="x">Wed 11</div></div>
+    <div class="col"><div class="bar" style="height:64%"></div><div class="x">Thu 12</div></div>
+    <div class="col"><div class="bar" style="height:100%"></div><div class="x">Fri 13</div></div>
+    <div class="col"><div class="bar" style="height:78%"></div><div class="x">Sat 14</div></div>
+  </div>
+  <div class="insights">
+    <div class="ins"><div class="l">Best day</div><div class="v">Fri 13</div></div>
+    <div class="ins"><div class="l">Total (period)</div><div class="v">$3,940</div></div>
+    <div class="ins"><div class="l">Daily avg</div><div class="v">$563</div></div>
+  </div>
+</div>
+<p class="desc" style="margin-top:8px">Switching the toggle to <strong>#</strong> with "Card" selected would re-plot the same days as the <em>number of card transactions</em> instead of dollars. "Hour" grouping keeps today's hour-of-day profile; Day/Week/Month/Year bucket the selected date range (chart scrolls horizontally if there are many bars).</p>
+
+</body>
+</html>

@@ -489,9 +489,25 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Performance by hour + insights -->
-        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Performance by Hour</h3>
-        <div id="rpt-perf" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5"></div>
+        <!-- Performance — selectable time grouping + metric + $/# unit -->
+        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Performance</h3>
+        <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5">
+          <div class="flex items-center gap-2 flex-wrap mb-3">
+            <span id="perf-gran" class="inline-flex bg-surface-container rounded-lg p-0.5 flex-shrink-0">
+              <button onclick="setPerfGran('hour')" data-g="hour" class="px-3 py-1.5 rounded-md text-xs font-body font-semibold transition-colors">Hour</button>
+              <button onclick="setPerfGran('day')" data-g="day" class="px-3 py-1.5 rounded-md text-xs font-body font-semibold transition-colors">Day</button>
+              <button onclick="setPerfGran('week')" data-g="week" class="px-3 py-1.5 rounded-md text-xs font-body font-semibold transition-colors">Week</button>
+              <button onclick="setPerfGran('month')" data-g="month" class="px-3 py-1.5 rounded-md text-xs font-body font-semibold transition-colors">Month</button>
+              <button onclick="setPerfGran('year')" data-g="year" class="px-3 py-1.5 rounded-md text-xs font-body font-semibold transition-colors">Year</button>
+            </span>
+            <select id="perf-metric" onchange="setPerfMetric(this.value)" class="border border-surface-container-high bg-transparent rounded-lg px-2.5 py-2 text-sm font-body font-semibold text-on-surface focus:outline-none focus:border-primary"></select>
+            <span id="perf-unit" class="inline-flex bg-surface-container rounded-lg p-0.5 flex-shrink-0" title="Show as dollars or as a transaction count">
+              <button onclick="setPerfUnit('amount')" data-u="amount" class="px-3.5 py-1.5 rounded-md text-sm font-body font-bold transition-colors">$</button>
+              <button onclick="setPerfUnit('count')" data-u="count" class="px-3.5 py-1.5 rounded-md text-sm font-body font-bold transition-colors">#</button>
+            </span>
+          </div>
+          <div id="rpt-perf"></div>
+        </div>
 
         <!-- Ask about your data (AI) -->
         <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Ask About Your Data</h3>
@@ -554,7 +570,7 @@ tailwind.config = {
       </div>
       <!-- Comparison mode menu — anchored to its button -->
       <div id="compare-menu" class="fixed inset-0 z-50 hidden" onclick="if(event.target===this)closeCompareMenu()">
-        <div id="compare-panel" class="bg-surface rounded-2xl shadow-2xl overflow-auto py-2" style="position:fixed;width:min(260px,calc(100vw - 16px));max-height:82vh">
+        <div id="compare-panel" class="bg-surface rounded-2xl shadow-2xl overflow-auto py-2" style="position:fixed;width:min(320px,calc(100vw - 16px));max-height:82vh">
           <div class="px-4 py-2 text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Compare to</div>
           <div id="compare-menu-list"></div>
         </div>
