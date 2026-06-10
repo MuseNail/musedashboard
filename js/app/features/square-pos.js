@@ -497,6 +497,9 @@ function _pollTerminalCheckout(id) {
 
 function _finalizeTerminalPaid(partyIds, tenders, paymentIds, tipDollars, unrecorded) {
   hideTerminalModal();
+  // The Assign & Price modal stays open during the charge (so a cancel returns to it) — but once
+  // the payment lands, close it; leaving it up showed a stale, already-paid ticket.
+  window.closeGroupAssignModal?.();
   partyIds.forEach((id, i) => {
     const ge = queue().find(x => String(x.id) === String(id));
     if (ge) {
