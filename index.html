@@ -2643,6 +2643,9 @@ tailwind.config = {
 
 <div id="numpad-modal" class="fixed inset-0 z-[90] hidden items-end justify-center bg-on-surface/40" onclick="closeNumpad(event)">
   <div class="bg-surface-container-lowest w-full max-w-sm rounded-t-2xl shadow-2xl pb-safe" onclick="event.stopPropagation()">
+    <!-- Matching customers (phone mode) — mirrored from the field's autocomplete, which the
+         numpad sheet otherwise covers on the iPad. Tap a match → fills the form + closes. -->
+    <div id="numpad-ac" class="hidden border-b border-surface-container-high max-h-44 overflow-y-auto no-scroll" onclick="setTimeout(()=>dismissNumpad(),50)"></div>
     <!-- Display -->
     <div class="px-6 pt-5 pb-3 border-b border-surface-container-high flex items-end justify-between gap-3">
       <div class="min-w-0">

@@ -265,6 +265,7 @@ export function openPhoneNumpad(inputEl, label) {
   m.classList.remove('hidden'); m.style.display = 'flex';
   inputEl.blur();
   _watchNumpadHost(inputEl);
+  setTimeout(_numpadMirrorAc, 0);   // field may already hold digits — show matches immediately
 }
 
 // Floating = no dim backdrop, clicks pass through everywhere except the panel
@@ -281,6 +282,21 @@ function _numpadSyncPhone() {
   if (!_numpadTarget) return;
   _numpadTarget.value = _numpadRaw;   // acSearch → formatPhone reformats on input
   _numpadTarget.dispatchEvent(new Event('input', { bubbles: true }));
+  setTimeout(_numpadMirrorAc, 0);     // after acSearch has rendered the field's dropdown
+}
+// Mirror the field's autocomplete matches INTO the numpad sheet. The field's own dropdown
+// renders inside its host modal's stacking context (e.g. z-50), so the z-90 numpad sheet
+// covers it on a tablet — the operator had to close the numpad to see/tap a match. The
+// cloned items keep their inline onmousedown="acFill…" handlers; #numpad-ac then dismisses
+// the numpad (dismiss, not confirm — confirming would clobber the picked value).
+function _numpadMirrorAc() {
+  const strip = document.getElementById('numpad-ac'); if (!strip) return;
+  if (_numpadMode !== 'phone' || !_numpadTarget || !_numpadTarget.isConnected) { strip.classList.add('hidden'); strip.innerHTML = ''; return; }
+  const src = _numpadTarget.closest('.ac-input-wrap')?.querySelector('.autocomplete-list')
+           || _numpadTarget.parentElement?.querySelector('.autocomplete-list');
+  const has = src && !src.classList.contains('hidden') && src.innerHTML.trim();
+  strip.innerHTML = has ? src.innerHTML : '';
+  strip.classList.toggle('hidden', !has);
 }
 // Live-write amount/percent fields as digits are typed (mirrors _numpadSyncPhone), writing
 // exactly what numpadConfirm would. This makes the running total update as you type AND makes
@@ -428,6 +444,7 @@ function _closeNumpadModal() {
   if (_numpadHostObs) { _numpadHostObs.disconnect(); _numpadHostObs = null; }
   const m = document.getElementById('numpad-modal');
   m.classList.add('hidden'); m.style.display = '';
+  const strip = document.getElementById('numpad-ac'); if (strip) { strip.classList.add('hidden'); strip.innerHTML = ''; }
   _numpadTarget = null; _numpadRaw = '';
   // A numpad key fires on pointerdown and closes the pad synchronously, so the trailing
   // tap (pointerup → click) lands on whatever is now revealed at that spot — e.g. the
