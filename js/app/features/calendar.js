@@ -806,6 +806,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   })();
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-[85] flex items-center justify-center bg-on-surface/40 px-4';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };   // tap outside closes
   let statusBadge = '';
   if (['complete','paid','done'].includes(queueMatch?.status)) statusBadge = '<span style="color:#6b7280;font-size:11px;font-weight:700">✓ Completed</span>';
   else if (queueMatch?.status === 'inservice') statusBadge = '<span style="color:#16a34a;font-size:11px;font-weight:700">● In Service</span>';
@@ -1025,6 +1026,7 @@ function _showQuickCheckinPicker(party) {
   const modal = document.createElement('div');
   modal.id = 'quick-checkin-modal';
   modal.className = 'fixed inset-0 z-[88] flex items-center justify-center bg-on-surface/40 px-4';
+  modal.onclick = e => { if (e.target === modal) closeQuickCheckin(); };   // tap outside closes
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-1"><h3 class="font-headline font-bold text-on-surface text-lg">Check in who?</h3><button onclick="closeQuickCheckin()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
     <p class="text-xs font-body text-on-surface-variant mb-3">Select the guests arriving now. The rest can be checked in later.</p>
@@ -1089,6 +1091,7 @@ function _showApptGuardModal(m) {
   const modal = document.createElement('div');
   modal.id = 'appt-guard-modal';
   modal.className = 'fixed inset-0 z-[95] flex items-center justify-center bg-on-surface/40 px-4';
+  modal.onclick = e => { if (e.target === modal) closeApptGuardModal(); };   // tap outside = Cancel
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center gap-2 mb-2"><span class="material-symbols-outlined text-primary" style="font-size:22px">event_available</span><h3 class="font-headline font-bold text-on-surface text-lg">Already booked today</h3></div>
     <p class="text-sm font-body text-on-surface-variant mb-4"><span class="font-semibold text-on-surface">${_escHtml(m.name)}</span> has an appointment today at <span class="font-semibold text-on-surface">${when}</span>${m.summary ? ` — ${_escHtml(m.summary)}` : ''}.</p>

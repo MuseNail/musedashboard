@@ -315,6 +315,7 @@ async function checkAppVersion() {
     if (data.version && data.version !== APP_VERSION) {
       badge.textContent = data.version + ' ↻';
       badge.title = `Update ${data.version} available — tap to reload`;
+      badge.classList.add('update-pulse');   // E2: make the update glyph discoverable
     }
   } catch (e) {}
 }

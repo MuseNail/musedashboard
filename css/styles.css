@@ -115,6 +115,10 @@
   /* Report range buttons */
   .rng-btn.active { background:#1a5252 !important; color:#ffffff !important; }
 
+  /* Update-available badge (E2): gentle pulse so the ↻ is discoverable */
+  .update-pulse { color:#1a5252 !important; font-weight:700; animation:updatePulse 2s ease-in-out infinite; }
+  @keyframes updatePulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+
   /* Turns board "Large" text (C8) — per-device toggle (Settings → Workflow → Turns Board
      Display). Bumps the bubble + side-list type and widens the slots so the text fits. */
   #panel-turns.turns-large .text-\[9px\]  { font-size: 11px !important; }
