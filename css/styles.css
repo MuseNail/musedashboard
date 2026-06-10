@@ -451,6 +451,8 @@
   .dp-day.today { box-shadow:inset 0 0 0 1.5px var(--primary,#1a5252); }
   .dp-day.sel { background:var(--primary,#1a5252); color:#fff; }
   .dp-day.dp-rstart, .dp-day.dp-rend { background:var(--primary,#1a5252); color:#fff; border-radius:999px; }
+  /* Hide Square-only UI (legacy POS deep-link, etc.) when Helcim is the active card processor. */
+  body.proc-helcim .square-only { display: none !important; }
 
   /* ── Reports: performance-by-hour chart ───────────────────────────────── */
   .perf-plot { display:flex; gap:8px; align-items:stretch; }

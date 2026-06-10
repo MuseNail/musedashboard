@@ -262,9 +262,9 @@ const SETTINGS_NAV = [
     { label:'Numpad Entry', sub:'Cents or whole dollars', content:'settings-numpad-section', render:'renderNumpadSettings' },
     { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section' },
   ]},
-  { id:'integrations', title:'Integrations', desc:'Square & Google', items:[
-    { label:'Payments (Helcim)', sub:'Card terminal — device code & test charge', content:'helcim-section', render:'renderHelcimSettings' },
-    { label:'Square', sub:'Location, connection & sync', content:'square-section' },
+  { id:'integrations', title:'Integrations', desc:'Payments & Google', items:[
+    { label:'Payment Processing', sub:'Card processor, terminal & Square', content:'helcim-section', render:'renderHelcimSettings' },
+    { label:'Square', sub:'Location, connection & sync', content:'square-section', hidden:true },   // reached from the Payment Processing panel
     { label:'Google Calendar', sub:'Connect for appointments', content:'gcal-section', render:'renderGcalSettings' },
     { label:'Text Messaging', sub:'SMS confirmations & replies (httpSMS)', content:'sms-section', render:'renderSmsSettings', adminOnly:true },
     { label:'Customer Directory', sub:'Browse synced customers', action:'showCustomerDir' },
@@ -308,7 +308,7 @@ export function settingsOpenCategory(catId) {
   document.getElementById('settings-root')?.classList.add('hidden');
   const isAdmin = getActiveUser()?.role === 'admin';
   const list = document.getElementById('settings-category');
-  list.innerHTML = g.items.filter(it => !it.adminOnly || isAdmin).map(it => `
+  list.innerHTML = g.items.filter(it => !it.hidden && (!it.adminOnly || isAdmin)).map(it => `
     <button onclick="${it.action ? it.action + '()' : `settingsOpenLeaf('${it.content}')`}" class="w-full flex items-center justify-between px-5 py-4 bg-surface-container-lowest rounded-xl border border-surface-container-high mb-2 hover:bg-surface-container transition-colors text-left">
       <div><div class="font-headline font-bold text-on-surface">${it.label}</div><div class="text-xs font-body text-on-surface-variant mt-0.5">${it.sub || ''}</div></div>
       <span class="material-symbols-outlined text-on-surface-variant">${it.action ? 'open_in_new' : 'chevron_right'}</span>

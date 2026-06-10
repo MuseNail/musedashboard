@@ -232,7 +232,7 @@ function onStateChange(state, changed) {
   if (changed === 'connection') return;
   if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); }   // apply pending Square auto-paid + roll over the day if needed, once the queue loads
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
-    photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync(); timeclock.renderClockButton();
+    photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync(); timeclock.renderClockButton(); helcim.syncProcessorClass();
     // The customer directory is now a DO entity — it hydrates from the snapshot like records,
     // so no Square auto-pull on boot. (A one-time "Import from Square" seeds it; see the
     // Customers tab.) square-customers.js rebuilds its directory caches on every store change.

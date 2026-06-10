@@ -19,8 +19,11 @@ export function setPaymentProcessor(p) {
   const v = p === 'helcim' ? 'helcim' : 'square';
   dispatch('config.set', { key: 'payment_processor', value: v });
   showToast(v === 'helcim' ? 'Card processor set to Helcim ✓' : 'Card processor set to Square ✓');
-  renderHelcimSettings();
+  syncProcessorClass(); renderHelcimSettings();
 }
+// Toggle a body class so CSS can hide Square-only UI (the legacy POS deep-link) when Helcim is
+// active. Called on boot, on every store change, and on flip — so it stays accurate cross-device.
+export function syncProcessorClass() { try { document.body.classList.toggle('proc-helcim', helcimActive()); } catch {} }
 
 // invoiceNumber → { settle } resolver for an in-flight terminal charge.
 const _pending = {};
