@@ -717,6 +717,8 @@ export function showGroupAssignModal(entryId) {
 
 function renderGroupAssignTabs() {
   const tabs = document.getElementById('group-assign-tabs');
+  if (ASSIGN_ONELIST) { tabs.innerHTML = ''; tabs.classList.add('hidden'); return; }
+  tabs.classList.remove('hidden');
   tabs.innerHTML = groupAssignEntries.map((id, i) => {
     const entry = q().find(e => String(e.id) === id);
     if (!entry) return '';
@@ -786,15 +788,18 @@ export function revertServiceStatus(entryId, serviceId, prevStatus) {
   }, 'Move back');
 }
 
-// Accept an in-modal tech suggestion: set that service row's tech dropdown.
-export function acceptAssignSuggestion(serviceId, techId) {
-  const row = document.querySelector(`#group-assign-content [data-service-id="${serviceId}"]`);
+// Accept an in-modal tech suggestion: set that service row's tech dropdown. entryId scopes
+// the row to one guest in the one-list layout (two guests can carry the same service).
+export function acceptAssignSuggestion(serviceId, techId, entryId) {
+  const scope = entryId ? `[data-assign-entry="${entryId}"] ` : '';
+  const row = document.querySelector(`#group-assign-content ${scope}[data-service-id="${serviceId}"]`);
   const sel = row?.querySelector('.assign-tech');
   if (sel) { sel.value = techId; updateGroupTotal(); }
 }
 
 // Mutates the in-store entry as an editing buffer (committed by the save handlers).
 export function saveCurrentGroupTabInputs() {
+  if (ASSIGN_ONELIST) return _saveAssignOneList();
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
   if (!entry) return;
   commitNumpad();   // flush a still-open numpad (a fee/cost typed but not ✓'d) into its field first
@@ -885,7 +890,13 @@ export function saveCurrentGroupTabInputs() {
   setTimeout(updateGroupTotal, 0);
 }
 
+// B5 (v4.77): the Assign & Price modal renders ONE list of every guest's lines beside a
+// catalog pane — no per-guest tabs. Flip to false to restore the original tabbed layout
+// (kept intact below; the owner asked to keep the way back).
+const ASSIGN_ONELIST = true;
+
 export function renderGroupAssignContent() {
+  if (ASSIGN_ONELIST) return _renderAssignOneList();
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
   if (!entry) return;
   const color = entry.groupColor || '#1a5252';
@@ -1064,6 +1075,296 @@ export function assignRemoveGiftCard(idx) {
   if (entry.giftcardSales && idx >= 0 && idx < entry.giftcardSales.length) { entry.giftcardSales.splice(idx, 1); saveCurrentGroupTabInputs(); renderGroupAssignContent(); }
 }
 
+// ── B5 one-list renderer: catalog pane left, every guest's lines right ────────
+function _assignSvcRowHtml(entry, sid, techOptions, stationOptions, allowRemove) {
+  const s = svc(sid) || { id: sid, label: sid };
+  const a = (entry.assignments || []).find(x => x.serviceId === sid) || {};
+  const st = getAssignmentStatus(entry, a);
+  const sug = !a.techId ? (window.suggestTechForService?.(sid) || null) : null;
+  const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#1a5252;color:#fff', complete:'background:#2a7a4f;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[st] || 'background:#f5c870;color:#3a2800';
+  const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Done', paid:'Paid', done:'Paid' }[st] || 'Waiting';
+  const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', paid:'waiting', done:'waiting' }[st];
+  const prevStatus = { inservice:'waiting', complete:'inservice' }[st];
+  return `
+    <div class="bg-surface-container-low rounded-xl p-3.5 border border-surface-container-high mb-2.5" data-service-id="${sid}">
+      <div class="flex items-center justify-between mb-2.5">
+        <div class="font-headline font-semibold text-on-surface flex items-center gap-2 flex-wrap">${s.label}${sug ? `<button onclick="acceptAssignSuggestion('${sid}','${sug.techId}','${entry.id}')" title="Assign ${sug.techName}" class="text-[10px] px-2 py-0.5 rounded-full font-body font-semibold hover:opacity-80" style="background:#1a525218;color:#1a5252">→ ${sug.techName} ✓</button>` : ''}</div>
+        <div class="flex items-center gap-1.5 flex-shrink-0">
+          ${prevStatus ? `<button onclick="revertServiceStatus('${entry.id}','${sid}','${prevStatus}')" title="Move status back (fix a mistake)" class="w-7 h-7 rounded-full font-body font-semibold transition-all hover:opacity-80 flex items-center justify-center" style="background:#f3f4f6;color:#6b7280"><span class="material-symbols-outlined" style="font-size:16px">undo</span></button>` : ''}
+          <button onclick="cycleServiceStatus('${entry.id}','${sid}','${nextStatus}')" class="text-[11px] px-3 py-1 rounded-full font-body font-semibold transition-all hover:opacity-80" style="${statusBtnStyle}">${statusLabel} ›</button>
+          ${allowRemove ? `<button onclick="removeServiceFromGuest('${entry.id}','${sid}')" title="Remove this service" class="w-7 h-7 rounded-full flex items-center justify-center text-outline-variant hover:text-error hover:bg-error/10 transition-colors"><span class="material-symbols-outlined" style="font-size:15px">close</span></button>` : ''}
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-3">
+        <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Technician</label>
+          <select class="assign-tech w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary" onchange="updateGroupTotal()"><option value="">— Unassigned —</option>${techOptions(a.techId)}</select></div>
+        <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Station</label>
+          <select class="assign-station w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary"><option value="">— None —</option>${stationOptions(a.station || entry.station)}</select></div>
+        <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
+          <input type="text" inputmode="none" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.comped ? '' : (a.cost != null && a.cost !== 0 ? a.cost : '')}" ${a.comped ? 'disabled' : ''}
+            class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer${a.comped ? ' opacity-50' : ''}"
+            onfocus="openNumpad(this,'Cost — ' + '${s.label}')" onclick="openNumpad(this,'Cost — ' + '${s.label}')" oninput="updateGroupTotal()"></div>
+      </div>
+      <div class="flex items-center gap-2 mt-2">
+        <label class="flex items-center gap-1.5 text-[11px] font-body text-on-surface-variant cursor-pointer select-none">
+          <input type="checkbox" class="assign-comp" ${a.comped ? 'checked' : ''} onchange="toggleCompRow(this)" style="accent-color:#1a5252;width:15px;height:15px;flex-shrink:0"> Comp / No charge
+        </label>
+        <select class="assign-comp-reason bg-surface-container border border-surface-container-high rounded-lg px-2 py-1 text-[11px] font-body text-on-surface focus:outline-none focus:border-primary${a.comped ? '' : ' hidden'}" onchange="updateGroupTotal()">
+          <option value="Comp"${a.compReason === 'Comp' ? ' selected' : ''}>Comp</option>
+          <option value="Fix"${a.compReason === 'Fix' ? ' selected' : ''}>Fix / Redo</option>
+        </select>
+      </div>
+    </div>`;
+}
+
+function _renderAssignOneList() {
+  const party = groupAssignEntries.map(id => q().find(e => String(e.id) === id)).filter(Boolean);
+  if (!party.length) return;
+  const content = document.getElementById('group-assign-content');
+  const isParty = party.length > 1;
+  // Widen the shell for the two panes (the tabbed layout's max-w-2xl is too narrow).
+  const shell = content.closest('.max-w-2xl'); if (shell) shell.style.maxWidth = '58rem';
+  // Whole-ticket extras gathered across the party (same consolidation as the tabbed layout).
+  const gItems = new Map(); let gDiscount = 0, gNote = '', gcCount = 0;
+  party.forEach(e => {
+    (e.items || []).forEach(it => { const c = gItems.get(it.itemId); if (c) c.qty += (it.qty || 0); else gItems.set(it.itemId, { qty: it.qty || 0, price: it.price || 0 }); });
+    gDiscount += e.discount || 0;
+    if (!gNote && e.discountNote) gNote = e.discountNote;
+    gcCount += (e.giftcardSales || []).length;
+  });
+  const checkedIn = activeStaff().filter(s => cfg().turns_order.includes(s.id)).sort(byName);
+  const techOptions = sel => {
+    let opts = checkedIn;
+    if (sel && !checkedIn.some(s => s.id === sel)) { const assigned = staffById(sel); if (assigned) opts = [...checkedIn, assigned]; }
+    return opts.length > 0
+      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}</option>`).join('')
+      : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
+  };
+  const stationOptions = sel => stationDefs().map(s => `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${s.label || s.id}</option>`).join('');
+
+  const catalog = cfg().services.filter(s => isServiceVisibleOnDash(s.id)).map(s =>
+    `<button type="button" onclick="assignCatalogTap('${s.id}')" class="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl border border-surface-container-high bg-surface-container-lowest hover:border-primary hover:bg-primary/5 transition-colors text-left mb-1.5">
+      <span class="text-sm font-body font-semibold text-on-surface">${s.label}</span>
+      <span class="text-xs font-headline font-bold text-outline">${s.baseCost != null ? '$' + Number(s.baseCost).toFixed(0) : ''}</span></button>`).join('');
+
+  const guestSections = party.map(e => {
+    const color = e.groupColor || '#1a5252';
+    const nm = (e.name || '').trim().split(/\s+/), first = nm[0] || '', last = nm.slice(1).join(' ') || '';
+    const rows = e.services.map(sid => _assignSvcRowHtml(e, sid, techOptions, stationOptions, e.services.length > 1)).join('')
+      || `<div class="text-xs font-body text-on-surface-variant py-2 px-1 opacity-70">No services — tap one in the catalog.</div>`;
+    return `<div data-assign-entry="${e.id}" class="mb-4">
+      <div class="flex items-center gap-2 mb-2 flex-wrap">
+        <span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${color}"></span>
+        <input type="text" value="${first.replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="First"
+          class="ga-first font-headline font-bold text-on-surface bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-24 flex-shrink-0">
+        <input type="text" value="${last.replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="Last"
+          class="ga-last font-headline font-semibold text-on-surface bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-24 flex-shrink-0">
+        <input type="tel" value="${(e.phone||'').replace(/"/g,'&quot;')}" onfocus="openPhoneNumpad(this)" placeholder="Phone"
+          class="ga-phone text-sm font-body text-on-surface-variant bg-transparent border-b border-surface-container-high focus:border-primary outline-none px-1 py-0.5 w-36 flex-shrink-0">
+        <button onclick="openCustomerFromAssign('${e.id}')" title="Edit customer" class="w-7 h-7 rounded-full hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors flex-shrink-0"><span class="material-symbols-outlined" style="font-size:16px">person_edit</span></button>
+        ${isParty ? `<span class="ml-auto text-sm font-headline font-bold text-primary flex-shrink-0" id="ga-sub-${e.id}">$0.00</span>` : ''}
+      </div>
+      ${rows}
+    </div>`;
+  }).join('');
+
+  const itemRows = cfg().items.map(item => {
+    const existing = gItems.get(item.id) || {};
+    return `<div class="bg-surface-container-low rounded-xl p-3.5 border border-surface-container-high mb-2.5" data-item-id="${item.id}">
+        <div class="flex items-center justify-between">
+          <div class="font-headline font-semibold text-on-surface text-sm">${item.label}<span class="ml-2 text-[10px] font-body text-outline-variant uppercase tracking-widest">Retail Item</span></div>
+          <div class="flex items-center gap-2">
+            <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">Qty</label>
+            <div class="flex items-center rounded-lg border border-surface-container-high overflow-hidden bg-surface-container">
+              <button type="button" onclick="stepItemQty(this,-1)" aria-label="Decrease quantity" class="px-2.5 py-1.5 text-on-surface-variant font-headline font-bold text-base leading-none active:bg-surface-container-high">−</button>
+              <input type="text" inputmode="none" readonly value="${existing.qty || 0}" class="item-qty w-8 bg-transparent border-0 px-0 py-1.5 text-sm font-body text-center focus:outline-none pointer-events-none">
+              <button type="button" onclick="stepItemQty(this,1)" aria-label="Increase quantity" class="px-2.5 py-1.5 text-on-surface-variant font-headline font-bold text-base leading-none active:bg-surface-container-high">＋</button>
+            </div>
+            <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">$</label>
+            <input type="text" inputmode="none" value="${existing.price != null && existing.price !== 0 ? existing.price : ''}" placeholder="${item.price || '0.00'}" class="item-price w-16 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" onfocus="openNumpad(this,'${item.label}')" onclick="openNumpad(this,'${item.label}')" oninput="updateGroupTotal()">
+          </div></div></div>`;
+  }).join('');
+
+  const anyGc = party.flatMap(e => e.giftcardSales || []);
+  const extrasOpen = gDiscount > 0 || gcCount > 0 || [...gItems.values()].some(i => (i.qty || 0) > 0);
+  const extrasSummary = [
+    [...gItems.values()].reduce((s,i)=>s+(i.qty||0),0) ? `${[...gItems.values()].reduce((s,i)=>s+(i.qty||0),0)} item(s)` : '',
+    gcCount ? `${gcCount} gift card(s)` : '',
+    gDiscount > 0 ? `$${gDiscount.toFixed(2)} off` : '',
+  ].filter(Boolean).join(' · ');
+
+  content.innerHTML = `
+    <div class="flex gap-4 items-start">
+      <div class="w-44 flex-shrink-0" style="position:sticky;top:0">
+        <div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2">Services</div>
+        <div style="max-height:56vh;overflow-y:auto" class="no-scroll pr-0.5">${catalog}</div>
+      </div>
+      <div class="flex-1 min-w-0">
+        ${guestSections}
+        <div class="border-t border-surface-container-high pt-2.5">
+          <button type="button" onclick="assignToggleExtras()" class="flex items-center gap-1.5 text-sm font-body font-semibold text-primary hover:underline">
+            <span class="material-symbols-outlined" style="font-size:18px" id="ga-extras-chev">${extrasOpen ? 'expand_more' : 'chevron_right'}</span>
+            Items, gift cards &amp; discount${extrasSummary ? ` <span class="text-xs font-normal text-on-surface-variant">— ${extrasSummary}</span>` : ''}
+          </button>
+          <div id="ga-extras" class="${extrasOpen ? '' : 'hidden'} mt-2">
+            ${isParty ? `<div class="-mt-1 mb-2 flex items-center gap-1.5 text-[11px] font-body text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:14px">receipt_long</span>These apply to the <strong>whole party</strong> (entered once). The service fee is added at checkout.</div>` : ''}
+            ${itemRows}
+            <div class="pt-1 mb-2">
+              <button type="button" onclick="assignToggleGcForm()" class="flex items-center gap-1.5 text-sm font-body font-semibold text-primary hover:underline"><span class="material-symbols-outlined" style="font-size:18px">card_giftcard</span> + Gift Card</button>
+              <div id="ga-gc-form" class="hidden mt-2 p-3 rounded-xl border border-primary/40 bg-primary/5 space-y-2">
+                <div class="grid grid-cols-2 gap-2">
+                  <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Amount</label><input id="ga-gc-amount" type="text" inputmode="decimal" onfocus="openNumpad(this,'Gift card amount')" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none"></div>
+                  <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Serial <span class="normal-case tracking-normal text-on-surface-variant">(optional)</span></label><input id="ga-gc-serial" type="text" placeholder="#00000000" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">To (recipient)</label><input id="ga-gc-to" type="text" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+                  <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Recipient phone</label><input id="ga-gc-phone" type="tel" placeholder="(000) 000-0000" oninput="formatPhone(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+                </div>
+                <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">From <span class="normal-case tracking-normal text-on-surface-variant">(note)</span></label><input id="ga-gc-from" type="text" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+                <button type="button" onclick="assignAddGiftCard()" class="w-full py-2 rounded-lg bg-primary text-on-primary font-body font-bold text-sm hover:bg-primary-dim transition-colors">Add gift card to ticket</button>
+              </div>
+              ${anyGc.map((g, i) => `<div class="flex items-center gap-2 py-1.5 mt-1 border-t border-surface-container first:border-t-0"><span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:18px">card_giftcard</span><span class="flex-1 min-w-0 truncate font-body text-on-surface text-sm">Gift Card${g.serial ? ' #' + String(g.serial).replace(/[<>&"]/g, '') : ''}${g.to ? ' → ' + String(g.to).replace(/[<>&"]/g, '') : ''}</span><button type="button" onclick="assignRemoveGiftCard(${i})" class="text-on-surface-variant hover:text-error flex-shrink-0"><span class="material-symbols-outlined" style="font-size:16px">close</span></button><span class="font-headline font-bold text-primary text-sm flex-shrink-0">$${(+g.amount).toFixed(2)}</span></div>`).join('')}
+            </div>
+            <div class="pt-1"><div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2">Discount</div>
+              <div class="bg-surface-container-low rounded-xl p-3 border border-surface-container-high">
+                <div class="flex items-center gap-2 mb-2">
+                  <select class="discount-type-select bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-xs font-body focus:outline-none focus:border-primary" onchange="updateGroupTotal()"><option value="flat">$ Off</option><option value="percent">% Off</option></select>
+                  <input type="text" inputmode="none" class="discount-input flex-1 bg-surface-container border border-surface-container-high rounded-lg px-3 py-1.5 text-sm font-body text-right focus:outline-none focus:border-primary cursor-pointer" value="${gDiscount && gDiscount > 0 ? gDiscount : ''}" placeholder="0" onfocus="openDiscountNumpad(this)" onclick="openDiscountNumpad(this)" oninput="updateGroupTotal()">
+                </div>
+                <input type="text" maxlength="60" class="discount-note-input w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-1.5 text-xs font-body focus:outline-none focus:border-primary" value="${(gNote || '').replace(/"/g,'&quot;')}" placeholder="Reason (optional)">
+              </div></div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  updateGroupTotal();
+  document.getElementById('group-split-btn')?.classList.toggle('hidden', !isParty);
+  const noteEl = document.getElementById('assign-txn-note'); if (noteEl) noteEl.value = party[0].txnNote || '';
+}
+
+export function assignToggleExtras() {
+  const x = document.getElementById('ga-extras'), chev = document.getElementById('ga-extras-chev');
+  if (!x) return;
+  x.classList.toggle('hidden');
+  if (chev) chev.textContent = x.classList.contains('hidden') ? 'chevron_right' : 'expand_more';
+}
+
+// Catalog tap: solo → toggle for the one guest (familiar); party → ask "for whom?".
+export function assignCatalogTap(sid) {
+  if (groupAssignEntries.length === 1) { assignServiceToggleFor(groupAssignEntries[0], sid); return; }
+  saveCurrentGroupTabInputs();
+  const s = svc(sid);
+  const party = groupAssignEntries.map(id => q().find(e => String(e.id) === id)).filter(Boolean);
+  closeAssignGuestPick();
+  const pick = document.createElement('div');
+  pick.id = 'assign-guest-pick';
+  pick.className = 'fixed inset-0 z-[70] flex items-center justify-center bg-on-surface/30 px-4';
+  pick.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-full max-w-xs shadow-2xl">
+    <div class="font-headline font-bold text-on-surface mb-3">${s ? s.label : 'Service'} — for whom?</div>
+    <div class="space-y-2 mb-3">${party.map(e => {
+      const has = e.services.includes(sid);
+      return `<button onclick="assignServiceToggleFor('${e.id}','${sid}'); this.querySelector('.gp-check').textContent = this.querySelector('.gp-check').textContent ? '' : 'check';"
+        class="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-surface-container-high hover:border-primary hover:bg-primary/5 transition-colors text-left">
+        <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${e.groupColor || '#1a5252'}"></span>
+        <span class="flex-1 font-body font-semibold text-sm text-on-surface">${(e.name || 'Guest').split(' ')[0]}</span>
+        <span class="material-symbols-outlined gp-check text-primary" style="font-size:18px">${has ? 'check' : ''}</span></button>`;
+    }).join('')}</div>
+    <button onclick="closeAssignGuestPick()" class="w-full py-2.5 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm">Done</button></div>`;
+  document.body.appendChild(pick);
+}
+export function closeAssignGuestPick() { document.getElementById('assign-guest-pick')?.remove(); }
+export function assignServiceToggleFor(entryId, sid) {
+  saveCurrentGroupTabInputs();
+  const entry = q().find(e => String(e.id) === String(entryId)); if (!entry) return;
+  if (entry.services.includes(sid)) {
+    if (entry.services.length === 1 && groupAssignEntries.length === 1) { showToast('At least one service required.'); return; }
+    entry.services = entry.services.filter(id => id !== sid);
+    if (entry.assignments) entry.assignments = entry.assignments.filter(a => a.serviceId !== sid);
+  } else entry.services.push(sid);
+  renderGroupAssignContent();
+}
+export function removeServiceFromGuest(entryId, sid) {
+  const entry = q().find(e => String(e.id) === String(entryId)); if (!entry) return;
+  if (entry.services.includes(sid) && entry.services.length === 1 && groupAssignEntries.length === 1) { showToast('At least one service required.'); return; }
+  assignServiceToggleFor(entryId, sid);
+}
+
+// One-list save: every guest's rows are in the DOM under their [data-assign-entry] section.
+// Mirrors the tabbed save exactly — per-row reads, then the whole-ticket consolidation.
+function _saveAssignOneList() {
+  commitNumpad();
+  const party = groupAssignEntries.map(id => q().find(e => String(e.id) === id)).filter(Boolean);
+  if (!party.length) return;
+  party.forEach(entry => {
+    const sec = document.querySelector(`#group-assign-content [data-assign-entry="${entry.id}"]`); if (!sec) return;
+    const firstEl = sec.querySelector('.ga-first'), lastEl = sec.querySelector('.ga-last'), phoneEl = sec.querySelector('.ga-phone');
+    if (firstEl || lastEl || phoneEl) {
+      const newName = [firstEl?.value.trim() || '', lastEl?.value.trim() || ''].filter(Boolean).join(' ');
+      const newPhone = phoneEl ? phoneEl.value.trim() : (entry.phone || '');
+      if ((newName && newName !== entry.name) || newPhone !== (entry.phone || '')) _custEditedIds.add(String(entry.id));
+      if (newName) entry.name = newName;
+      entry.phone = newPhone;
+    }
+    if (!entry.assignments) entry.assignments = [];
+    sec.querySelectorAll('[data-service-id]').forEach(row => {
+      const sid = row.dataset.serviceId;
+      let a = entry.assignments.find(x => x.serviceId === sid);
+      if (!a) { a = { serviceId: sid, status: 'waiting' }; entry.assignments.push(a); }
+      const prevTech = a.techId;
+      a.techId  = row.querySelector('.assign-tech')?.value || '';
+      a.station = row.querySelector('.assign-station')?.value || '';
+      const comped = !!row.querySelector('.assign-comp')?.checked;
+      a.comped = comped;
+      a.compReason = comped ? (row.querySelector('.assign-comp-reason')?.value || 'Comp') : '';
+      a.cost    = comped ? 0 : (parseFloat(row.querySelector('.assign-cost')?.value) || 0);
+      if (a.techId && !prevTech) a.assignedAt = Date.now();
+    });
+    entry.services = entry.assignments.map(a => a.serviceId);
+  });
+  const noteEl = document.getElementById('assign-txn-note'); if (noteEl) party[0].txnNote = noteEl.value;
+
+  // Whole-ticket items / fees / discount → consolidated onto the anchor (same as tabbed).
+  const memberSvc = e => (e.assignments || []).reduce((s, a) => s + (a.cost || 0), 0);
+  const partySvcSubtotal = party.reduce((s, e) => s + memberSvc(e), 0);
+  const partyItems = [];
+  document.querySelectorAll('#group-assign-content [data-item-id]').forEach(row => {
+    const qty = parseInt(row.querySelector('.item-qty')?.value) || 0;
+    const price = parseFloat(row.querySelector('.item-price')?.value) || 0;
+    if (price > 0 && qty > 0) partyItems.push({ itemId: row.dataset.itemId, qty, price });
+  });
+  const _feeMerge = new Map();
+  party.forEach(e => (e.fees || []).forEach(f => {
+    const cur = _feeMerge.get(f.feeId);
+    if (cur) cur.amount += (f.amount || 0); else _feeMerge.set(f.feeId, { feeId: f.feeId, amount: f.amount || 0, type: f.type });
+  }));
+  const partyFees = [];
+  _feeMerge.forEach(f => {
+    const def = cfg().fees.find(x => x.id === f.feeId);
+    const amount = (f.type === 'percent' && def) ? Math.round(partySvcSubtotal * (def.value || 0) / 100 * 100) / 100 : f.amount;
+    if (amount > 0) partyFees.push({ feeId: f.feeId, amount, type: f.type });
+  });
+  const partyItemTotal = partyItems.reduce((s, i) => s + i.price * (i.qty || 0), 0);
+  const partyFeeTotal  = partyFees.reduce((s, f) => s + (f.amount || 0), 0);
+  const discountType  = document.querySelector('#group-assign-content .discount-type-select')?.value || 'flat';
+  const discountInput = parseFloat(document.querySelector('#group-assign-content .discount-input')?.value) || 0;
+  const discountNote  = document.querySelector('#group-assign-content .discount-note-input')?.value?.trim() || '';
+  let partyDiscount = discountType === 'percent' ? Math.round(partySvcSubtotal * discountInput / 100 * 100) / 100 : discountInput;
+  let anchor = party[0], anchorSub = -1;
+  party.forEach(e => { const sub = memberSvc(e); if (sub > anchorSub) { anchorSub = sub; anchor = e; } });
+  const anchorBase = anchorSub + partyItemTotal + partyFeeTotal;
+  if (partyDiscount > anchorBase) { partyDiscount = Math.max(0, anchorBase); showToast(`Discount capped at $${partyDiscount.toFixed(2)} for this ticket.`); }
+  party.forEach(e => {
+    const isAnchor = String(e.id) === String(anchor.id);
+    e.items        = isAnchor ? partyItems : [];
+    e.fees         = isAnchor ? partyFees  : [];
+    e.discount     = isAnchor ? partyDiscount : 0;
+    e.discountNote = isAnchor ? discountNote  : '';
+    e.totalCost    = Math.max(0, memberSvc(e) + (isAnchor ? partyItemTotal + partyFeeTotal - partyDiscount : 0));
+    applyEntryStatus(e);
+  });
+  setTimeout(updateGroupTotal, 0);
+}
+
 export function toggleGroupService(sid) {
   saveCurrentGroupTabInputs();   // preserve typed name/phone/costs before the re-render
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
@@ -1084,11 +1385,21 @@ export function openDiscountNumpad(inputEl) {
 }
 
 export function updateGroupTotal() {
-  // Active tab's service costs come live from the DOM; every other member's come from the
-  // store. The whole-ticket fee % and discount % are based on the WHOLE party's services.
-  const activeSvc = [...document.querySelectorAll('#group-assign-content .assign-cost')].reduce((a,i)=>a+(parseFloat(i.value)||0),0);
-  let partySvc = activeSvc;
-  groupAssignEntries.forEach((id,i) => { if (i === activeGroupTab) return; const e = q().find(x => String(x.id) === id); if (e) partySvc += (e.assignments||[]).reduce((s,a)=>s+(a.cost||0),0); });
+  // One-list (B5): EVERY guest's rows are in the DOM — sum per section and update each
+  // guest's subtotal line. Tabbed: active tab from DOM, the rest from the store.
+  let activeSvc = 0, partySvc = 0;
+  if (ASSIGN_ONELIST) {
+    document.querySelectorAll('#group-assign-content [data-assign-entry]').forEach(sec => {
+      let s = 0; sec.querySelectorAll('.assign-cost').forEach(i => { s += parseFloat(i.value) || 0; });
+      partySvc += s;
+      const sub = document.getElementById('ga-sub-' + sec.dataset.assignEntry); if (sub) sub.textContent = '$' + s.toFixed(2);
+    });
+    activeSvc = partySvc;
+  } else {
+    activeSvc = [...document.querySelectorAll('#group-assign-content .assign-cost')].reduce((a,i)=>a+(parseFloat(i.value)||0),0);
+    partySvc = activeSvc;
+    groupAssignEntries.forEach((id,i) => { if (i === activeGroupTab) return; const e = q().find(x => String(x.id) === id); if (e) partySvc += (e.assignments||[]).reduce((s,a)=>s+(a.cost||0),0); });
+  }
   const itemTotal = [...document.querySelectorAll('#group-assign-content [data-item-id]')].reduce((sum,row)=>{
     const qty = parseInt(row.querySelector('.item-qty')?.value)||0, price = parseFloat(row.querySelector('.item-price')?.value)||0;
     return sum + price*qty;
