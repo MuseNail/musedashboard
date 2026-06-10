@@ -3,8 +3,14 @@
 Build backlog for the **live single-salon app** (distinct from `TURNDESK-PORT.md`, which tracks the
 public-product fork). Ordered by impact.
 
+> ## 🔥 CURRENT (2026-06-10, prod v4.76 · `dev` branch carries the UX-audit build, unmerged)
+> 1. **D11 — unified button system** (next session, fresh): define `.btn-primary` / `.btn-secondary` / `.btn-ghost` + `.chip` in styles.css, then sweep the panels onto them (10 distinct button styles measured in the audit). Then **E5** floor-plan drag handles.
+> 2. **End-of-day merge:** `dev` → `main` as **v4.77** (9 verified commits: numpad autocomplete-in-sheet · Option E toolbar switcher · Sales rename · plain sync pill · status vocabulary + filled pills · one-list Assign & Price [old layout kept behind `ASSIGN_ONELIST=false`] · global search · per-device Turns text size · accessibility batch). Preview pass → single version-trio bump → push with owner OK.
+> 3. **Helcim follow-ups:** owner merges the v4.72-era duplicate customers in the Helcim dashboard; verify text-receipt phone prefill on a live charge (the v4.76 `cellPhone` fix is deployed); then the **refund path + §13 Worker auth**.
+> 4. **Revisit-later (owner-flagged in the UX audit):** B6 checkout layout (tips stay MANUAL $ entry — never presets) · B7 kiosk single-button check-in (keep `isAppointment` accurate — walk-in vs appt metrics matter). Details in memory `ux-audit-decisions`.
+
 > ## ⭐ MASTER PLAN = `NEXT-SESSION-KICKOFF.md` (post-audit phased strategy, 2026-06-03)
-> **STATUS 2026-06-04 (prod v4.33): Phases 1–3 DONE; all audit HIGHs fixed.** Phase 1 (PWA/staff/schedule robustness), Phase 2 (client security), and Phase 3 (customers + catalog OFF Square → DO entity + Customers tab) all shipped (v4.20–v4.33). **NEXT = Phase 4 = the Square→Helcim payment migration** (`HELCIM-MIGRATION.md`), gated on the Smart Terminal hardware; the **"Paid" status P0 below is Phase 4a** and is the hardware-independent first step (one clean pay path = one swap point). Methodology held throughout: non-Square first; financial/card last; don't polish doomed Square code.
+> **STATUS 2026-06-10 (prod v4.76): Phases 1–3 DONE; Phase 4 (Helcim) is LIVE in production** — payments (webhook-driven Terminal flow), reconcile, and customer-carry all shipped; `HELCIM-MIGRATION.md` has the current state. Remaining from Phase 4: the Helcim **refund path**, **§13 full Worker auth** (gate `/helcim/*` + `/gcal/token`), the **pay-path P0 consolidation** below, and **retiring Square** when the owner calls it.
 
 ---
 
