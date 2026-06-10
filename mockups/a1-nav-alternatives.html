@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A1 — Navigation Alternatives</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap">
+<style>
+  * { box-sizing:border-box; margin:0; }
+  body { font-family:'Inter',sans-serif; background:#e8ebed; color:#1a1a1a; padding-bottom:60px; }
+  .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; vertical-align:middle; }
+  .wrap { max-width:1140px; margin:0 auto; padding:0 16px; }
+  h1 { font-size:20px; font-weight:800; color:#1a5252; margin:22px 0 4px; }
+  .sub { font-size:13px; color:#555; margin-bottom:14px; }
+  .picker { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; position:sticky; top:0; background:#e8ebed; padding:10px 0; z-index:60; }
+  .picker button { flex:1; min-width:240px; text-align:left; font-family:inherit; padding:11px 14px; border-radius:12px; border:2px solid #c8ced2; background:#fff; cursor:pointer; }
+  .picker button.on { border-color:#1a5252; background:#eef4f4; }
+  .picker .t { font-size:13.5px; font-weight:800; color:#1a5252; }
+  .picker .d { font-size:11.5px; color:#666; margin-top:2px; line-height:1.4; }
+  .stage { display:none; } .stage.on { display:block; }
+  /* app frame */
+  .app { background:#f6f7f8; border:1px solid #d6dbdf; border-radius:16px; overflow:hidden; box-shadow:0 6px 24px rgba(0,0,0,.08); height:560px; display:flex; flex-direction:column; position:relative; }
+  .bar { background:#fff; border-bottom:1px solid #e2e6e9; height:54px; display:flex; align-items:center; gap:8px; padding:0 10px; flex-shrink:0; }
+  .logo { width:38px; height:38px; border-radius:8px; background:#1a5252; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
+  .tabs { flex:1; display:flex; align-items:center; justify-content:center; gap:4px; }
+  .tab { display:inline-flex; align-items:center; gap:5px; padding:8px 14px; border-radius:10px; cursor:pointer; font-size:12.5px; font-weight:600; border:none; background:transparent; white-space:nowrap; font-family:inherit; }
+  .tab:hover { background:#d0d6da; }
+  .tab.active { background:#1a5252; color:#fff; }
+  .tab .material-symbols-outlined { font-size:17px; }
+  .pills { display:flex; gap:5px; align-items:center; flex-shrink:0; }
+  .pill { font-size:10px; font-weight:700; padding:4px 9px; border-radius:999px; background:#e7f3ec; color:#1d7a46; }
+  .ibtn { width:30px; height:30px; border:none; background:transparent; border-radius:50%; cursor:pointer; color:#5b6166; display:inline-flex; align-items:center; justify-content:center; }
+  .ibtn:hover { background:#eef1f3; }
+  .ibtn .material-symbols-outlined { font-size:18px; }
+  /* content */
+  .content { padding:12px; overflow-y:auto; flex:1; }
+  .toolbar { display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap; }
+  .tbtn { font-family:inherit; font-size:11.5px; font-weight:600; padding:7px 11px; border-radius:10px; border:1px solid #d6dbdf; background:#fff; cursor:pointer; display:inline-flex; gap:5px; align-items:center; }
+  .tbtn .material-symbols-outlined { font-size:15px; }
+  .seg2 { display:inline-flex; background:#e4e8ea; border-radius:11px; padding:3px; gap:2px; }
+  .seg2 button { border:none; background:transparent; font-family:inherit; font-size:11.5px; font-weight:700; padding:6px 13px; border-radius:8px; cursor:pointer; color:#555; display:inline-flex; gap:4px; align-items:center; }
+  .seg2 button.on { background:#fff; color:#1a5252; box-shadow:0 1px 4px rgba(0,0,0,.13); }
+  .seg2 .material-symbols-outlined { font-size:14px; }
+  .trow { display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #e2e6e9; border-radius:10px; padding:7px 10px; margin-bottom:6px; }
+  .tava { width:30px; height:30px; border-radius:50%; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
+  .tname { width:72px; font-weight:700; font-size:13.5px; }
+  .bub { border-radius:9px; padding:4px 9px; margin-right:5px; display:inline-block; background:#eef4f4; border:1px solid #cfe0e0; }
+  .bub b { display:block; font-size:12.5px; }
+  .bub span { font-size:11.5px; color:#777; }
+  .bub.empty { background:transparent; border:1.5px dashed #c8ced2; color:#aab2b8; padding:7px 10px; font-size:11px; }
+  /* (c) overflow menu */
+  .menu { position:absolute; top:50px; right:54px; background:#fff; border:1px solid #d6dbdf; border-radius:14px; box-shadow:0 10px 36px rgba(0,0,0,.18); min-width:200px; z-index:40; overflow:hidden; display:none; }
+  .menu.open { display:block; }
+  .menu button { display:flex; width:100%; align-items:center; gap:10px; border:none; background:transparent; font-family:inherit; font-size:13px; font-weight:600; padding:12px 16px; cursor:pointer; }
+  .menu button:hover { background:#f4f7f7; }
+  .menu .material-symbols-outlined { font-size:19px; color:#1a5252; }
+  /* (d) rail */
+  .railwrap { display:flex; flex:1; min-height:0; }
+  .rail { width:64px; background:#10403f; display:flex; flex-direction:column; align-items:center; padding:10px 0; gap:4px; flex-shrink:0; }
+  .rbtn { width:48px; height:48px; border:none; border-radius:12px; background:transparent; color:#9fc3c2; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; font-family:inherit; }
+  .rbtn span.lbl { font-size:8.5px; font-weight:700; }
+  .rbtn .material-symbols-outlined { font-size:21px; }
+  .rbtn:hover { background:rgba(255,255,255,.08); }
+  .rbtn.active { background:#fff; color:#1a5252; }
+  .rail .spacer { flex:1; }
+  .railmain { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .railbar { background:#fff; border-bottom:1px solid #e2e6e9; height:46px; display:flex; align-items:center; gap:8px; padding:0 12px; flex-shrink:0; }
+  .note { font-size:12px; color:#555; background:#fff8e8; border:1px solid #efd9a0; border-radius:10px; padding:9px 12px; margin-top:10px; line-height:1.55; }
+  .note b { color:#1a5252; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>A1 — Three ways to shrink the top bar</h1>
+  <p class="sub">All three are clickable — switch tabs, open menus, flip the view segments. Every frame is the same 560px tall so you can compare how much room content gets.</p>
+  <div class="picker">
+    <button class="on" onclick="pick(this,'c')"><div class="t">(c) Everyday tabs + ⋯ menu</div><div class="d">Header shows only Floor and Calendar. Sales / Reports / Settings move into a ⋯ menu — tap it.</div></button>
+    <button onclick="pick(this,'d')"><div class="t">(d) Icon rail (left edge)</div><div class="d">No top tabs at all — a slim teal rail holds all five places. Top bar is just status + actions.</div></button>
+    <button onclick="pick(this,'e')"><div class="t">(e) 5 tabs, no subnav row</div><div class="d">Top bar stays as today, but Turns | Queue | Floor Plan moves into the panel's own toolbar.</div></button>
+  </div>
+
+  <!-- ════ (c) everyday tabs + overflow ════ -->
+  <div class="stage on" id="st-c">
+    <div class="app">
+      <div class="bar">
+        <div class="logo">M</div>
+        <div class="tabs" id="c-tabs">
+          <button class="tab active" onclick="cTab(this)"><span class="material-symbols-outlined">swap_vert</span>Floor</button>
+          <button class="tab" onclick="cTab(this)"><span class="material-symbols-outlined">calendar_month</span>Calendar</button>
+        </div>
+        <div class="pills">
+          <span class="pill">● Live</span>
+          <button class="ibtn"><span class="material-symbols-outlined">search</span></button>
+          <button class="ibtn" onclick="document.getElementById('c-menu').classList.toggle('open');event.stopPropagation()"><span class="material-symbols-outlined">more_horiz</span></button>
+          <button class="ibtn"><span class="material-symbols-outlined">logout</span></button>
+        </div>
+      </div>
+      <div class="menu" id="c-menu">
+        <button onclick="cMenuPick('Sales')"><span class="material-symbols-outlined">receipt_long</span>Sales</button>
+        <button onclick="cMenuPick('Reports')"><span class="material-symbols-outlined">bar_chart</span>Reports</button>
+        <button onclick="cMenuPick('Settings')"><span class="material-symbols-outlined">tune</span>Settings</button>
+      </div>
+      <div class="content" id="c-body"></div>
+    </div>
+    <p class="note"><b>What changes:</b> the two screens you use all day are always one tap. Sales/Reports/Settings = two taps (⋯ → pick). When you're inside one of those, the ⋯ icon highlights and its name shows next to the logo. <b>Risk:</b> "where did Sales go?" for the first day or two.</p>
+  </div>
+
+  <!-- ════ (d) icon rail ════ -->
+  <div class="stage" id="st-d">
+    <div class="app">
+      <div class="railwrap">
+        <div class="rail" id="d-rail">
+          <button class="rbtn active" onclick="dTab(this,'Floor')"><span class="material-symbols-outlined">swap_vert</span><span class="lbl">Floor</span></button>
+          <button class="rbtn" onclick="dTab(this,'Calendar')"><span class="material-symbols-outlined">calendar_month</span><span class="lbl">Calendar</span></button>
+          <button class="rbtn" onclick="dTab(this,'Sales')"><span class="material-symbols-outlined">receipt_long</span><span class="lbl">Sales</span></button>
+          <button class="rbtn" onclick="dTab(this,'Reports')"><span class="material-symbols-outlined">bar_chart</span><span class="lbl">Reports</span></button>
+          <button class="rbtn" onclick="dTab(this,'Settings')"><span class="material-symbols-outlined">tune</span><span class="lbl">Settings</span></button>
+          <div class="spacer"></div>
+          <button class="rbtn"><span class="material-symbols-outlined">search</span></button>
+          <button class="rbtn"><span class="material-symbols-outlined">logout</span></button>
+        </div>
+        <div class="railmain">
+          <div class="railbar">
+            <span style="font-weight:800;font-size:13.5px" id="d-title">Floor</span>
+            <span class="pill" style="margin-left:auto">● Live</span>
+          </div>
+          <div class="content" id="d-body"></div>
+        </div>
+      </div>
+    </div>
+    <p class="note"><b>What changes:</b> everything is always one tap, nothing is hidden, and the top strip shrinks to 46px — the most total content space of the three. The rail is thumb-reachable when the iPad sits in landscape. <b>Risk:</b> the biggest visual change — it stops looking like the current app; portrait mode loses 64px of width.</p>
+  </div>
+
+  <!-- ════ (e) tabs stay, segments move into the toolbar ════ -->
+  <div class="stage" id="st-e">
+    <div class="app">
+      <div class="bar">
+        <div class="logo">M</div>
+        <div class="tabs">
+          <button class="tab active"><span class="material-symbols-outlined">swap_vert</span>Floor</button>
+          <button class="tab"><span class="material-symbols-outlined">calendar_month</span>Calendar</button>
+          <button class="tab"><span class="material-symbols-outlined">receipt_long</span>Sales</button>
+          <button class="tab"><span class="material-symbols-outlined">bar_chart</span>Reports</button>
+          <button class="tab"><span class="material-symbols-outlined">tune</span>Settings</button>
+        </div>
+        <div class="pills"><span class="pill">● Live</span><button class="ibtn"><span class="material-symbols-outlined">search</span></button><button class="ibtn"><span class="material-symbols-outlined">logout</span></button></div>
+      </div>
+      <div class="content">
+        <div class="toolbar">
+          <span class="seg2" id="e-seg">
+            <button class="on" onclick="eSeg(this)"><span class="material-symbols-outlined">swap_vert</span>Turns</button>
+            <button onclick="eSeg(this)"><span class="material-symbols-outlined">queue</span>Queue</button>
+            <button onclick="eSeg(this)"><span class="material-symbols-outlined">grid_view</span>Floor Plan</button>
+          </span>
+          <button class="tbtn"><span class="material-symbols-outlined">chevron_left</span></button>
+          <button class="tbtn"><span class="material-symbols-outlined">calendar_today</span>Today · Wed, Jun 10</button>
+          <button class="tbtn"><span class="material-symbols-outlined">chevron_right</span></button>
+          <span style="flex:1"></span>
+          <button class="tbtn"><span class="material-symbols-outlined">person_add</span>New Entry</button>
+        </div>
+        <div id="e-body"></div>
+      </div>
+    </div>
+    <p class="note"><b>What changes:</b> nothing moves homes — same 5 tabs, but the dedicated switcher row is gone; Turns | Queue | Floor Plan sits in the toolbar that already exists next to the date picker. Saves the 60px with the least relearning. <b>Risk:</b> the busiest toolbar (Turns) gets one more control in the row — on a narrow window it wraps to a second line (which costs the saved height back only on small screens).</p>
+  </div>
+</div>
+
+<script>
+const TECHS=[['Kim','#7e57c2',3],['Lisa','#43a047',2],['John','#ef6c00',2],['Christina','#d81b60',1],['Emily','#5e8d93',2],['Lyn','#8e24aa',1],['Tracy','#3949ab',2],['Vivian','#00897b',1]];
+function turnsHtml(){ return TECHS.map(([n,c,t])=>{
+  const b=Array.from({length:t},(_,i)=>`<span class="bub"><b>${['Pedicure','Gel Mani','Full Set'][i%3]}</b><span>${9+i}:${i?'45':'15'} · $${[35,45,55][i%3]}</span></span>`).join('');
+  return `<div class="trow"><span class="tava" style="background:${c}">${n[0]}</span><span class="tname">${n}</span><span style="flex:1;white-space:nowrap;overflow:hidden">${b}<span class="bub empty">＋</span></span><span style="font-size:11.5px;color:#888;font-weight:700">${t} turns</span></div>`;
+}).join(''); }
+function placeholder(t){ return `<div style="padding:60px 0;text-align:center;color:#aab2b8;font-size:13px;font-weight:600">${t} panel</div>`; }
+
+function pick(btn,v){ document.querySelectorAll('.picker button').forEach(b=>b.classList.remove('on')); btn.classList.add('on');
+  document.querySelectorAll('.stage').forEach(s=>s.classList.remove('on')); document.getElementById('st-'+v).classList.add('on'); }
+
+// (c)
+const cBody=document.getElementById('c-body');
+function cFloor(){ cBody.innerHTML=`<div class="toolbar"><span class="seg2"><button class="on" onclick="eSeg(this);">Turns</button><button onclick="eSeg(this)">Queue</button><button onclick="eSeg(this)">Floor Plan</button></span><span style="flex:1"></span><button class="tbtn"><span class="material-symbols-outlined">person_add</span>New Entry</button></div>`+turnsHtml(); }
+cFloor();
+function cTab(b){ document.querySelectorAll('#c-tabs .tab').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  document.getElementById('c-menu').classList.remove('open');
+  if(b.textContent.includes('Floor')) cFloor(); else cBody.innerHTML=placeholder('Calendar'); }
+function cMenuPick(name){ document.getElementById('c-menu').classList.remove('open');
+  document.querySelectorAll('#c-tabs .tab').forEach(x=>x.classList.remove('active'));
+  cBody.innerHTML=placeholder(name+' — opened from the ⋯ menu'); }
+document.body.addEventListener('click',()=>document.getElementById('c-menu').classList.remove('open'));
+
+// (d)
+const dBody=document.getElementById('d-body');
+dBody.innerHTML=`<div class="toolbar"><span class="seg2"><button class="on" onclick="eSeg(this)">Turns</button><button onclick="eSeg(this)">Queue</button><button onclick="eSeg(this)">Floor Plan</button></span></div>`+turnsHtml();
+function dTab(b,name){ document.querySelectorAll('#d-rail .rbtn').forEach(x=>x.classList.remove('active')); b.classList.add('active');
+  document.getElementById('d-title').textContent=name;
+  dBody.innerHTML = name==='Floor' ? `<div class="toolbar"><span class="seg2"><button class="on" onclick="eSeg(this)">Turns</button><button onclick="eSeg(this)">Queue</button><button onclick="eSeg(this)">Floor Plan</button></span></div>`+turnsHtml() : placeholder(name); }
+
+// (e)
+document.getElementById('e-body').innerHTML=turnsHtml();
+function eSeg(b){ b.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); }
+</script>
+</body>
+</html>
