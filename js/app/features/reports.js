@@ -1373,6 +1373,27 @@ const _refCells  = (cur, prev) => `<td class="num staff-sep" style="color:#dc262
 // ── Payroll lock: manually freeze a pay period's numbers against later %/check/rule changes ──
 // _payrollLiveT holds the live-computed rows from the last render so Lock can snapshot them.
 let _payrollLiveT = [], _payrollLiveKey = '', _payrollLiveSpan = null;
+// Per-tech per-period manual overrides (config.payroll_adj[techId:perKey] = {check?,deduction?,cash?,checkNum?}).
+export function payrollSetOverride(techId, field, val) {
+  if (!['check', 'deduction', 'cash'].includes(field)) return;
+  const perKey = localDateStr(payrollPeriodAt(_payrollOffset).from);
+  const adj = JSON.parse(JSON.stringify(cfg().payroll_adj || {}));
+  const k = techId + ':' + perKey; adj[k] = adj[k] || {};
+  const n = parseFloat(val);
+  if (val === '' || val == null || isNaN(n)) delete adj[k][field]; else adj[k][field] = n;
+  if (!Object.keys(adj[k]).length) delete adj[k];
+  dispatch('config.set', { key: 'payroll_adj', value: adj });
+  renderPayrollPage();
+}
+export function payrollSetCheckNum(techId, val) {
+  const perKey = localDateStr(payrollPeriodAt(_payrollOffset).from);
+  const adj = JSON.parse(JSON.stringify(cfg().payroll_adj || {}));
+  const k = techId + ':' + perKey; adj[k] = adj[k] || {};
+  const v = (val || '').trim();
+  if (!v) delete adj[k].checkNum; else adj[k].checkNum = v;
+  if (!Object.keys(adj[k]).length) delete adj[k];
+  dispatch('config.set', { key: 'payroll_adj', value: adj });
+}
 export function payrollLockPeriod() {
   if (!['admin','manager'].includes(getActiveUser()?.role)) { showToast('Only an admin or manager can lock payroll.'); return; }
   if (!_payrollLiveKey) return;
@@ -1406,19 +1427,26 @@ export function renderPayrollPage() {
   const curDays = payrollDaysInRange(cur.from, cur.to), prevDays = payrollDaysInRange(prev.from, prev.to);
   const order = cfg().turns_order || [];
   const techs = (cfg().staff || []).filter(s => !cfg().inactive_staff.includes(s.id))
-    .sort((a, b) => { const ra = order.indexOf(a.id), rb = order.indexOf(b.id); return (ra === -1 ? 1e9 : ra) - (rb === -1 ? 1e9 : rb); });
+    .sort((a, b) => (a.legalName || a.name || '').localeCompare(b.legalName || b.name || '', undefined, { sensitivity: 'base' }));   // payroll: A→Z by legal name
   if (!techs.length) { wrap.innerHTML = '<div class="text-sm text-on-surface-variant py-8 text-center w-full">No technicians configured.</div>'; return; }
   // Excel-style table: techs as column-groups across the top (This | Last), metrics +
   // each day as rows; sticky first column holds the row labels.
+  const _adj = cfg().payroll_adj || {};
   const T = techs.map(tech => {
     const c = curData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] };
     const p = prevData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] };
     const cComm = _netComm(c), pComm = _netComm(p);
-    const cChk = techCheckAmount(tech, cComm, curKey), pChk = techCheckAmount(tech, pComm, prevKey);
+    // Per-tech per-period manual overrides (config.payroll_adj): check / deduction / cash can each be
+    // hand-set; anything not overridden falls back to the rule (cash defaults to commission−check−deduction).
+    const a = _adj[tech.id + ':' + curKey] || {};
+    const cChk = a.check != null ? a.check : techCheckAmount(tech, cComm, curKey);
+    const pChk = techCheckAmount(tech, pComm, prevKey);
     const cCashGross = Math.max(0, cComm - cChk), pCashGross = Math.max(0, pComm - pChk);
-    const cDed = techCashDeduction(tech, cCashGross), pDed = techCashDeduction(tech, pCashGross);
-    const cCash = Math.max(0, cCashGross - cDed), pCash = Math.max(0, pCashGross - pDed);
-    return { tech, c, p, cChk, pChk, cDed, pDed, cCash, pCash, cTotal: cChk + cCash, pTotal: pChk + pCash, isVar: (tech.checkType || 'variable') === 'variable' };
+    const cDed = a.deduction != null ? a.deduction : techCashDeduction(tech, cCashGross);
+    const pDed = techCashDeduction(tech, pCashGross);
+    const cCash = a.cash != null ? a.cash : Math.max(0, cCashGross - cDed);
+    const pCash = Math.max(0, pCashGross - pDed);
+    return { tech, c, p, cChk, pChk, cDed, pDed, cCash, pCash, cTotal: cChk + cCash, pTotal: pChk + pCash, isVar: (tech.checkType || 'variable') === 'variable', adj: a };
   });
   // Lock: keep the LIVE rows for the Lock button; if this period is locked, override the displayed
   // numbers with the frozen snapshot so later %/check/rule changes don't rewrite history.
@@ -1450,9 +1478,13 @@ export function renderPayrollPage() {
   const span2 = (cVal, pVal) => cmp
     ? `<td class="num staff-sep" colspan="3">${cVal}</td><td class="num last thislast-sep" colspan="2">${_m2(pVal)}</td>`
     : `<td class="num staff-sep" colspan="2">${cVal}</td>`;
-  const checkCell = x => x.isVar
-    ? `<td class="num staff-sep" colspan="${cmp ? 3 : 2}"><input type="number" min="0" step="1" value="${x.cChk || ''}" placeholder="0" onchange="payrollSetCheck('${x.tech.id}',this.value)" style="width:62px" class="bg-surface-container border border-surface-container-high rounded px-1 py-0.5 text-sm font-headline text-right text-on-surface focus:outline-none focus:border-primary"></td>${cmp ? `<td class="num last thislast-sep" colspan="2">${_m2(x.pChk)}</td>` : ''}`
-    : span2(_m2(x.cChk), x.pChk);
+  // check / deduction / cash are editable override inputs (disabled when the period is locked); a *
+  // marks a manual override. Check # records the issued check number (editable even when locked).
+  const _locked = !!_plock;
+  const _ovMark = (x, f) => (x.adj && x.adj[f] != null) ? '<span title="Manual override" style="color:#c77700;font-weight:700"> *</span>' : '';
+  const ovInput = (techId, field, val, color) => `<input type="number" min="0" step="0.01" value="${val ? Math.round(val * 100) / 100 : ''}" placeholder="0" ${_locked ? 'disabled' : ''} onchange="payrollSetOverride('${techId}','${field}',this.value)" style="width:64px" class="bg-surface-container border border-surface-container-high rounded px-1 py-0.5 text-sm font-headline text-right ${color || 'text-on-surface'} focus:outline-none focus:border-primary disabled:opacity-70">`;
+  const ovCell = (x, field, val, pHtml, color) => `<td class="num staff-sep" colspan="${cmp ? 3 : 2}">${ovInput(x.tech.id, field, val, color)}${_ovMark(x, field)}</td>${cmp ? `<td class="num last thislast-sep" colspan="2">${pHtml}</td>` : ''}`;
+  const checkNumCell = x => `<td class="num staff-sep" colspan="${colsPer}" style="text-align:center"><input type="text" value="${x.adj?.checkNum ? _eTxn(x.adj.checkNum) : ''}" placeholder="check #" onchange="payrollSetCheckNum('${x.tech.id}',this.value)" style="width:90px" class="bg-surface-container border border-surface-container-high rounded px-1.5 py-0.5 text-sm font-body text-center text-on-surface focus:outline-none focus:border-primary"></td>`;
   const refCells = (c, p) =>
     `<td class="num staff-sep" style="color:#dc2626">${c.refund ? '-$' + Math.abs(c.refund).toFixed(0) : '—'}${_refNote(c.refundNotes)}</td><td class="num" style="color:#dc2626">${c.refundComm ? '-$' + Math.abs(c.refundComm).toFixed(0) : '—'}</td>`
     + (cmp ? `<td class="arrow-col"></td><td class="num last thislast-sep" style="color:#dc2626">${p.refund ? '-$' + Math.abs(p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${p.refundComm ? '-$' + Math.abs(p.refundComm).toFixed(0) : '—'}</td>` : '');
@@ -1462,11 +1494,10 @@ export function renderPayrollPage() {
     ...(T.some(x => x.c.refund || x.p.refund) ? [
       `<tr><td class="sticky-col">Refunds</td>${T.map(x => refCells(x.c, x.p)).join('')}</tr>`,
     ] : []),
-    `<tr><td class="sticky-col">Check</td>${T.map(checkCell).join('')}</tr>`,
-    ...(T.some(x => x.cDed || x.pDed) ? [
-      `<tr><td class="sticky-col">Cash deduction</td>${T.map(x => `<td class="num staff-sep" colspan="${cmp ? 3 : 2}" style="color:#dc2626">${x.cDed ? '-' + _m2(x.cDed) : '—'}</td>${cmp ? `<td class="num last thislast-sep" colspan="2" style="color:#dc2626">${x.pDed ? '-' + _m2(x.pDed) : '—'}</td>` : ''}`).join('')}</tr>`,
-    ] : []),
-    `<tr><td class="sticky-col">Cash</td>${T.map(x => span2(_m2(x.cCash), x.pCash)).join('')}</tr>`,
+    `<tr><td class="sticky-col">Check</td>${T.map(x => ovCell(x, 'check', x.cChk, _m2(x.pChk))).join('')}</tr>`,
+    `<tr><td class="sticky-col" style="font-weight:400;font-size:11px;color:var(--md-on-surface-variant)">Check #</td>${T.map(checkNumCell).join('')}</tr>`,
+    `<tr><td class="sticky-col">Cash deduction</td>${T.map(x => ovCell(x, 'deduction', x.cDed, x.pDed ? '-' + _m2(x.pDed) : '—', 'text-error')).join('')}</tr>`,
+    `<tr><td class="sticky-col">Cash</td>${T.map(x => ovCell(x, 'cash', x.cCash, _m2(x.pCash))).join('')}</tr>`,
     `<tr style="font-weight:700"><td class="sticky-col">Total paid</td>${T.map(x => span2(_m2(x.cTotal), x.pTotal)).join('')}</tr>`,
     `<tr class="section-row"><td class="sticky-col">By day ${info}</td><td colspan="${T.length * colsPer}"></td></tr>`,
     ...curDays.map((day, i) => {
@@ -1474,7 +1505,7 @@ export function renderPayrollPage() {
       return `<tr><td class="sticky-col" style="font-weight:500">${dl}</td>${T.map(x => dquad(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`;
     }),
   ];
-  const head1 = T.map(x => `<th colspan="${colsPer}" class="staff-sep" style="text-align:center"><span style="text-decoration:underline">${x.tech.name}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</span></th>`).join('');
+  const head1 = T.map(x => { const legal = x.tech.legalName || x.tech.name || '', pref = x.tech.name || ''; const showPref = pref && legal && pref.toLowerCase() !== legal.toLowerCase(); return `<th colspan="${colsPer}" class="staff-sep" style="text-align:center"><span style="text-decoration:underline">${_eTxn(legal)}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</span>${showPref ? `<div style="font-weight:400;font-size:10px;color:var(--md-on-surface-variant)">aka ${_eTxn(pref)}</div>` : ''}</th>`; }).join('');
   const head2 = T.map(() => `<th colspan="2" class="staff-sep" style="text-align:center;font-weight:600">This</th><th class="arrow-col"></th><th colspan="2" class="thislast-sep" style="text-align:center;font-weight:600">Last</th>`).join('');
   const head3 = T.map(() => cmp
     ? `<th class="num staff-sep">Billed</th><th class="num">Comm</th><th class="arrow-col"></th><th class="num thislast-sep">Billed</th><th class="num">Comm</th>`
@@ -1691,7 +1722,7 @@ function payrollGrid() {
   const curDays = payrollDaysInRange(cur.from, cur.to), prevDays = payrollDaysInRange(prev.from, prev.to);
   const order = cfg().turns_order || [];
   const techs = (cfg().staff || []).filter(s => !cfg().inactive_staff.includes(s.id))
-    .sort((a, b) => { const ra = order.indexOf(a.id), rb = order.indexOf(b.id); return (ra === -1 ? 1e9 : ra) - (rb === -1 ? 1e9 : rb); });
+    .sort((a, b) => (a.legalName || a.name || '').localeCompare(b.legalName || b.name || '', undefined, { sensitivity: 'base' }));   // payroll: A→Z by legal name
   const T = techs.map(tech => { const c = curData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] }, p = prevData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] }; const cComm = _netComm(c), pComm = _netComm(p); const cChk = techCheckAmount(tech, cComm, curKey), pChk = techCheckAmount(tech, pComm, prevKey); const cCashGross = Math.max(0, cComm - cChk), pCashGross = Math.max(0, pComm - pChk); const cDed = techCashDeduction(tech, cCashGross), pDed = techCashDeduction(tech, pCashGross); const cCash = Math.max(0, cCashGross - cDed), pCash = Math.max(0, pCashGross - pDed); return { tech, c, p, cChk, pChk, cDed, pDed, cCash, pCash, cTotal: cChk + cCash, pTotal: pChk + pCash }; });
   return { cur, T, curDays, prevDays };
 }
