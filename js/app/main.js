@@ -131,11 +131,14 @@ function syncNavForRole() {
   if (btn) btn.style.display = canViewReportsGroup() ? '' : 'none';
 }
 function renderDashSubnav(grp, activePanel) {
-  const el = document.getElementById('dash-subnav'); if (!el) return;
-  if (!grp) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-  el.classList.remove('hidden');
-  el.innerHTML = '<div class="subnav-seg">' + NAV_GROUPS[grp].panels.map(([id, icon, label]) =>
+  document.querySelectorAll('.subnav-slot').forEach(s => { if (s.innerHTML) s.innerHTML = ''; });
+  const global = document.getElementById('dash-subnav');
+  if (!grp) { if (global) { global.classList.add('hidden'); global.innerHTML = ''; } return; }
+  const html = '<div class="subnav-seg">' + NAV_GROUPS[grp].panels.map(([id, icon, label]) =>
     `<button class="subnav-btn${id === activePanel ? ' on' : ''}" onclick="showDashPanel('${id}')"><span class="material-symbols-outlined" style="font-size:17px">${icon}</span><span class="subnav-label">${label}</span></button>`).join('') + '</div>';
+  const slot = document.getElementById('subnav-slot-' + activePanel);
+  if (slot) { slot.innerHTML = html; if (global) { global.classList.add('hidden'); global.innerHTML = ''; } }
+  else if (global) { global.classList.remove('hidden'); global.innerHTML = html; }   // fallback row (Customers)
 }
 
 function showDashPanel(panel) {

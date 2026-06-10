@@ -267,6 +267,7 @@ tailwind.config = {
       <!-- ── FLOOR PLAN PANEL ── -->
       <div class="dash-panel" id="panel-floorplan">
         <div class="flex items-center gap-2 mb-3 flex-wrap">
+          <span class="subnav-slot" id="subnav-slot-floorplan" style="flex:0 1 auto"></span>
           <div id="floorplan-tray" class="flex-1 min-w-0"></div>
           <div class="flex gap-2 items-center flex-shrink-0">
             <div id="floorplan-edit-tools" class="hidden flex items-center gap-1">
@@ -311,6 +312,7 @@ tailwind.config = {
             <span class="material-symbols-outlined" style="font-size:15px" id="done-toggle-icon">visibility_off</span>
             <span id="done-toggle-label">Hide Paid</span>
           </button>
+          <span class="subnav-slot" id="subnav-slot-queue"></span>
           <button onclick="openQuickSale()" class="ml-auto flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-body font-semibold border border-primary text-primary hover:bg-primary/5 transition-all">
             <span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Quick Sale
           </button>
@@ -341,6 +343,7 @@ tailwind.config = {
               <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">vs</span>
               <span class="text-sm font-headline font-bold text-on-surface compare-btn-label">Prior period</span>
             </button>
+            <span class="subnav-slot" id="subnav-slot-reports"></span>
             <div class="flex gap-2 flex-wrap ml-auto">
               <button onclick="exportReportExcel()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
               <button onclick="exportReportPDF()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
@@ -575,6 +578,7 @@ tailwind.config = {
             <button onclick="openCashRegister()" title="Open the cash drawer / register" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors"><span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Cash Register</button>
             <button id="add-historical-btn" onclick="showHistoricalEntryModal()" class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface bg-surface-container-lowest font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical</button>
           </div>
+          <span class="subnav-slot" id="subnav-slot-transactions"></span>
           <div class="flex items-center gap-2 flex-wrap justify-end">
             <button onclick="openReconcile()" title="Find tickets whose recorded total doesn't match what was charged"
               class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors">
@@ -615,6 +619,7 @@ tailwind.config = {
       <div class="dash-panel" id="panel-payroll">
         <div class="flex items-start justify-between gap-2 mb-4 flex-wrap">
           <div id="clocked-in-now" class="hidden flex-1 min-w-[240px]"></div>
+          <span class="subnav-slot" id="subnav-slot-payroll"></span>
           <div class="flex items-center gap-2 flex-wrap flex-shrink-0 ml-auto">
             <button onclick="payrollExportPDF()" title="Full payroll table (landscape)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
             <button onclick="payrollExportStaffPDF()" title="Per-tech billed total + by day — for handing to staff" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">badge</span> Staff PDF</button>
@@ -644,6 +649,7 @@ tailwind.config = {
             <button onclick="exportTurnsCSV()" title="Export this day as CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-xs font-body font-semibold text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
             <button onclick="exportTurnsPDF()" title="Print / save this day as PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-xs font-body font-semibold text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
           </div>
+          <span class="subnav-slot" id="subnav-slot-turns"></span>
           <div class="flex items-center gap-3">
             <!-- Add/Remove technicians button -->
             <button onclick="showTurnsTechSelector()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary hover:text-on-primary transition-colors">
@@ -1314,6 +1320,7 @@ tailwind.config = {
             <h2 class="text-xl font-headline font-bold text-on-surface">Gift Cards</h2>
             <p class="text-sm font-body text-on-surface-variant mt-0.5">Track gift cards sold and redeemed</p>
           </div>
+          <span class="subnav-slot" id="subnav-slot-giftcards"></span>
           <div class="flex gap-2">
             <button onclick="showAddGiftCard()" class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">add</span> New Gift Card
