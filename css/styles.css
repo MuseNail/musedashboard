@@ -115,6 +115,14 @@
   /* Report range buttons */
   .rng-btn.active { background:#1a5252 !important; color:#ffffff !important; }
 
+  /* Turns board "Large" text (C8) — per-device toggle (Settings → Workflow → Turns Board
+     Display). Bumps the bubble + side-list type and widens the slots so the text fits. */
+  #panel-turns.turns-large .text-\[9px\]  { font-size: 11px !important; }
+  #panel-turns.turns-large .text-\[10px\] { font-size: 12px !important; }
+  #panel-turns.turns-large .text-\[11px\] { font-size: 13px !important; }
+  #panel-turns.turns-large .turns-filled-slot,
+  #panel-turns.turns-large .turns-drop-zone { width: 172px !important; }
+
   /* Queue filter chips (D13): filters are OUTLINED buttons — visually distinct from the
      color-FILLED status pills they used to mimic. Active = teal outline + light teal wash. */
   .tab-btn { border:1.5px solid #b9c2c7; background:transparent; color:#4a5055; }

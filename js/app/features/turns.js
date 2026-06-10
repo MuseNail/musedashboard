@@ -159,7 +159,26 @@ function acceptBtnHtml(entryId, serviceId, techName) {
 }
 
 // ── Render ────────────────────────────────────────
-export function renderTurns() { renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); if (!turnsViewingHistory) window.autoNoShowStaleAppts?.(); }
+export function renderTurns() { _applyTurnsTextSize(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); if (!turnsViewingHistory) window.autoNoShowStaleAppts?.(); }
+
+// ── Per-device Turns text size (C8) ───────────────
+// Device-local (like muse_cal_hours) — the front-desk monitor can run Large while the
+// iPad stays Standard. Applied as a panel class; the size overrides live in styles.css.
+const turnsLarge = () => localStorage.getItem('muse_turns_large') === '1';
+function _applyTurnsTextSize() { document.getElementById('panel-turns')?.classList.toggle('turns-large', turnsLarge()); }
+export function setTurnsLarge(on) {
+  localStorage.setItem('muse_turns_large', on ? '1' : '0');
+  _applyTurnsTextSize(); renderTurnsDisplaySettings();
+  showToast(on ? 'Turns board: large text (this device) ✓' : 'Turns board: standard text (this device) ✓');
+}
+export function renderTurnsDisplaySettings() {
+  const host = document.getElementById('turns-display-buttons'); if (!host) return;
+  const on  = 'flex-1 px-4 py-3 rounded-xl border font-body font-bold text-sm bg-primary text-on-primary border-primary';
+  const off = 'flex-1 px-4 py-3 rounded-xl border font-body font-semibold text-sm bg-surface-container-lowest text-on-surface border-surface-container-high hover:bg-surface-container';
+  host.innerHTML = `
+    <button onclick="setTurnsLarge(false)" class="${turnsLarge() ? off : on}">Standard</button>
+    <button onclick="setTurnsLarge(true)" class="${turnsLarge() ? on : off}">Large<span class="block text-[10px] font-normal opacity-80">easier to read from a distance</span></button>`;
+}
 
 // ── Upcoming appointments (Google Calendar) on the Turns sheet ────────────────
 // Strip = the "Next up" row (toggled by the Appointments button, device-local).
