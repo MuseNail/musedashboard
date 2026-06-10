@@ -99,6 +99,7 @@ export function renderStaffServicesPicker(selectedServices) {
 export function showAddStaff() {
   document.getElementById('staff-modal-title').textContent = 'Add Technician';
   document.getElementById('staff-name-input').value = '';
+  { const ln = document.getElementById('staff-legalname-input'); if (ln) ln.value = ''; }
   document.getElementById('staff-commission-input').value = '';
   const pinEl = document.getElementById('staff-pin-input'); if (pinEl) pinEl.value = '';
   document.getElementById('staff-edit-id').value = '';
@@ -114,6 +115,7 @@ export function showEditStaff(id) {
   if (!st) return;
   document.getElementById('staff-modal-title').textContent = 'Edit Technician';
   document.getElementById('staff-name-input').value = st.name;
+  { const ln = document.getElementById('staff-legalname-input'); if (ln) ln.value = st.legalName || ''; }
   document.getElementById('staff-commission-input').value = st.commission != null ? st.commission : '';
   const pinEl = document.getElementById('staff-pin-input'); if (pinEl) pinEl.value = st.pin || '';
   document.getElementById('staff-edit-id').value = id;
@@ -147,6 +149,7 @@ function _setStaffDeductFields(pct, threshold) {
 
 export function saveStaff() {
   const name = document.getElementById('staff-name-input').value.trim();
+  const legalName = (document.getElementById('staff-legalname-input')?.value || '').trim();
   const commRaw = document.getElementById('staff-commission-input').value.trim();
   const commission = commRaw !== '' ? parseFloat(commRaw) : null;
   const pin = (document.getElementById('staff-pin-input')?.value || '').trim();
@@ -167,9 +170,9 @@ export function saveStaff() {
   const staff = [...cfg().staff];
   if (editId) {
     const i = staff.findIndex(s => s.id === editId);
-    if (i >= 0) staff[i] = { ...staff[i], name, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold };
+    if (i >= 0) staff[i] = { ...staff[i], name, legalName, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold };
   } else {
-    staff.push({ id: `staff-${Date.now()}`, name, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold });
+    staff.push({ id: `staff-${Date.now()}`, name, legalName, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold });
   }
   setStaff(staff);
   closeStaffModal();

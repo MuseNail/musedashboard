@@ -1624,7 +1624,12 @@ tailwind.config = {
     </div>
     <div class="space-y-4">
       <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Name</label>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Legal Name <span class="normal-case tracking-normal text-on-surface-variant">(payroll / official)</span></label>
+        <input id="staff-legalname-input" type="text" placeholder="e.g. Christina Nguyen"
+          class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
+      </div>
+      <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Preferred Name <span class="normal-case tracking-normal text-on-surface-variant">(display &amp; Google Calendar)</span></label>
         <input id="staff-name-input" type="text" placeholder="e.g. Christina"
           class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
       </div>

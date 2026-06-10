@@ -16,7 +16,7 @@ export function renderServicesMerged() {
   const list = document.getElementById('services-merged-list');
   if (!list) return;
   const svcs = cfg().services;
-  if (!svcs.length) { list.innerHTML = '<p class="text-sm font-body text-on-surface-variant py-4 text-center">No services yet. Add one or sync from Square.</p>'; return; }
+  if (!svcs.length) { list.innerHTML = '<p class="text-sm font-body text-on-surface-variant py-4 text-center">No services yet. Add one to get started.</p>'; return; }
   list.innerHTML = svcs.map(s => {
     const checkin = isServiceVisibleOnCheckin(s.id);
     const dash    = isServiceVisibleOnDash(s.id);
