@@ -555,7 +555,7 @@ export function closeManualAdd() {
   const c = document.getElementById('manual-guests-container'); if (c) c.innerHTML = '';
 }
 
-export function submitManualAdd() {
+export function submitManualAdd(skipApptGuard) {
   const newEntries = [];
   const isAppointment = document.getElementById('manual-is-appointment')?.checked || false;
   const apptTechId = isAppointment ? (document.getElementById('manual-appt-tech')?.value || '') : '';
@@ -577,6 +577,8 @@ export function submitManualAdd() {
     newEntries.push(entry);
   }
   if (newEntries.length === 0) return;
+  // Appointment guard: same prompt as the kiosk — offer to check in FROM today's appointment.
+  if (skipApptGuard !== true && window.checkinApptGuard?.(newEntries.map(e => ({ name: e.name, phone: e.phone })), () => submitManualAdd(true))) return;
   if (newEntries.length > 1) {
     const groupId = `grp-${Date.now()}`, groupColor = GROUP_COLORS[groupColorIndex++ % GROUP_COLORS.length], primaryName = newEntries[0].name;
     newEntries.forEach((e, i) => { e.groupId = groupId; e.groupColor = groupColor; e.groupLabel = i === 0 ? `${e.name} (primary)` : `${primaryName} — ${e.name}`; });

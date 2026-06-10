@@ -788,6 +788,22 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   const confirmed = ev.extendedProperties?.private?.museConfirmed === '1';
   const noShow = ev.extendedProperties?.private?.museNoShow === '1';
   let queueMatch = queue().find(x => x.calEventId && x.calEventId === eventId) || _phoneQueueMatch(rawPhone, startDt.getTime());
+  // Read-only services + staff summary for the whole booking (every guest in the group).
+  const svcSummaryHtml = (() => {
+    const uCal = unassignedCalId();
+    const blocks = _gatherParty(calId, eventId).map(p => ({
+      name: p.name,
+      lines: _parseApptLines(p.ev, p.calId).map(l => {
+        const svc = cfg().services.find(s => s.id === l.svcId)?.label || '';
+        if (!svc) return '';
+        const tech = (!l.calId || l.calId === uCal) ? 'Unassigned' : (_calCalendars.find(c => c.id === l.calId)?.name || 'Unassigned');
+        return `${svc} — ${tech}`;
+      }).filter(Boolean),
+    })).filter(b => b.lines.length);
+    if (!blocks.length) return '';
+    const multi = blocks.length > 1;
+    return `<div class="mt-2 rounded-xl bg-surface-container px-3 py-2"><div class="text-[10px] font-body font-bold uppercase tracking-widest text-outline mb-1">Services &amp; Staff</div>${blocks.map(b => `${multi ? `<div class="text-xs font-body font-bold text-on-surface mt-1.5">${_escHtml(b.name)}</div>` : ''}${b.lines.map(l => `<div class="text-xs font-body text-on-surface mt-0.5">${_escHtml(l)}</div>`).join('')}`).join('')}</div>`;
+  })();
   const modal = document.createElement('div');
   modal.className = 'fixed inset-0 z-[85] flex items-center justify-center bg-on-surface/40 px-4';
   let statusBadge = '';
@@ -799,7 +815,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   const confirmBadge = confirmed ? '<span style="color:#16a34a;font-size:11px;font-weight:700">✓ Confirmed</span>' : '';
   modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl">
     <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${_escHtml(title)}</h3><button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
-    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${_escHtml(cal?.name||'')}</span> · ${startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</p>${phone?`<p>📞 ${_escHtml(phone)}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${ev.created?`<p class="text-xs opacity-60">🗓 Booked ${new Date(ev.created).toLocaleString([],{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}</p>`:''}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
+    <div class="space-y-1 text-sm font-body text-on-surface-variant mb-4"><p><span class="font-semibold text-on-surface">${_escHtml(cal?.name||'')}</span> · ${startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</p>${phone?`<p>📞 ${_escHtml(phone)}</p>`:''}${notes?`<p class="text-xs opacity-75">${notes.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</p>`:''}${svcSummaryHtml}${ev.created?`<p class="text-xs opacity-60">🗓 Booked ${new Date(ev.created).toLocaleString([],{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}</p>`:''}${(statusBadge||confirmBadge)?`<div class="mt-1 flex items-center gap-2 flex-wrap">${statusBadge}${confirmBadge}</div>`:''}</div>
     <div class="space-y-2">
       ${isAppt ? `<button onclick="calQuickCheckin('${calId}','${eventId}'); this.closest('.fixed').remove()" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Quick Check-In</button>
       ${queueMatch?`<button onclick="this.closest('.fixed').remove(); showGroupAssignModal('${queueMatch.id}')" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">assignment_ind</span> Assign & Price</button>`:''}
@@ -1028,6 +1044,78 @@ export function confirmQuickCheckin() {
   closeQuickCheckin();
   _doCalCheckin(sel, gid, partySize);
 }
+
+// ── Check-in guard: catch a manual check-in for someone who already has an appointment today ─
+// Matched by phone (digits) or exact full name against today's not-yet-checked-in, not-no-show
+// appointments. Returns null when the calendar isn't loaded on this device (guard degrades silently).
+export function findTodayApptFor(phone, name) {
+  const p = String(phone || '').replace(/\D/g, '');
+  const nm = String(name || '').trim().toLowerCase();
+  if (!p && !nm) return null;
+  const uCal = unassignedCalId();
+  let hit = null;
+  Object.entries(todayApptSource()).forEach(([cid, list]) => (list || []).forEach(ev => {
+    if (hit || !ev.start?.dateTime) return;
+    const ext = ev.extendedProperties?.private || {};
+    if (ext.museNoShow === '1') return;
+    const evPhone = _apptPhone(ev).replace(/\D/g, '');
+    const evName = (ext.museName || (ev.summary || '').split(' — ')[0] || '').trim().toLowerCase();
+    if (!((p && evPhone && evPhone === p) || (nm && evName && evName === nm))) return;
+    if (queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id))) return;   // that appt is already checked in
+    const lines = _parseApptLines(ev, cid).map(l => {
+      const svc = cfg().services.find(s => s.id === l.svcId)?.label || '';
+      if (!svc) return '';
+      const tech = (!l.calId || l.calId === uCal) ? '' : (_calCalendars.find(c => c.id === l.calId)?.name || '');
+      return svc + (tech ? ` with ${tech}` : '');
+    }).filter(Boolean);
+    hit = { calId: cid, eventId: ev.id, name: ext.museName || (ev.summary || '').split(' — ')[0] || name, startMs: new Date(ev.start.dateTime).getTime(), summary: lines.join(', ') };
+  }));
+  return hit;
+}
+// Called by the kiosk submitCheckin + desk submitManualAdd before they create entries.
+// Returns true when a matching appointment was found (the prompt is up; the caller must bail).
+// proceed() re-runs the caller's check-in with the guard bypassed.
+let _guardMatch = null, _guardProceed = null;
+export function checkinApptGuard(guests, proceed) {
+  for (const g of guests || []) {
+    const m = findTodayApptFor(g.phone, g.name);
+    if (m) { _guardMatch = m; _guardProceed = proceed; _showApptGuardModal(m); return true; }
+  }
+  return false;
+}
+function _showApptGuardModal(m) {
+  document.getElementById('appt-guard-modal')?.remove();   // replace any prior prompt WITHOUT clearing the just-set guard state
+  const when = new Date(m.startMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const modal = document.createElement('div');
+  modal.id = 'appt-guard-modal';
+  modal.className = 'fixed inset-0 z-[95] flex items-center justify-center bg-on-surface/40 px-4';
+  modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center gap-2 mb-2"><span class="material-symbols-outlined text-primary" style="font-size:22px">event_available</span><h3 class="font-headline font-bold text-on-surface text-lg">Already booked today</h3></div>
+    <p class="text-sm font-body text-on-surface-variant mb-4"><span class="font-semibold text-on-surface">${_escHtml(m.name)}</span> has an appointment today at <span class="font-semibold text-on-surface">${when}</span>${m.summary ? ` — ${_escHtml(m.summary)}` : ''}.</p>
+    <div class="space-y-2">
+      <button onclick="apptGuardUseAppt()" class="w-full bg-primary text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm hover:bg-primary-dim transition-colors flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">how_to_reg</span> Check In from the Appointment</button>
+      <button onclick="apptGuardProceed()" class="w-full border-2 border-outline-variant text-on-surface py-2.5 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Check In Separately — keep the appointment for later</button>
+      <button onclick="closeApptGuardModal()" class="w-full text-on-surface-variant py-2 rounded-xl font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Cancel</button>
+    </div></div>`;
+  document.body.appendChild(modal);
+}
+export function closeApptGuardModal() { document.getElementById('appt-guard-modal')?.remove(); _guardMatch = null; _guardProceed = null; }
+export function apptGuardUseAppt() {
+  const m = _guardMatch; closeApptGuardModal();
+  if (!m) return;
+  window.closeManualAdd?.();                       // harmless no-op when the desk modal isn't open
+  calQuickCheckin(m.calId, m.eventId);
+  // Kiosk flow: keep the customer-facing screens — show the confirm screen, then bounce
+  // back to welcome (mirrors submitCheckin). On the desk screen _doCalCheckin already
+  // switched to the Queue panel, so leave it alone.
+  if (!document.getElementById('screen-desk')?.classList.contains('active')) {
+    const cn = document.getElementById('confirm-name'); if (cn) cn.textContent = m.name;
+    window.goTo?.('screen-confirm');
+    clearTimeout(window._confirmResetTimer);
+    window._confirmResetTimer = setTimeout(() => { if (document.getElementById('screen-confirm')?.classList.contains('active')) window.goTo?.('screen-welcome'); }, 5000);
+  }
+}
+export function apptGuardProceed() { const fn = _guardProceed; closeApptGuardModal(); if (fn) fn(); }
 
 // ── Appointment modal ─────────────────────────────
 export function apptAcSearch(input, field) {
