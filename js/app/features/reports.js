@@ -1444,18 +1444,20 @@ export function renderPayrollPage() {
   const _fdRows = (cfg().fd_users || []).map(u => {
     const r = fdPaidHours(u.id, +_fdFrom, +_fdTo);
     return { u, hours: r.hours, open: r.openShift, flagged: r.flagged, rate: u.hourlyRate || 0, pay: r.hours * (u.hourlyRate || 0) };
-  }).filter(r => r.rate > 0 || r.hours > 0 || r.open || r.flagged);
-  let _fdHtml = '';
-  if (_fdRows.length) {
-    const _fdTotal = _fdRows.reduce((s, r) => s + r.pay, 0);
-    _fdHtml = `<div class="mt-6">
+  });
+  const _fdTotal = _fdRows.reduce((s, r) => s + r.pay, 0);
+  // ALWAYS rendered (even with no FD staff / no hourly rate set) so it's a stable, discoverable
+  // home for front-desk hours — empty state guides the operator to add staff.
+  const _fdBody = _fdRows.length
+    ? _fdRows.map(r => `<tr ${_fdEdit ? `onclick="openTimecard('${r.u.id}')" style="cursor:pointer"` : ''}><td class="sticky-col">${_eTxn(r.u.name)}${r.open ? ' <span title="Still clocked in" style="color:#c77700">⏱</span>' : ''}${r.flagged ? ` <span title="${r.flagged} punch(es) need review — a forgotten clock-out/in, not counted. Tap to fix." style="color:#c0392b">⚠${r.flagged}</span>` : ''}</td><td class="num">${r.hours.toFixed(2)}</td><td class="num">$${r.rate.toFixed(2)}</td><td class="num">$${r.pay.toFixed(2)}</td></tr>`).join('')
+      + `<tr style="font-weight:700"><td class="sticky-col">Total</td><td class="num"></td><td class="num"></td><td class="num">$${_fdTotal.toFixed(2)}</td></tr>`
+    : `<tr><td colspan="4" style="text-align:center;color:var(--md-on-surface-variant);padding:16px;font-style:italic">No front-desk staff yet — add them in Settings → Staff &amp; Access.</td></tr>`;
+  const _fdHtml = `<div class="mt-6">
       <div class="flex items-center gap-2 mb-2"><h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest">Front Desk — Hourly</h3>${_fdEdit ? '<span class="text-[11px] font-body text-on-surface-variant">tap a row to adjust times</span>' : ''}</div>
       <div class="overflow-x-auto rounded-xl border border-surface-container-high"><table class="data-table">
         <thead><tr><th class="sticky-col">Staff</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Pay</th></tr></thead>
-        <tbody>${_fdRows.map(r => `<tr ${_fdEdit ? `onclick="openTimecard('${r.u.id}')" style="cursor:pointer"` : ''}><td class="sticky-col">${_eTxn(r.u.name)}${r.open ? ' <span title="Still clocked in" style="color:#c77700">⏱</span>' : ''}${r.flagged ? ` <span title="${r.flagged} punch(es) need review — a forgotten clock-out/in, not counted. Tap to fix." style="color:#c0392b">⚠${r.flagged}</span>` : ''}</td><td class="num">${r.hours.toFixed(2)}</td><td class="num">$${r.rate.toFixed(2)}</td><td class="num">$${r.pay.toFixed(2)}</td></tr>`).join('')}
-        <tr style="font-weight:700"><td class="sticky-col">Total</td><td class="num"></td><td class="num"></td><td class="num">$${_fdTotal.toFixed(2)}</td></tr></tbody>
+        <tbody>${_fdBody}</tbody>
       </table></div></div>`;
-  }
   wrap.innerHTML = `<table class="data-table"><thead>${cmp
       ? `<tr><th class="sticky-col" rowspan="3"></th>${head1}</tr><tr>${head2}</tr><tr>${head3}</tr>`
       : `<tr><th class="sticky-col" rowspan="2"></th>${head1}</tr><tr>${head3}</tr>`}</thead>
@@ -1697,33 +1699,45 @@ export function payrollExportStaffPDF() {
   if (!techs.length) { showToast('No billing this period.'); return; }
   const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const period = `${fmt(cur.from)} – ${fmt(cur.to)}`;
-  const cards = techs.map(x => {
-    const trs = curDays.map(day => { const b = (x.c.daily[day] || { billed: 0 }).billed; const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }); return `<tr><td>${dl}</td><td class="n">$${b.toFixed(0)}</td></tr>`; }).join('');
+  // Each tech = a plain receipt: centered shop / name / period, the day list, then the total.
+  // Uniform size, no bold, all black, monospace — reads like a register slip you cut & hand out.
+  const receipts = techs.map(x => {
+    const rows = curDays.map(day => {
+      const b = (x.c.daily[day] || { billed: 0 }).billed;
+      const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+      return `<div class="line"><span>${dl}</span><span>$${b.toFixed(0)}</span></div>`;
+    }).join('');
     const net = x.c.billed + (x.c.refund || 0);
-    const rf = x.c.refund ? `<div class="crf">Refunds -$${Math.abs(x.c.refund).toFixed(2)} · Net $${net.toFixed(2)}</div>` : '';
-    return `<div class="card">
-      <div class="cname">${_eTxn(x.tech.name)}</div>
-      <div class="ctot">$${x.c.billed.toFixed(2)} <span class="ctl">billed</span></div>
-      <table class="cdays"><tbody>${trs}</tbody><tfoot><tr><td>Total</td><td class="n">$${x.c.billed.toFixed(2)}</td></tr></tfoot></table>
+    const rf = x.c.refund ? `<div class="line"><span>Refunds</span><span>-$${Math.abs(x.c.refund).toFixed(2)}</span></div><div class="line"><span>Net</span><span>$${net.toFixed(2)}</span></div>` : '';
+    return `<div class="receipt">
+      <div class="ctr">Muse Nails &amp; Spa</div>
+      <div class="ctr">${_eTxn(x.tech.name)}</div>
+      <div class="ctr">${_eTxn(period)}</div>
+      <div class="dash"></div>
+      ${rows}
+      <div class="dash"></div>
+      <div class="line"><span>Total</span><span>$${x.c.billed.toFixed(2)}</span></div>
       ${rf}
     </div>`;
-  }).join('');
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Staff Billing — ${_eTxn(period)}</title><style>
-    @page{size:11in 8.5in;margin:.4in} body{font-family:Arial,sans-serif;margin:0;color:#222;font-size:11pt}
-    .hd{font-size:11pt;color:#666;margin:0 0 8px}.hd b{color:#1a5252;font-size:13pt}
-    .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-    .card{border:1px dashed #9aa;border-radius:8px;padding:6px 7px;break-inside:avoid;page-break-inside:avoid}
-    .cname{font-size:13pt;font-weight:800;color:#1a5252;line-height:1.1}
-    .ctot{font-size:13pt;font-weight:800;color:#1a5252;margin:2px 0 5px}.ctl{font-size:9pt;font-weight:600;color:#888;text-transform:uppercase}
-    .cdays{width:100%;border-collapse:collapse;font-size:11pt}.cdays td{padding:1px 1px;border-bottom:1px solid #eee}.cdays td.n{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
-    .cdays tfoot td{border-top:1.5px solid #1a5252;border-bottom:none;font-weight:800;padding-top:3px}
-    .crf{margin-top:5px;font-size:11pt;color:#a01818;font-weight:600}
-  </style></head><body>
-    <div class="hd"><b>Muse Nails &amp; Spa</b> — Staff Billing · ${_eTxn(period)}</div>
-    <div class="grid">${cards}</div>
-  </body></html>`;
+  });
+  // Two rows of four receipts per landscape sheet (8), page-break between sheets.
+  const PER_SHEET = 8;
+  let sheets = '';
+  for (let i = 0; i < receipts.length; i += PER_SHEET) {
+    const last = i + PER_SHEET >= receipts.length;
+    sheets += `<div class="sheet"${last ? '' : ' style="page-break-after:always"'}>${receipts.slice(i, i + PER_SHEET).join('')}</div>`;
+  }
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Staff Billing</title><style>
+    @page{size:11in 8.5in;margin:.4in} body{font-family:'Courier New',monospace;margin:0;color:#000;font-size:10pt}
+    .sheet{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+    .receipt{border:1px dashed #999;border-radius:6px;padding:9px 11px;break-inside:avoid;page-break-inside:avoid;line-height:1.32}
+    .ctr{text-align:center}
+    .dash{border-top:1px dashed #000;margin:5px 0}
+    .line{display:flex;justify-content:space-between;gap:10px}
+    .line span:last-child{font-variant-numeric:tabular-nums}
+  </style></head><body>${sheets}</body></html>`;
   const u = URL.createObjectURL(new Blob([html], { type: 'text/html' })); const w = window.open(u, '_blank'); if (w) setTimeout(() => w.print(), 600); URL.revokeObjectURL(u);
-  showToast('Staff PDF opened — grid of cards (cut to hand out)');
+  showToast('Staff receipts opened — two rows per sheet (cut to hand out)');
 }
 
 // ── Transactions list ─────────────────────────────
