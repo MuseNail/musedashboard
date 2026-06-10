@@ -47,8 +47,7 @@ window.calEventsFor = calendar.getCalEvents;
 // Single source of truth for every dismissible modal/overlay + its close fn. Drives BOTH the
 // Escape key (close the first open one) AND closeAllModals() on navigation (so a screen change
 // never leaves an orphaned modal floating over the new screen / silently eating nav taps).
-// `setup-wizard` is intentionally excluded (forced first-run setup); `pin-modal` is handled
-// separately in the Esc handler.
+// `pin-modal` is handled separately in the Esc handler.
 const MODAL_CLOSERS = [
   ['tech-status-menu', turns.closeTechStatusMenu], ['group-assign-modal', queue.closeGroupAssignModal],
   ['manual-modal', queue.closeManualAdd], ['warn-modal', queue.closeWarnModal],
@@ -112,14 +111,46 @@ function goTo(screenId, param) {
   }
   if (screenId === 'screen-desk') { utils.updateDeskDate(); settings.initCalHoursSelectors(); }
 }
+// ── Grouped top nav (v4.74) ──────────────────────
+// 5 tabs; grouped panels switch via the subnav segments under the header. The Reports group
+// (Reports | Payroll) is admin/manager-only — the tab is hidden and direct opens are blocked.
+const NAV_GROUPS = {
+  floor:      { navId: 'nav-floor',      panels: [['turns','swap_vert','Turns'], ['queue','queue','Queue'], ['floorplan','grid_view','Floor Plan']] },
+  money:      { navId: 'nav-money',      panels: [['transactions','receipt_long','Transactions'], ['giftcards','card_giftcard','Gift Cards']] },
+  reportsgrp: { navId: 'nav-reportsgrp', panels: [['reports','bar_chart','Reports'], ['payroll','payments','Payroll']] },
+  // Settings isn't a real group (its tab always opens Settings); 'admin' only renders the
+  // Settings|Customers subnav while on the Customers panel so there's an obvious way back.
+  admin:      { navId: 'nav-settings',   panels: [['settings','tune','Settings'], ['customers','contacts','Customers']] },
+};
+const groupOf = p => Object.keys(NAV_GROUPS).find(g => NAV_GROUPS[g].panels.some(t => t[0] === p));
+const lastGroupView = {};
+const canViewReportsGroup = () => ['admin', 'manager'].includes(session.getActiveUser()?.role);
+function showDashGroup(g) { showDashPanel(lastGroupView[g] || NAV_GROUPS[g].panels[0][0]); }
+function syncNavForRole() {
+  const btn = document.getElementById('nav-reportsgrp');
+  if (btn) btn.style.display = canViewReportsGroup() ? '' : 'none';
+}
+function renderDashSubnav(grp, activePanel) {
+  const el = document.getElementById('dash-subnav'); if (!el) return;
+  if (!grp) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  el.classList.remove('hidden');
+  el.innerHTML = '<div class="subnav-seg">' + NAV_GROUPS[grp].panels.map(([id, icon, label]) =>
+    `<button class="subnav-btn${id === activePanel ? ' on' : ''}" onclick="showDashPanel('${id}')"><span class="material-symbols-outlined" style="font-size:17px">${icon}</span><span class="subnav-label">${label}</span></button>`).join('') + '</div>';
+}
+
 function showDashPanel(panel) {
+  if ((panel === 'reports' || panel === 'payroll') && !canViewReportsGroup()) { utils.showToast('Only a manager or admin can view Reports & Payroll.'); return; }
   closeAllModals();
   ['queue','reports','transactions','payroll','turns','settings','giftcards','calendar','floorplan','customers'].forEach(p => {
     document.getElementById(`panel-${p}`)?.classList.remove('active');
-    document.getElementById(`nav-${p}`)?.classList.remove('active');
   });
+  ['nav-floor','nav-calendar','nav-money','nav-reportsgrp','nav-settings'].forEach(id => document.getElementById(id)?.classList.remove('active'));
   document.getElementById(`panel-${panel}`)?.classList.add('active');
-  document.getElementById(`nav-${panel}`)?.classList.add('active');
+  const grp = groupOf(panel);
+  document.getElementById(grp ? NAV_GROUPS[grp].navId : `nav-${panel}`)?.classList.add('active');
+  if (grp && grp !== 'admin') lastGroupView[grp] = panel;
+  renderDashSubnav(panel === 'settings' ? null : grp, panel);
+  syncNavForRole();
   // Re-render the panel being shown so it reflects the latest state. onStateChange only
   // re-renders the ACTIVE panel, so a queue change that landed while another tab was open
   // left the Queue panel stale (a check-in showed in Turns but not Queue until a refresh).
@@ -151,7 +182,7 @@ function showStaffListView() {
   document.getElementById('staff-schedule-view')?.classList.add('hidden');
   const btn = document.getElementById('schedule-view-btn'); if (btn) { btn.style.background = ''; btn.style.color = ''; }
 }
-Object.assign(window, { goTo, showDashPanel, toggleStaffScheduleView, showStaffListView });
+Object.assign(window, { goTo, showDashPanel, showDashGroup, toggleStaffScheduleView, showStaffListView });
 
 // Let a mouse wheel scroll the top nav horizontally when it overflows a narrow desktop window
 // (touch already pans it; the scrollbar is hidden via .no-scroll). justify-content:safe center
@@ -455,9 +486,6 @@ function boot() {
     confirmScreen.addEventListener('click', reset);
     confirmScreen.addEventListener('touchend', e => { e.preventDefault(); reset(); });
   }
-
-  // First-time Square setup wizard
-  setTimeout(() => { if (!store.getState().config.square_config && !sessionStorage.getItem('muse_setup_skipped')) settings.showSetupWizard(); }, 1500);
 
   wireKeyboard();
   armMidnightRollover();

@@ -153,18 +153,6 @@ export function renderAppInfo() {
     </div>`).join('');
 }
 
-// ── First-time setup wizard ───────────────────────
-export function showSetupWizard() { const w = document.getElementById('setup-wizard'); if (!w) return; w.classList.remove('hidden'); w.style.display = 'flex'; setTimeout(() => document.getElementById('setup-location-id')?.focus(), 300); }
-export function hideSetupWizard() { const w = document.getElementById('setup-wizard'); if (!w) return; w.classList.add('hidden'); w.style.display = ''; }
-export function completeSetup() {
-  const locationId = document.getElementById('setup-location-id')?.value.trim();
-  if (!locationId) { showToast('Please enter your Square Location ID.'); return; }
-  dispatch('config.set', { key: 'square_config', value: { locationId } });
-  hideSetupWizard();
-  showToast('Connected to Square ✓');
-}
-export function skipSetup() { sessionStorage.setItem('muse_setup_skipped', '1'); hideSetupWizard(); showToast('Running without Square. You can connect later in Settings.'); }
-
 // ── Pay period (config.pay_period) — drives the Reports/Transactions quick button ─
 export function renderPayPeriodSettings() {
   const el = document.getElementById('settings-payperiod-section'); if (!el) return;

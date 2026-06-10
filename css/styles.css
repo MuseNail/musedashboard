@@ -93,6 +93,13 @@
   .dash-tab.active { background:#1a5252; color:#ffffff; }
   .dash-tab.active .material-symbols-outlined { color:#ffffff; }
 
+  /* Sub-view switcher under the header for grouped tabs (Floor / Transactions / Reports) */
+  #dash-subnav { display:flex; justify-content:center; padding:10px 12px 0; }
+  #dash-subnav.hidden { display:none; }
+  .subnav-seg { display:inline-flex; background:#e4e8ea; border-radius:12px; padding:3px; gap:2px; }
+  .subnav-btn { display:inline-flex; align-items:center; gap:6px; border:none; background:transparent; font-family:'Inter',sans-serif; font-size:13px; font-weight:700; padding:7px 18px; border-radius:10px; cursor:pointer; color:#5b6166; transition:all 0.15s; white-space:nowrap; }
+  .subnav-btn.on { background:#ffffff; color:#1a5252; box-shadow:0 1px 4px rgba(0,0,0,0.14); }
+
   /* Report range buttons */
   .rng-btn.active { background:#1a5252 !important; color:#ffffff !important; }
 
