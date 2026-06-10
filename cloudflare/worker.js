@@ -453,23 +453,28 @@ export default {
     // text/email the receipt. Returns { customerCode }. Best-effort; the client never blocks a charge on it.
     if (path === '/helcim/customer' && method === 'POST') {
       let b = {}; try { b = await request.json(); } catch {}
-      const name = String(b.name || '').trim(), phone = String(b.phone || '').replace(/\D/g, '');
-      if (!name && !phone) return json({ error: 'name or phone required' }, 400);
+      const name = String(b.name || '').trim(), digits = String(b.phone || '').replace(/\D/g, '');
+      if (!name && !digits) return json({ error: 'name or phone required' }, 400);
+      // Helcim's field is cellPhone (capital P) and their search does PARTIAL STRING matching on the
+      // stored phone — so always store and search the same dashed XXX-XXX-XXXX format. (v4.72 sent
+      // lowercase `cellphone`, which Helcim ignored: no phone on the customer, search never matched,
+      // and every charge minted a duplicate customer.)
+      const phone = digits.length === 10 ? `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}` : digits;
       const hh = { 'api-token': env.HELCIM_API_TOKEN, 'accept': 'application/json' };
       let customerCode = null;
       try {
         if (phone) {
-          const sr = await fetch(`https://api.helcim.com/v2/customers?search=${encodeURIComponent(phone)}&limit=10`, { headers: hh });
+          const sr = await fetch(`https://api.helcim.com/v2/customers?search=${encodeURIComponent(phone)}&limit=25`, { headers: hh });
           const sj = await sr.json().catch(() => ({}));
           const list = Array.isArray(sj) ? sj : (Array.isArray(sj.customers) ? sj.customers : (Array.isArray(sj.data) ? sj.data : []));
-          const match = list.find(c => String(c.cellphone || c.phone || '').replace(/\D/g, '') === phone);
-          if (match) customerCode = match.customerCode || match.id || null;
+          const match = list.find(c => String(c.cellPhone || c.cellphone || c.phone || '').replace(/\D/g, '') === digits);
+          if (match) customerCode = match.customerCode || null;
         }
       } catch {}
       if (!customerCode) {
-        const cr = await fetch('https://api.helcim.com/v2/customers', { method: 'POST', headers: { ...hh, 'Content-Type': 'application/json' }, body: JSON.stringify({ contactName: name || phone, cellphone: phone }) });
+        const cr = await fetch('https://api.helcim.com/v2/customers', { method: 'POST', headers: { ...hh, 'Content-Type': 'application/json' }, body: JSON.stringify({ contactName: name || phone, ...(phone ? { cellPhone: phone } : {}) }) });
         const cj = await cr.json().catch(() => ({}));
-        customerCode = cj.customerCode || cj.id || (cj.customer && (cj.customer.customerCode || cj.customer.id)) || null;
+        customerCode = cj.customerCode || (cj.customer && cj.customer.customerCode) || null;
         if (!customerCode) console.error('[helcim customer]', cr.status, JSON.stringify(cj).slice(0, 200));
       }
       return json({ customerCode });
