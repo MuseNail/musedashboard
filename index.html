@@ -1934,6 +1934,21 @@ tailwind.config = {
         <div id="qs-catalog" class="grid grid-cols-2 gap-2"></div>
       </div>
       <div>
+        <button onclick="qsToggleGcForm()" class="flex items-center gap-1.5 text-sm font-body font-semibold text-primary hover:underline"><span class="material-symbols-outlined" style="font-size:18px">card_giftcard</span> + Gift Card</button>
+        <div id="qs-gc-form" class="hidden mt-2 p-3 rounded-xl border border-primary/40 bg-primary/5 space-y-2">
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Amount</label><input id="qs-gc-amount" type="text" inputmode="decimal" onfocus="openNumpad(this,'Gift card amount')" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none"></div>
+            <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Serial <span class="normal-case tracking-normal text-on-surface-variant">(optional)</span></label><input id="qs-gc-serial" type="text" placeholder="#00000000" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">To (recipient)</label><input id="qs-gc-to" type="text" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+            <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Recipient phone</label><input id="qs-gc-phone" type="tel" placeholder="(000) 000-0000" oninput="formatPhone(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+          </div>
+          <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">From <span class="normal-case tracking-normal text-on-surface-variant">(note, optional)</span></label><input id="qs-gc-from" type="text" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+          <button onclick="qsAddGiftCard()" class="w-full py-2 rounded-lg bg-primary text-on-primary font-body font-bold text-sm hover:bg-primary-dim transition-colors">Add gift card to sale</button>
+        </div>
+      </div>
+      <div>
         <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Sale</div>
         <div id="qs-cart"></div>
       </div>

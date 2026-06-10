@@ -654,7 +654,7 @@ export function upsertPartyCustomers(entries) {
 // Ensure this entry's customer exists in the app's DO directory (found by phone; created if new).
 // The DO is the source of truth. Avoids flip-flopping the name on a shared phone (upsertPartyCustomers
 // already dedups by phone). When the linked Square id becomes known, attaches it. Returns the DO id.
-function ensureCustomerInStore(entry, squareLink) {
+export function ensureCustomerInStore(entry, squareLink) {
   if (!entry || !entry.name || entry.name.trim() === '-') return null;
   const pk = notePhoneKey(entry.phone);
   if (!pk) return null;   // no phone → can't key reliably (Square also skips these)

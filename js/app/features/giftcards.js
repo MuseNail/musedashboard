@@ -3,7 +3,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr } from '../utils.js';
 import { APP_NAME, APP_VERSION } from '../config.js';
-import { customerDirectory } from './square-customers.js';
+import { customerDirectory, ensureCustomerInStore } from './square-customers.js';
 import { chargeOnTerminal, recordCashPayment, recordExternalPayment } from './square-pos.js';
 import { chargeOnHelcim, helcimActive } from './helcim.js';
 import { getActiveUser } from '../session.js';
@@ -51,6 +51,33 @@ export function gcSyncTicket(ticketId, items) {
     if (amt <= 0) return;
     _gcCommit({ ...g, redemptions: [...gcRedemptions(g), { date: todayStr(), amount: amt, ticketId }] });
   });
+}
+
+// ── Gift card SOLD on a ticket / Quick Sale (Phase 3) ───────────────────────
+// A gift-card line is charged with the ticket but is NOT income — on paid it auto-creates a
+// ledger entry (counts in Gift Cards Sold, redeemable), tied to the ticket so a reopen reverses
+// it, and the recipient is auto-added to the directory (phone-keyed). Total used by the charge.
+export const giftSaleTotal = e => (e?.giftcardSales || []).reduce((s, g) => s + (+g.amount || 0), 0);
+export function gcCreateSalesFromTicket(ticketId, sales) {
+  if (!ticketId || !Array.isArray(sales)) return;
+  sales.forEach((s, i) => {
+    if (!(+s.amount > 0)) return;
+    const id = `gc-tkt-${ticketId}-${i}`;
+    if (giftCards().some(g => g.id === id)) return;   // idempotent — already created for this ticket
+    const raw = String(s.serial || '').trim();
+    const serial = /^\d+$/.test(raw) ? raw.padStart(8, '0') : raw;
+    dispatch('giftcard.save', { card: {
+      id, datePurchased: todayStr(), serial, amount: +s.amount,
+      phone: s.phone || '', from: s.from || '', to: s.to || '', notes: '',
+      redemptions: [], amountUsed: 0, dateUsed: '',
+      saleTicketId: String(ticketId), createdAt: new Date().toISOString(),
+    } });
+    if (s.to && s.phone) { try { ensureCustomerInStore({ name: s.to, phone: s.phone }); } catch {} }
+  });
+}
+export function gcReverseSalesForTicket(ticketId) {
+  if (!ticketId) return;
+  giftCards().filter(g => g.saleTicketId === String(ticketId)).forEach(g => dispatch('giftcard.delete', { id: g.id }));
 }
 
 let _gcSortField = 'datePurchased', _gcSortDir = 'desc', _gcHideZero = false;

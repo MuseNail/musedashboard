@@ -42,6 +42,7 @@ export function saveRecord(entry) {
     ...(entry.squareUnrecorded?.length ? { squareUnrecorded: entry.squareUnrecorded } : {}),   // tenders that failed to POST to Square (cash/Zelle) — flagged for Reconcile
     ...(entry.quickSale ? { quickSale: true } : {}),   // no-service retail / gift-card sale — excluded from Guests Served
     ...(entry.soldBy ? { soldBy: entry.soldBy } : {}),  // front-desk staff who rang it up
+    ...(entry.giftcardSales?.length ? { giftcardSales: entry.giftcardSales } : {}),   // gift cards sold on this ticket (liability, not income); ledger entry created on paid
   };
   dispatch('record.save', { record });
 }
@@ -55,6 +56,7 @@ export function voidRecordOnReopen(id) {
   const rec = getState().records.find(r => String(r.id) === String(id));
   if (!rec || rec.status === 'deleted' || !(isPaidStatus(rec.status) || rec.status === 'refund')) return;
   dispatch('record.save', { record: { ...rec, status: 'deleted', voidedReason: 'reopened', voidedAt: new Date().toISOString() } });
+  if (rec.giftcardSales?.length) window.gcReverseSalesForTicket?.(String(id));   // un-create gift cards that were sold on this ticket
 }
 
 // Combine stored records with the live queue. Records are the SINGLE SOURCE OF TRUTH for
@@ -1069,7 +1071,9 @@ export function openReconcile() {
     if (!withT) { unchecked++; return; }
     const t = withT.tenders;
     const charged = Math.round(((t.card||0)+(t.cash||0)+(t.gift||0)+(t.zelle||0))*100)/100;
-    const recorded = Math.round(members.reduce((s,m)=>s+(m.totalCost||0),0)*100)/100;
+    // Gift cards SOLD are charged on top of the bill (liability, not in totalCost) — count them on the
+    // recorded side too, so a gift-card sale doesn't read as a mismatch.
+    const recorded = Math.round(members.reduce((s,m)=>s+(m.totalCost||0)+(m.giftcardSales||[]).reduce((a,g)=>a+(+g.amount||0),0),0)*100)/100;
     const diff = Math.round((charged - recorded)*100)/100;
     if (Math.abs(diff) >= 0.01) rows.push({ id: String(withT.id), names: members.map(m=>m.name).join(' & '), time: new Date(withT.completedAt||withT.checkinTime), recorded, charged, diff });
   });

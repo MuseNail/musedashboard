@@ -376,6 +376,8 @@ export function updateStatus(id, status) {
   // R6: when a ticket is paid, commit any recorded gift-card use (log the redemption + draw down
   // the app balance, tied to this ticket). Idempotent. The Square charge is unaffected.
   if (entry.status === 'paid' && entry.giftcardRedemptions && entry.giftcardRedemptions.length) window.gcSyncTicket?.(String(entry.id), entry.giftcardRedemptions);
+  // Gift cards SOLD on this ticket → create their ledger entries (Gift Cards Sold, redeemable), tied to the ticket.
+  if (entry.status === 'paid' && entry.giftcardSales && entry.giftcardSales.length) window.gcCreateSalesFromTicket?.(String(entry.id), entry.giftcardSales);
   upsert(entry);
   renderQueue(); updateStats(); window.renderTurns?.(); window.renderFloorPlan?.();
 }

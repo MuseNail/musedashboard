@@ -70,6 +70,7 @@ function _payAnchor() {                 // the ticket the whole-checkout fee att
 const _feeAmount = (fee, svcSubtotal) => fee.type === 'percent' ? Math.round(svcSubtotal * (fee.value || 0)) / 100 : (fee.value || 0);
 function _payApplyDefaultFees(party) {  // default-ON: add each configured fee to the anchor if the party doesn't already carry it
   if (!party.length) return;
+  if (party.some(e => e.quickSale)) return;   // a Quick Sale has no service → no default service fee
   const svc = party.reduce((s, e) => s + _entrySvc(e), 0);
   let anchor = party[0], best = -1;
   party.forEach(e => { const sub = _entrySvc(e); if (sub > best) { best = sub; anchor = e; } });
@@ -79,7 +80,7 @@ function _payApplyDefaultFees(party) {  // default-ON: add each configured fee t
     if (amount > 0) anchor.fees = [...(anchor.fees || []), { feeId: fee.id, amount, type: fee.type }];
   });
 }
-function _payRecomputeBill() { if (_pendingPay) _pendingPay.cents = Math.round(_payParty().reduce((s, e) => s + ticketTotal(e), 0) * 100); }
+function _payRecomputeBill() { if (_pendingPay) _pendingPay.cents = Math.round(_payParty().reduce((s, e) => s + ticketTotal(e) + (e.giftcardSales || []).reduce((a, g) => a + (+g.amount || 0), 0), 0) * 100); }
 function _refreshPayBody() {            // re-render the per-customer blocks (separate node from the numpad-bearing summary)
   const body = document.getElementById('square-confirm-body');
   if (body) body.innerHTML = _payParty().map(payCustomerBlock).join('');
@@ -145,10 +146,12 @@ function payCustomerBlock(e) {
   (e.assignments || []).forEach(a => { const s = cfg().services.find(x => x.id === a.serviceId); lines.push(payLine(s?.label || 'Service', a.cost || 0)); });
   (e.items || []).forEach(it => { const item = cfg().items.find(x => x.id === it.itemId); lines.push(payLine(`${item?.label || 'Item'} ×${it.qty || 1}`, (it.price || 0) * (it.qty || 0))); });
   (e.fees || []).forEach(f => { const fee = cfg().fees.find(x => x.id === f.feeId); lines.push(payLine(fee?.label || 'Fee', f.amount || 0)); });
+  (e.giftcardSales || []).forEach(g => lines.push(payLine(`Gift Card${g.serial ? ' #' + g.serial : ''}${g.to ? ' → ' + g.to : ''}`, +g.amount || 0)));   // sold (liability, not income) — charged here
   if (e.discount > 0) lines.push(payLine(`Discount${e.discountNote ? ' (' + e.discountNote + ')' : ''}`, -e.discount));
   if (e.tip > 0) lines.push(payLine('Tip', e.tip));   // informational only — never part of ticketTotal (the header total below)
+  const blockTotal = ticketTotal(e) + (e.giftcardSales || []).reduce((a, g) => a + (+g.amount || 0), 0);
   return `<div class="bg-surface-container rounded-xl px-4 py-3">
-    <div class="flex justify-between items-center mb-1.5"><span class="font-headline font-bold text-on-surface">${e.name}</span><span class="font-headline font-bold text-primary">$${ticketTotal(e).toFixed(2)}</span></div>
+    <div class="flex justify-between items-center mb-1.5"><span class="font-headline font-bold text-on-surface">${e.name}</span><span class="font-headline font-bold text-primary">$${blockTotal.toFixed(2)}</span></div>
     ${lines.join('') || '<div class="text-xs text-on-surface-variant italic">No charges</div>'}
   </div>`;
 }
@@ -163,7 +166,9 @@ export function openSquarePOS(entryId) {
   // Default-ON service fee: applied to the anchor ticket at checkout (was the Assign & Price modal).
   // Persisted with the party just below; toggle it off in the Confirm Payment modal.
   _payApplyDefaultFees(party);
-  const cents = Math.round(party.reduce((s, e) => s + ticketTotal(e), 0) * 100);
+  // Charge total = the bill (ticketTotal) PLUS any gift cards being sold (charged on top, but the
+  // gift amount is NOT income — it posts to the Gift Cards ledger on paid). totalCost stays the bill.
+  const cents = Math.round(party.reduce((s, e) => s + ticketTotal(e) + (e.giftcardSales || []).reduce((a, g) => a + (+g.amount || 0), 0), 0) * 100);
   if (cents <= 0) { showToast('No total — assign a price first.'); return; }
   // Persist each ticket to the server BEFORE charging, and recompute its total from
   // its parts (services + items + fees − discount) as we save — so the stored total
