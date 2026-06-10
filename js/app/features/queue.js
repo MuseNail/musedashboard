@@ -998,6 +998,22 @@ export function renderGroupAssignContent() {
     ${serviceRows}
     ${isParty ? `<div class="border-t border-surface-container-high mt-2 pt-2 -mb-1 flex items-center gap-1.5 text-[11px] font-body text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:14px;color:${color}">receipt_long</span>The items &amp; discount below apply to the <strong>whole party</strong> (entered once). The service fee is added at checkout.</div>` : ''}
     ${hasSupplement ? `<div class="border-t border-surface-container-high mt-2 pt-3 mb-2"><div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-3">${isParty ? 'Whole-ticket ' : ''}Items</div>${itemRows}</div>` : ''}
+    <div class="border-t border-surface-container-high pt-3 mb-2">
+      <button type="button" onclick="assignToggleGcForm()" class="flex items-center gap-1.5 text-sm font-body font-semibold text-primary hover:underline"><span class="material-symbols-outlined" style="font-size:18px">card_giftcard</span> + Gift Card</button>
+      <div id="ga-gc-form" class="hidden mt-2 p-3 rounded-xl border border-primary/40 bg-primary/5 space-y-2">
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Amount</label><input id="ga-gc-amount" type="text" inputmode="decimal" onfocus="openNumpad(this,'Gift card amount')" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none"></div>
+          <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Serial <span class="normal-case tracking-normal text-on-surface-variant">(optional)</span></label><input id="ga-gc-serial" type="text" placeholder="#00000000" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">To (recipient)</label><input id="ga-gc-to" type="text" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+          <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Recipient phone</label><input id="ga-gc-phone" type="tel" placeholder="(000) 000-0000" oninput="formatPhone(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+        </div>
+        <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">From <span class="normal-case tracking-normal text-on-surface-variant">(note)</span></label><input id="ga-gc-from" type="text" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+        <button type="button" onclick="assignAddGiftCard()" class="w-full py-2 rounded-lg bg-primary text-on-primary font-body font-bold text-sm hover:bg-primary-dim transition-colors">Add gift card to ticket</button>
+      </div>
+      ${(entry.giftcardSales || []).map((g, i) => `<div class="flex items-center gap-2 py-1.5 mt-1 border-t border-surface-container first:border-t-0"><span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:18px">card_giftcard</span><span class="flex-1 min-w-0 truncate font-body text-on-surface text-sm">Gift Card${g.serial ? ' #' + String(g.serial).replace(/[<>&"]/g, '') : ''}${g.to ? ' → ' + String(g.to).replace(/[<>&"]/g, '') : ''}</span><button type="button" onclick="assignRemoveGiftCard(${i})" class="text-on-surface-variant hover:text-error flex-shrink-0"><span class="material-symbols-outlined" style="font-size:16px">close</span></button><span class="font-headline font-bold text-primary text-sm flex-shrink-0">$${(+g.amount).toFixed(2)}</span></div>`).join('')}
+    </div>
     <div class="border-t border-surface-container-high pt-3 mb-2"><div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2">${isParty ? 'Whole-ticket ' : ''}Discount</div>
       <div class="bg-surface-container-low rounded-xl p-3 border border-surface-container-high">
         <div class="flex items-center gap-2 mb-2">
@@ -1020,6 +1036,31 @@ export function saveAssignTxnNote() {
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
   const el = document.getElementById('assign-txn-note');
   if (entry && el) entry.txnNote = el.value;
+}
+
+// ── Gift card sold on a service ticket (Phase 3 "B") — same liability-line model as Quick Sale.
+export function assignToggleGcForm() {
+  const f = document.getElementById('ga-gc-form'); if (!f) return;
+  f.classList.toggle('hidden');
+  if (!f.classList.contains('hidden')) setTimeout(() => document.getElementById('ga-gc-amount')?.focus(), 60);
+}
+export function assignAddGiftCard() {
+  const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]); if (!entry) return;
+  const amount = parseFloat(document.getElementById('ga-gc-amount')?.value) || 0;
+  if (!(amount > 0)) { showToast('Enter the gift card amount.'); return; }
+  entry.giftcardSales = [...(entry.giftcardSales || []), {
+    amount,
+    serial: (document.getElementById('ga-gc-serial')?.value || '').trim(),
+    to:     (document.getElementById('ga-gc-to')?.value || '').trim(),
+    phone:  (document.getElementById('ga-gc-phone')?.value || '').trim(),
+    from:   (document.getElementById('ga-gc-from')?.value || '').trim(),
+  }];
+  saveCurrentGroupTabInputs();      // keep the other typed inputs
+  renderGroupAssignContent();       // re-render: shows the new line + updated Party Total
+}
+export function assignRemoveGiftCard(idx) {
+  const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]); if (!entry) return;
+  if (entry.giftcardSales && idx >= 0 && idx < entry.giftcardSales.length) { entry.giftcardSales.splice(idx, 1); saveCurrentGroupTabInputs(); renderGroupAssignContent(); }
 }
 
 export function toggleGroupService(sid) {
@@ -1063,7 +1104,10 @@ export function updateGroupTotal() {
   const discountType = document.querySelector('#group-assign-content .discount-type-select')?.value || 'flat';
   const discountInput = parseFloat(document.querySelector('#group-assign-content .discount-input')?.value) || 0;
   const discountAmt = discountType === 'percent' ? Math.round(partySvc * discountInput / 100 * 100) / 100 : discountInput;
-  const partyTotal = Math.max(0, partySvc + itemTotal + feeTotal - discountAmt);
+  // Gift cards sold on any party member ride the charge (liability, not service income — they post to the Gift Cards ledger on paid).
+  let gcSaleTotal = 0; const _seenGc = new Set();
+  groupAssignEntries.forEach(id => { if (_seenGc.has(id)) return; _seenGc.add(id); const e = q().find(x => String(x.id) === id); (e?.giftcardSales || []).forEach(g => { gcSaleTotal += (+g.amount || 0); }); });
+  const partyTotal = Math.max(0, partySvc + itemTotal + feeTotal - discountAmt) + gcSaleTotal;
   const isParty = groupAssignEntries.length > 1;
   // Solo: the one line shows the full ticket. Party: it shows just THIS guest's services
   // (the whole-ticket items/fees/discount roll into the Party Total in the footer).

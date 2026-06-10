@@ -1394,6 +1394,21 @@ export function payrollSetCheckNum(techId, val) {
   if (!Object.keys(adj[k]).length) delete adj[k];
   dispatch('config.set', { key: 'payroll_adj', value: adj });
 }
+// Right-click / double-click a payroll cell → swap it to an input; save on blur/Enter, cancel on Escape.
+export function payrollEditCell(ev) {
+  ev.preventDefault();
+  const td = ev.currentTarget; if (!td || td.querySelector('input')) return;
+  const field = td.dataset.field, techId = td.dataset.tech, raw = td.dataset.val || '';
+  if (td.dataset.locked === '1' && field !== 'checkNum') { showToast('Unlock this pay period to override.'); return; }
+  const isNum = field !== 'checkNum';
+  const val = isNum ? (raw && +raw ? String(Math.round(+raw * 100) / 100) : '') : raw;
+  td.innerHTML = `<input type="${isNum ? 'number' : 'text'}"${isNum ? ' step="0.01" min="0"' : ''} value="${val}" style="width:${isNum ? 70 : 90}px" class="bg-surface-container border border-primary rounded px-1.5 py-0.5 text-sm font-headline text-${isNum ? 'right' : 'center'} text-on-surface focus:outline-none">`;
+  const inp = td.querySelector('input'); inp.focus(); inp.select();
+  let done = false;
+  const commit = () => { if (done) return; done = true; if (field === 'checkNum') { payrollSetCheckNum(techId, inp.value); renderPayrollPage(); } else payrollSetOverride(techId, field, inp.value); };
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') inp.blur(); else if (e.key === 'Escape') { done = true; renderPayrollPage(); } });
+}
 export function payrollLockPeriod() {
   if (!['admin','manager'].includes(getActiveUser()?.role)) { showToast('Only an admin or manager can lock payroll.'); return; }
   if (!_payrollLiveKey) return;
@@ -1481,10 +1496,14 @@ export function renderPayrollPage() {
   // check / deduction / cash are editable override inputs (disabled when the period is locked); a *
   // marks a manual override. Check # records the issued check number (editable even when locked).
   const _locked = !!_plock;
-  const _ovMark = (x, f) => (x.adj && x.adj[f] != null) ? '<span title="Manual override" style="color:#c77700;font-weight:700"> *</span>' : '';
-  const ovInput = (techId, field, val, color) => `<input type="number" min="0" step="0.01" value="${val ? Math.round(val * 100) / 100 : ''}" placeholder="0" ${_locked ? 'disabled' : ''} onchange="payrollSetOverride('${techId}','${field}',this.value)" style="width:64px" class="bg-surface-container border border-surface-container-high rounded px-1 py-0.5 text-sm font-headline text-right ${color || 'text-on-surface'} focus:outline-none focus:border-primary disabled:opacity-70">`;
-  const ovCell = (x, field, val, pHtml, color) => `<td class="num staff-sep" colspan="${cmp ? 3 : 2}">${ovInput(x.tech.id, field, val, color)}${_ovMark(x, field)}</td>${cmp ? `<td class="num last thislast-sep" colspan="2">${pHtml}</td>` : ''}`;
-  const checkNumCell = x => `<td class="num staff-sep" colspan="${colsPer}" style="text-align:center"><input type="text" value="${x.adj?.checkNum ? _eTxn(x.adj.checkNum) : ''}" placeholder="check #" onchange="payrollSetCheckNum('${x.tech.id}',this.value)" style="width:90px" class="bg-surface-container border border-surface-container-high rounded px-1.5 py-0.5 text-sm font-body text-center text-on-surface focus:outline-none focus:border-primary"></td>`;
+  const _ovMark = (x, f) => (x.adj && x.adj[f] != null) ? '<span title="Manual override — right-click to change" style="color:#c77700;font-weight:700"> *</span>' : '';
+  // Clean number by default; right-click (or double-click) a cell to override — the input appears for
+  // that cell only. An overridden value shows a * and stays editable; locked periods can't be overridden.
+  const ovCell = (x, field, val, pHtml, color) => {
+    const txt = val ? `${field === 'deduction' ? '-' : ''}${_m2(val)}` : '—';
+    return `<td class="num staff-sep" colspan="${cmp ? 3 : 2}" data-tech="${x.tech.id}" data-field="${field}" data-val="${val || 0}"${_locked ? ' data-locked="1"' : ''} oncontextmenu="payrollEditCell(event)" ondblclick="payrollEditCell(event)" title="Right-click to override" style="cursor:context-menu${color === 'text-error' ? ';color:#dc2626' : ''}">${txt}${_ovMark(x, field)}</td>${cmp ? `<td class="num last thislast-sep" colspan="2"${color === 'text-error' ? ' style="color:#dc2626"' : ''}>${pHtml}</td>` : ''}`;
+  };
+  const checkNumCell = x => `<td class="num staff-sep" colspan="${colsPer}" data-tech="${x.tech.id}" data-field="checkNum" data-val="${x.adj?.checkNum ? _eTxn(x.adj.checkNum) : ''}" oncontextmenu="payrollEditCell(event)" ondblclick="payrollEditCell(event)" title="Right-click to enter the check #" style="text-align:center;cursor:context-menu;color:var(--md-on-surface-variant)">${x.adj?.checkNum ? _eTxn(x.adj.checkNum) : '—'}</td>`;
   const refCells = (c, p) =>
     `<td class="num staff-sep" style="color:#dc2626">${c.refund ? '-$' + Math.abs(c.refund).toFixed(0) : '—'}${_refNote(c.refundNotes)}</td><td class="num" style="color:#dc2626">${c.refundComm ? '-$' + Math.abs(c.refundComm).toFixed(0) : '—'}</td>`
     + (cmp ? `<td class="arrow-col"></td><td class="num last thislast-sep" style="color:#dc2626">${p.refund ? '-$' + Math.abs(p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${p.refundComm ? '-$' + Math.abs(p.refundComm).toFixed(0) : '—'}</td>` : '');
@@ -1505,7 +1524,7 @@ export function renderPayrollPage() {
       return `<tr><td class="sticky-col" style="font-weight:500">${dl}</td>${T.map(x => dquad(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`;
     }),
   ];
-  const head1 = T.map(x => { const legal = x.tech.legalName || x.tech.name || '', pref = x.tech.name || ''; const showPref = pref && legal && pref.toLowerCase() !== legal.toLowerCase(); return `<th colspan="${colsPer}" class="staff-sep" style="text-align:center"><span style="text-decoration:underline">${_eTxn(legal)}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</span>${showPref ? `<div style="font-weight:400;font-size:10px;color:var(--md-on-surface-variant)">aka ${_eTxn(pref)}</div>` : ''}</th>`; }).join('');
+  const head1 = T.map(x => { const legal = x.tech.legalName || '', pref = x.tech.name || legal || ''; const showLegal = legal && legal.toLowerCase() !== pref.toLowerCase(); return `<th colspan="${colsPer}" class="staff-sep" style="text-align:center"><span style="text-decoration:underline">${_eTxn(pref)}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</span>${showLegal ? `<div style="font-weight:400;font-size:10px;color:var(--md-on-surface-variant)">${_eTxn(legal)}</div>` : ''}</th>`; }).join('');
   const head2 = T.map(() => `<th colspan="2" class="staff-sep" style="text-align:center;font-weight:600">This</th><th class="arrow-col"></th><th colspan="2" class="thislast-sep" style="text-align:center;font-weight:600">Last</th>`).join('');
   const head3 = T.map(() => cmp
     ? `<th class="num staff-sep">Billed</th><th class="num">Comm</th><th class="arrow-col"></th><th class="num thislast-sep">Billed</th><th class="num">Comm</th>`
