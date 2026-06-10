@@ -36,9 +36,10 @@ import * as timeclock from './features/timeclock.js';
 import * as fdSchedule from './features/fd-schedule.js';
 import * as helcim from './features/helcim.js';
 import * as quicksale from './features/quicksale.js';
+import * as search from './features/search.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -65,6 +66,7 @@ const MODAL_CLOSERS = [
   ['day-picker-modal', reports.closeDayPicker], ['txn-merge-modal', reports.closeTxnMergeModal],
   ['rpt-drill-modal', reports.closeDrillDown], ['cash-register-modal', cashdrawer.closeCashRegister],
   ['square-modal', () => { const m = document.getElementById('square-modal'); m.classList.add('hidden'); m.style.display = ''; }],
+  ['global-search-modal', search.closeGlobalSearch],
   ['numpad-modal', utils.numpadConfirm],
 ];
 // Generic force-hide on navigation (does NOT invoke each modal's close fn, so a programmatic/

@@ -47,6 +47,7 @@ const PRECACHE_URLS = [
   '/musedashboard/js/app/features/fd-schedule.js',
   '/musedashboard/js/app/features/helcim.js',
   '/musedashboard/js/app/features/quicksale.js',
+  '/musedashboard/js/app/features/search.js',
 ];
 
 self.addEventListener('install', event => {

@@ -223,6 +223,10 @@ tailwind.config = {
     </nav>
     <!-- Right side: sync pills + actions — locked right -->
     <div class="flex items-center gap-1.5 flex-shrink-0">
+      <button onclick="openGlobalSearch()" title="Search customers, tickets, gift cards (anything)" aria-label="Search"
+        class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
+        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">search</span>
+      </button>
       <div class="flex items-center gap-2 px-3 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:72px"
         onclick="forceSyncNow()" title="Live sync — tap to re-sync now">
         <span class="sync-dot" id="conn-dot" style="background:#adb3b5"></span>
