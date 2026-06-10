@@ -263,6 +263,7 @@ const SETTINGS_NAV = [
     { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section' },
   ]},
   { id:'integrations', title:'Integrations', desc:'Square & Google', items:[
+    { label:'Payments (Helcim)', sub:'Card terminal — device code & test charge', content:'helcim-section', render:'renderHelcimSettings' },
     { label:'Square', sub:'Location, connection & sync', content:'square-section' },
     { label:'Google Calendar', sub:'Connect for appointments', content:'gcal-section', render:'renderGcalSettings' },
     { label:'Text Messaging', sub:'SMS confirmations & replies (httpSMS)', content:'sms-section', render:'renderSmsSettings', adminOnly:true },

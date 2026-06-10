@@ -172,6 +172,9 @@ function handle(msg) {
     applyChange(msg.op, msg.payload, msg.seq);
     return;
   }
+  // Helcim terminal result pushed by the Worker webhook (transient — not a state mutation).
+  // Routed to the payments module (attached to window by main.js) to settle a waiting charge.
+  if (msg.type === 'helcim_result') { try { window.onHelcimResult?.(msg); } catch {} return; }
 }
 
 function replayOutbox() { for (const msg of _outbox) send(msg); } // DO dedupes by mutationId

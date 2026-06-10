@@ -717,14 +717,14 @@ tailwind.config = {
         <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div class="flex items-center gap-2">
             <!-- Date nav (far left) -->
-            <button onclick="calNavDay(-1)" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors" style="width:32px;height:32px;flex-shrink:0">
+            <button onclick="calNavDay(-1)" class="flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors" style="width:32px;height:32px;flex-shrink:0">
               <span class="material-symbols-outlined" style="font-size:18px">chevron_left</span>
             </button>
             <button onclick="openCalDatePicker(event)" class="flex items-center gap-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors" style="height:32px;padding:0 12px">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
               <span class="text-sm font-headline font-bold text-on-surface date-pick-val" id="cal-date-btn-val">Today</span>
             </button>
-            <button onclick="calNavDay(1)" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors" style="width:32px;height:32px;flex-shrink:0">
+            <button onclick="calNavDay(1)" class="flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors" style="width:32px;height:32px;flex-shrink:0">
               <span class="material-symbols-outlined" style="font-size:18px">chevron_right</span>
             </button>
           </div>
@@ -943,6 +943,22 @@ tailwind.config = {
 
         <!-- Leaf: Square -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="helcim-section" class="hidden px-5 py-4 space-y-3">
+            <div class="text-xs font-body text-on-surface-variant">Drive your Helcim Smart Terminal for card payments. The API token &amp; result webhook are configured on the server.</div>
+            <div>
+              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Terminal device code</label>
+              <div class="flex gap-2">
+                <input id="helcim-device-code" type="text" placeholder="e.g. 7C0X" autocapitalize="characters" class="flex-1 border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline uppercase focus:border-primary outline-none">
+                <button onclick="helcimSaveDevice()" class="px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">Save</button>
+              </div>
+              <div class="text-[11px] text-on-surface-variant mt-1">The code from your terminal (Helcim → Devices, with API mode on).</div>
+            </div>
+            <div class="flex gap-2 flex-wrap">
+              <button onclick="helcimCheckConnection()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">wifi_tethering</span> Check connection</button>
+              <button onclick="helcimRunTest()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary/5 transition-colors"><span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Send $1.00 test charge</button>
+            </div>
+            <div id="helcim-conn-status" class="text-xs font-body text-on-surface-variant rounded-lg bg-surface-container-lowest border border-surface-container-high px-3 py-2">No terminal device code set.</div>
+          </div>
           <div id="square-section" class="hidden px-5 py-4 space-y-3">
             <div class="text-xs font-body text-on-surface-variant" id="settings-square-status">Checking…</div>
             <div>

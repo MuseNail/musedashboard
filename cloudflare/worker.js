@@ -445,7 +445,28 @@ export default {
       if (!ok) { console.error('[terminal webhook] signature verify FAILED'); return new Response('bad signature', { status: 401 }); }
       let evt = {}; try { evt = JSON.parse(raw); } catch {}
       console.log('[terminal webhook] verified:', JSON.stringify(evt).slice(0, 400));
-      // Phase 1b: on a cardTransaction event → GET the full txn → DO finalize (mark the ticket paid) + broadcast.
+      // The cardTransaction payload is just { id, type } — fetch the full txn to get the
+      // invoiceNumber/status/amount, then push the result to the connected app(s) via the DO
+      // (broadcast over the same WebSocket the app already holds). terminalCancel carries the
+      // invoiceNumber directly (customer cancelled on the device → un-stage the charge).
+      try {
+        let fin = null;
+        if (evt.type === 'cardTransaction' && evt.id != null) {
+          const tr = await fetch(`https://api.helcim.com/v2/card-transactions/${encodeURIComponent(evt.id)}`, { headers: { 'api-token': env.HELCIM_API_TOKEN, 'accept': 'application/json' } });
+          let txn = null; try { txn = JSON.parse(await tr.text()); } catch {}
+          if (txn && Array.isArray(txn.value)) txn = txn.value[0];
+          if (txn) fin = { invoiceNumber: txn.invoiceNumber || '', status: txn.status || '', transactionId: txn.transactionId || evt.id, amount: (txn.amount ?? null), type: 'cardTransaction' };
+        } else if (evt.type === 'terminalCancel') {
+          const d = evt.data || {};
+          fin = { invoiceNumber: d.invoiceNumber || '', status: 'CANCELLED', transactionId: null, amount: (d.transactionAmount ?? null), type: 'terminalCancel' };
+        }
+        if (fin && fin.invoiceNumber) {
+          const stub = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
+          await stub.fetch(new Request('https://do/helcim/finalize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fin) }));
+        } else {
+          console.warn('[terminal webhook] no invoiceNumber to finalize', evt.type);
+        }
+      } catch (e) { console.error('[terminal webhook] finalize error', (e && e.message) || String(e)); }
       return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
@@ -596,6 +617,19 @@ export class MuseSalonDO {
       let body = {}; try { body = await request.json(); } catch {}
       if (body.techId && body.endpoint) await this.state.storage.delete('push:' + body.techId + ':' + (await pushKeyHash(body.endpoint)));
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // ── Helcim terminal result fan-out ──────────────────────────────────────────
+    // Called server-side by the /terminal/webhook receiver. Pushes the terminal result to
+    // every connected app over the existing WebSocket so the waiting Pay screen finalizes
+    // instantly (no polling). NOT a state mutation — it broadcasts a transient envelope.
+    if (url.pathname === '/helcim/finalize' && request.method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      if (b && b.invoiceNumber) {
+        const msg = JSON.stringify({ type: 'helcim_result', invoiceNumber: b.invoiceNumber, status: b.status || '', transactionId: b.transactionId || null, amount: (b.amount ?? null) });
+        for (const socket of this.sockets) { if (socket.readyState === 1) { try { socket.send(msg); } catch {} } }
+      }
+      return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     return new Response('Expected WebSocket upgrade or /state/*', { status: 426 });
