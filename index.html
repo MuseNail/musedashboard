@@ -1617,7 +1617,7 @@ tailwind.config = {
      STAFF EDIT MODAL
 ═══════════════════════════════════════════════ -->
 <div id="staff-modal" onclick="if(event.target===this)closeStaffModal()" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
-  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4">
+  <div class="bg-surface-container-lowest rounded-2xl p-7 w-full max-w-sm shadow-2xl fade-up mx-4 max-h-[90vh] overflow-y-auto">
     <div class="flex items-center justify-between mb-5">
       <h2 id="staff-modal-title" class="text-xl font-headline font-bold text-on-surface">Add Staff</h2>
       <button onclick="closeStaffModal()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>

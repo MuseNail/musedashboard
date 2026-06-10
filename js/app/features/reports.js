@@ -1370,6 +1370,30 @@ const _netComm   = c => (c.commission || 0) + _refImpact(c);
 const _refNote   = notes => (notes && notes.length)
   ? ` <span title="${notes.map(n => String(n).replace(/"/g, '&quot;')).join(' · ')}" style="cursor:help;color:var(--md-on-surface-variant);font-size:11px">&#9432;</span>` : '';
 const _refCells  = (cur, prev) => `<td class="num staff-sep" style="color:#dc2626">${cur.refund ? '-$' + Math.abs(cur.refund).toFixed(2) : '—'}${_refNote(cur.refundNotes)}</td><td class="num last" style="color:#dc2626">${prev.refund ? '-$' + Math.abs(prev.refund).toFixed(2) : '—'}</td>`;
+// ── Payroll lock: manually freeze a pay period's numbers against later %/check/rule changes ──
+// _payrollLiveT holds the live-computed rows from the last render so Lock can snapshot them.
+let _payrollLiveT = [], _payrollLiveKey = '', _payrollLiveSpan = null;
+export function payrollLockPeriod() {
+  if (!['admin','manager'].includes(getActiveUser()?.role)) { showToast('Only an admin or manager can lock payroll.'); return; }
+  if (!_payrollLiveKey) return;
+  const rows = (_payrollLiveT || []).filter(x => x.c.billed || x.c.refund || x.cChk || x.cDed || x.cCash).map(x => ({
+    techId: x.tech.id, name: x.tech.name, commPct: x.tech.commission,
+    billed: x.c.billed || 0, commission: x.c.commission || 0, refund: x.c.refund || 0, refundComm: x.c.refundComm || 0, refundNotes: x.c.refundNotes || [],
+    check: x.cChk || 0, deduction: x.cDed || 0, cash: x.cCash || 0, total: x.cTotal || 0, daily: x.c.daily || {},
+  }));
+  const locks = { ...(cfg().payroll_locks || {}) };
+  locks[_payrollLiveKey] = { lockedAt: new Date().toISOString(), lockedBy: getActiveUser()?.name || '', from: _payrollLiveSpan?.from, to: _payrollLiveSpan?.to, techs: rows };
+  dispatch('config.set', { key: 'payroll_locks', value: locks });
+  showToast('Pay period locked 🔒');
+  renderPayrollPage();
+}
+export function payrollUnlockPeriod() {
+  if (!['admin','manager'].includes(getActiveUser()?.role)) { showToast('Only an admin or manager can unlock payroll.'); return; }
+  const key = _payrollLiveKey;
+  const doIt = () => { const locks = { ...(cfg().payroll_locks || {}) }; delete locks[key]; dispatch('config.set', { key: 'payroll_locks', value: locks }); showToast('Pay period unlocked'); renderPayrollPage(); };
+  if (window.showWarnModal) window.showWarnModal('Unlock this pay period?', 'Payroll will recompute from current settings — the saved snapshot is discarded.', doIt, 'Unlock');
+  else doIt();
+}
 export function renderPayrollPage() {
   window.renderClockedInNow?.();   // live "clocked in now" card (gated by viewClockedIn)
   const wrap = document.getElementById('payroll-cards'); if (!wrap) return;
@@ -1396,6 +1420,18 @@ export function renderPayrollPage() {
     const cCash = Math.max(0, cCashGross - cDed), pCash = Math.max(0, pCashGross - pDed);
     return { tech, c, p, cChk, pChk, cDed, pDed, cCash, pCash, cTotal: cChk + cCash, pTotal: pChk + pCash, isVar: (tech.checkType || 'variable') === 'variable' };
   });
+  // Lock: keep the LIVE rows for the Lock button; if this period is locked, override the displayed
+  // numbers with the frozen snapshot so later %/check/rule changes don't rewrite history.
+  const _lockKey = localDateStr(cur.from);
+  const _plock = (cfg().payroll_locks || {})[_lockKey];
+  _payrollLiveT = T; _payrollLiveKey = _lockKey; _payrollLiveSpan = { from: localDateStr(cur.from), to: localDateStr(cur.to) };
+  if (_plock) {
+    const byId = {}; (_plock.techs || []).forEach(s => byId[s.techId] = s);
+    T.forEach(x => { const s = byId[x.tech.id]; if (!s) return;
+      x.c = { ...x.c, billed: s.billed, commission: s.commission, refund: s.refund || 0, refundComm: s.refundComm || 0, refundNotes: s.refundNotes || x.c.refundNotes, daily: s.daily || x.c.daily };
+      x.cChk = s.check; x.cDed = s.deduction; x.cCash = s.cash; x.cTotal = s.total;
+    });
+  }
   // Each tech spans 5 columns: This-Billed | This-Comm | Δ | Last-Billed | Last-Comm.
   // The Δ column holds a single ▲/▼% — green up / red down — based on the BILLED change vs
   // the prior period (one arrow, not one per number). Compact whole dollars in the dense
@@ -1464,7 +1500,11 @@ export function renderPayrollPage() {
         <thead><tr><th class="sticky-col">Staff</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Pay</th></tr></thead>
         <tbody>${_fdBody}</tbody>
       </table></div></div>`;
-  wrap.innerHTML = `<table class="data-table"><thead>${cmp
+  const _isAdmin = ['admin', 'manager'].includes(getActiveUser()?.role);
+  const _lockBar = _plock
+    ? `<div class="flex items-center justify-between gap-2 mb-3 px-4 py-2.5 rounded-xl" style="background:rgba(26,82,82,.08);border:1px solid rgba(26,82,82,.28)"><div class="flex items-center gap-2 text-sm font-body text-on-surface"><span class="material-symbols-outlined text-primary" style="font-size:18px">lock</span><span><b>Locked</b>${_plock.lockedAt ? ' · ' + new Date(_plock.lockedAt).toLocaleDateString() : ''}${_plock.lockedBy ? ' by ' + _eTxn(_plock.lockedBy) : ''} — showing the saved snapshot.</span></div>${_isAdmin ? '<button onclick="payrollUnlockPeriod()" class="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-surface-container-high text-on-surface font-body font-semibold text-xs hover:bg-surface-container flex-shrink-0"><span class="material-symbols-outlined" style="font-size:15px">lock_open</span> Unlock</button>' : ''}</div>`
+    : (_isAdmin ? `<div class="flex items-center justify-between gap-2 mb-3 px-4 py-2.5 rounded-xl border border-surface-container-high flex-wrap"><div class="text-sm font-body text-on-surface-variant">Lock this pay period to freeze it against future commission / check / deduction changes.</div><button onclick="payrollLockPeriod()" class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-on-primary font-body font-semibold text-xs hover:bg-primary-dim flex-shrink-0"><span class="material-symbols-outlined" style="font-size:15px">lock</span> Lock this pay period</button></div>` : '');
+  wrap.innerHTML = _lockBar + `<table class="data-table"><thead>${cmp
       ? `<tr><th class="sticky-col" rowspan="3"></th>${head1}</tr><tr>${head2}</tr><tr>${head3}</tr>`
       : `<tr><th class="sticky-col" rowspan="2"></th>${head1}</tr><tr>${head3}</tr>`}</thead>
     <tbody>${rows.join('')}</tbody></table>${_fdHtml}`;
