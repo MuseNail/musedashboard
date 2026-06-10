@@ -322,7 +322,10 @@ tailwind.config = {
             <span class="material-symbols-outlined" style="font-size:15px" id="done-toggle-icon">visibility_off</span>
             <span id="done-toggle-label">Hide Paid</span>
           </button>
-          <button onclick="showManualAdd()" class="ml-auto flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-body font-semibold bg-primary text-on-primary hover:bg-primary-dim transition-all shadow-sm">
+          <button onclick="openQuickSale()" class="ml-auto flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-body font-semibold border border-primary text-primary hover:bg-primary/5 transition-all">
+            <span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Quick Sale
+          </button>
+          <button onclick="showManualAdd()" class="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-body font-semibold bg-primary text-on-primary hover:bg-primary-dim transition-all shadow-sm">
             <span class="material-symbols-outlined" style="font-size:18px">person_add</span> Add Guest
           </button>
         </div>
@@ -1907,6 +1910,37 @@ tailwind.config = {
         <button onclick="closeSquareConfirm()" class="flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-semibold transition-all">Cancel</button>
         <button id="sq-pos-btn" onclick="proceedSquarePayment()" class="square-only flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-3 rounded-xl font-headline font-semibold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Square POS</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Quick Sale modal (no-service retail / gift-card sale) ── -->
+<div id="quicksale-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 p-4" onclick="if(event.target===this)closeQuickSale()">
+  <div class="bg-surface rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-3.5 border-b border-surface-container-high">
+      <div class="flex items-center gap-2"><span class="material-symbols-outlined text-primary">point_of_sale</span><h2 class="text-lg font-headline font-bold text-on-surface">Quick Sale</h2></div>
+      <button onclick="closeQuickSale()" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="px-5 py-4 overflow-y-auto space-y-4">
+      <div class="flex items-end gap-3 flex-wrap">
+        <div class="flex-1 min-w-[180px]">
+          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Customer name <span class="normal-case tracking-normal text-on-surface-variant">(optional)</span></label>
+          <input id="qs-name" type="text" placeholder="Quick Sale" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-body focus:border-primary outline-none">
+        </div>
+        <div class="text-xs font-body text-on-surface-variant pb-2">Sold by <span id="qs-soldby" class="font-semibold text-on-surface">—</span></div>
+      </div>
+      <div>
+        <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1.5">Retail items</div>
+        <div id="qs-catalog" class="grid grid-cols-2 gap-2"></div>
+      </div>
+      <div>
+        <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Sale</div>
+        <div id="qs-cart"></div>
+      </div>
+    </div>
+    <div class="px-5 py-3.5 border-t border-surface-container-high flex items-center gap-3">
+      <div class="flex-1"><div class="text-[11px] text-on-surface-variant uppercase tracking-widest">Total</div><div id="qs-total" class="text-xl font-headline font-extrabold text-on-surface">$0.00</div></div>
+      <button id="qs-checkout-btn" onclick="qsCheckout()" class="px-5 py-3 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm hover:bg-primary-dim transition-colors">Add items to continue</button>
     </div>
   </div>
 </div>

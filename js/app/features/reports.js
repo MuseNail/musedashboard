@@ -40,6 +40,8 @@ export function saveRecord(entry) {
     ...(entry.tenders ? { tenders: entry.tenders } : {}),
     ...(entry.tip ? { tip: entry.tip } : {}),   // card tip — tracked separately; NOT part of totalCost
     ...(entry.squareUnrecorded?.length ? { squareUnrecorded: entry.squareUnrecorded } : {}),   // tenders that failed to POST to Square (cash/Zelle) — flagged for Reconcile
+    ...(entry.quickSale ? { quickSale: true } : {}),   // no-service retail / gift-card sale — excluded from Guests Served
+    ...(entry.soldBy ? { soldBy: entry.soldBy } : {}),  // front-desk staff who rang it up
   };
   dispatch('record.save', { record });
 }
@@ -499,7 +501,7 @@ export function runReport() {
   const feesTotal = filtered.reduce((s,r)=>s+(r.fees||[]).reduce((a,x)=>a+(x.amount||0),0),0);
   const discountTotal = filtered.reduce((s,r)=>s+(r.discount||0),0);
   const totalIncome = filtered.reduce((s,r)=>s+(r.totalCost||0),0);   // "Total Billed" — bill only, no tips; still drives Avg Ticket / Shop Keeps
-  const guestCount = filtered.filter(r => isPaidStatus(r.status)).length;
+  const guestCount = filtered.filter(r => isPaidStatus(r.status) && !r.quickSale).length;   // retail/gift-card-only Quick Sales aren't "guests"
   const avgTicket = guestCount > 0 ? totalIncome / guestCount : 0;
   const tipsTotal = filtered.reduce((s,r)=>s+(r.tip||0),0);
   // Payment Mix — how the money was actually collected (single source: paymentMix()).
@@ -694,7 +696,7 @@ function computeMetrics(from, to) {
   const feesTotal = sum(filtered, r => sum(r.fees||[], x => x.amount||0));
   const discountTotal = sum(filtered, r => r.discount||0);
   const totalIncome = sum(filtered, r => r.totalCost||0);
-  const guestCount = filtered.filter(r => isPaidStatus(r.status)).length;
+  const guestCount = filtered.filter(r => isPaidStatus(r.status) && !r.quickSale).length;   // retail/gift-card-only Quick Sales aren't "guests"
   const avgTicket = guestCount > 0 ? totalIncome / guestCount : 0;
   const staffInc = {};
   filtered.forEach(r => (r.assignments||[]).forEach(a => { if (a.techId) staffInc[a.techId] = (staffInc[a.techId]||0) + (a.cost||0); }));

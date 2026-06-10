@@ -193,6 +193,12 @@ export function openSquarePOS(entryId) {
 }
 
 export function closeSquareConfirm() {
+  // A cancelled Quick Sale leaves no trace — drop the transient no-service ticket. Never mid-charge
+  // (_charging is set before proceedTerminalPayment closes the modal), and never once it's paid.
+  if (_payTicketId && !_charging) {
+    const e = queue().find(x => String(x.id) === String(_payTicketId));
+    if (e && e.quickSale && e.status === 'waiting') dispatch('queue.remove', { id: String(_payTicketId) });
+  }
   _pendingPay = null;
   _payGc = []; _payTicketId = null; _gcPickerOpen = false; _newGcOpen = false; _payCash = 0; _payTip = 0; _payZelle = 0; _payTipFromDrawer = false;
   const gs = document.getElementById('square-gc-section'); if (gs) gs.innerHTML = '';
