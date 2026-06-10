@@ -192,7 +192,7 @@ function notesSectionHtml(idx) {
 export function removeGuest(idx) { document.getElementById(`guest-card-${idx}`)?.remove(); }
 export function toggleService(btn) { btn.classList.toggle('selected'); }
 
-export function submitCheckin() {
+export function submitCheckin(skipApptGuard) {
   const newEntries = [];
   for (let i = 1; i <= guestCount; i++) {
     const card = document.getElementById(`guest-card-${i}`);
@@ -222,6 +222,9 @@ export function submitCheckin() {
     newEntries.push(entry);
   }
   if (newEntries.length === 0) return;
+  // Appointment guard: if a guest already has a not-checked-in appointment today, prompt to
+  // check in FROM the appointment (linked, services included) or proceed as its own check-in.
+  if (skipApptGuard !== true && window.checkinApptGuard?.(newEntries.map(e => ({ name: e.name, phone: e.phone })), () => submitCheckin(true))) return;
   if (_submitting) return;                 // ignore a bounced/double tap while the first submit is in flight
   _submitting = true;
   setTimeout(() => { _submitting = false; }, 1500);   // self-release so the lock can never wedge the kiosk
