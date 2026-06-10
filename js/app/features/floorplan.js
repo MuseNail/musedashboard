@@ -158,6 +158,7 @@ function stationHtml(id, entry) {
   return `<div class="floor-station absolute ${floorEditMode ? 'cursor-move' : ''}" data-station="${id}"
     style="left:${L.x}px;top:${L.y}px;width:${L.w}px;height:${L.h}px;box-sizing:border-box;border:2px solid ${border};border-radius:${radius};background:${bg};overflow:hidden;${sel ? 'outline:3px solid #1a5252;outline-offset:2px;' : ''}">
     ${entry ? `<div class="absolute" style="top:1px;left:5px;font-size:9px;font-weight:700;color:${border};opacity:0.65;pointer-events:none">${escHtml(stationLabel(id))}</div>` : ''}
+    ${entry && !floorEditMode ? `<span class="material-symbols-outlined fp-grip" style="position:absolute;bottom:1px;right:2px">drag_indicator</span>` : ''}
     ${content}
   </div>`;
 }
@@ -180,8 +181,9 @@ function renderFloorStaffRow() {
     const turns = getTechTurns(id).total;
     const turnsTxt = Number.isInteger(turns) ? String(turns) : turns.toFixed(1);
     const turnsBadge = `<span title="${turnsTxt} turns today" style="position:absolute;bottom:-3px;right:-3px;min-width:29px;height:29px;padding:0 4px;border-radius:15px;background:#1a5252;color:#fff;font-size:15px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface-container-lowest,#fff);box-sizing:border-box">${turnsTxt}</span>`;
+    const grip = floorEditMode ? '' : `<span class="material-symbols-outlined fp-grip" style="position:absolute;top:-2px;left:-6px;background:var(--surface-container-lowest,#fff);border-radius:7px;padding:1px;box-shadow:0 1px 3px rgba(0,0,0,.25)">drag_indicator</span>`;
     return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:78px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Tap for status · drag onto a station to assign"'}>
-      <div style="position:relative">${avatar}${turnsBadge}</div>
+      <div style="position:relative">${avatar}${turnsBadge}${grip}</div>
       <span style="font-size:13px;font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:76px">${escHtml(st.name.split(' ')[0])}</span>
       <span style="font-size:10px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
     </div>`;
@@ -216,7 +218,7 @@ export function renderFloorPlan() {
       <div class="text-[11px] font-body font-semibold text-on-surface-variant">All guests seated — drag a guest here to un-seat.</div></div>`;
     else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not seated — drag onto a station (${unplaced.length})</div>
-      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#cfe0e0' : '#ffe9c4'};color:#1f2937;font-size:11px">${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${escHtml(e.name)}</span></div>`).join('')}</div></div>`;
+      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#cfe0e0' : '#ffe9c4'};color:#1f2937;font-size:11px"><span class="material-symbols-outlined fp-grip">drag_indicator</span>${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${escHtml(e.name)}</span></div>`).join('')}</div></div>`;
   }
 
   grid.style.position = 'relative';
