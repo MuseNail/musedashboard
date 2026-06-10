@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UX Audit — In-App Demos</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap">
+<style>
+  * { box-sizing:border-box; margin:0; }
+  body { font-family:'Inter',sans-serif; background:#e8ebed; color:#1a1a1a; padding-bottom:80px; }
+  .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; vertical-align:middle; }
+  .wrap { max-width:1140px; margin:0 auto; padding:0 16px; }
+  h1 { font-size:20px; font-weight:800; color:#1a5252; margin:24px 0 4px; }
+  .sub { font-size:13px; color:#555; margin-bottom:14px; }
+  .secnav { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:18px; position:sticky; top:0; background:#e8ebed; padding:10px 0; z-index:50; }
+  .secnav button { font-family:inherit; font-size:12.5px; font-weight:700; padding:8px 14px; border-radius:999px; border:2px solid #c8ced2; background:#fff; cursor:pointer; color:#444; }
+  .secnav button.on { border-color:#1a5252; background:#1a5252; color:#fff; }
+  .sec { display:none; } .sec.on { display:block; }
+  .card { background:#fff; border:1px solid #d6dbdf; border-radius:16px; padding:18px; margin-bottom:16px; box-shadow:0 4px 16px rgba(0,0,0,.06); }
+  .card h2 { font-size:15px; font-weight:800; color:#1a5252; margin-bottom:4px; }
+  .card .d { font-size:12.5px; color:#666; margin-bottom:12px; line-height:1.5; }
+  .pick { display:flex; gap:8px; margin-bottom:12px; }
+  .pick button { font-family:inherit; font-size:12px; font-weight:700; padding:7px 14px; border-radius:10px; border:2px solid #c8ced2; background:#fff; cursor:pointer; }
+  .pick button.on { border-color:#1a5252; background:#eef4f4; color:#1a5252; }
+  /* app frame */
+  .app { background:#f6f7f8; border:1px solid #d6dbdf; border-radius:14px; overflow:hidden; }
+  .bar { background:#fff; border-bottom:1px solid #e2e6e9; height:54px; display:flex; align-items:center; gap:8px; padding:0 10px; }
+  .logo { width:38px; height:38px; border-radius:8px; background:#1a5252; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
+  .tabs { flex:1; display:flex; align-items:center; justify-content:center; gap:4px; }
+  .tab { display:inline-flex; align-items:center; gap:5px; padding:7px 12px; border-radius:10px; cursor:pointer; font-size:12px; font-weight:600; border:none; background:transparent; white-space:nowrap; font-family:inherit; }
+  .tab:hover { background:#d0d6da; }
+  .tab.active { background:#1a5252; color:#fff; }
+  .tab .material-symbols-outlined { font-size:16px; }
+  .pills { display:flex; gap:5px; align-items:center; flex-shrink:0; }
+  .pill { font-size:10px; font-weight:700; padding:4px 9px; border-radius:999px; background:#e7f3ec; color:#1d7a46; }
+  .seg-inline { display:inline-flex; background:#10403f; border-radius:10px; padding:2px; gap:1px; }
+  .seg-inline button { border:none; background:transparent; color:#9fc3c2; font-family:inherit; font-size:11.5px; font-weight:700; padding:6px 11px; border-radius:8px; cursor:pointer; display:inline-flex; gap:4px; align-items:center; }
+  .seg-inline button.on { background:#fff; color:#1a5252; }
+  .seg-inline .material-symbols-outlined { font-size:14px; }
+  .subrow { display:flex; justify-content:center; padding:8px 0 0; transition:margin-top .25s, opacity .25s; }
+  .subrow.hidden2 { margin-top:-46px; opacity:0; pointer-events:none; }
+  .seg2 { display:inline-flex; background:#e4e8ea; border-radius:12px; padding:3px; gap:2px; }
+  .seg2 button { border:none; background:transparent; font-family:inherit; font-size:12px; font-weight:700; padding:7px 16px; border-radius:9px; cursor:pointer; color:#555; display:inline-flex; gap:5px; align-items:center; }
+  .seg2 button.on { background:#fff; color:#1a5252; box-shadow:0 1px 4px rgba(0,0,0,.14); }
+  .seg2 .material-symbols-outlined { font-size:15px; }
+  .content { padding:12px; }
+  .skrow { background:#fff; border:1px solid #e2e6e9; border-radius:10px; padding:10px 14px; margin-bottom:8px; display:flex; gap:10px; align-items:center; font-size:12.5px; }
+  .skrow .dot { width:9px; height:9px; border-radius:50%; background:#1d7a46; }
+  .scrollbox { height:240px; overflow-y:auto; }
+  /* turns demo */
+  .trow { display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #e2e6e9; border-radius:10px; padding:6px 10px; margin-bottom:6px; }
+  .tava { width:30px; height:30px; border-radius:50%; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; font-size:13px; flex-shrink:0; }
+  .tname { width:74px; font-weight:700; font-size:13px; }
+  .bub { border-radius:9px; padding:4px 8px; margin-right:5px; display:inline-block; background:#eef4f4; border:1px solid #cfe0e0; }
+  .bub b { display:block; font-size:12px; }
+  .bub.empty { background:transparent; border:1.5px dashed #c8ced2; color:#aab2b8; padding:8px 10px; }
+  /* status pills + chips */
+  .stp { font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; display:inline-block; }
+  .stp.wait { background:#f5c870; color:#3a2800; }
+  .stp.insvc { background:#1a5252; color:#fff; }
+  .stp.done { background:#2a7a4f; color:#fff; }
+  .stp.paid { background:#5b6166; color:#fff; }
+  .fchip { font-size:12px; font-weight:600; padding:6px 13px; border-radius:999px; border:1.5px solid #b9c2c7; background:transparent; color:#444; cursor:pointer; font-family:inherit; display:inline-flex; gap:5px; align-items:center; }
+  .fchip.on { border-color:#1a5252; color:#1a5252; background:#eef4f4; }
+  .fchip .material-symbols-outlined { font-size:14px; }
+  /* assign modal demo */
+  .modal { background:#fff; border:1px solid #d6dbdf; border-radius:16px; max-width:760px; margin:0 auto; overflow:hidden; box-shadow:0 10px 40px rgba(0,0,0,.18); }
+  .mhead { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid #eef1f3; }
+  .mhead h3 { font-size:15px; font-weight:800; }
+  .gtabs { display:flex; gap:5px; }
+  .gtab { font-size:11.5px; font-weight:700; padding:5px 12px; border-radius:999px; border:1.5px solid #c8ced2; background:#fff; cursor:pointer; font-family:inherit; }
+  .gtab.on { background:#1a5252; color:#fff; border-color:#1a5252; }
+  .mbody { display:flex; min-height:300px; }
+  .cat { width:235px; border-right:1px solid #eef1f3; padding:10px; overflow-y:auto; max-height:330px; }
+  .cat .sv { display:flex; justify-content:space-between; align-items:center; border:1.5px solid #d6dbdf; border-radius:10px; padding:8px 10px; margin-bottom:6px; font-size:12.5px; font-weight:600; cursor:pointer; }
+  .cat .sv:hover { border-color:#1a5252; background:#eef4f4; }
+  .cat .sv .p { color:#888; font-weight:700; font-size:11.5px; }
+  .tkt { flex:1; padding:12px 14px; }
+  .line { border:1px solid #e2e6e9; border-radius:10px; padding:9px 11px; margin-bottom:8px; }
+  .line .l1 { display:flex; justify-content:space-between; font-size:13px; font-weight:700; }
+  .line .l2 { display:flex; gap:8px; margin-top:5px; font-size:11.5px; color:#555; align-items:center; flex-wrap:wrap; }
+  .mini { border:1px solid #c8ced2; border-radius:7px; padding:2px 8px; background:#fff; font-size:11px; font-weight:600; }
+  .gname { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:#1a5252; margin:8px 0 5px; }
+  .mfoot { display:flex; align-items:center; gap:10px; padding:11px 16px; border-top:1px solid #eef1f3; background:#fafbfb; }
+  .mfoot .tot { font-size:14px; font-weight:800; margin-right:auto; }
+  .btnp { background:#1a5252; color:#fff; border:none; border-radius:11px; font-family:inherit; font-size:13px; font-weight:700; padding:10px 20px; cursor:pointer; }
+  .btns { background:#fff; color:#1a1a1a; border:1.5px solid #c8ced2; border-radius:11px; font-family:inherit; font-size:13px; font-weight:700; padding:10px 16px; cursor:pointer; }
+  /* numpad field */
+  .npfield { display:inline-flex; align-items:center; gap:6px; border:2px solid #c8ced2; border-radius:10px; padding:8px 10px; background:#fff; cursor:pointer; }
+  .npfield:hover { border-color:#1a5252; }
+  .npfield .v { font-size:14px; font-weight:700; min-width:52px; }
+  .npfield .material-symbols-outlined { font-size:17px; color:#1a5252; }
+  /* search demo */
+  .srch { position:relative; max-width:430px; }
+  .srch input { width:100%; border:2px solid #1a5252; border-radius:12px; padding:11px 14px 11px 38px; font-family:inherit; font-size:14px; outline:none; }
+  .srch .material-symbols-outlined { position:absolute; left:10px; top:11px; color:#1a5252; font-size:20px; }
+  .sres { border:1px solid #d6dbdf; border-radius:12px; margin-top:6px; overflow:hidden; background:#fff; }
+  .sres .r { display:flex; align-items:center; gap:10px; padding:10px 13px; border-bottom:1px solid #eef1f3; font-size:13px; cursor:pointer; }
+  .sres .r:hover { background:#f4f7f7; }
+  .sres .r .material-symbols-outlined { font-size:18px; color:#1a5252; }
+  .sres .grp { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.6px; color:#8a9298; padding:7px 13px 3px; background:#fafbfb; }
+  .sres .meta { margin-left:auto; font-size:11px; color:#888; }
+  table.spec { width:100%; border-collapse:collapse; font-size:12.5px; }
+  table.spec th { text-align:left; background:#1a5252; color:#fff; padding:7px 10px; font-size:11.5px; }
+  table.spec td { padding:7px 10px; border-bottom:1px solid #e8ecee; vertical-align:top; }
+  .ok { color:#1d7a46; font-weight:700; } .no { color:#b3261e; font-weight:700; }
+  .note { font-size:12px; color:#555; background:#fff8e8; border:1px solid #efd9a0; border-radius:10px; padding:9px 12px; margin-top:10px; line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>UX Audit — In-App Demos</h1>
+  <p class="sub">Everything below is interactive. Pick a section, then flip the variant buttons inside each one.</p>
+  <div class="secnav" id="secnav"></div>
+
+  <!-- ════ A1 — SUBNAV INTO HEADER ════ -->
+  <div class="sec" data-s="A1 · Subnav">
+    <div class="card">
+      <h2>A1 — Where the Turns | Queue | Floor Plan switcher lives</h2>
+      <p class="d">Option (a): the segments live INSIDE the header — the active tab "opens" into its views, other tabs stay buttons. Option (b): keep today's separate row, but it slides away when you scroll down and returns when you scroll up. <b>Try scrolling the content box in (b).</b></p>
+      <div class="pick"><button class="on" onclick="a1(this,'a')">(a) Inside the header</button><button onclick="a1(this,'b')">(b) Auto-hide row on scroll</button></div>
+
+      <div id="a1a" class="app">
+        <div class="bar">
+          <div class="logo">M</div>
+          <div class="tabs">
+            <span class="seg-inline" id="a1a-seg">
+              <button class="on" onclick="a1seg(this)"><span class="material-symbols-outlined">swap_vert</span>Turns</button>
+              <button onclick="a1seg(this)"><span class="material-symbols-outlined">queue</span>Queue</button>
+              <button onclick="a1seg(this)"><span class="material-symbols-outlined">grid_view</span>Floor Plan</button>
+            </span>
+            <button class="tab"><span class="material-symbols-outlined">calendar_month</span>Calendar</button>
+            <button class="tab"><span class="material-symbols-outlined">receipt_long</span>Sales</button>
+            <button class="tab"><span class="material-symbols-outlined">bar_chart</span>Reports</button>
+            <button class="tab"><span class="material-symbols-outlined">tune</span>Settings</button>
+          </div>
+          <div class="pills"><span class="pill">● Live</span></div>
+        </div>
+        <div class="content">
+          <div class="skrow"><span class="dot"></span><b>Content starts here — 60px taller than today.</b></div>
+          <div class="skrow"><span class="dot" style="background:#f5c870"></span>Sarah Kim · Gel Manicure · waiting 12m</div>
+          <div class="skrow"><span class="dot" style="background:#f5c870"></span>Walk-in · Pedicure · waiting 4m</div>
+        </div>
+      </div>
+
+      <div id="a1b" class="app" style="display:none">
+        <div class="bar">
+          <div class="logo">M</div>
+          <div class="tabs">
+            <button class="tab active"><span class="material-symbols-outlined">swap_vert</span>Floor</button>
+            <button class="tab"><span class="material-symbols-outlined">calendar_month</span>Calendar</button>
+            <button class="tab"><span class="material-symbols-outlined">receipt_long</span>Sales</button>
+            <button class="tab"><span class="material-symbols-outlined">bar_chart</span>Reports</button>
+            <button class="tab"><span class="material-symbols-outlined">tune</span>Settings</button>
+          </div>
+          <div class="pills"><span class="pill">● Live</span></div>
+        </div>
+        <div class="subrow" id="a1b-row"><span class="seg2">
+          <button class="on"><span class="material-symbols-outlined">swap_vert</span>Turns</button>
+          <button><span class="material-symbols-outlined">queue</span>Queue</button>
+          <button><span class="material-symbols-outlined">grid_view</span>Floor Plan</button>
+        </span></div>
+        <div class="content scrollbox" id="a1b-scroll">
+          <div class="skrow"><span class="dot"></span><b>Scroll me down — the switcher row slides away. Scroll up — it returns.</b></div>
+          <div class="skrow"><span class="dot" style="background:#f5c870"></span>Sarah Kim · Gel Manicure · waiting 12m</div>
+          <div class="skrow"><span class="dot" style="background:#f5c870"></span>Walk-in · Pedicure · waiting 4m</div>
+          <div class="skrow"><span class="dot" style="background:#1a5252"></span>Amy Tran · Full Set · Lisa · in service</div>
+          <div class="skrow"><span class="dot" style="background:#1a5252"></span>Maria Lopez · Gel Mani · Christina · in service</div>
+          <div class="skrow"><span class="dot" style="background:#2a7a4f"></span>Jenny + mom · Pedicure · Kim · done</div>
+          <div class="skrow"><span class="dot"></span>Linda Park · paid 11:02</div>
+          <div class="skrow"><span class="dot"></span>Grace Ho · paid 10:48</div>
+          <div class="skrow"><span class="dot"></span>…more…</div>
+          <div class="skrow"><span class="dot"></span>…more…</div>
+          <div class="skrow"><span class="dot"></span>…more…</div>
+        </div>
+      </div>
+      <p class="note"><b>Trade-offs:</b> (a) saves the 60px always, but on a narrow window the header gets crowded (segments + 4 tabs). (b) changes nothing visually until you scroll; costs nothing to learn; the row is hidden exactly when you're reading the list — but it "moves," which some people find twitchy.</p>
+    </div>
+  </div>
+
+  <!-- ════ B5 — ASSIGN & PRICE TWO-PANE ════ -->
+  <div class="sec" data-s="B5 · Assign &amp; Price">
+    <div class="card">
+      <h2>B5 — Assign &amp; Price: catalog left, ticket right, no scrolling</h2>
+      <p class="d">Services live in their own scrollable pane on the left; the ticket you're building stays fully visible on the right; total + actions are always pinned at the bottom. Two ways to handle parties — flip between them:</p>
+      <div class="pick"><button class="on" onclick="b5(this,'tabs')">Per-guest tabs (like today)</button><button onclick="b5(this,'list')">One list, all guests</button></div>
+
+      <div class="modal">
+        <div class="mhead">
+          <h3>Assign &amp; Price — Jenny + mom</h3>
+          <div class="gtabs" id="b5-tabs"><span class="gtab on" onclick="b5g(this)">Jenny</span><span class="gtab" onclick="b5g(this)">Mom</span><span class="gtab">＋</span></div>
+        </div>
+        <div class="mbody">
+          <div class="cat">
+            <div class="sv"><span>Pedicure</span><span class="p">$35</span></div>
+            <div class="sv"><span>Gel Manicure</span><span class="p">$45</span></div>
+            <div class="sv"><span>Full Set</span><span class="p">$55</span></div>
+            <div class="sv"><span>Fill</span><span class="p">$45</span></div>
+            <div class="sv"><span>Dip Powder</span><span class="p">$50</span></div>
+            <div class="sv"><span>Kid Mani</span><span class="p">$15</span></div>
+            <div class="sv"><span>Polish Change</span><span class="p">$20</span></div>
+            <div class="sv"><span>Eyebrow Wax</span><span class="p">$12</span></div>
+          </div>
+          <div class="tkt" id="b5-tkt"></div>
+        </div>
+        <div class="mfoot">
+          <span class="tot">Party Total <span style="color:#1a5252">$80.00</span></span>
+          <button class="btns">card_giftcard&nbsp;Extras ▾</button>
+          <button class="btns">Save</button>
+          <button class="btnp">✓ Check Out</button>
+        </div>
+      </div>
+      <p class="note"><b>Per-guest tabs:</b> identical mental model to today — tap a guest, see only their lines. <b>One list:</b> every guest's lines visible at once under name headers (tap a service in the catalog → it asks "for whom?" when there's more than one guest). With your parties usually being 2–3 people, the list shows the whole ticket without any tab-switching.</p>
+    </div>
+  </div>
+
+  <!-- ════ C8 — TURNS DENSITY ════ -->
+  <div class="sec" data-s="C8 · Turns size">
+    <div class="card">
+      <h2>C8 — Turns board on a BUSY day (10 techs) — readable AND no scrolling</h2>
+      <p class="d">The frame below is sized like your iPad's usable height for the tech list (~520px). Flip between today's sizes and the proposed bump. The row height grows only ~4px per tech — all 10 still fit.</p>
+      <div class="pick"><button class="on" onclick="c8(this,'cur')">Current (9–10px meta)</button><button onclick="c8(this,'new')">Proposed (12px meta, bigger names)</button></div>
+      <div class="app"><div class="content" id="c8-box" style="height:520px; overflow:hidden"></div></div>
+      <p class="note">Proposed: tech name 14px (was 13), bubble service 13px (was 12), time/price meta 12px (was 9–10). Empty turn slots compress to small "+" chips so busy rows get the space. If the salon ever grows past ~12 techs, rows switch to a 2-column grid before anything scrolls.</p>
+    </div>
+  </div>
+
+  <!-- ════ D13 — CHIPS VS PILLS ════ -->
+  <div class="sec" data-s="D13 · Chips vs pills">
+    <div class="card">
+      <h2>D13 — Filters should not look like statuses</h2>
+      <p class="d">Today both are grey rounded chips. Proposed: <b>filters = outlined, with a ✓ when active</b> (they're buttons you press) · <b>statuses = color-filled pills</b> (they're labels you read — using the filled style you said you prefer).</p>
+      <div style="display:flex; gap:24px; flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#8a9298;margin-bottom:7px">Filter row (buttons)</div>
+          <button class="fchip on"><span class="material-symbols-outlined">check</span>All</button>
+          <button class="fchip">Waiting</button>
+          <button class="fchip">In Service</button>
+          <button class="fchip">Done</button>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#8a9298;margin-bottom:7px">Status pills (labels on cards)</div>
+          <span class="stp wait">Waiting</span>&nbsp;<span class="stp insvc">In Service</span>&nbsp;<span class="stp done">Done</span>&nbsp;<span class="stp paid">Paid</span>
+        </div>
+      </div>
+      <p class="note">Same vocabulary everywhere (C9): <b>Waiting · In Service · Done · Paid</b> — no more "In Svc" / "Complete" variants. Colors: amber = waiting, teal = in service, green = done, slate = paid.</p>
+    </div>
+  </div>
+
+  <!-- ════ E6 — NUMPAD FIELD ════ -->
+  <div class="sec" data-s="E6 · Numpad hint">
+    <div class="card">
+      <h2>E6 — Price fields that look tappable</h2>
+      <p class="d">Today a price field looks like a plain text input — nothing says "tap me for the keypad." Proposed: a keypad glyph inside the field. Same behavior, just visible.</p>
+      <div style="display:flex; gap:30px; align-items:center; flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#8a9298;margin-bottom:7px">Current</div>
+          <span style="border:2px solid #c8ced2;border-radius:10px;padding:8px 14px;background:#fff;font-weight:700;font-size:14px">$45.00</span>
+        </div>
+        <div>
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#8a9298;margin-bottom:7px">Proposed</div>
+          <span class="npfield"><span class="v">$45.00</span><span class="material-symbols-outlined">dialpad</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════ A3 — GLOBAL SEARCH ════ -->
+  <div class="sec" data-s="A3 · Global search">
+    <div class="card">
+      <h2>A3 — Global search: how it looks &amp; works</h2>
+      <p class="d"><b>How you reach it:</b> a magnifier icon in the header (next to the sync pill), or just start typing… it opens an overlay like this. <b>Type in the box below — try "co", "951", or "2207".</b></p>
+      <div class="srch"><span class="material-symbols-outlined">search</span><input id="a3q" placeholder="Name, phone, or gift card #…" oninput="a3()"></div>
+      <div class="sres" id="a3r" style="display:none"></div>
+      <p class="d" style="margin-top:14px"><b>How it works:</b> searches as you type (2+ characters), everything is instant because it reads the data already in the app — no network call. Phone digits match any part of the number. Tapping a result takes you straight to the right place:</p>
+      <table class="spec">
+        <tr><th>What</th><th>Matched by</th><th>Tap →</th></tr>
+        <tr><td class="ok">✓ Customers (directory)</td><td>name, phone</td><td>opens the customer editor (notes, history)</td></tr>
+        <tr><td class="ok">✓ Today's queue tickets</td><td>guest name, phone</td><td>opens that ticket's Assign &amp; Price</td></tr>
+        <tr><td class="ok">✓ Recent transactions (90 days)</td><td>customer name</td><td>opens the transaction card in Sales</td></tr>
+        <tr><td class="ok">✓ Gift cards</td><td>serial #, recipient name</td><td>opens the gift card in Sales → Gift Cards</td></tr>
+        <tr><td class="ok">✓ Today's appointments</td><td>guest name, phone</td><td>opens the appointment popup (Quick Check-In etc.)</td></tr>
+        <tr><td class="no">✗ Older calendar events</td><td colspan="2">only TODAY's appointments are loaded in the app; searching past/future weeks would need Google round-trips — out of scope</td></tr>
+        <tr><td class="no">✗ Reports / payroll numbers</td><td colspan="2">aggregates, not records — use the Reports tab</td></tr>
+        <tr><td class="no">✗ Settings, staff, chat messages</td><td colspan="2">not customer-facing lookups; excluded to keep results clean</td></tr>
+        <tr><td class="no">✗ Archived turns history</td><td colspan="2">device-local archive; not indexed</td></tr>
+      </table>
+      <p class="note"><b>Permissions:</b> transactions only appear for roles that can already see the Sales tab. Customers/queue/appointments appear for everyone — that's the front-desk use case.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// section nav
+const secs=[...document.querySelectorAll('.sec')];
+const nav=document.getElementById('secnav');
+secs.forEach((s,i)=>{ const b=document.createElement('button'); b.innerHTML=s.dataset.s; if(i===0){b.classList.add('on');s.classList.add('on');}
+  b.onclick=()=>{ nav.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); secs.forEach(x=>x.classList.remove('on')); s.classList.add('on'); }; nav.appendChild(b); });
+
+// A1
+function a1(btn,v){ btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on')); btn.classList.add('on');
+  document.getElementById('a1a').style.display=v==='a'?'':'none'; document.getElementById('a1b').style.display=v==='b'?'':'none'; }
+function a1seg(b){ b.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); }
+// A1b auto-hide on scroll
+(()=>{ const box=document.getElementById('a1b-scroll'), row=document.getElementById('a1b-row'); let last=0;
+  box.addEventListener('scroll',()=>{ const y=box.scrollTop; row.classList.toggle('hidden2', y>last && y>30); last=y; }); })();
+
+// B5
+const B5={
+ tabs:`<div class="line"><div class="l1"><span>Pedicure</span><span>$35</span></div><div class="l2"><span class="mini">→ Kim</span><span class="mini">Stn P1</span><span class="stp done">Done</span><span class="npfield" style="padding:2px 7px"><span class="v" style="font-size:11px;min-width:0">$35</span><span class="material-symbols-outlined" style="font-size:13px">dialpad</span></span></div></div>
+ <div class="line"><div class="l1"><span>Eyebrow Wax</span><span>$12</span></div><div class="l2"><span class="mini">→ Kim</span><span class="mini">Stn P1</span><span class="stp wait">Waiting</span></div></div>
+ <div style="font-size:11.5px;color:#888;margin-top:10px">Showing <b>Jenny</b> — tap a guest tab above to switch. Tap a service on the left to add it to Jenny.</div>`,
+ list:`<div class="gname">Jenny</div>
+ <div class="line"><div class="l1"><span>Pedicure</span><span>$35</span></div><div class="l2"><span class="mini">→ Kim</span><span class="mini">Stn P1</span><span class="stp done">Done</span></div></div>
+ <div class="line"><div class="l1"><span>Eyebrow Wax</span><span>$12</span></div><div class="l2"><span class="mini">→ Kim</span><span class="mini">Stn P1</span><span class="stp wait">Waiting</span></div></div>
+ <div class="gname">Mom</div>
+ <div class="line"><div class="l1"><span>Pedicure</span><span>$35</span></div><div class="l2"><span class="mini">→ Lisa</span><span class="mini">Stn P2</span><span class="stp insvc">In Service</span></div></div>
+ <div style="font-size:11.5px;color:#888;margin-top:10px">Every guest visible at once. Tap a service on the left → a small "Add for: Jenny / Mom" picker appears.</div>`};
+function b5(btn,v){ btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on')); btn.classList.add('on');
+  document.getElementById('b5-tkt').innerHTML=B5[v]; document.getElementById('b5-tabs').style.visibility=v==='tabs'?'visible':'hidden'; }
+document.getElementById('b5-tkt').innerHTML=B5.tabs;
+function b5g(t){ t.parentElement.querySelectorAll('.gtab').forEach(x=>x.classList.remove('on')); t.classList.add('on'); }
+
+// C8 — 10 techs, current vs proposed sizes
+const TECHS=[['Kim','#7e57c2',3],['Lisa','#43a047',2],['John','#ef6c00',2],['Christina','#d81b60',1],['Emily','#5e8d93',2],['Lyn','#8e24aa',1],['Tracy','#3949ab',2],['Vivian','#00897b',1],['Hanna','#c0ca33',0],['Mai','#f4511e',1]];
+function c8(btn,v){ if(btn){btn.parentElement.querySelectorAll('button').forEach(b=>b.classList.remove('on')); btn.classList.add('on');}
+  const cur=v!=='new';
+  const nameF=cur?13:14, svcF=cur?12:13, metaF=cur?9.5:12, pad=cur?6:7;
+  document.getElementById('c8-box').innerHTML=TECHS.map(([n,c,turns])=>{
+    const bubs=Array.from({length:turns},(_,i)=>`<span class="bub"><b style="font-size:${svcF}px">${['Pedicure','Gel Mani','Full Set'][i%3]}</b><span style="font-size:${metaF}px;color:#777">${9+i}:${i?'45':'15'} AM · $${[35,45,55][i%3]}</span></span>`).join('');
+    const empt=cur?`<span class="bub empty" style="font-size:${metaF}px">＋</span><span class="bub empty" style="font-size:${metaF}px">＋</span>`:`<span class="bub empty" style="font-size:11px;padding:5px 9px">＋</span>`;
+    return `<div class="trow" style="padding:${pad}px 10px"><span class="tava" style="background:${c};width:${cur?28:32}px;height:${cur?28:32}px">${n[0]}</span><span class="tname" style="font-size:${nameF}px">${n}</span><span style="flex:1;white-space:nowrap;overflow:hidden">${bubs}${empt}</span><span style="font-size:${metaF}px;color:#888;font-weight:700">${turns} turns</span></div>`;
+  }).join('');
+}
+c8(null,'cur');
+
+// A3 search demo
+const A3D=[
+ ['Customers','person',[['Corine Munoz','(951) 326-4153','co 951'],['Connie Tran','(909) 880-2214','co'],['Lisa Wilson','(909) 555-7788','']]],
+ ['In the queue today','confirmation_number',[['Corine M — Pedicure','waiting 8m','co 951']]],
+ ['Recent transactions','receipt_long',[['Corine Munoz — $47','Jun 3 · card','co 951']]],
+ ['Gift cards','card_giftcard',[['GC #2207 — $50','bal $50 · Maria','2207']]],
+ ["Today's appointments",'event',[['Corine Munoz 9:30 AM','Pedicure · Sarah H','co 951']]]];
+function a3(){ const q=document.getElementById('a3q').value.trim().toLowerCase(); const box=document.getElementById('a3r');
+  if(q.length<2){ box.style.display='none'; return; }
+  let h=''; A3D.forEach(([g,ic,rows])=>{ const m=rows.filter(([t,s,k])=>t.toLowerCase().includes(q)||s.toLowerCase().includes(q)||k.split(' ').some(x=>x&&x.startsWith(q)));
+    if(m.length){ h+=`<div class="grp">${g}</div>`+m.map(([t,s])=>`<div class="r"><span class="material-symbols-outlined">${ic}</span><span><b>${t}</b><br><span style="font-size:11px;color:#888">${s}</span></span><span class="meta">open ›</span></div>`).join(''); } });
+  box.innerHTML=h||'<div class="r" style="color:#888">No matches</div>'; box.style.display='block'; }
+</script>
+</body>
+</html>

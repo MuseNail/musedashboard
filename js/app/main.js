@@ -253,11 +253,20 @@ function checkSquarePending() {
 function updateSyncIndicator(state) {
   const dot = document.getElementById('conn-dot'), text = document.getElementById('conn-text');
   if (!dot) return;
+  const pill = dot.parentElement;
   // A server-rejected/dead-lettered write is the most urgent state — surface it instead of a green "Synced".
   const failed = (sync.failedOps?.() || []).length;
-  if (failed > 0) { dot.style.background = '#fa746f'; if (text) text.textContent = `Failed ${failed}`; dot.parentElement && (dot.parentElement.title = 'A change failed to save — open Settings → Data Recovery'); return; }
-  if (state.connected) { dot.style.background = state.pendingCount > 0 ? '#f5c870' : '#2a7a4f'; if (text) text.textContent = state.pendingCount > 0 ? `Sync ${state.pendingCount}` : 'Synced'; }
-  else { dot.style.background = '#fa746f'; if (text) text.textContent = state.pendingCount > 0 ? `Offline ${state.pendingCount}` : 'Offline'; }
+  if (failed > 0) { dot.style.background = '#fa746f'; if (text) text.textContent = `${failed} failed`; if (pill) pill.title = 'A change failed to save — open Settings → Data Recovery'; return; }
+  const n = state.pendingCount || 0, queued = n === 1 ? '1 change queued' : `${n} changes queued`;
+  if (state.connected) {
+    dot.style.background = n > 0 ? '#f5c870' : '#2a7a4f';
+    if (text) text.textContent = n > 0 ? `Syncing · ${n}` : 'Live';
+    if (pill) pill.title = n > 0 ? `${queued} — sending now. Tap to force a sync.` : 'Connected — everything saved. Tap to force a sync.';
+  } else {
+    dot.style.background = '#fa746f';
+    if (text) text.textContent = n > 0 ? `Offline · ${queued}` : 'Offline';
+    if (pill) pill.title = n > 0 ? `${queued} — they'll send automatically when the connection returns. Tap to retry now.` : 'No connection — changes will queue and send when it returns. Tap to retry.';
+  }
 }
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
