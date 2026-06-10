@@ -946,6 +946,14 @@ tailwind.config = {
           <div id="helcim-section" class="hidden px-5 py-4 space-y-3">
             <div class="text-xs font-body text-on-surface-variant">Drive your Helcim Smart Terminal for card payments. The API token &amp; result webhook are configured on the server.</div>
             <div>
+              <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Active card processor</label>
+              <div class="flex gap-2">
+                <button id="helcim-proc-square" onclick="setPaymentProcessor('square')" class="flex-1 px-4 py-2 rounded-xl border font-body font-bold text-sm transition-colors bg-surface-container-lowest text-on-surface border-surface-container-high">Square</button>
+                <button id="helcim-proc-helcim" onclick="setPaymentProcessor('helcim')" class="flex-1 px-4 py-2 rounded-xl border font-body font-bold text-sm transition-colors bg-surface-container-lowest text-on-surface border-surface-container-high">Helcim</button>
+              </div>
+              <div class="text-[11px] text-on-surface-variant mt-1">Which processor the checkout charges cards on. Switch any time — instant fallback.</div>
+            </div>
+            <div>
               <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Terminal device code</label>
               <div class="flex gap-2">
                 <input id="helcim-device-code" type="text" placeholder="e.g. 7C0X" autocapitalize="characters" class="flex-1 border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline uppercase focus:border-primary outline-none">

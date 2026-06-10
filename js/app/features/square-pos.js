@@ -5,6 +5,7 @@ import { getActiveUser } from '../session.js';
 import { showToast, commitNumpad, ticketTotal } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
 import { squareUpsertCustomer } from './square-customers.js';
+import { chargeOnHelcim, helcimActive } from './helcim.js';
 
 const cfg     = () => getState().config;
 const sqConfig = () => cfg().square_config || null;
@@ -264,7 +265,7 @@ export async function proceedTerminalPayment() {
   if (!_pendingPay) return;
   if (_charging) return;   // ignore double-taps while a charge is already in flight
   const sc = sqConfig();
-  if (!sc?.locationId) { showToast('Add your Square Location ID in Settings → Square first.'); return; }
+  if (!helcimActive() && !sc?.locationId) { showToast('Add your Square Location ID in Settings → Square first.'); return; }
   const party = (_pendingPay.ids || []).map(id => queue().find(x => String(x.id) === String(id))).filter(Boolean);
   if (!party.length) { showToast('Ticket not found.'); return; }
   // Split tender: cash + gift cards reduce what's charged on the card.
@@ -291,7 +292,7 @@ export async function proceedTerminalPayment() {
     window.openCashRegister?.();
     return;
   }
-  if (termCharge > 0 && !sc.terminalDeviceId) { showToast('Pair your Square Terminal in Settings → Square first.'); return; }
+  if (!helcimActive() && termCharge > 0 && !sc.terminalDeviceId) { showToast('Pair your Square Terminal in Settings → Square first.'); return; }
   // Capture BEFORE closeSquareConfirm() — it nulls _pendingPay / _payTicketId / _payCash / _payTip.
   const payNames = _pendingPay.names || '', ticketId = _payTicketId, partyIds = party.map(e => String(e.id));
   const tenders  = { cash: cashBillC / 100, card: cardBillC / 100, gift: giftCents / 100, zelle: zelleBillC / 100, cashReceived: cashReceivedC / 100, change: changeCents / 100 };
@@ -326,7 +327,20 @@ export async function proceedTerminalPayment() {
   try {
     // 1) Card portion + tip on the Terminal (the uncertain step) — do it FIRST.
     let cardPaymentId = null;
-    if (termCharge > 0) {
+    if (termCharge > 0 && helcimActive()) {
+      // Helcim terminal. Deterministic invoice ref per (ticket, card amount) makes a retry after a
+      // timeout idempotent — chargeOnHelcim returns the existing APPROVED charge instead of re-charging.
+      showTerminalModal(`Charging $${(termCharge / 100).toFixed(2)} on the Terminal — finish on the device…`);
+      const res = await chargeOnHelcim(termCharge / 100, `tkt-${idemBase}-${termCharge}`);
+      hideTerminalModal();
+      if (!res.ok) {
+        _unstageGift(ticketId);
+        if (res.status === 'CANCELLED' || res.status === 'TIMEOUT') { try { localStorage.removeItem('muse_term_pending'); } catch (e) {} }
+        showToast(res.error || 'Payment not completed.');
+        return;
+      }
+      cardPaymentId = res.transactionId || null;
+    } else if (termCharge > 0) {
       showTerminalModal(`Charging $${(termCharge / 100).toFixed(2)} on the Terminal — finish on the device…`);
       const coRes = await fetch(`${SQUARE_PROXY}/v2/terminals/checkouts`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -351,18 +365,21 @@ export async function proceedTerminalPayment() {
     // totals silently miss real cash/Zelle (the recorders return null on failure, by design,
     // because the money was physically received — so we surface it instead of blocking).
     const unrecorded = [];
-    let cashPaymentId = null;
-    if (cashAppliedC > 0) {
-      showTerminalModal('Recording cash payment…');
-      cashPaymentId = await recordCashPayment(cashAppliedC, cashReceivedC, sc.locationId, pend.cashKey, customerId);
-      if (!cashPaymentId) unrecorded.push('cash');
-    }
-    // 3) Record the Zelle portion as an EXTERNAL payment so Square's totals include it.
-    let zellePaymentId = null;
-    if (zelleC > 0) {
-      showTerminalModal('Recording Zelle payment…');
-      zellePaymentId = await recordExternalPayment(zelleC, 'Zelle', sc.locationId, pend.zelleKey, customerId);
-      if (!zellePaymentId) unrecorded.push('Zelle');
+    let cashPaymentId = null, zellePaymentId = null;
+    // Cash/Zelle are pushed to Square only when Square is the active processor (for Square's totals).
+    // On Helcim they're app-only — already captured in `tenders` + the cash drawer + reports.
+    if (!helcimActive()) {
+      if (cashAppliedC > 0) {
+        showTerminalModal('Recording cash payment…');
+        cashPaymentId = await recordCashPayment(cashAppliedC, cashReceivedC, sc.locationId, pend.cashKey, customerId);
+        if (!cashPaymentId) unrecorded.push('cash');
+      }
+      // 3) Record the Zelle portion as an EXTERNAL payment so Square's totals include it.
+      if (zelleC > 0) {
+        showTerminalModal('Recording Zelle payment…');
+        zellePaymentId = await recordExternalPayment(zelleC, 'Zelle', sc.locationId, pend.zelleKey, customerId);
+        if (!zellePaymentId) unrecorded.push('Zelle');
+      }
     }
     _finalizeTerminalPaid(partyIds, tenders, [cardPaymentId, cashPaymentId, zellePaymentId].filter(Boolean), tipCents / 100, unrecorded);
     // Pay the card tip to the tech in cash from the drawer (no-op if no drawer is open).

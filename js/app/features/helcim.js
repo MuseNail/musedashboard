@@ -12,6 +12,16 @@ import { HELCIM_PROXY } from '../config.js';
 const cfg = () => getState().config;
 export function helcimDeviceCode() { return String(cfg().helcim_device_code || '').trim(); }
 
+// Which processor the checkout charges cards on. Default 'square' until the operator flips it.
+export function activeProcessor() { return cfg().payment_processor === 'helcim' ? 'helcim' : 'square'; }
+export function helcimActive() { return activeProcessor() === 'helcim'; }
+export function setPaymentProcessor(p) {
+  const v = p === 'helcim' ? 'helcim' : 'square';
+  dispatch('config.set', { key: 'payment_processor', value: v });
+  showToast(v === 'helcim' ? 'Card processor set to Helcim ✓' : 'Card processor set to Square ✓');
+  renderHelcimSettings();
+}
+
 // invoiceNumber → { settle } resolver for an in-flight terminal charge.
 const _pending = {};
 
@@ -37,6 +47,16 @@ export async function chargeOnHelcim(amountDollars, invoiceNumber, opts = {}) {
   if (!deviceCode)            return { ok: false, error: 'Set your terminal device code in Settings → Payments first.' };
   if (!(amountDollars > 0))   return { ok: false, error: 'Amount must be greater than zero.' };
   if (!invoiceNumber)         return { ok: false, error: 'Missing invoice reference.' };
+
+  // Idempotency (Helcim's purchase call has no idempotency key): if a successful charge already
+  // exists for this reference — e.g. a retry after a timeout where the first attempt DID go
+  // through — return it instead of charging the card a second time.
+  try {
+    const r = await fetch(`${HELCIM_PROXY}/result?invoiceNumber=${encodeURIComponent(invoiceNumber)}`);
+    const j = await r.json().catch(() => ({}));
+    const prior = (j && Array.isArray(j.value)) ? j.value.find(t => String(t.status).toUpperCase() === 'APPROVED') : null;
+    if (prior) return { ok: true, status: 'APPROVED', transactionId: prior.transactionId, amount: prior.amount, reused: true };
+  } catch {}
 
   let start;
   try {
@@ -68,6 +88,11 @@ export async function chargeOnHelcim(amountDollars, invoiceNumber, opts = {}) {
 // ── Settings → Payments (Helcim) panel ──────────────────────────────────────
 export function renderHelcimSettings() {
   const el = document.getElementById('helcim-device-code'); if (el && document.activeElement !== el) el.value = helcimDeviceCode();
+  const active = activeProcessor();
+  const on  = 'flex-1 px-4 py-2 rounded-xl border font-body font-bold text-sm transition-colors bg-primary text-on-primary border-primary';
+  const off = 'flex-1 px-4 py-2 rounded-xl border font-body font-bold text-sm transition-colors bg-surface-container-lowest text-on-surface border-surface-container-high';
+  const sb = document.getElementById('helcim-proc-square'); if (sb) sb.className = active === 'square' ? on : off;
+  const hb = document.getElementById('helcim-proc-helcim'); if (hb) hb.className = active === 'helcim' ? on : off;
   const st = document.getElementById('helcim-conn-status'); if (st && !st.dataset.touched) st.textContent = helcimDeviceCode() ? `Device ${helcimDeviceCode()} saved.` : 'No terminal device code set.';
 }
 export function helcimSaveDevice() {

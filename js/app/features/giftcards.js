@@ -5,6 +5,7 @@ import { showToast, todayStr, localDateStr } from '../utils.js';
 import { APP_NAME, APP_VERSION } from '../config.js';
 import { customerDirectory } from './square-customers.js';
 import { chargeOnTerminal, recordCashPayment, recordExternalPayment } from './square-pos.js';
+import { chargeOnHelcim, helcimActive } from './helcim.js';
 import { getActiveUser } from '../session.js';
 
 const giftCards = () => getState().giftcards;
@@ -162,15 +163,21 @@ export async function saveGiftCard() {
     const idem = `gcsale-${(serial || from || to || 'x')}-${cents}-${datePurchased}-${payMethod}`;   // stable so a retry can't double-charge
     const btn = document.querySelector('#gc-modal button[onclick="saveGiftCard()"]'); if (btn) { btn.disabled = true; btn.textContent = 'Charging…'; }
     let res;
-    if (payMethod === 'card') res = await chargeOnTerminal(cents, note, idem);
-    else if (!loc) res = { ok: false, error: 'Add your Square Location ID in Settings → Square first.' };
-    else if (payMethod === 'cash') { const id = await recordCashPayment(cents, cents, loc, idem, null, note); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square cash record failed.' }; }
-    else { const id = await recordExternalPayment(cents, 'Zelle', loc, idem, null, note); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square Zelle record failed.' }; }
+    if (helcimActive()) {
+      // Card → charge on the Helcim terminal; cash/Zelle → app-only (collected manually, no processor record).
+      if (payMethod === 'card') { const hr = await chargeOnHelcim(amount, idem); res = hr.ok ? { ok: true, paymentId: hr.transactionId } : { ok: false, error: hr.error }; }
+      else res = { ok: true, paymentId: null };
+    } else {
+      if (payMethod === 'card') res = await chargeOnTerminal(cents, note, idem);
+      else if (!loc) res = { ok: false, error: 'Add your Square Location ID in Settings → Square first.' };
+      else if (payMethod === 'cash') { const id = await recordCashPayment(cents, cents, loc, idem, null, note); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square cash record failed.' }; }
+      else { const id = await recordExternalPayment(cents, 'Zelle', loc, idem, null, note); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square Zelle record failed.' }; }
+    }
     if (btn) { btn.disabled = false; btn.textContent = 'Save Gift Card'; }
     if (!res.ok) { showToast('Gift-card payment failed: ' + (res.error || 'error') + ' — card not created.'); return; }
     squarePaymentIds = res.paymentId ? [res.paymentId] : null;
     salePaidBy = payMethod;
-    showToast(`Gift card charged $${amount.toFixed(2)} (${payMethod}) in Square ✓`);
+    showToast(`Gift card charged $${amount.toFixed(2)} (${payMethod}) ✓`);
   }
 
   const card = {
