@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — Top Nav Consolidation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: 'Inter', sans-serif; background: #e8ebed; color: #1a1a1a; padding-bottom: 60px; }
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; vertical-align: middle; }
+
+  .page-head { max-width: 1100px; margin: 24px auto 8px; padding: 0 16px; }
+  .page-head h1 { font-size: 20px; font-weight: 800; color: #1a5252; }
+  .page-head p { font-size: 13px; color: #555; margin-top: 4px; line-height: 1.5; }
+
+  .variant-picker { max-width: 1100px; margin: 14px auto 18px; padding: 0 16px; display: flex; gap: 8px; }
+  .vp-btn { flex: 1; padding: 12px 14px; border-radius: 12px; border: 2px solid #c8ced2; background: #fff; cursor: pointer; text-align: left; font-family: inherit; }
+  .vp-btn.active { border-color: #1a5252; background: #eef4f4; }
+  .vp-btn .t { font-size: 14px; font-weight: 800; color: #1a5252; }
+  .vp-btn .d { font-size: 11.5px; color: #666; margin-top: 3px; line-height: 1.45; }
+
+  /* ── Mock app frame ── */
+  .frame { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+  .app { background: #f6f7f8; border: 1px solid #d6dbdf; border-radius: 16px; overflow: hidden; box-shadow: 0 6px 24px rgba(0,0,0,.08); }
+  header.bar { background: #fff; border-bottom: 1px solid #e2e6e9; height: 62px; display: flex; align-items: center; gap: 10px; padding: 0 12px; }
+  .logo { width: 46px; height: 46px; border-radius: 8px; background: #1a5252; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; flex-shrink: 0; }
+  nav.tabs { flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; overflow-x: auto; }
+  .dash-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 10px; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; color: #1a1a1a; border: none; background: transparent; white-space: nowrap; transition: background .15s; }
+  .dash-tab:hover { background: #d0d6da; }
+  .dash-tab.active { background: #1a5252; color: #fff; }
+  .dash-tab .material-symbols-outlined { font-size: 18px; }
+  .right-pills { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .pill { font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: #e7f3ec; color: #1d7a46; }
+  .pill.user { background: #eef0f2; color: #444; }
+
+  /* ── Segmented view switcher (the new piece) ── */
+  .panel { padding: 16px; min-height: 330px; }
+  .panel-top { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .seg { display: inline-flex; background: #e4e8ea; border-radius: 12px; padding: 3px; gap: 2px; }
+  .seg button { border: none; background: transparent; font-family: inherit; font-size: 13px; font-weight: 700; padding: 8px 18px; border-radius: 10px; cursor: pointer; color: #555; display: inline-flex; align-items: center; gap: 6px; transition: all .15s; }
+  .seg button .material-symbols-outlined { font-size: 17px; }
+  .seg button.on { background: #fff; color: #1a5252; box-shadow: 0 1px 4px rgba(0,0,0,.14); }
+  .panel-actions { margin-left: auto; display: flex; gap: 8px; }
+  .pa-btn { font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 10px; border: 1px solid #d6dbdf; background: #fff; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 5px; }
+  .pa-btn .material-symbols-outlined { font-size: 15px; }
+  .pa-btn.green { background: #1d7a46; color: #fff; border-color: #1d7a46; }
+
+  /* fake content */
+  .content { display: grid; gap: 10px; }
+  .skline { background: #fff; border: 1px solid #e2e6e9; border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+  .skline .dot { width: 10px; height: 10px; border-radius: 50%; background: #1d7a46; flex-shrink: 0; }
+  .skline .nm { font-weight: 700; font-size: 13.5px; }
+  .skline .sub { font-size: 11.5px; color: #888; }
+  .skline .amt { margin-left: auto; font-weight: 800; font-size: 13.5px; color: #1a5252; }
+  .ghost { color: #aab2b8; font-size: 12.5px; text-align: center; padding: 24px 0 8px; }
+
+  /* settings list mock */
+  .set-list { background: #fff; border: 1px solid #e2e6e9; border-radius: 12px; overflow: hidden; max-width: 460px; }
+  .set-item { display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-bottom: 1px solid #eef1f3; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+  .set-item:last-child { border-bottom: none; }
+  .set-item:hover { background: #f6f8f9; }
+  .set-item .material-symbols-outlined { font-size: 20px; color: #1a5252; }
+  .set-item .chev { margin-left: auto; color: #b6bec4; font-size: 18px; }
+  .set-item.new { background: #eef4f4; }
+  .set-item.new .badge { margin-left: auto; font-size: 9.5px; font-weight: 800; letter-spacing: .5px; background: #1a5252; color: #fff; padding: 3px 8px; border-radius: 999px; }
+  .set-item.new .chev { margin-left: 8px; }
+
+  .note { max-width: 1100px; margin: 14px auto 0; padding: 0 16px; font-size: 12.5px; color: #555; line-height: 1.6; }
+  .note b { color: #1a5252; }
+  .kbd { background: #fff; border: 1px solid #ccc; border-radius: 5px; padding: 1px 6px; font-size: 11px; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Top Dashboard — Consolidated Nav</h1>
+  <p>Today: <b>10 tabs</b> (Turns · Floor Plan · Queue · Calendar · Reports · Transactions · Payroll · Gift Cards · Customers · Settings).
+     Both options below merge related tabs into one with a <b>view switcher inside the panel</b>, and move <b>Customers into Settings</b>. Everything is clickable — try the tabs and the switcher.</p>
+</div>
+
+<div class="variant-picker">
+  <button class="vp-btn active" id="vpA" onclick="setVariant('A')">
+    <div class="t">Option A — 7 tabs (what you asked for)</div>
+    <div class="d">Turns + Queue → one <b>“Floor”</b> tab · Reports + Payroll → one <b>“Reports”</b> tab · Customers → Settings. Floor Plan &amp; Transactions stay their own tabs.</div>
+  </button>
+  <button class="vp-btn" id="vpB" onclick="setVariant('B')">
+    <div class="t">Option B — 5 tabs (one step further)</div>
+    <div class="d">Floor Plan joins the Floor group (Turns | Queue | Floor Plan) · Transactions joins the money group (Reports | Transactions | Payroll). Smallest possible top bar.</div>
+  </button>
+</div>
+
+<div class="frame">
+  <div class="app">
+    <header class="bar">
+      <div class="logo">M</div>
+      <nav class="tabs" id="mock-nav"></nav>
+      <div class="right-pills">
+        <span class="pill">● Synced</span>
+        <span class="pill user">Tina</span>
+      </div>
+    </header>
+    <div class="panel">
+      <div class="panel-top" id="panel-top"></div>
+      <div id="panel-body"></div>
+    </div>
+  </div>
+</div>
+
+<div class="note" id="note"></div>
+
+<script>
+let variant = 'A';
+let activeTab = 'floor';
+let segSel = {};   // per-tab remembered sub-view
+
+const NAVS = {
+  A: [
+    { id:'floor',    icon:'swap_vert',     label:'Floor',        segs:[['turns','swap_vert','Turns'],['queue','queue','Queue']] },
+    { id:'floorplan',icon:'grid_view',     label:'Floor Plan' },
+    { id:'calendar', icon:'calendar_month',label:'Calendar' },
+    { id:'reports',  icon:'bar_chart',     label:'Reports',      segs:[['reports','bar_chart','Reports'],['payroll','payments','Payroll']] },
+    { id:'transactions', icon:'receipt_long', label:'Transactions' },
+    { id:'giftcards',icon:'card_giftcard', label:'Gift Cards' },
+    { id:'settings', icon:'tune',          label:'Settings' },
+  ],
+  B: [
+    { id:'floor',    icon:'swap_vert',     label:'Floor',        segs:[['turns','swap_vert','Turns'],['queue','queue','Queue'],['floorplan','grid_view','Floor Plan']] },
+    { id:'calendar', icon:'calendar_month',label:'Calendar' },
+    { id:'reports',  icon:'bar_chart',     label:'Money',        segs:[['reports','bar_chart','Reports'],['transactions','receipt_long','Transactions'],['payroll','payments','Payroll']] },
+    { id:'giftcards',icon:'card_giftcard', label:'Gift Cards' },
+    { id:'settings', icon:'tune',          label:'Settings' },
+  ],
+};
+
+const FAKE = {
+  turns: [['Kim','3 turns · busy','#1'],['Lisa','2 turns · free','#2'],['John','2 turns · busy','#3'],['Christina','1 turn · free','#4']],
+  queue: [['Sarah K. · Gel Mani','Waiting 12 min · Kim','$45'],['Walk-in · Pedicure','Waiting 4 min · unassigned','$55'],['Amy T. · Full Set','In service · Lisa','$70']],
+  floorplan: [['Station 1 — Kim','Gel Mani · 22 min in',''],['Station 2 — Lisa','open',''],['Pedi 1 — John','Pedicure · 35 min in','']],
+  calendar: [['10:30 AM — Jenny P.','Pedicure · Kim',''],['11:00 AM — Walk-in hold','Full set · any','']],
+  reports: [['Revenue today','42 guests served','$2,310'],['Card / Cash / Zelle','$1,720 / $440 / $150',''],['Tips','12 tickets','$236']],
+  payroll: [['Kim — 55%','comm $1,270 · check $700','cash $570'],['Lisa — 50%','comm $980 · check $490','cash $490']],
+  transactions: [['#1042 — Sarah K.','Card · 2:14 PM','$45'],['#1041 — Amy T.','Cash · 1:50 PM','$70'],['#1040 — Walk-in','Card · 1:22 PM','$55']],
+  giftcards: [['GC #2207 — $50','Sold to Maria · bal $50',''],['GC #2206 — $100','bal $35','']],
+};
+
+function setVariant(v) {
+  variant = v; activeTab = 'floor'; segSel = {};
+  document.getElementById('vpA').classList.toggle('active', v==='A');
+  document.getElementById('vpB').classList.toggle('active', v==='B');
+  render();
+}
+function setTab(id) { activeTab = id; render(); }
+function setSeg(tab, seg) { segSel[tab] = seg; render(); }
+
+function render() {
+  const nav = NAVS[variant];
+  document.getElementById('mock-nav').innerHTML = nav.map(t =>
+    `<button class="dash-tab ${t.id===activeTab?'active':''}" onclick="setTab('${t.id}')">
+       <span class="material-symbols-outlined">${t.icon}</span> ${t.label}</button>`).join('');
+
+  const tab = nav.find(t => t.id === activeTab);
+  const top = document.getElementById('panel-top');
+  const body = document.getElementById('panel-body');
+
+  if (tab.segs) {
+    const cur = segSel[tab.id] || tab.segs[0][0];
+    top.innerHTML = `<div class="seg">${tab.segs.map(([id,ic,lb]) =>
+        `<button class="${id===cur?'on':''}" onclick="setSeg('${tab.id}','${id}')">
+           <span class="material-symbols-outlined">${ic}</span>${lb}</button>`).join('')}</div>
+      <div class="panel-actions">${cur==='queue' ? `<button class="pa-btn green"><span class="material-symbols-outlined">add</span>Quick Sale</button><button class="pa-btn"><span class="material-symbols-outlined">person_add</span>Check In</button>` : cur==='reports' ? `<button class="pa-btn"><span class="material-symbols-outlined">calendar_month</span>Jun 1 – Jun 9</button><button class="pa-btn"><span class="material-symbols-outlined">download</span>CSV</button>` : ''}</div>`;
+    body.innerHTML = fakeRows(cur);
+  } else if (tab.id === 'settings') {
+    top.innerHTML = '';
+    body.innerHTML = `
+      <div class="set-list">
+        <div class="set-item new"><span class="material-symbols-outlined">contacts</span> Customers <span class="badge">MOVED HERE</span><span class="material-symbols-outlined chev">chevron_right</span></div>
+        <div class="set-item"><span class="material-symbols-outlined">groups</span> Technicians <span class="material-symbols-outlined chev">chevron_right</span></div>
+        <div class="set-item"><span class="material-symbols-outlined">spa</span> Services, Items &amp; Fees <span class="material-symbols-outlined chev">chevron_right</span></div>
+        <div class="set-item"><span class="material-symbols-outlined">credit_card</span> Payment Processing <span class="material-symbols-outlined chev">chevron_right</span></div>
+        <div class="set-item"><span class="material-symbols-outlined">table_restaurant</span> Stations &amp; Floor <span class="material-symbols-outlined chev">chevron_right</span></div>
+        <div class="set-item"><span class="material-symbols-outlined">badge</span> Front Desk Users <span class="material-symbols-outlined chev">chevron_right</span></div>
+        <div class="set-item"><span class="material-symbols-outlined">database</span> Data &amp; Recovery <span class="material-symbols-outlined chev">chevron_right</span></div>
+      </div>
+      <div class="ghost">Settings panel — Customers becomes the first row, opens the same full Customers screen.</div>`;
+  } else {
+    top.innerHTML = '';
+    body.innerHTML = fakeRows(tab.id);
+  }
+
+  document.getElementById('note').innerHTML = variant === 'A'
+    ? `<b>Option A — how it behaves:</b> tapping <b>Floor</b> opens whichever view you used last (Turns or Queue) — the segmented switcher at the top flips between them instantly, no page change. Same for <b>Reports</b> (Reports | Payroll). The switcher remembers your last view per tab. Check-in kiosk, staff app, and every feature stay exactly where they are — this is only the top bar. <br><b>Net: 10 tabs → 7.</b>`
+    : `<b>Option B — how it behaves:</b> same idea, pushed further: <b>Floor</b> holds Turns | Queue | Floor Plan, and a <b>Money</b> tab holds Reports | Transactions | Payroll. <br><b>Net: 10 tabs → 5.</b> Trade-off: Transactions is one extra tap away (Money → Transactions), and the busiest tab (Floor) cycles three views.`;
+}
+
+function fakeRows(key) {
+  const rows = FAKE[key] || [];
+  return `<div class="content">${rows.map(([nm,sub,amt]) =>
+    `<div class="skline"><span class="dot"></span><div><div class="nm">${nm}</div><div class="sub">${sub}</div></div><span class="amt">${amt}</span></div>`).join('')}
+    <div class="ghost">(placeholder content — the real ${key} panel renders here unchanged)</div></div>`;
+}
+
+render();
+</script>
+</body>
+</html>

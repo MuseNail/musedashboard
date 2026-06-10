@@ -8,6 +8,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast } from '../utils.js';
 import { HELCIM_PROXY } from '../config.js';
+import { getActiveUser } from '../session.js';
 
 const cfg = () => getState().config;
 export function helcimDeviceCode() { return String(cfg().helcim_device_code || '').trim(); }
@@ -28,6 +29,10 @@ export async function helcimCustomerCode(name, phone) {
 }
 export function setPaymentProcessor(p) {
   const v = p === 'helcim' ? 'helcim' : 'square';
+  if (v === activeProcessor()) return;
+  if (!['admin', 'manager'].includes(getActiveUser()?.role)) { showToast('Only an admin or manager can switch the card processor.'); return; }
+  const ok = confirm(`Switch the card processor to ${v === 'helcim' ? 'HELCIM' : 'SQUARE'}?\n\nThis changes which terminal ALL card charges go to, on every device, immediately. Tickets already paid are not affected.`);
+  if (!ok) return;
   dispatch('config.set', { key: 'payment_processor', value: v });
   showToast(v === 'helcim' ? 'Card processor set to Helcim ✓' : 'Card processor set to Square ✓');
   syncProcessorClass(); renderHelcimSettings();
