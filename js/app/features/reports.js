@@ -3,7 +3,7 @@
 //   record.save (complete/historical/refund), record.delete (soft delete).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, todayStr, partyLetterMap, ticketTotal, newEntryId } from '../utils.js';
+import { showToast, localDateStr, todayStr, partyLetterMap, ticketTotal, newEntryId, dateBtnLabel } from '../utils.js';
 import { canDo, getActiveUser } from '../session.js';
 import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
@@ -247,10 +247,11 @@ function syncRangeButtons() {
   document.querySelectorAll('.rng-btn').forEach(b => b.classList.toggle('active', b.dataset.range === reportRange.type));
 }
 function rangeLabel() {
-  if (_rangeLabels[reportRange.type]) return _rangeLabels[reportRange.type];
   const d = getReportDates(); if (!d) return 'Custom';
   const fmt = x => x.toLocaleDateString('en-US',{month:'short',day:'numeric'});
-  if (reportRange.type === 'day') { const diff = Math.round((_sod(d.from) - _sod(new Date())) / 86400000); return diff === 0 ? 'Today' : diff === -1 ? 'Yesterday' : diff === 1 ? 'Tomorrow' : fmt(d.from); }
+  // Single-day selections show the date like every other tab's picker ("Today · Tue, Jun 9" / "Mon, Jun 8").
+  if (reportRange.type === 'today' || reportRange.type === 'yesterday' || reportRange.type === 'day') return dateBtnLabel(localDateStr(d.from));
+  if (_rangeLabels[reportRange.type]) return `${_rangeLabels[reportRange.type]} · ${fmt(d.from)} – ${fmt(d.to)}`;   // This Week · Jun 8 – Jun 14
   if (reportRange.type === 'payperiod') return `Pay Period (${fmt(d.from)} – ${fmt(d.to)})`;
   return `${fmt(d.from)} – ${fmt(d.to)}`;
 }
@@ -326,7 +327,8 @@ function _cmpRangeShort(c) {
 function compareDatesLabel() { return _cmpRangeShort(getCompareDates()); }
 
 // ── Date picker popup ─────────────────────────────
-let _dpDragging = false, _dpDragStart = null, _dpDragEnd = null, _dpGridWired = false;
+let _dpPendingStart = null, _dpGridWired = false;   // click-start (awaiting click-end) range selection
+const _fmtDpDate = ds => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 // Anchor a popup's top-left to the bottom-left of the button that opened it (clamped to
 // the viewport), so it reads as a dropdown off the Date/compare bubble — not a centered modal.
 function _anchorPanel(panelId, ev) {
@@ -340,12 +342,13 @@ function _anchorPanel(panelId, ev) {
   panel.style.left = left + 'px'; panel.style.top = top + 'px';
 }
 export function openDatePicker(ev) {
+  _dpPendingStart = null;
   const cur = getReportDates();
   _dpMonth = _sod(reportRange.type === 'day' && reportRange.date ? new Date(reportRange.date + 'T12:00:00') : (cur?.from || new Date()));
   const m = document.getElementById('date-picker-modal'); if (m) m.classList.remove('hidden');
   renderDatePicker(); _wireDatePickerGrid(); _anchorPanel('date-picker-panel', ev);
 }
-export function closeDatePicker() { _dpDragging = false; const m = document.getElementById('date-picker-modal'); if (m) m.classList.add('hidden'); }
+export function closeDatePicker() { _dpPendingStart = null; const m = document.getElementById('date-picker-modal'); if (m) m.classList.add('hidden'); }
 export function datePickerNavMonth(delta) { _dpMonth = new Date(_dpMonth.getFullYear(), _dpMonth.getMonth() + delta, 1); renderDatePicker(); }
 function renderDatePicker() {
   const presetWrap = document.getElementById('date-picker-presets');
@@ -357,48 +360,63 @@ function renderDatePicker() {
     const y = _dpMonth.getFullYear(), m = _dpMonth.getMonth();
     const startDow = new Date(y, m, 1).getDay(), daysIn = new Date(y, m+1, 0).getDate();
     const today = localDateStr(new Date());
-    const selDay = reportRange.type === 'day' ? reportRange.date : null;
-    const rLo = reportRange.type === 'custom' ? reportRange.from : null, rHi = reportRange.type === 'custom' ? reportRange.to : null;
     let cells = ['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => `<div class="dp-dow">${d}</div>`).join('');
     for (let i = 0; i < startDow; i++) cells += '<div></div>';
     for (let d = 1; d <= daysIn; d++) {
       const ds = localDateStr(new Date(y, m, d));
-      const inRange = rLo && rHi && ds >= rLo && ds <= rHi;
-      cells += `<button data-date="${ds}" class="dp-day${ds===today?' today':''}${ds===selDay?' sel':''}${inRange?' dp-range':''}">${d}</button>`;
+      cells += `<button data-date="${ds}" class="dp-day${ds===today?' today':''}">${d}</button>`;
     }
     grid.innerHTML = cells;
+    _dpApplyHighlight();   // paint the active range (preset OR custom) every render
   }
-  document.getElementById('date-picker-custom')?.classList.toggle('hidden', reportRange.type !== 'custom');
-  if (reportRange.type === 'custom') {
-    const f = document.getElementById('dp-from'), t = document.getElementById('dp-to');
-    if (f && reportRange.from) f.value = reportRange.from;
-    if (t && reportRange.to) t.value = reportRange.to;
-  }
+  _dpSetHint();
 }
-// Drag across days = a custom range (always switches to Custom); a plain tap = single day.
-// Pointer events cover both mouse and iPad touch; elementFromPoint tracks the day under the finger.
-function _dpCellDate(el) { return el?.closest?.('.dp-day')?.dataset?.date || null; }
-function _dpPaintRange() {
+// Highlight the selected range on the calendar. With no override it reads the CURRENTLY active
+// range (so presets like "This Week" highlight too); during selection it's called with the
+// pending start + hovered day to preview the range. Endpoints render solid, the middle tinted.
+function _dpApplyHighlight(lo, hi) {
   const grid = document.getElementById('date-picker-grid'); if (!grid) return;
-  const a = _dpDragStart, b = _dpDragEnd, lo = (a && b) ? (a < b ? a : b) : null, hi = (a && b) ? (a < b ? b : a) : null;
-  grid.querySelectorAll('.dp-day').forEach(c => c.classList.toggle('dp-range', !!(lo && c.dataset.date >= lo && c.dataset.date <= hi)));
+  if (lo == null) {
+    if (_dpPendingStart) { lo = hi = _dpPendingStart; }
+    else { const d = getReportDates(); if (d) { lo = localDateStr(d.from); hi = localDateStr(d.to); } }
+  }
+  if (lo && hi && lo > hi) { const t = lo; lo = hi; hi = t; }
+  const single = lo && lo === hi;
+  grid.querySelectorAll('.dp-day').forEach(c => {
+    const ds = c.dataset.date;
+    c.classList.toggle('sel',      !!(single && ds === lo));
+    c.classList.toggle('dp-range', !!(lo && hi && !single && ds >= lo && ds <= hi));
+    c.classList.toggle('dp-rstart',!!(lo && hi && !single && ds === lo));
+    c.classList.toggle('dp-rend',  !!(lo && hi && !single && ds === hi));
+  });
 }
-function _dpFinishDrag() {
-  if (!_dpDragging) return; _dpDragging = false;
-  const a = _dpDragStart, b = _dpDragEnd; if (!a || !b) return;
-  if (a === b) { selectRangeDay(a); return; }
-  const from = a < b ? a : b, to = a < b ? b : a;
-  reportRange.type = 'custom'; reportRange.from = from; reportRange.to = to;
+function _dpSetHint() {
+  const hint = document.getElementById('date-picker-hint'); if (!hint) return;
+  hint.textContent = _dpPendingStart
+    ? `Start ${_fmtDpDate(_dpPendingStart)} — click the end date (or the same day for one day)`
+    : 'Click a day for that day, or click a start then an end date for a range.';
+}
+function _dpCellDate(el) { return el?.closest?.('.dp-day')?.dataset?.date || null; }
+// Click-to-select: first click sets the start (awaiting a second click), second click closes the
+// range. Same-day twice = a single day. Hover previews the range. Works on iPad (tap-tap; no hover).
+function _dpClickDay(ds) {
+  if (_dpPendingStart == null) {
+    _dpPendingStart = ds;
+    _dpApplyHighlight(ds, ds); _dpSetHint();
+    return;
+  }
+  const a = _dpPendingStart; _dpPendingStart = null;
+  const lo = a < ds ? a : ds, hi = a < ds ? ds : a;
+  if (lo === hi) { selectRangeDay(lo); return; }
+  reportRange.type = 'custom'; reportRange.from = lo; reportRange.to = hi;
   syncRangeButtons(); closeDatePicker(); runReport(); renderTransactions(); updateDateButtons();
 }
 function _wireDatePickerGrid() {
   if (_dpGridWired) return;
   const grid = document.getElementById('date-picker-grid'); if (!grid) return;
   _dpGridWired = true;
-  grid.addEventListener('pointerdown', e => { const d = _dpCellDate(e.target); if (!d) return; e.preventDefault(); _dpDragging = true; _dpDragStart = _dpDragEnd = d; _dpPaintRange(); });
-  grid.addEventListener('pointermove', e => { if (!_dpDragging) return; const d = _dpCellDate(document.elementFromPoint(e.clientX, e.clientY)); if (d) { _dpDragEnd = d; _dpPaintRange(); } });
-  grid.addEventListener('pointercancel', () => { _dpDragging = false; });
-  window.addEventListener('pointerup', _dpFinishDrag);
+  grid.addEventListener('click', e => { const ds = _dpCellDate(e.target); if (ds) _dpClickDay(ds); });
+  grid.addEventListener('mouseover', e => { if (_dpPendingStart == null) return; const ds = _dpCellDate(e.target); if (ds) _dpApplyHighlight(_dpPendingStart, ds); });
 }
 
 // ── Comparison menu ───────────────────────────────
@@ -1506,6 +1524,21 @@ export function openTimecard(userId) {
   _tcOrig = JSON.stringify(_tcDraft);
   _renderTimecard();
 }
+// Open a user's timecard navigated to the pay period that CONTAINS atMs. Used by the
+// "Clocked in now" card to jump straight to a forgotten/stale punch (which lives in an
+// earlier period and is otherwise invisible in the current-period timecard).
+export function openTimecardAt(userId, atMs) {
+  if (atMs) {
+    for (let off = 0; off >= -60; off--) {
+      const per = payrollPeriodAt(off);
+      const f = new Date(per.from); f.setHours(0, 0, 0, 0);
+      const t = new Date(per.to);   t.setHours(23, 59, 59, 999);
+      if (atMs >= +f && atMs <= +t) { _payrollOffset = off; break; }
+    }
+    renderPayrollPage();   // reflect the period nav (label + cards) behind the timecard
+  }
+  openTimecard(userId);
+}
 function _renderTimecard() {
   const userId = _tcUser, u = (cfg().fd_users || []).find(x => x.id === userId);
   if (!u || !_tcDraft) return;
@@ -1841,8 +1874,10 @@ export function togglePartyTxn(headerEl) {
   if (chev) chev.style.transform = members.classList.contains('hidden') ? '' : 'rotate(180deg)';
 }
 export function updateHistoricalButtonVisibility() {
-  document.getElementById('add-historical-btn')?.classList.toggle('hidden', !canDo('historicalEntry'));
-  document.getElementById('txn-merge-btn')?.classList.toggle('hidden', !canDo('historicalEntry'));
+  // Restricted to the app manager + admin only (not configurable per-role) — historical
+  // entry rewrites financial records, so it stays locked to the two trusted roles.
+  const allowed = ['admin', 'manager'].includes(getActiveUser()?.role);
+  document.getElementById('add-historical-btn')?.classList.toggle('hidden', !allowed);
 }
 
 // ── Merge separate tickets into one party ─────────────────────────────────────
@@ -1997,11 +2032,25 @@ function buildTxnHtml(rows) {
 export function exportReportExcel() {
   const d = window._currentReportData;
   if (!d || d.filtered.length === 0) { showToast('No data to export.'); return; }
+  // Per-day totals section ("tab") — same filtered records, grouped by calendar day,
+  // using the same billed/guest/tips/payment-mix logic as the main report.
+  const _byDay = {};
+  d.filtered.forEach(r => { const k = localDateStr(new Date(r.checkinTime)); (_byDay[k] = _byDay[k] || []).push(r); });
+  const _dailyRows = Object.keys(_byDay).sort().map(k => {
+    const recs = _byDay[k];
+    const billed = recs.reduce((s, r) => s + (r.totalCost || 0), 0);
+    const guests = recs.filter(r => isPaidStatus(r.status)).length;
+    const tips = recs.reduce((s, r) => s + (r.tip || 0), 0);
+    const mix = paymentMix(recs, tips);
+    return [new Date(k + 'T12:00:00').toLocaleDateString(), guests, `$${billed.toFixed(2)}`, `$${tips.toFixed(2)}`, `$${mix.cardMix.toFixed(2)}`, `$${mix.cashMix.toFixed(2)}`, `$${mix.zelleMix.toFixed(2)}`, `$${mix.giftMix.toFixed(2)}`, `$${mix.otherMix.toFixed(2)}`];
+  });
   const rows = [
     ['Muse Nails & Spa — Report'], [`Period: ${d.from.toLocaleDateString()} – ${d.to.toLocaleDateString()}`],
     [`Total Billed: $${d.totalIncome.toFixed(2)}`, `Guests Served: ${d.guestCount}`, `Avg Ticket: $${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}`],
     [`Total Money Collected: $${(d.totalIncome+(d.gcSoldValue||0)-(d.gcRedeemed||0)+(d.tipsTotal||0)).toFixed(2)}`, `Total Tips: $${(d.tipsTotal||0).toFixed(2)}`],
     [`Payment Mix — Card (incl. tips): $${(d.cardMix||0).toFixed(2)}`, `Cash: $${(d.cashMix||0).toFixed(2)}`, `Gift: $${(d.giftMix||0).toFixed(2)}`, `Zelle: $${(d.zelleMix||0).toFixed(2)}`, `Other: $${(d.otherMix||0).toFixed(2)}`], [],
+    ['DAILY TOTALS'], ['Date','Guests','Billed','Tips','Card','Cash','Zelle','Gift','Other'],
+    ..._dailyRows, [],
     ['CHECK-INS'], ['Date','Time','Name','Phone','Services','Type','Staff','Total','Status'],
     ...d.filtered.map(r => { const dt = new Date(r.checkinTime); const staffNames = (r.assignments||[]).map(a=>staffById(a.techId)?.name).filter(Boolean).join(', '); return [dt.toLocaleDateString(), dt.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}), r.name, r.phone, r.services.map(sid=>svc(sid)?.label||sid).join(', '), r.isAppointment?'Appointment':'Walk-In', staffNames, r.totalCost?`$${r.totalCost.toFixed(2)}`:'$0.00', r.status]; }),
     [], ['STAFF BREAKDOWN'], ['Technician','Services','Turns','Bonus Turns','Total Billed','Commission %','Commission Earned','Salon Keeps'],

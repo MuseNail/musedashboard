@@ -430,26 +430,40 @@ export async function mergeCustomers(keepId, removeIds) {
 // ── Cleanup UI (rendered into the directory modal's list) ───────────────────────
 const _cEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const _cName = c => _cEsc([c.firstName, c.lastName].filter(Boolean).join(' ') || '(no name)');
+// Which cleanup criteria sections are expanded (device-local UI state).
+const _cleanupOpen = { phone: true, name: true, nophone: false };
+export function cleanupToggleSection(key) {
+  if (key in _cleanupOpen) _cleanupOpen[key] = !_cleanupOpen[key];
+  renderCustomerCleanup();
+}
 export function openCustomerCleanup() { renderCustomerCleanup(); }
 export function renderCustomerCleanup() {
   const list = document.getElementById('customers-content'); if (!list) return;
   const { byPhone, byName } = findDuplicateGroups(customerDirectory);
   const noPhone = customerDirectory.filter(c => !_custPhoneKey(c));
   const memberRow = (c, ids) => `<div class="flex items-center justify-between gap-2 px-3 py-2 border-t border-surface-container first:border-t-0">
-      <div class="min-w-0"><div class="text-sm font-body font-semibold text-on-surface truncate">${_cName(c)}</div><div class="text-[11px] text-on-surface-variant truncate">${_cEsc(c.phone || 'no phone')}${c.email ? ' · ' + _cEsc(c.email) : ''}</div></div>
+      <button type="button" onclick="showEditCustomer('${c.squareId}')" title="Open profile — notes, visits, edit" class="min-w-0 text-left group"><div class="text-sm font-body font-semibold text-on-surface truncate group-hover:text-primary">${_cName(c)}</div><div class="text-[11px] text-on-surface-variant truncate">${_cEsc(c.phone || 'no phone')}${c.email ? ' · ' + _cEsc(c.email) : ''}</div></button>
       <span class="flex gap-1.5 flex-shrink-0 items-center">
         <button onclick="cleanupMergeGroup('${c.squareId}','${ids}')" class="text-[11px] font-body font-bold text-on-primary bg-primary rounded-lg px-2.5 py-1">Keep, merge rest</button>
         <button onclick="cleanupDeleteCustomer('${c.squareId}')" title="Delete just this one" class="text-on-surface-variant hover:text-error flex items-center"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
       </span></div>`;
   const groupCard = g => { const ids = g.customers.map(c => c.squareId).join(','); return `<div class="rounded-xl border border-surface-container-high mb-2 overflow-hidden"><div class="px-3 py-1.5 bg-surface-container text-[11px] font-body font-semibold text-on-surface-variant">${_cEsc(g.key)} · ${g.customers.length} profiles</div>${g.customers.map(c => memberRow(c, ids)).join('')}</div>`; };
-  const section = (title, hint, html, n) => `<div class="text-xs font-headline font-bold text-on-surface uppercase tracking-widest mt-3 mb-1">${title} <span class="text-on-surface-variant">(${n})</span></div><div class="text-[11px] text-on-surface-variant mb-2">${hint}</div>${html || '<div class="text-xs text-on-surface-variant italic py-1">None. ✓</div>'}`;
+  const section = (key, title, hint, html, n) => {
+    const open = _cleanupOpen[key];
+    return `<div class="mt-3 border-t border-surface-container-high pt-2">
+      <button onclick="cleanupToggleSection('${key}')" class="w-full flex items-center justify-between gap-2 py-1 text-left">
+        <span class="text-xs font-headline font-bold text-on-surface uppercase tracking-widest">${title} <span class="text-on-surface-variant">(${n})</span></span>
+        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">${open ? 'expand_less' : 'expand_more'}</span>
+      </button>
+      ${open ? `<div class="text-[11px] text-on-surface-variant mb-2 mt-1">${hint}</div>${html || '<div class="text-xs text-on-surface-variant italic py-1">None. ✓</div>'}` : ''}</div>`;
+  };
   const noPhoneBtn = noPhone.length ? `<button onclick="cleanupDeleteAllNoPhone()" class="mb-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-error/10 text-error text-xs font-body font-bold hover:bg-error/20 transition-colors"><span class="material-symbols-outlined" style="font-size:16px">delete_sweep</span> Delete all ${noPhone.length} no-phone customer${noPhone.length !== 1 ? 's' : ''}</button>` : '';
-  const noPhoneHtml = noPhoneBtn + noPhone.slice(0, 300).map(c => `<div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-surface-container-high mb-1"><div class="min-w-0"><div class="text-sm font-body font-semibold text-on-surface truncate">${_cName(c)}</div><div class="text-[11px] text-on-surface-variant truncate">no phone${c.email ? ' · ' + _cEsc(c.email) : ''}</div></div><button onclick="cleanupDeleteCustomer('${c.squareId}')" title="Delete" class="text-on-surface-variant hover:text-error flex items-center flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button></div>`).join('');
+  const noPhoneHtml = noPhoneBtn + noPhone.slice(0, 300).map(c => `<div class="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-surface-container-high mb-1"><button type="button" onclick="showEditCustomer('${c.squareId}')" title="Open profile — notes, visits, edit" class="min-w-0 text-left group"><div class="text-sm font-body font-semibold text-on-surface truncate group-hover:text-primary">${_cName(c)}</div><div class="text-[11px] text-on-surface-variant truncate">no phone${c.email ? ' · ' + _cEsc(c.email) : ''}</div></button><button onclick="cleanupDeleteCustomer('${c.squareId}')" title="Delete" class="text-on-surface-variant hover:text-error flex items-center flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button></div>`).join('');
   list.innerHTML = `
     <div class="flex items-center justify-between mb-2"><button onclick="renderCustomerDir('')" class="flex items-center gap-1 text-sm font-body font-semibold text-primary"><span class="material-symbols-outlined" style="font-size:18px">arrow_back</span> All customers</button><span class="text-[11px] text-on-surface-variant">${customerDirectory.length} total</span></div>
-    ${section('Same phone', 'Profiles sharing a phone — usually one person (or family on one number). Tap "Keep, merge rest" on the right profile; the others are deleted (notes &amp; history stay, since they’re phone-keyed).', byPhone.map(groupCard).join(''), byPhone.length)}
-    ${section('Same name', 'Identical name — could be the same person twice, or two different people. Review before merging.', byName.map(groupCard).join(''), byName.length)}
-    ${section('No phone', 'No phone on file. Delete placeholder/junk entries — or clear them all with one tap.', noPhoneHtml, noPhone.length)}`;
+    ${section('phone', 'Same phone', 'Profiles sharing a phone — usually one person (or family on one number). Tap "Keep, merge rest" on the right profile; the others are deleted (notes &amp; history stay, since they’re phone-keyed).', byPhone.map(groupCard).join(''), byPhone.length)}
+    ${section('name', 'Same name', 'Identical name — could be the same person twice, or two different people. Review before merging.', byName.map(groupCard).join(''), byName.length)}
+    ${section('nophone', 'No phone', 'No phone on file. Delete placeholder/junk entries — or clear them all with one tap.', noPhoneHtml, noPhone.length)}`;
 }
 export async function cleanupMergeGroup(keepId, idsCsv) {
   const ids = (idsCsv || '').split(',').filter(Boolean);

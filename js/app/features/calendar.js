@@ -1,7 +1,7 @@
 // ── Google Calendar + Tasks ─────────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual } from '../utils.js';
+import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer } from './square-customers.js';
 
 const GCAL_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
@@ -417,7 +417,7 @@ function calSetStatus(msg) {
 function calUpdateDateLabel() { const el = document.getElementById('cal-date-label'); if (el) el.textContent = _calDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); calUpdateDateInput(); }
 function calUpdateDateInput() {
   const btn = document.getElementById('cal-date-btn-val');
-  if (btn) { const isToday = new Date().toDateString() === _calDate.toDateString(); btn.textContent = isToday ? 'Today' : _calDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); }
+  if (btn) btn.textContent = dateBtnLabel(_calDate);   // "Today · Tue, Jun 9" / "Mon, Jun 8" — same as every tab
 }
 export function calNavDay(delta) { _calOffPeek = new Set(); _calDate = new Date(_calDate); _calDate.setDate(_calDate.getDate() + delta); calUpdateDateLabel(); calLoadAndRender(); }
 export function calGoToday() { _calOffPeek = new Set(); _calDate = new Date(); calUpdateDateLabel(); calLoadAndRender(); }

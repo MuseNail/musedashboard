@@ -278,9 +278,8 @@ tailwind.config = {
       <!-- ── FLOOR PLAN PANEL ── -->
       <div class="dash-panel" id="panel-floorplan">
         <div class="flex items-center gap-2 mb-3 flex-wrap">
-          <h2 class="text-lg font-headline font-bold text-on-surface">Floor Plan</h2>
-          <span id="floorplan-mode-label" class="text-xs font-body text-on-surface-variant px-2 py-0.5 rounded-full bg-surface-container">Live</span>
-          <div class="ml-auto flex gap-2 items-center">
+          <div id="floorplan-tray" class="flex-1 min-w-0"></div>
+          <div class="flex gap-2 items-center flex-shrink-0">
             <div id="floorplan-edit-tools" class="hidden flex items-center gap-1">
               <button onclick="fpSelectAll()" title="Select all stations" class="border border-outline-variant text-on-surface-variant hover:bg-surface-container px-2.5 py-1.5 rounded-lg text-xs font-body transition-all">Select all</button>
               <div class="flex items-center gap-0.5 border border-outline-variant rounded-lg px-1 py-0.5">
@@ -294,7 +293,6 @@ tailwind.config = {
             <button id="floorplan-edit-btn" onclick="toggleFloorEdit()" class="flex items-center gap-1 border border-primary text-primary hover:bg-primary hover:text-on-primary px-3 py-1.5 rounded-lg text-xs font-headline font-bold transition-all"><span class="material-symbols-outlined" style="font-size:16px">edit</span> Edit layout</button>
           </div>
         </div>
-        <div id="floorplan-tray" class="mb-3"></div>
         <div id="floorplan-props" class="hidden bg-surface-container rounded-xl px-4 py-3 mb-3"></div>
         <div id="floorplan-grid" style="position:relative"></div>
         <div id="floorplan-staff-row" class="mt-4"></div>
@@ -304,6 +302,15 @@ tailwind.config = {
       <div class="dash-panel active" id="panel-queue">
         <!-- Filter tabs + Add + History date -->
         <div class="dash-head flex gap-2 flex-wrap items-center">
+          <!-- History date picker (far left) -->
+          <div class="flex items-center gap-2 mr-1">
+            <button onclick="shiftQueueDate(-1)" title="Previous day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
+            <button onclick="openQueueHistoryPicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-pick-val" id="queue-date-btn-val">Today</span>
+            </button>
+            <button onclick="shiftQueueDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+          </div>
           <button onclick="filterQueue('all')" id="tab-all" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-primary text-on-primary transition-all">All</button>
           <button onclick="filterQueue('waiting')" id="tab-waiting" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Waiting</button>
           <button onclick="filterQueue('inservice')" id="tab-inservice" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">In Service</button>
@@ -315,16 +322,6 @@ tailwind.config = {
             <span class="material-symbols-outlined" style="font-size:15px" id="done-toggle-icon">visibility_off</span>
             <span id="done-toggle-label">Hide Paid</span>
           </button>
-          <!-- History date picker -->
-          <div class="flex items-center gap-2 ml-2">
-            <button onclick="shiftQueueDate(-1)" title="Previous day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
-            <button onclick="openQueueHistoryPicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
-              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
-              <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
-              <span class="text-sm font-headline font-bold text-on-surface" id="queue-date-btn-val">Today</span>
-            </button>
-            <button onclick="shiftQueueDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
-          </div>
           <button onclick="showManualAdd()" class="ml-auto flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-body font-semibold bg-primary text-on-primary hover:bg-primary-dim transition-all shadow-sm">
             <span class="material-symbols-outlined" style="font-size:18px">person_add</span> Add Guest
           </button>
@@ -339,38 +336,24 @@ tailwind.config = {
 
       <!-- ── REPORTS PANEL ── -->
       <div class="dash-panel" id="panel-reports">
-        <div class="dash-head flex items-center justify-between">
-          <div>
-            <h2 class="text-xl font-headline font-bold text-on-surface">Reports</h2>
-            <p class="text-sm font-body text-on-surface-variant mt-0.5">Income, staff earnings & commissions</p>
-          </div>
-          <div class="flex gap-2 flex-wrap justify-end">
-            <button onclick="exportReportExcel()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV
-            </button>
-            <button onclick="exportReportPDF()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF
-            </button>
-            <button onclick="exportReportLink()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">link</span> Copy Link
-            </button>
-          </div>
-        </div>
-
-        <!-- Date range selector (Square-style: Date button + comparison) -->
+        <!-- Date range selector (Square-style: Date button + comparison) + exports -->
         <div class="bg-surface-container-lowest rounded-xl px-4 py-2.5 border border-surface-container-high mb-3">
           <div class="flex gap-2 flex-wrap items-center">
             <button onclick="shiftReportRange(-1)" title="Previous period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
             <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
-              <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
-              <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-btn-label date-pick-val">Today</span>
             </button>
             <button onclick="shiftReportRange(1)" title="Next period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
             <button onclick="openCompareMenu(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">vs</span>
               <span class="text-sm font-headline font-bold text-on-surface compare-btn-label">Prior period</span>
             </button>
+            <div class="flex gap-2 flex-wrap ml-auto">
+              <button onclick="exportReportExcel()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+              <button onclick="exportReportPDF()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+              <button onclick="exportReportLink()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">link</span> Copy Link</button>
+            </div>
           </div>
           <p class="text-xs font-body text-on-surface-variant mt-1.5" id="report-range-label">Showing: Today</p>
         </div>
@@ -557,13 +540,7 @@ tailwind.config = {
                 <button onclick="datePickerNavMonth(1)" class="w-8 h-8 rounded-full flex items-center justify-center hover:bg-surface-container text-on-surface"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
               </div>
               <div id="date-picker-grid" class="dp-grid"></div>
-              <div id="date-picker-custom" class="hidden mt-3 pt-3 border-t border-surface-container-high">
-                <div class="grid grid-cols-2 gap-2 mb-2">
-                  <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">From</label><input type="date" id="dp-from" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body text-on-surface focus:outline-none focus:border-primary"></div>
-                  <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">To</label><input type="date" id="dp-to" class="w-full bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body text-on-surface focus:outline-none focus:border-primary"></div>
-                </div>
-                <button onclick="applyCustomRange()" class="w-full py-2 rounded-lg bg-primary text-on-primary font-headline font-bold text-sm">Apply range</button>
-              </div>
+              <div id="date-picker-hint" class="text-[11px] font-body text-on-surface-variant mt-3 pt-3 border-t border-surface-container-high text-center"></div>
             </div>
           </div>
         </div>
@@ -596,23 +573,17 @@ tailwind.config = {
       <!-- ── TRANSACTIONS PANEL ── -->
       <div class="dash-panel" id="panel-transactions">
         <div class="dash-head flex items-start justify-between gap-3 flex-wrap">
-          <div>
-            <h2 class="text-xl font-headline font-bold text-on-surface">Transaction History</h2>
-            <p class="text-sm font-body text-on-surface-variant mt-0.5">All check-ins with service and payment details</p>
-            <div class="flex items-center gap-2 mt-2">
-              <button onclick="shiftReportRange(-1)" title="Previous period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_left</span></button>
-              <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
-                <span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">calendar_today</span>
-                <span class="text-sm font-headline font-bold text-on-surface date-btn-label">Today</span>
-              </button>
-              <button onclick="shiftReportRange(1)" title="Next period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>
-            </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button onclick="shiftReportRange(-1)" title="Previous period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_left</span></button>
+            <button onclick="openDatePicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-btn-label date-pick-val">Today</span>
+            </button>
+            <button onclick="shiftReportRange(1)" title="Next period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>
+            <button onclick="openCashRegister()" title="Open the cash drawer / register" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors"><span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Cash Register</button>
+            <button id="add-historical-btn" onclick="showHistoricalEntryModal()" class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface bg-surface-container-lowest font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical</button>
           </div>
           <div class="flex items-center gap-2 flex-wrap justify-end">
-            <button onclick="openCashRegister()" title="Open the cash drawer / register"
-              class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 border border-primary/30 text-primary font-body font-semibold text-sm hover:bg-primary/20 transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Cash Register
-            </button>
             <button onclick="openReconcile()" title="Find tickets whose recorded total doesn't match what was charged"
               class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">rule</span> Reconcile
@@ -621,12 +592,6 @@ tailwind.config = {
               class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">sync_alt</span> Reconcile w/ Square
             </button>
-            <button id="add-historical-btn" onclick="showHistoricalEntryModal()"
-              class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical
-            </button>
-            <button id="txn-merge-btn" onclick="openTxnMergeModal()" title="Merge separate tickets into one party"
-              class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">merge</span> Merge</button>
             <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
             <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
           </div>
@@ -656,23 +621,19 @@ tailwind.config = {
 
       <!-- ── PAYROLL PANEL ── -->
       <div class="dash-panel" id="panel-payroll">
-        <div class="dash-head flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h2 class="text-xl font-headline font-bold text-on-surface">Payroll</h2>
-            <p class="text-sm font-body text-on-surface-variant mt-0.5">Per-tech commission, check &amp; cash by pay period</p>
-          </div>
-          <div class="flex items-center gap-2 flex-wrap justify-end">
-            <button onclick="payrollToggleCompare()" id="payroll-compare-btn" title="Show/hide the prior pay period comparison columns (This vs Last)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border bg-surface-container-lowest hover:bg-surface-container font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">compare_arrows</span> <span id="payroll-compare-label">Comparing: Last</span></button>
+        <div class="flex items-start justify-between gap-2 mb-4 flex-wrap">
+          <div id="clocked-in-now" class="hidden flex-1 min-w-[240px]"></div>
+          <div class="flex items-center gap-2 flex-wrap flex-shrink-0 ml-auto">
             <button onclick="payrollExportPDF()" title="Full payroll table (landscape)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
             <button onclick="payrollExportStaffPDF()" title="Per-tech billed total + by day — for handing to staff" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">badge</span> Staff PDF</button>
             <button onclick="payrollExportCSV()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
           </div>
         </div>
-        <div id="clocked-in-now" class="hidden"></div>
-        <div class="flex items-center justify-center gap-3 mb-4">
+        <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
           <button onclick="payrollNav(-1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
           <span id="payroll-period-label" class="font-headline font-bold text-on-surface text-sm min-w-[180px] text-center">Pay Period</span>
           <button onclick="payrollNav(1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+          <button onclick="payrollToggleCompare()" id="payroll-compare-btn" title="Show/hide the prior pay period comparison columns (This vs Last)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border bg-surface-container-lowest hover:bg-surface-container font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">compare_arrows</span> <span id="payroll-compare-label">Comparing: Last</span></button>
         </div>
         <div id="payroll-cards" class="overflow-x-auto pb-3 rounded-xl border border-surface-container-high" style="scrollbar-width:thin"></div>
       </div>
@@ -681,30 +642,17 @@ tailwind.config = {
       <div class="dash-panel" id="panel-turns">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
-            <div>
-              <h2 class="text-xl font-headline font-bold text-on-surface">Technician Turns</h2>
-              <p class="text-sm font-body text-on-surface-variant mt-0.5" id="turns-date-label">Today</p>
-            </div>
-            <!-- Date select for history (matches Reports date picker) -->
+            <!-- Date picker (far left) — day history. Shows the relative word + the date. -->
             <button onclick="shiftTurnsDate(-1)" title="Previous day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
             <button onclick="openTurnsHistoryPicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
-              <span class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
-              <span class="text-sm font-headline font-bold text-on-surface" id="turns-date-btn-val">Today</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-pick-val" id="turns-date-btn-val">Today</span>
             </button>
             <button onclick="shiftTurnsDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
             <button onclick="exportTurnsCSV()" title="Export this day as CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-xs font-body font-semibold text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
             <button onclick="exportTurnsPDF()" title="Print / save this day as PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-xs font-body font-semibold text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
           </div>
           <div class="flex items-center gap-3">
-            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant">
-              <div class="w-2 h-2 rounded-full bg-primary"></div>
-              <span>Active: <strong id="turns-active-count">0</strong></span>
-            </div>
-            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container text-xs font-body text-on-surface-variant">
-              <div class="w-2 h-2 rounded-full" style="background:#f5c870"></div>
-              <span>Break: <strong id="turns-break-count">0</strong></span>
-            </div>
             <!-- Add/Remove technicians button -->
             <button onclick="showTurnsTechSelector()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary hover:text-on-primary transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">people</span> Technicians
@@ -767,24 +715,20 @@ tailwind.config = {
       <div class="dash-panel" id="panel-calendar">
         <!-- Header -->
         <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <div>
-            <h2 class="text-xl font-headline font-bold text-on-surface">Appointments</h2>
-            <p class="text-sm font-body text-on-surface-variant mt-0.5" id="cal-date-label">Loading…</p>
-          </div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <!-- Date nav -->
+          <div class="flex items-center gap-2">
+            <!-- Date nav (far left) -->
             <button onclick="calNavDay(-1)" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors" style="width:32px;height:32px;flex-shrink:0">
               <span class="material-symbols-outlined" style="font-size:18px">chevron_left</span>
             </button>
-            <!-- Date button → calendar popup (Today / In 1–6 weeks presets) -->
             <button onclick="openCalDatePicker(event)" class="flex items-center gap-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors" style="height:32px;padding:0 12px">
-              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:16px">calendar_today</span>
-              <span class="text-[10px] font-body uppercase tracking-widest text-on-surface-variant">Date</span>
-              <span class="text-sm font-headline font-bold text-on-surface" id="cal-date-btn-val">Today</span>
+              <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
+              <span class="text-sm font-headline font-bold text-on-surface date-pick-val" id="cal-date-btn-val">Today</span>
             </button>
             <button onclick="calNavDay(1)" class="flex items-center justify-center rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors" style="width:32px;height:32px;flex-shrink:0">
               <span class="material-symbols-outlined" style="font-size:18px">chevron_right</span>
             </button>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
             <!-- Unassigned-only toggle -->
             <button id="cal-unassigned-toggle" onclick="toggleUnassignedOnly()" title="Show only unassigned appointments" class="flex items-center gap-1.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors" style="height:32px;padding:0 12px">
               <span class="material-symbols-outlined" style="font-size:16px">person_off</span>
@@ -884,7 +828,6 @@ tailwind.config = {
           <button id="settings-back-btn" onclick="settingsBack()" class="hidden w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors flex-shrink-0"><span class="material-symbols-outlined">arrow_back</span></button>
           <div>
             <h2 id="settings-nav-title" class="text-xl font-headline font-bold text-on-surface">Settings</h2>
-            <p id="settings-nav-desc" class="text-sm font-body text-on-surface-variant mt-0.5">Configure app behavior and customer options</p>
           </div>
         </div>
 
@@ -1332,20 +1275,14 @@ tailwind.config = {
            GIFT CARDS PANEL (inside dashboard)
       ═══════════════════════════════════════════════ -->
       <div id="panel-customers" class="dash-panel">
-        <div class="dash-head flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h2 class="text-xl font-headline font-bold text-on-surface">Customers</h2>
-            <p class="text-sm font-body text-on-surface-variant mt-0.5">Your customer directory — search, edit, visit history</p>
-          </div>
-          <div class="flex gap-2 flex-wrap">
+        <div class="flex items-center gap-2 mb-3 flex-wrap">
+          <input id="customers-search" type="text" placeholder="Search by name, phone, or email…" oninput="filterCustomersTab(this.value)" class="flex-1 min-w-[200px] border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2.5 text-sm font-body focus:border-primary outline-none">
+          <div class="flex gap-2 flex-wrap flex-shrink-0">
             <button onclick="showAddCustomer()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary text-sm font-headline font-bold hover:bg-primary-dim transition-colors"><span class="material-symbols-outlined" style="font-size:16px">person_add</span> Add Customer</button>
             <button onclick="openCustomerCleanup()" title="Find &amp; merge duplicates" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-container-high text-on-surface text-sm font-body font-semibold hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">cleaning_services</span> Clean up</button>
             <button onclick="exportCustomersCSV()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-container-high text-on-surface text-sm font-body font-semibold hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">download</span> CSV</button>
             <button onclick="importCustomersFromSquare()" title="One-time import of your existing Square customers" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary text-sm font-body font-semibold hover:bg-primary/5 transition-colors"><span class="material-symbols-outlined" style="font-size:16px">sync</span> Import from Square</button>
           </div>
-        </div>
-        <div class="mb-3">
-          <input id="customers-search" type="text" placeholder="Search by name, phone, or email…" oninput="filterCustomersTab(this.value)" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2.5 text-sm font-body focus:border-primary outline-none">
         </div>
         <div id="customers-content"></div>
       </div>

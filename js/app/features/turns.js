@@ -1,7 +1,7 @@
 // ── Turns: rotation grid, drag-drop, tech status, turn classification ───────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap, statusTimeHtml, escHtml } from '../utils.js';
+import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap, statusTimeHtml, escHtml, dateBtnLabel } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { canDo } from '../session.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle } from './status.js';
@@ -248,9 +248,7 @@ export function renderTurnsTechGrid() {
   if (!grid) return;
   if (turnsViewingHistory) { renderTurnsHistoryView(); return; }
 
-  const todayLabel = document.getElementById('turns-date-label');
-  if (todayLabel) todayLabel.textContent = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
-  const bc = document.getElementById('turns-break-count'); if (bc) bc.textContent = cfg().turns_break.length;
+  const _db = document.getElementById('turns-date-btn-val'); if (_db) _db.textContent = dateBtnLabel(null);
 
   const order = getActiveTurnsOrder();
   const partyLetters = partyLetterMap(q());   // same party letter as the queue/side cards
@@ -659,14 +657,12 @@ export function loadTurnsHistory(dateStr) {
   const today = todayStr();
   if (!dateStr || dateStr === today) { clearTurnsHistory(); return; }
   turnsViewingHistory = dateStr;
-  const btn = document.getElementById('turns-date-btn-val'); if (btn) btn.textContent = new Date(dateStr+'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
-  document.getElementById('turns-date-label').textContent = new Date(dateStr+'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  const btn = document.getElementById('turns-date-btn-val'); if (btn) btn.textContent = dateBtnLabel(dateStr);
   renderTurnsTechGrid(); renderTurnsQueue();
 }
 export function clearTurnsHistory() {
   turnsViewingHistory = null;
-  const btn = document.getElementById('turns-date-btn-val'); if (btn) btn.textContent = 'Today';
-  const lbl = document.getElementById('turns-date-label'); if (lbl) lbl.textContent = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  const btn = document.getElementById('turns-date-btn-val'); if (btn) btn.textContent = dateBtnLabel(null);
   renderTurns();
 }
 // Prev/next-day arrows on the Date bubble. Stepping to today (or a future day) returns

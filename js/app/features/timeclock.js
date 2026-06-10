@@ -199,6 +199,10 @@ function _fmtDur(ms) {
   const m = Math.floor(ms / 60000), h = Math.floor(m / 60);
   return h > 0 ? `${h}h ${m % 60}m` : `${m}m`;
 }
+// "May 26, 10:00 AM" — includes the date so a stale open punch reads as not-today.
+function _sinceDateTime(ms) {
+  return new Date(ms).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
 // Total time worked TODAY (sum of today's segments — completed + the open one up to now), so a
 // staff member with a mid-day break still shows their real worked time for the day. Counts only
 // the portion that falls within today (a shift spanning midnight contributes today's part).
@@ -222,12 +226,28 @@ export function renderClockedInNow() {
   const canOut = ['admin', 'manager'].includes(getActiveUser()?.role);
   const list = clockedInNow();
   const rows = list.length
-    ? list.map(({ u, since }) => `<div class="flex items-center gap-3 py-2 border-b border-surface-container-high last:border-0 text-sm font-body">
+    ? list.map(({ u, since }) => {
+        // A "clocked in" person whose open punch is stale (>18h) is almost certainly a forgotten
+        // clock-out, NOT someone here now. Flag it (don't show a bogus "Nh today") and offer a Fix
+        // that jumps to the timecard period holding that punch — otherwise it's invisible there.
+        const open = fdPunches(u.id).slice(-1)[0];
+        const suspect = open && fdPunchSuspect(open);
+        const status = suspect
+          ? '<span style="color:#c0392b;font-weight:700">● open</span>'
+          : '<span style="color:#2a7a4f;font-weight:600">● in</span>';
+        const detail = suspect
+          ? `<span class="ml-auto text-xs" style="color:#c0392b">⚠ open since ${_sinceDateTime(since)} — forgotten clock-out?</span>`
+          : `<span class="ml-auto text-xs text-on-surface-variant">since ${_hhmm(since)} · ${_fmtDur(fdWorkedTodayMs(u.id))} today</span>`;
+        const action = !canOut ? '' : suspect
+          ? `<button onclick="openTimecardAt('${u.id}',${since})" class="px-2.5 py-1 rounded-lg border border-primary text-xs font-body font-semibold text-primary hover:bg-primary/5 flex-shrink-0">Fix</button>`
+          : `<button onclick="clockOutUser('${u.id}')" class="px-2.5 py-1 rounded-lg border border-surface-container-high text-xs font-body font-semibold text-on-surface hover:bg-surface-container flex-shrink-0">Clock out</button>`;
+        return `<div class="flex items-center gap-3 py-2 border-b border-surface-container-high last:border-0 text-sm font-body">
         <div class="w-7 h-7 rounded-full flex items-center justify-center text-on-primary text-xs font-headline font-bold flex-shrink-0" style="background:var(--primary);overflow:hidden">${u.photo ? `<img src="${escHtml(u.photo)}" class="w-full h-full object-cover">` : escHtml((u.name || '?').charAt(0).toUpperCase())}</div>
         <span class="font-semibold text-on-surface">${escHtml(u.name || '—')}</span>
-        <span style="color:#2a7a4f;font-weight:600">● in</span>
-        <span class="ml-auto text-xs text-on-surface-variant">since ${_hhmm(since)} · ${_fmtDur(fdWorkedTodayMs(u.id))} today</span>
-        ${canOut ? `<button onclick="clockOutUser('${u.id}')" class="px-2.5 py-1 rounded-lg border border-surface-container-high text-xs font-body font-semibold text-on-surface hover:bg-surface-container flex-shrink-0">Clock out</button>` : ''}</div>`).join('')
+        ${status}
+        ${detail}
+        ${action}</div>`;
+      }).join('')
     : `<div class="py-2 text-sm font-body text-on-surface-variant">Nobody is clocked in right now.</div>`;
   el.innerHTML = `<div class="mb-4 bg-surface-container-lowest rounded-xl border border-surface-container-high p-4">
     <div class="flex items-center gap-2 mb-1"><span class="material-symbols-outlined" style="font-size:18px;color:#2a7a4f">schedule</span><h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest">Clocked in now</h3><span class="text-[10px] font-body text-on-surface-variant border border-surface-container-high rounded px-1.5 py-0.5">live</span></div>

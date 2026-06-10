@@ -90,6 +90,17 @@ export function localDateStr(date) {
     String(d.getDate()).padStart(2, '0');
 }
 export function todayStr() { return localDateStr(new Date()); }
+// Shared label for every date-picker button across the app (Turns / Queue / Reports / Transactions /
+// Calendar). Only TODAY gets a word ("Today · Tue, Jun 9"); every other day shows just the date
+// ("Mon, Jun 8") — no "Yesterday" — so the button stays a constant width. Accepts a Date, a
+// YYYY-MM-DD string, or null (= today).
+export function dateBtnLabel(dateOrStr) {
+  const d = dateOrStr instanceof Date ? new Date(dateOrStr) : dateOrStr ? new Date(dateOrStr + 'T12:00:00') : new Date();
+  const short = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const t = new Date(); t.setHours(0, 0, 0, 0);
+  const dd = new Date(d); dd.setHours(0, 0, 0, 0);
+  return Math.round((dd - t) / 86400000) === 0 ? `Today · ${short}` : short;
+}
 
 // Day-rollover gate decision (pure, testable). Given the SHARED last-rollover marker (a localDateStr
 // from synced config) and today's date string, returns what the rollover should do:

@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
-import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, escHtml } from '../utils.js';
+import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, escHtml, dateBtnLabel } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle } from './status.js';
@@ -176,12 +176,12 @@ export function loadQueueHistory(dateStr) {
   if (!dateStr || dateStr === todayStr()) { clearQueueHistory(); return; }
   const hist = JSON.parse(localStorage.getItem('muse_turns_history') || '{}')[dateStr];
   queueViewingHistory = { date: dateStr, snapshot: (hist && hist.snapshot) || [] };
-  const btn = document.getElementById('queue-date-btn-val'); if (btn) btn.textContent = new Date(dateStr+'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  const btn = document.getElementById('queue-date-btn-val'); if (btn) btn.textContent = dateBtnLabel(dateStr);
   renderQueue();
 }
 export function clearQueueHistory() {
   queueViewingHistory = null;
-  const btn = document.getElementById('queue-date-btn-val'); if (btn) btn.textContent = 'Today';
+  const btn = document.getElementById('queue-date-btn-val'); if (btn) btn.textContent = dateBtnLabel(null);
   renderQueue();
 }
 // Prev/next-day arrows on the Date bubble. Stepping to today (or a future day) returns
@@ -235,6 +235,7 @@ export function renderQueue() {
   healLoneGroups();   // a 1-person "group" auto-ungroups (e.g. a split that left one behind)
   _partyLetters = partyLetterMap(q());   // assign party letters across the whole queue (stable across status sections)
   if (queueViewingHistory) { renderQueueHistoryView(list, empty); return; }
+  const _qd = document.getElementById('queue-date-btn-val'); if (_qd) _qd.textContent = dateBtnLabel(null);
   let filtered = ui.currentFilter === 'all' ? [...q()] : q().filter(e => ui.currentFilter === 'paid' ? isPaidStatus(e.status) : e.status === ui.currentFilter);
   if (ui.currentFilter === 'all' && !ui.showDoneInQueue) filtered = filtered.filter(e => !isPaidStatus(e.status));
   const order = { waiting: 0, inservice: 1, complete: 2, paid: 3, done: 3 };
