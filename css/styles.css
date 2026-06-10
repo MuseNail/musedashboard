@@ -460,6 +460,55 @@
   button.bg-primary:not(.dash-tab):not(.q-action-btn):not(.mswitch):active { box-shadow: 0 2px 6px -2px rgba(26,82,82,.5); }
   button.border-2.border-primary.text-primary { background-color: rgba(26,82,82,0.08); }
 
+  /* ── D11: unified button system ───────────────────────────────────────────
+     Three intents + a pill chip — ONE visual identity for every panel-toolbar
+     button (replaces ~10 ad-hoc Tailwind combos). Layout utilities (w-full,
+     flex-1, hidden, ml-auto, mb-*) still ride alongside on the element, and
+     JS state toggles (bg-primary, border-primary, inline styles) layer on top
+     because the Tailwind CDN stylesheet is generated after this one loads. */
+  .btn-primary, .btn-secondary, .btn-ghost {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    padding: 8px 16px; border-radius: 12px; border: 1px solid transparent;
+    font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700; line-height: 1.2;
+    white-space: nowrap; cursor: pointer;
+  }
+  .btn-primary .material-symbols-outlined, .btn-secondary .material-symbols-outlined,
+  .btn-ghost .material-symbols-outlined { font-size: 18px; }
+  .btn-primary {
+    background-color: var(--primary);
+    background-image: linear-gradient(180deg, #237370, var(--primary));
+    color: var(--on-primary);
+    box-shadow: 0 4px 12px -3px rgba(26,82,82,.45);
+  }
+  .btn-primary:hover { background-image: linear-gradient(180deg, var(--primary-dim), var(--primary-dim)); }
+  .btn-primary:active { box-shadow: 0 2px 6px -2px rgba(26,82,82,.5); }
+  .btn-secondary {
+    border-color: var(--surface-container-high, #c2cacd);
+    background-color: var(--surface-container-lowest, #ffffff);
+    color: var(--on-surface, #1a1a1a);
+  }
+  .btn-secondary:hover { background-color: var(--surface-container, #d0d6da); }
+  .btn-ghost { background: transparent; color: var(--on-surface-variant, #1a1a1a); }
+  .btn-ghost:hover { background: var(--surface-container, #d0d6da); }
+  /* Pill chip — small toggles/filters. Active state = .chip-on (matches the
+     D13 outlined queue-filter look so all chips read as one family). */
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 13px; border-radius: 999px;
+    border: 1.5px solid var(--outline-variant, #b9c2c7);
+    background: transparent; color: var(--on-surface-variant, #4a5055);
+    font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; line-height: 1.2;
+    white-space: nowrap; cursor: pointer;
+  }
+  .chip .material-symbols-outlined { font-size: 15px; }
+  .chip:hover { background: var(--surface-container-low, #eef1f3); }
+  .chip.chip-on { border-color: var(--primary); color: var(--primary); background: rgba(26,82,82,.08); }
+
+  /* ── E5: drag-handle affordance (floor plan) — a subtle grip glyph on the
+     draggable things in the live view: occupied seats, the Not-seated tray
+     bubbles, and the tech avatars. Display-only; drags hit the parent. */
+  .fp-grip { font-size: 14px !important; color: rgba(31,41,55,.38); pointer-events: none; flex-shrink: 0; }
+
   /* ── Reports: comparison delta badges ─────────────────────────────────── */
   .rpt-delta { display:inline-flex; align-items:center; gap:3px; margin-top:4px; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; line-height:1; }
   .rpt-delta:empty { display:none; }

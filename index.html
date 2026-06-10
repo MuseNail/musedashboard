@@ -275,7 +275,7 @@ tailwind.config = {
           <div id="floorplan-tray" class="flex-1 min-w-0"></div>
           <div class="flex gap-2 items-center flex-shrink-0">
             <div id="floorplan-edit-tools" class="hidden flex items-center gap-1">
-              <button onclick="fpSelectAll()" title="Select all stations" class="border border-outline-variant text-on-surface-variant hover:bg-surface-container px-2.5 py-1.5 rounded-lg text-xs font-body transition-all">Select all</button>
+              <button onclick="fpSelectAll()" title="Select all stations" class="btn-secondary">Select all</button>
               <div class="flex items-center gap-0.5 border border-outline-variant rounded-lg px-1 py-0.5">
                 <button onclick="fpZoom(-1)" title="Zoom out" class="w-7 h-7 flex items-center justify-center rounded text-on-surface-variant hover:bg-surface-container text-lg leading-none">−</button>
                 <span id="floorplan-zoom-label" class="text-[11px] font-body text-on-surface-variant w-9 text-center">100%</span>
@@ -283,8 +283,8 @@ tailwind.config = {
                 <button onclick="fpZoomFit()" title="Fit layout to screen" class="px-2 h-7 rounded text-on-surface-variant hover:bg-surface-container text-xs font-body">Fit</button>
               </div>
             </div>
-            <button id="floorplan-reset-btn" onclick="resetFloorLayout()" class="hidden border border-outline-variant text-on-surface-variant hover:bg-surface-container px-3 py-1.5 rounded-lg text-xs font-body transition-all">Reset layout</button>
-            <button id="floorplan-edit-btn" onclick="toggleFloorEdit()" class="flex items-center gap-1 border border-primary text-primary hover:bg-primary hover:text-on-primary px-3 py-1.5 rounded-lg text-xs font-headline font-bold transition-all"><span class="material-symbols-outlined" style="font-size:16px">edit</span> Edit layout</button>
+            <button id="floorplan-reset-btn" onclick="resetFloorLayout()" class="hidden btn-secondary">Reset layout</button>
+            <button id="floorplan-edit-btn" onclick="toggleFloorEdit()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">edit</span> Edit layout</button>
           </div>
         </div>
         <div id="floorplan-props" class="hidden bg-surface-container rounded-xl px-4 py-3 mb-3"></div>
@@ -312,15 +312,15 @@ tailwind.config = {
           <button onclick="filterQueue('paid')" id="tab-paid" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Paid</button>
           <!-- Done toggle -->
           <button onclick="toggleDoneVisibility()" id="done-toggle-btn"
-            class="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-body font-semibold bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all border border-outline-variant/40">
+            class="chip">
             <span class="material-symbols-outlined" style="font-size:15px" id="done-toggle-icon">visibility_off</span>
             <span id="done-toggle-label">Hide Paid</span>
           </button>
           <span class="subnav-slot" id="subnav-slot-queue"></span>
-          <button onclick="openQuickSale()" class="ml-auto flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-body font-semibold border border-primary text-primary hover:bg-primary/5 transition-all">
+          <button onclick="openQuickSale()" class="ml-auto btn-secondary">
             <span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Quick Sale
           </button>
-          <button onclick="showManualAdd()" class="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-body font-semibold bg-primary text-on-primary hover:bg-primary-dim transition-all shadow-sm">
+          <button onclick="showManualAdd()" class="btn-primary">
             <span class="material-symbols-outlined" style="font-size:18px">person_add</span> Add Guest
           </button>
         </div>
@@ -349,9 +349,9 @@ tailwind.config = {
             </button>
             <span class="subnav-slot" id="subnav-slot-reports"></span>
             <div class="flex gap-2 flex-wrap ml-auto">
-              <button onclick="exportReportExcel()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
-              <button onclick="exportReportPDF()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
-              <button onclick="exportReportLink()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">link</span> Copy Link</button>
+              <button onclick="exportReportExcel()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+              <button onclick="exportReportPDF()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+              <button onclick="exportReportLink()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">link</span> Copy Link</button>
             </div>
           </div>
           <p class="text-xs font-body text-on-surface-variant mt-1.5" id="report-range-label">Showing: Today</p>
@@ -496,7 +496,7 @@ tailwind.config = {
         <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high mb-5">
           <div class="flex gap-2">
             <input id="ai-q" type="text" placeholder="e.g. When am I busiest? What's my slowest day?" onkeydown="if(event.key==='Enter')aiAsk()" class="flex-1 bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary">
-            <button onclick="aiAsk()" class="px-4 py-2 rounded-lg bg-primary text-on-primary font-headline font-bold text-sm">Ask</button>
+            <button onclick="aiAsk()" class="btn-primary">Ask</button>
           </div>
           <div class="flex items-center gap-3 mt-2">
             <button onclick="aiCopyForBridge()" class="flex items-center gap-1 text-xs font-body font-semibold text-primary hover:underline"><span class="material-symbols-outlined" style="font-size:14px">content_copy</span> Copy for my Claude/ChatGPT tab</button>
@@ -579,21 +579,21 @@ tailwind.config = {
               <span class="text-sm font-headline font-bold text-on-surface date-btn-label date-pick-val">Today</span>
             </button>
             <button onclick="shiftReportRange(1)" title="Next period" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>
-            <button onclick="openCashRegister()" title="Open the cash drawer / register" class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors"><span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Cash Register</button>
-            <button id="add-historical-btn" onclick="showHistoricalEntryModal()" class="hidden flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface bg-surface-container-lowest font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical</button>
+            <button onclick="openCashRegister()" title="Open the cash drawer / register" class="btn-primary"><span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Cash Register</button>
+            <button id="add-historical-btn" onclick="showHistoricalEntryModal()" class="hidden btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">add</span> Add Historical</button>
           </div>
           <span class="subnav-slot" id="subnav-slot-transactions"></span>
           <div class="flex items-center gap-2 flex-wrap justify-end">
             <button onclick="openReconcile()" title="Find tickets whose recorded total doesn't match what was charged"
-              class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors">
+              class="btn-secondary">
               <span class="material-symbols-outlined" style="font-size:16px">rule</span> Reconcile
             </button>
             <button onclick="openProcessorReconcile()" title="Pull the actual card payments from your active processor for this date range and match them to your records"
-              class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors">
+              class="btn-secondary">
               <span class="material-symbols-outlined" style="font-size:16px">sync_alt</span> <span id="reconcile-proc-label">Reconcile w/ Square</span>
             </button>
-            <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
-            <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+            <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+            <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
           </div>
         </div>
         <div id="txn-total-bar" class="mb-3 flex items-center justify-between gap-3 px-5 py-3 rounded-xl bg-primary/10 border border-primary/30">
@@ -625,16 +625,16 @@ tailwind.config = {
           <div id="clocked-in-now" class="hidden flex-1 min-w-[240px]"></div>
           <span class="subnav-slot" id="subnav-slot-payroll"></span>
           <div class="flex items-center gap-2 flex-wrap flex-shrink-0 ml-auto">
-            <button onclick="payrollExportPDF()" title="Full payroll table (landscape)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
-            <button onclick="payrollExportStaffPDF()" title="Per-tech billed total + by day — for handing to staff" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">badge</span> Staff PDF</button>
-            <button onclick="payrollExportCSV()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-outline-variant/60 bg-surface-container-lowest hover:bg-surface-container text-on-surface font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+            <button onclick="payrollExportPDF()" title="Full payroll table (landscape)" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+            <button onclick="payrollExportStaffPDF()" title="Per-tech billed total + by day — for handing to staff" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">badge</span> Staff PDF</button>
+            <button onclick="payrollExportCSV()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
           </div>
         </div>
         <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
           <button onclick="payrollNav(-1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
           <span id="payroll-period-label" class="font-headline font-bold text-on-surface text-sm min-w-[180px] text-center">Pay Period</span>
           <button onclick="payrollNav(1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
-          <button onclick="payrollToggleCompare()" id="payroll-compare-btn" title="Show/hide the prior pay period comparison columns (This vs Last)" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border bg-surface-container-lowest hover:bg-surface-container font-body font-semibold text-sm transition-colors"><span class="material-symbols-outlined" style="font-size:16px">compare_arrows</span> <span id="payroll-compare-label">Comparing: Last</span></button>
+          <button onclick="payrollToggleCompare()" id="payroll-compare-btn" title="Show/hide the prior pay period comparison columns (This vs Last)" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">compare_arrows</span> <span id="payroll-compare-label">Comparing: Last</span></button>
         </div>
         <div id="payroll-cards" class="overflow-x-auto pb-3 rounded-xl border border-surface-container-high" style="scrollbar-width:thin"></div>
       </div>
@@ -650,21 +650,21 @@ tailwind.config = {
               <span class="text-sm font-headline font-bold text-on-surface date-pick-val" id="turns-date-btn-val">Today</span>
             </button>
             <button onclick="shiftTurnsDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
-            <button onclick="exportTurnsCSV()" title="Export this day as CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-xs font-body font-semibold text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
-            <button onclick="exportTurnsPDF()" title="Print / save this day as PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-xs font-body font-semibold text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+            <button onclick="exportTurnsCSV()" title="Export this day as CSV" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+            <button onclick="exportTurnsPDF()" title="Print / save this day as PDF" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
           </div>
           <span class="subnav-slot" id="subnav-slot-turns"></span>
           <div class="flex items-center gap-3">
             <!-- Add/Remove technicians button -->
-            <button onclick="showTurnsTechSelector()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary hover:text-on-primary transition-colors">
+            <button onclick="showTurnsTechSelector()" class="btn-secondary">
               <span class="material-symbols-outlined" style="font-size:16px">people</span> Technicians
             </button>
             <!-- Show/hide the upcoming-appointments strip -->
-            <button onclick="toggleTurnsApptStrip()" id="turns-appts-toggle" title="Show/hide upcoming appointments" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-container-high text-on-surface-variant font-body font-semibold text-sm hover:bg-surface-container transition-colors">
+            <button onclick="toggleTurnsApptStrip()" id="turns-appts-toggle" title="Show/hide upcoming appointments" class="btn-secondary">
               <span class="material-symbols-outlined" style="font-size:16px">event_upcoming</span> Appointments
             </button>
             <!-- Sync Appts hidden — Square Appointments integration pending -->
-            <button onclick="showManualAdd()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-all">
+            <button onclick="showManualAdd()" class="btn-primary">
               <span class="material-symbols-outlined" style="font-size:16px">person_add</span> New Entry
             </button>
           </div>
@@ -755,11 +755,11 @@ tailwind.config = {
             </div>
             <!-- Auth / New appointment -->
             <div id="cal-auth-area">
-              <button onclick="calSignIn()" id="cal-signin-btn" class="hidden flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+              <button onclick="calSignIn()" id="cal-signin-btn" class="hidden btn-primary">
                 <span class="material-symbols-outlined" style="font-size:16px">login</span> Connect Google Calendar
               </button>
             </div>
-            <button onclick="showNewApptModal()" class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+            <button onclick="showNewApptModal()" class="btn-primary">
               <span class="material-symbols-outlined" style="font-size:16px">add</span> New Appointment
             </button>
           </div>
@@ -881,14 +881,14 @@ tailwind.config = {
               </div>
               <!-- Controls -->
               <div class="flex-grow space-y-2">
-                <button onclick="recropLogo()" id="logo-recrop-btn" class="hidden w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+                <button onclick="recropLogo()" id="logo-recrop-btn" class="hidden w-full btn-primary">
                   <span class="material-symbols-outlined" style="font-size:18px">crop</span> Re-crop / Adjust
                 </button>
                 <label class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-surface-container hover:bg-surface-container-high text-on-surface font-body font-semibold text-sm transition-colors cursor-pointer w-full">
                   <span class="material-symbols-outlined" style="font-size:18px">upload</span> Upload New Logo
                   <input type="file" accept="image/png,image/jpeg,image/jpg" class="hidden" onchange="handleLogoUpload(this)">
                 </label>
-                <button onclick="removeLogo()" class="w-full flex items-center justify-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/60 text-on-surface-variant font-body font-semibold text-sm hover:bg-surface-container transition-colors">
+                <button onclick="removeLogo()" class="w-full btn-secondary">
                   <span class="material-symbols-outlined" style="font-size:16px">delete</span> Remove Logo
                 </button>
                 <p class="text-xs font-body text-on-surface-variant">PNG with transparent background works best. Wide/rectangular logos display better than square ones.</p>
@@ -916,7 +916,7 @@ tailwind.config = {
                 <p class="text-[11px] font-body text-on-surface-variant mt-1">Between half min and full min = half turn. Below half min = bonus</p>
               </div>
             </div>
-            <button onclick="saveTurnThresholds()" class="w-full bg-primary text-on-primary py-3 rounded-xl font-headline font-bold mb-4 hover:bg-primary-dim transition-all active:scale-95">Save Thresholds</button>
+            <button onclick="saveTurnThresholds()" class="w-full mb-4 btn-primary">Save Thresholds</button>
 
             <div class="border-t border-surface-container-high pt-4">
               <div class="font-headline font-semibold text-on-surface mb-1">Always-Bonus Services</div>
@@ -963,13 +963,13 @@ tailwind.config = {
               <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Terminal device code</label>
               <div class="flex gap-2">
                 <input id="helcim-device-code" type="text" placeholder="e.g. 7C0X" autocapitalize="characters" class="flex-1 border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline uppercase focus:border-primary outline-none">
-                <button onclick="helcimSaveDevice()" class="px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">Save</button>
+                <button onclick="helcimSaveDevice()" class="btn-primary">Save</button>
               </div>
               <div class="text-[11px] text-on-surface-variant mt-1">The code from your terminal (Helcim → Devices, with API mode on).</div>
             </div>
             <div class="flex gap-2 flex-wrap">
-              <button onclick="helcimCheckConnection()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">wifi_tethering</span> Check connection</button>
-              <button onclick="helcimRunTest()" class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary/5 transition-colors"><span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Send $1.00 test charge</button>
+              <button onclick="helcimCheckConnection()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">wifi_tethering</span> Check connection</button>
+              <button onclick="helcimRunTest()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span> Send $1.00 test charge</button>
             </div>
             <div id="helcim-conn-status" class="text-xs font-body text-on-surface-variant rounded-lg bg-surface-container-lowest border border-surface-container-high px-3 py-2">No terminal device code set.</div>
             <button onclick="settingsOpenLeaf('square-section')" class="w-full mt-1 flex items-center justify-between px-4 py-3 rounded-xl border border-surface-container-high hover:bg-surface-container transition-colors text-left">
@@ -992,17 +992,17 @@ tailwind.config = {
                 class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-3 text-base font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
               <p class="text-[11px] font-body text-on-surface-variant mt-1">From Square Developer Dashboard → your app → Credentials. Needed for "Pay in Square POS". Not the access token.</p>
             </div>
-            <button onclick="saveSquareFromSettings()" class="w-full bg-primary text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary-dim">
+            <button onclick="saveSquareFromSettings()" class="w-full btn-primary">
               Save & Connect
             </button>
-            <button onclick="syncSquareFromSettings()" class="w-full flex items-center justify-center gap-2 border border-primary text-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary hover:text-on-primary">
+            <button onclick="syncSquareFromSettings()" class="w-full btn-secondary">
               <span class="material-symbols-outlined" style="font-size:18px">sync</span> Sync Customers from Square
             </button>
             <div class="pt-3 border-t border-surface-container-high">
               <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Square Terminal</label>
               <div id="sq-terminal-current" class="text-xs font-body mb-2"><span class="text-on-surface-variant">No Terminal paired yet.</span></div>
               <div id="sq-terminal-status" class="text-xs font-body text-on-surface-variant mb-2"></div>
-              <button onclick="pairTerminal()" class="w-full flex items-center justify-center gap-2 border border-primary text-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary hover:text-on-primary">
+              <button onclick="pairTerminal()" class="w-full btn-secondary">
                 <span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pair Terminal
               </button>
               <p class="text-[11px] font-body text-on-surface-variant mt-1">Enables itemized in-person payments on your Square Terminal (the "Pay on Terminal" button at checkout).</p>
@@ -1015,10 +1015,10 @@ tailwind.config = {
           <div id="gcal-section" class="hidden px-5 py-4 space-y-3">
             <p class="text-sm font-body text-on-surface-variant">Connect Google Calendar to view and create appointments in the Calendar tab.</p>
             <div class="text-xs font-body" id="gcal-settings-status">Checking…</div>
-            <button id="gcal-connect-btn" onclick="calSignIn()" class="w-full flex items-center justify-center gap-2 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary-dim">
+            <button id="gcal-connect-btn" onclick="calSignIn()" class="w-full btn-primary">
               <span class="material-symbols-outlined" style="font-size:18px">login</span> Connect Google Calendar
             </button>
-            <button id="gcal-disconnect-btn" onclick="calSignOut();renderGcalSettings()" class="hidden w-full flex items-center justify-center gap-2 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-surface-container">
+            <button id="gcal-disconnect-btn" onclick="calSignOut();renderGcalSettings()" class="hidden w-full btn-secondary">
               <span class="material-symbols-outlined" style="font-size:18px">logout</span> Disconnect
             </button>
             <div id="gcal-calendar-list" class="border-t border-surface-container-high pt-3 space-y-0.5"></div>
@@ -1040,7 +1040,7 @@ tailwind.config = {
               <textarea id="sms-test-msg" rows="2" maxlength="1000"
                 class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-3 text-sm font-body text-on-surface focus:border-primary transition-colors outline-none resize-none">Muse Nails &amp; Spa — your texts are working! ✦</textarea>
             </div>
-            <button id="sms-test-btn" onclick="sendTestSms()" class="w-full flex items-center justify-center gap-2 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold transition-all active:scale-95 hover:bg-primary-dim">
+            <button id="sms-test-btn" onclick="sendTestSms()" class="w-full btn-primary">
               <span class="material-symbols-outlined" style="font-size:18px">sms</span> Send test text
             </button>
             <div id="sms-test-result" class="text-xs font-body"></div>
@@ -1050,7 +1050,7 @@ tailwind.config = {
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="backup-section" class="hidden px-5 py-4">
             <div class="grid grid-cols-2 gap-3 mb-4">
-              <button onclick="exportAllData()" class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-all">
+              <button onclick="exportAllData()" class="btn-primary">
                 <span class="material-symbols-outlined" style="font-size:18px">download</span> Export Backup
               </button>
               <label class="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary/5 transition-all cursor-pointer">
@@ -1074,12 +1074,12 @@ tailwind.config = {
             <!-- Recalculate totals — heals any stored total that doesn't match its parts -->
             <div class="mt-4 pt-4 border-t border-surface-container-high">
               <button onclick="healRecordTotals()"
-                class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary/5 transition-all">
+                class="w-full btn-secondary">
                 <span class="material-symbols-outlined" style="font-size:18px">calculate</span> Recalculate Transaction Totals
               </button>
               <p class="text-[11px] font-body text-on-surface-variant mt-2 text-center">Fixes any saved total that doesn't match its services + items + fees − discount (e.g. a fee added after the total was saved). Export a backup first.</p>
               <button onclick="listFeelessTickets()"
-                class="w-full mt-3 flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-outline-variant text-on-surface-variant font-body font-semibold text-sm hover:bg-surface-container transition-all">
+                class="w-full mt-3 btn-secondary">
                 <span class="material-symbols-outlined" style="font-size:18px">search</span> Find Tickets With No Fee (30 days)
               </button>
               <p class="text-[11px] font-body text-on-surface-variant mt-2 text-center">Read-only list to help spot tickets that should've had a fee, so you can re-add it.</p>
@@ -1116,7 +1116,7 @@ tailwind.config = {
                 <button onclick="toggleAllDashServices()" class="text-primary underline">Toggle Dashboard</button>
               </div>
               <div class="flex gap-2">
-                <button onclick="showAddService()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+                <button onclick="showAddService()" class="btn-primary">
                   <span class="material-symbols-outlined" style="font-size:16px">add</span> Add Service
                 </button>
               </div>
@@ -1150,10 +1150,10 @@ tailwind.config = {
           <div id="staff-merged-section" class="hidden px-5 py-4">
             <div class="flex items-center gap-2 mb-3 flex-wrap">
               <button onclick="toggleAllActiveStaff()" class="text-xs font-body text-primary underline mr-auto">Toggle All Active</button>
-              <button onclick="toggleStaffScheduleView()" id="schedule-view-btn" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary hover:text-on-primary transition-colors">
+              <button onclick="toggleStaffScheduleView()" id="schedule-view-btn" class="btn-secondary">
                 <span class="material-symbols-outlined" style="font-size:16px">calendar_month</span> Schedule
               </button>
-              <button onclick="showAddStaff()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+              <button onclick="showAddStaff()" class="btn-primary">
                 <span class="material-symbols-outlined" style="font-size:16px">add</span> Add
               </button>
             </div>
@@ -1172,8 +1172,8 @@ tailwind.config = {
                   <button onclick="scheduleWeekOffset(1)" class="q-action-btn bg-surface-container hover:bg-surface-container-high text-on-surface-variant">
                     <span class="material-symbols-outlined" style="font-size:20px">chevron_right</span>
                   </button>
-                  <button onclick="scheduleWeekOffset(0, true)" class="px-3 py-1.5 rounded-full text-xs font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Today</button>
-                  <button onclick="copyLastWeekSchedule()" title="Copy the previous week's schedule into this week" class="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-body font-semibold border border-surface-container-high text-on-surface-variant hover:bg-surface-container transition-all"><span class="material-symbols-outlined" style="font-size:15px">content_copy</span>Copy last week</button>
+                  <button onclick="scheduleWeekOffset(0, true)" class="btn-ghost">Today</button>
+                  <button onclick="copyLastWeekSchedule()" title="Copy the previous week's schedule into this week" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:15px">content_copy</span>Copy last week</button>
                 </div>
                 <div class="flex gap-3 flex-wrap">
                   <div class="flex items-center gap-1.5 text-xs font-body text-on-surface-variant"><div class="w-3 h-3 rounded-full" style="background:#dcebea;border:1px solid #b6d2d0"></div>Working</div>
@@ -1195,10 +1195,10 @@ tailwind.config = {
           <div id="fdusers-merged-section" class="hidden px-5 py-4">
             <div class="flex items-center gap-2 mb-3 flex-wrap">
               <p class="text-sm font-body text-on-surface-variant mr-auto">Staff who sign in to the dashboard with a PIN.</p>
-              <button onclick="toggleFdScheduleView()" id="fd-schedule-view-btn" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary font-body font-semibold text-sm hover:bg-primary hover:text-on-primary transition-colors flex-shrink-0">
+              <button onclick="toggleFdScheduleView()" id="fd-schedule-view-btn" class="flex-shrink-0 btn-secondary">
                 <span class="material-symbols-outlined" style="font-size:16px">calendar_month</span> Schedule
               </button>
-              <button onclick="showAddFdUser()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors flex-shrink-0">
+              <button onclick="showAddFdUser()" class="flex-shrink-0 btn-primary">
                 <span class="material-symbols-outlined" style="font-size:16px">add</span> Add
               </button>
             </div>
@@ -1206,7 +1206,7 @@ tailwind.config = {
               <div id="fdusers-list" class="space-y-2"></div>
             <!-- Manager-only: view all PINs -->
             <div id="pin-viewer-section" class="mt-4 hidden">
-              <button onclick="togglePinViewer()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-outline-variant/60 text-on-surface-variant text-sm font-body hover:bg-surface-container transition-colors">
+              <button onclick="togglePinViewer()" class="btn-secondary">
                 <span class="material-symbols-outlined" style="font-size:16px">key</span>
                 <span id="pin-viewer-label">View Login PINs</span>
               </button>
@@ -1317,10 +1317,10 @@ tailwind.config = {
         <div class="flex items-center gap-2 mb-3 flex-wrap">
           <input id="customers-search" type="text" placeholder="Search by name, phone, or email…" oninput="filterCustomersTab(this.value)" class="flex-1 min-w-[200px] border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2.5 text-sm font-body focus:border-primary outline-none">
           <div class="flex gap-2 flex-wrap flex-shrink-0">
-            <button onclick="showAddCustomer()" class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary text-sm font-headline font-bold hover:bg-primary-dim transition-colors"><span class="material-symbols-outlined" style="font-size:16px">person_add</span> Add Customer</button>
-            <button onclick="openCustomerCleanup()" title="Find &amp; merge duplicates" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-container-high text-on-surface text-sm font-body font-semibold hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">cleaning_services</span> Clean up</button>
-            <button onclick="exportCustomersCSV()" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-surface-container-high text-on-surface text-sm font-body font-semibold hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">download</span> CSV</button>
-            <button onclick="importCustomersFromSquare()" title="One-time import of your existing Square customers" class="flex items-center gap-2 px-4 py-2 rounded-xl border border-primary text-primary text-sm font-body font-semibold hover:bg-primary/5 transition-colors"><span class="material-symbols-outlined" style="font-size:16px">sync</span> Import from Square</button>
+            <button onclick="showAddCustomer()" class="btn-primary"><span class="material-symbols-outlined" style="font-size:16px">person_add</span> Add Customer</button>
+            <button onclick="openCustomerCleanup()" title="Find &amp; merge duplicates" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">cleaning_services</span> Clean up</button>
+            <button onclick="exportCustomersCSV()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">download</span> CSV</button>
+            <button onclick="importCustomersFromSquare()" title="One-time import of your existing Square customers" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">sync</span> Import from Square</button>
           </div>
         </div>
         <div id="customers-content"></div>
@@ -1334,7 +1334,7 @@ tailwind.config = {
           </div>
           <span class="subnav-slot" id="subnav-slot-giftcards"></span>
           <div class="flex gap-2">
-            <button onclick="showAddGiftCard()" class="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm hover:bg-primary-dim transition-colors">
+            <button onclick="showAddGiftCard()" class="btn-primary">
               <span class="material-symbols-outlined" style="font-size:16px">add</span> New Gift Card
             </button>
           </div>
@@ -1366,7 +1366,7 @@ tailwind.config = {
             oninput="renderGiftCards()"
             class="flex-1 min-w-48 border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-body focus:border-primary outline-none">
           <button id="gc-hide-zero-btn" onclick="toggleGcHideZero()"
-            class="px-3 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high text-xs font-body font-semibold text-on-surface transition-colors">Hide $0</button>
+            class="chip">Hide $0</button>
           <select onchange="setGcSort(this.value); this.blur()"
             class="px-3 py-2 rounded-xl bg-surface-container border border-surface-container-high text-xs font-body text-on-surface focus:outline-none">
             <option value="datePurchased">Sort: Date</option>
@@ -1876,8 +1876,8 @@ tailwind.config = {
     <div class="flex items-center justify-between gap-3 p-5 border-b border-surface-container-high flex-shrink-0">
       <h3 id="rpt-drill-title" class="text-base font-headline font-bold text-on-surface min-w-0 truncate"></h3>
       <div class="flex items-center gap-2 flex-shrink-0">
-        <button onclick="exportDrillCSV()" title="Export this detail to CSV" class="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
-        <button onclick="exportDrillPDF()" title="Export this detail to PDF" class="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
+        <button onclick="exportDrillCSV()" title="Export this detail to CSV" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
+        <button onclick="exportDrillPDF()" title="Export this detail to PDF" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
         <button onclick="closeDrillDown()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
       </div>
     </div>

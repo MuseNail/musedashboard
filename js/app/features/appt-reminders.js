@@ -74,7 +74,7 @@ export function renderApptReminderSettings() {
   const on = reminderLeads();
   host.innerHTML = ALL_LEADS.map(L => {
     const active = on.includes(L);
-    return `<button onclick="toggleApptReminderLead(${L})" class="px-3 py-1.5 rounded-full text-xs font-body font-semibold border transition-all" style="${active ? 'background:#1a5252;color:#fff;border-color:#1a5252' : 'background:transparent;border-color:var(--outline-variant,#7a858a);color:var(--on-surface,#0e1a1a)'}">${_leadLabel(L)} before</button>`;
+    return `<button onclick="toggleApptReminderLead(${L})" class="chip${active ? ' chip-on' : ''}">${_leadLabel(L)} before</button>`;
   }).join('');
 }
 export function toggleApptReminderLead(L) {
