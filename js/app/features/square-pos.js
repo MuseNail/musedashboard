@@ -341,7 +341,9 @@ export async function proceedTerminalPayment() {
     if (termCharge > 0 && helcimActive()) {
       // Helcim terminal. Deterministic invoice ref per (ticket, card amount) makes a retry after a
       // timeout idempotent — chargeOnHelcim returns the existing APPROVED charge instead of re-charging.
-      showTerminalModal(`Charging $${(termCharge / 100).toFixed(2)} on the Terminal — finish on the device…`);
+      // To CANCEL, press Cancel on the terminal — Helcim has no software-cancel; the terminalCancel
+      // webhook then resolves this charge as cancelled (the ticket is not marked paid).
+      showTerminalModal(`Charging $${(termCharge / 100).toFixed(2)} on the Terminal — finish on the device, or press Cancel on the terminal to stop.`);
       const res = await chargeOnHelcim(termCharge / 100, `tkt-${idemBase}-${termCharge}`);
       hideTerminalModal();
       if (!res.ok) {

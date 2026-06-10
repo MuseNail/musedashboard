@@ -1813,12 +1813,9 @@ tailwind.config = {
       </div>
       <button id="group-split-btn" onclick="splitFromAssignModal()" class="hidden self-start flex items-center gap-1 text-xs font-body font-semibold text-primary hover:underline mb-1"><span class="material-symbols-outlined" style="font-size:15px">call_split</span> Split party / pay separately</button>
       <div class="flex gap-2">
-        <button onclick="saveGroupAssignments()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold tracking-tight transition-all">Save All</button>
-      </div>
-      <div class="flex gap-2 square-only">
-        <button onclick="openSquarePOSFromModal()" class="flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-2 rounded-xl font-body text-sm transition-all flex items-center justify-center gap-1.5">
-          <span class="material-symbols-outlined" style="font-size:16px">point_of_sale</span>
-          Pay in Square POS
+        <button onclick="saveGroupAssignments()" class="flex-1 border border-primary text-primary hover:bg-primary/5 py-3 rounded-xl font-headline font-bold tracking-tight transition-all">Save</button>
+        <button onclick="openSquarePOSFromModal()" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold tracking-tight transition-all flex items-center justify-center gap-1.5">
+          <span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Check Out
         </button>
       </div>
     </div>
