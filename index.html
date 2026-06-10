@@ -591,9 +591,9 @@ tailwind.config = {
               class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined" style="font-size:16px">rule</span> Reconcile
             </button>
-            <button onclick="openSquareReconcile()" title="Pull the actual payments from Square for this date range and match them to your records by payment ID"
+            <button onclick="openProcessorReconcile()" title="Pull the actual card payments from your active processor for this date range and match them to your records"
               class="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors">
-              <span class="material-symbols-outlined" style="font-size:16px">sync_alt</span> Reconcile w/ Square
+              <span class="material-symbols-outlined" style="font-size:16px">sync_alt</span> <span id="reconcile-proc-label">Reconcile w/ Square</span>
             </button>
             <button onclick="exportTransactionsPDF()" title="Export all tickets to PDF" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
             <button onclick="exportTransactionsCSV()" title="Export all tickets to CSV" class="flex items-center gap-1 px-3 py-2 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold text-sm hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>

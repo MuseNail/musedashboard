@@ -9,7 +9,8 @@ import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
 import { squareUpsertCustomer } from './square-customers.js';
 import { avgServiceTime, fmtDur } from './servicetime.js';
-import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS, SQUARE_PROXY } from '../config.js';
+import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS, SQUARE_PROXY, HELCIM_PROXY } from '../config.js';
+import { helcimActive } from './helcim.js';
 import { gcRedemptions, gcTotalUsed } from './giftcards.js';
 import { fdPaidHours, fdPunches, fdSetPunches, roundQuarterHours, fdPunchSuspect } from './timeclock.js';
 
@@ -1218,6 +1219,67 @@ export async function openSquareReconcile() {
     + section('In Square, not in the app', R.inSquareNotApp.length, sqRows, 'Charged in Square but no app record carries this payment — charged-but-unrecorded, or recorded before payment-ID tracking.')
     + section('In the app, not matched to Square', R.inAppNotSquare.length, appRows, 'Marked paid in the app with no matching Square charge — older Mark-Paid / deep-link sales, or a possible double-record.'));
 }
+
+// Reconcile against Helcim: pull the terminal's APPROVED purchases for the period and match them to
+// records by the stored transaction id (Helcim sales record their transactionId in squarePaymentIds).
+export async function helcimReconcile() {
+  const dates = getReportDates(); if (!dates) { showToast('Pick a date range first.'); return; }
+  if (!cfg().helcim_device_code) { showToast('Set your Helcim terminal in Settings → Payments first.'); return; }
+  const { from, to } = dates;
+  showDrillPanel('Helcim Reconciliation', '<p class="text-sm font-body text-on-surface-variant text-center py-6">Pulling transactions from Helcim…</p>');
+  let txns;
+  try {
+    const r = await fetch(`${HELCIM_PROXY}/transactions?dateFrom=${localDateStr(from)}&dateTo=${localDateStr(to)}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json().catch(() => ({}));
+    const arr = Array.isArray(j) ? j : (j.value || j.data || j.transactions || j.cardTransactions || []);
+    txns = arr.filter(t => String(t.type || '').toLowerCase().includes('purchase') && String(t.status || '').toUpperCase() === 'APPROVED');
+  } catch (e) {
+    showDrillPanel('Helcim Reconciliation', `<p class="text-sm font-body text-error text-center py-6">Couldn't load Helcim transactions: ${(e.message || 'error')}.<br>Is the Worker deployed with the /helcim/transactions endpoint?</p>`);
+    return;
+  }
+  const recs = buildCombinedRecords().filter(r => {
+    if (r.status === 'deleted' || !isPaidStatus(r.status)) return false;
+    const d = new Date(r.completedAt || r.checkinTime); return d >= from && d <= to;
+  });
+  const recByTxn = new Map();
+  recs.forEach(r => (r.squarePaymentIds || []).forEach(id => recByTxn.set(String(id), r)));
+  const txnId = t => String(t.transactionId || t.id || '');
+  const matched = txns.filter(t => recByTxn.has(txnId(t)));
+  const inHelcimNotApp = txns.filter(t => !recByTxn.has(txnId(t)));
+  const helcimTxnIds = new Set(txns.map(txnId));
+  const inAppNotHelcim = recs.filter(r => {
+    if (!(r.tenders && r.tenders.card > 0)) return false;
+    return !(r.squarePaymentIds || []).some(id => helcimTxnIds.has(String(id)));
+  });
+  const helcimCents = txns.reduce((s, t) => s + Math.round((+t.amount || 0) * 100), 0);
+  const $ = c => '$' + (c / 100).toFixed(2);
+  const fmtTime = iso => { try { return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch { return ''; } };
+  const summary = [
+    ['Helcim charged', $(helcimCents)],
+    ['Card charges', String(txns.length)],
+    ['Matched to a record', `${matched.length}/${txns.length}`],
+  ];
+  const card = (title, sub, amt) => `<div class="bg-surface-container-lowest rounded-xl px-4 py-2.5 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${_eTxn(title)}</div><div class="text-[11px] font-body text-outline">${_eTxn(sub)}</div></div><div class="font-headline font-bold text-on-surface flex-shrink-0 ml-3">${amt}</div></div>`;
+  const hRows = inHelcimNotApp.length ? inHelcimNotApp.map(t => card(t.cardHolderName || t.invoiceNumber || '(charge)', `${fmtTime(t.dateCreated)} · ${t.cardType || t.type || 'card'}`, '$' + (+t.amount || 0).toFixed(2))).join('') : '<p class="text-xs font-body text-on-surface-variant py-2 px-1 opacity-70">None — every Helcim charge ties to an app record. ✓</p>';
+  const aRows = inAppNotHelcim.length ? inAppNotHelcim.map(r => card(r.name || '(no name)', `${new Date(r.completedAt || r.checkinTime).toLocaleDateString()} · card`, '$' + (r.totalCost || 0).toFixed(2))).join('') : '<p class="text-xs font-body text-on-surface-variant py-2 px-1 opacity-70">None — every app card sale matches a Helcim charge. ✓</p>';
+  const section = (title, n, rows, hint) => `<div class="text-xs font-headline font-bold text-on-surface uppercase tracking-widest mt-3 mb-1.5">${title} <span class="text-on-surface-variant">(${n})</span></div><div class="text-[11px] font-body text-on-surface-variant mb-2 px-1">${hint}</div><div class="space-y-1.5">${rows}</div>`;
+  _drill = {
+    title: 'Helcim Reconciliation',
+    columns: ['Side', 'When', 'Who', 'Detail', 'Amount'],
+    rows: [
+      ...inHelcimNotApp.map(t => ['In Helcim, not app', fmtTime(t.dateCreated), t.cardHolderName || t.invoiceNumber || '', t.cardType || t.type || '', '$' + (+t.amount || 0).toFixed(2)]),
+      ...inAppNotHelcim.map(r => ['In app, not Helcim', new Date(r.completedAt || r.checkinTime).toLocaleDateString(), r.name || '', 'card', '$' + (r.totalCost || 0).toFixed(2)]),
+    ],
+    summary,
+  };
+  showDrillPanel('Helcim Reconciliation',
+    _drillSummaryBar(summary)
+    + section('In Helcim, not in the app', inHelcimNotApp.length, hRows, 'Charged on the terminal but no app record carries this transaction id — charged-but-unrecorded.')
+    + section('In the app, not matched to Helcim', inAppNotHelcim.length, aRows, 'Marked paid with a card in the app but no matching Helcim charge — a Square-era card sale, or a possible mismatch.'));
+}
+// The Transactions "Reconcile" button routes to whichever processor is active.
+export function openProcessorReconcile() { if (helcimActive()) helcimReconcile(); else openSquareReconcile(); }
 
 function showDrillPanel(title, html) {
   document.getElementById('rpt-drill-title').textContent = title;

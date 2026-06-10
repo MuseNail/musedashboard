@@ -439,6 +439,41 @@ export default {
       if (r.status >= 400) console.error('[helcim result]', r.status, body.slice(0, 200));
       return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
     }
+    // Reconcile: list card transactions for a date range (Mountain Time per Helcim). Match to records.
+    if (path === '/helcim/transactions' && method === 'GET') {
+      const qs = new URLSearchParams({ limit: '1000' });
+      if (url.searchParams.get('dateFrom')) qs.set('dateFrom', url.searchParams.get('dateFrom'));
+      if (url.searchParams.get('dateTo'))   qs.set('dateTo',   url.searchParams.get('dateTo'));
+      const r = await fetch(`https://api.helcim.com/v2/card-transactions?${qs}`, { headers: { 'api-token': env.HELCIM_API_TOKEN, 'accept': 'application/json' } });
+      const body = await r.text();
+      if (r.status >= 400) console.error('[helcim transactions]', r.status, body.slice(0, 200));
+      return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+    }
+    // Upsert a Helcim customer (by phone) so its contact rides the next purchase → the terminal can
+    // text/email the receipt. Returns { customerCode }. Best-effort; the client never blocks a charge on it.
+    if (path === '/helcim/customer' && method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const name = String(b.name || '').trim(), phone = String(b.phone || '').replace(/\D/g, '');
+      if (!name && !phone) return json({ error: 'name or phone required' }, 400);
+      const hh = { 'api-token': env.HELCIM_API_TOKEN, 'accept': 'application/json' };
+      let customerCode = null;
+      try {
+        if (phone) {
+          const sr = await fetch(`https://api.helcim.com/v2/customers?search=${encodeURIComponent(phone)}&limit=10`, { headers: hh });
+          const sj = await sr.json().catch(() => ({}));
+          const list = Array.isArray(sj) ? sj : (Array.isArray(sj.customers) ? sj.customers : (Array.isArray(sj.data) ? sj.data : []));
+          const match = list.find(c => String(c.cellphone || c.phone || '').replace(/\D/g, '') === phone);
+          if (match) customerCode = match.customerCode || match.id || null;
+        }
+      } catch {}
+      if (!customerCode) {
+        const cr = await fetch('https://api.helcim.com/v2/customers', { method: 'POST', headers: { ...hh, 'Content-Type': 'application/json' }, body: JSON.stringify({ contactName: name || phone, cellphone: phone }) });
+        const cj = await cr.json().catch(() => ({}));
+        customerCode = cj.customerCode || cj.id || (cj.customer && (cj.customer.customerCode || cj.customer.id)) || null;
+        if (!customerCode) console.error('[helcim customer]', cr.status, JSON.stringify(cj).slice(0, 200));
+      }
+      return json({ customerCode });
+    }
     if (path === '/terminal/webhook' && method === 'POST') {
       const raw = await request.text();
       const ok  = await verifyHelcimWebhook(request, raw, env.HELCIM_WEBHOOK_VERIFIER);

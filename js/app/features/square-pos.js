@@ -5,7 +5,7 @@ import { getActiveUser } from '../session.js';
 import { showToast, commitNumpad, ticketTotal } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
 import { squareUpsertCustomer } from './square-customers.js';
-import { chargeOnHelcim, helcimActive } from './helcim.js';
+import { chargeOnHelcim, helcimActive, helcimCustomerCode } from './helcim.js';
 
 const cfg     = () => getState().config;
 const sqConfig = () => cfg().square_config || null;
@@ -344,7 +344,9 @@ export async function proceedTerminalPayment() {
       // To CANCEL, press Cancel on the terminal — Helcim has no software-cancel; the terminalCancel
       // webhook then resolves this charge as cancelled (the ticket is not marked paid).
       showTerminalModal(`Charging $${(termCharge / 100).toFixed(2)} on the Terminal — finish on the device, or press Cancel on the terminal to stop.`);
-      const res = await chargeOnHelcim(termCharge / 100, `tkt-${idemBase}-${termCharge}`);
+      // Carry the customer's name+phone to Helcim (best-effort) so the terminal can text/email the receipt.
+      let _hcCust = null; try { _hcCust = await helcimCustomerCode(party[0]?.name, party[0]?.phone); } catch (e) {}
+      const res = await chargeOnHelcim(termCharge / 100, `tkt-${idemBase}-${termCharge}`, _hcCust ? { customerCode: _hcCust } : {});
       hideTerminalModal();
       if (!res.ok) {
         _unstageGift(ticketId);

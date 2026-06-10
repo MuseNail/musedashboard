@@ -1,7 +1,7 @@
-// ── Service Worker (v4.71 — modular ES-module client) ───────────────────────
+// ── Service Worker (v4.72 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'muse-v4.71';
+const CACHE_NAME = 'muse-v4.72';
 
 const PRECACHE_URLS = [
   '/musedashboard/',
@@ -43,6 +43,10 @@ const PRECACHE_URLS = [
   '/musedashboard/js/app/features/audit.js',
   '/musedashboard/js/app/features/cashdrawer.js',
   '/musedashboard/js/app/features/sms.js',
+  '/musedashboard/js/app/features/timeclock.js',
+  '/musedashboard/js/app/features/fd-schedule.js',
+  '/musedashboard/js/app/features/helcim.js',
+  '/musedashboard/js/app/features/quicksale.js',
 ];
 
 self.addEventListener('install', event => {

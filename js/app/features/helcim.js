@@ -15,6 +15,17 @@ export function helcimDeviceCode() { return String(cfg().helcim_device_code || '
 // Which processor the checkout charges cards on. Default 'square' until the operator flips it.
 export function activeProcessor() { return cfg().payment_processor === 'helcim' ? 'helcim' : 'square'; }
 export function helcimActive() { return activeProcessor() === 'helcim'; }
+
+// Resolve a Helcim customerCode from a ticket's name+phone so the contact rides the purchase and
+// the terminal can text/email the receipt. Best-effort — returns null on any failure (never blocks).
+export async function helcimCustomerCode(name, phone) {
+  if (!name && !phone) return null;
+  try {
+    const r = await fetch(`${HELCIM_PROXY}/customer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name || '', phone: phone || '' }) });
+    const j = await r.json().catch(() => ({}));
+    return j.customerCode || null;
+  } catch { return null; }
+}
 export function setPaymentProcessor(p) {
   const v = p === 'helcim' ? 'helcim' : 'square';
   dispatch('config.set', { key: 'payment_processor', value: v });
@@ -23,7 +34,13 @@ export function setPaymentProcessor(p) {
 }
 // Toggle a body class so CSS can hide Square-only UI (the legacy POS deep-link) when Helcim is
 // active. Called on boot, on every store change, and on flip — so it stays accurate cross-device.
-export function syncProcessorClass() { try { document.body.classList.toggle('proc-helcim', helcimActive()); } catch {} }
+export function syncProcessorClass() {
+  try {
+    document.body.classList.toggle('proc-helcim', helcimActive());
+    const lbl = document.getElementById('reconcile-proc-label');
+    if (lbl) lbl.textContent = helcimActive() ? 'Reconcile w/ Helcim' : 'Reconcile w/ Square';
+  } catch {}
+}
 
 // invoiceNumber → { settle } resolver for an in-flight terminal charge.
 const _pending = {};
