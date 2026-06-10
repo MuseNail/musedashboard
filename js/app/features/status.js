@@ -74,14 +74,16 @@ export function applyAssignmentStatus(a, newStatus) {
 // a colored glyph shape, a tiny text pill, and a row accent. Only in-service gets the loud
 // bar+tint ("the hot row"); paid fades. Palette = the staff-app STATUS_CHIP values.
 // `dot` = the per-status fill for a CSS-DRAWN circle (not a text glyph): a solid colored dot per
-// status (amber=waiting, green=in-service, blue=complete, grey=paid). Drawing the circle keeps
-// every status the EXACT same diameter — Unicode glyphs (● vs ◍) render at different sizes.
+// status. Drawing the circle keeps every status the EXACT same diameter — Unicode glyphs
+// (● vs ◍) render at different sizes.
 // Render it as: <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;{dot}"></span>
+// One vocabulary + one filled-pill palette everywhere (C9/D13):
+// Waiting (amber) · In Service (teal) · Done (green) · Paid (slate).
 export function serviceLineStyle(status) {
-  if (isPaidStatus(status))    return { key: 'paid',      dot: 'background:#b4bec2',                                bar: '#b4bec2', tint: '',                          pill: { bg: '#dde2e5', fg: '#555555', label: 'Paid'   }, rowOpacity: 0.6 };
-  if (status === 'inservice')  return { key: 'inservice', dot: 'background:#2a7a4f',                                bar: '#2a7a4f', tint: 'rgba(200,230,197,.35)', pill: { bg: '#c8e6c5', fg: '#1b5e20', label: 'In Svc' }, rowOpacity: 1 };
-  if (status === 'complete')   return { key: 'complete',  dot: 'background:#1a5c7a',                                bar: '#1a5c7a', tint: '',                          pill: { bg: '#cfe3ef', fg: '#0a3a52', label: 'Done'   }, rowOpacity: 1 };
-  return                              { key: 'waiting',   dot: 'background:#d4860a',                                bar: '#d4860a', tint: '',                          pill: { bg: '#ffe0c2', fg: '#6d3200', label: 'Wait'   }, rowOpacity: 0.9 };
+  if (isPaidStatus(status))    return { key: 'paid',      dot: 'background:#8a9298', bar: '#8a9298', tint: '',                   pill: { bg: '#5b6166', fg: '#ffffff', label: 'Paid'       }, rowOpacity: 0.6 };
+  if (status === 'inservice')  return { key: 'inservice', dot: 'background:#1a5252', bar: '#1a5252', tint: 'rgba(26,82,82,.07)', pill: { bg: '#1a5252', fg: '#ffffff', label: 'In Service' }, rowOpacity: 1 };
+  if (status === 'complete')   return { key: 'complete',  dot: 'background:#2a7a4f', bar: '#2a7a4f', tint: '',                   pill: { bg: '#2a7a4f', fg: '#ffffff', label: 'Done'       }, rowOpacity: 1 };
+  return                              { key: 'waiting',   dot: 'background:#d4860a', bar: '#d4860a', tint: '',                   pill: { bg: '#f5c870', fg: '#3a2800', label: 'Waiting'    }, rowOpacity: 0.9 };
 }
 
 export function setAssignmentStatus(entry, serviceId, newStatus, isRevert) {

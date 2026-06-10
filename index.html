@@ -301,11 +301,11 @@ tailwind.config = {
             </button>
             <button onclick="shiftQueueDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
           </div>
-          <button onclick="filterQueue('all')" id="tab-all" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-primary text-on-primary transition-all">All</button>
-          <button onclick="filterQueue('waiting')" id="tab-waiting" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Waiting</button>
-          <button onclick="filterQueue('inservice')" id="tab-inservice" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">In Service</button>
-          <button onclick="filterQueue('complete')" id="tab-complete" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Complete</button>
-          <button onclick="filterQueue('paid')" id="tab-paid" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold bg-surface-container text-on-surface hover:bg-surface-container-high transition-all">Paid</button>
+          <button onclick="filterQueue('all')" id="tab-all" class="tab-btn fchip-on px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">All</button>
+          <button onclick="filterQueue('waiting')" id="tab-waiting" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Waiting</button>
+          <button onclick="filterQueue('inservice')" id="tab-inservice" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">In Service</button>
+          <button onclick="filterQueue('complete')" id="tab-complete" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Done</button>
+          <button onclick="filterQueue('paid')" id="tab-paid" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Paid</button>
           <!-- Done toggle -->
           <button onclick="toggleDoneVisibility()" id="done-toggle-btn"
             class="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-body font-semibold bg-surface-container text-on-surface-variant hover:bg-surface-container-high transition-all border border-outline-variant/40">

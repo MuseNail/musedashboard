@@ -350,7 +350,7 @@ function buildQueueRow(e) {
           <button onclick="updateStatus('${id}','waiting')" title="Back to Waiting" class="${btnCls}" style="background:#f5c870;color:#3a2800;"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
           <button onclick="tryAdvanceStatus('${id}','complete')" title="Complete" class="${btnCls}" style="background:#1a5c7a;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">task_alt</span></button>` : ''}
         ${e.status === 'complete' ? `
-          <button onclick="updateStatus('${id}','inservice')" title="Back to In Service" class="${btnCls}" style="background:#c8e6c5;color:#1b5e20;"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
+          <button onclick="updateStatus('${id}','inservice')" title="Back to In Service" class="${btnCls}" style="background:#cfe0e0;color:#1a5252;"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
           ${ticketTotal(e) > 0
             ? `<button onclick="openSquarePOS('${id}')" title="Take payment" class="${btnCls}" style="background:#1b5e3b;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">point_of_sale</span></button>`
             : `<button onclick="tryAdvanceStatus('${id}','paid')" title="Mark Paid (no charge)" class="${btnCls}" style="background:#2a7a4f;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">paid</span></button>`}` : ''}
@@ -386,9 +386,8 @@ export function removeFromQueue(id) { window.initiateDeleteTransaction?.(id); }
 
 export function filterQueue(filter) {
   ui.currentFilter = filter;
-  document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('bg-primary','text-on-primary'); b.classList.add('bg-surface-container','text-on-surface-variant'); });
-  const active = document.getElementById(`tab-${filter}`);
-  if (active) { active.classList.add('bg-primary','text-on-primary'); active.classList.remove('bg-surface-container','text-on-surface-variant'); }
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('fchip-on'));
+  document.getElementById(`tab-${filter}`)?.classList.add('fchip-on');
   renderQueue();
 }
 
@@ -924,7 +923,7 @@ export function renderGroupAssignContent() {
     const a = (entry.assignments || []).find(x => x.serviceId === sid) || {};
     const st = getAssignmentStatus(entry, a);
     const sug = !a.techId ? (window.suggestTechForService?.(sid) || null) : null;
-    const statusBtnStyle = { waiting:'background:#ffe0b2;color:#6d3200', inservice:'background:#c8e6c5;color:#1b5e20', complete:'background:#cfe3ef;color:#0a3a52', paid:'background:#dde2e5;color:#555', done:'background:#dde2e5;color:#555' }[st] || 'background:#ffe0b2;color:#6d3200';
+    const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#1a5252;color:#fff', complete:'background:#2a7a4f;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[st] || 'background:#f5c870;color:#3a2800';
     const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[st] || 'Waiting';
     const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', paid:'waiting', done:'waiting' }[st];
     // Correct an accidental status change (e.g. marked In Service by mistake). Not offered

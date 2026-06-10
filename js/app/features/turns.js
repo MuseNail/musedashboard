@@ -325,7 +325,7 @@ export function renderTurnsTechGrid() {
         const turnLabel = tt === 'bonus' ? 'Bonus' : (cost === 0 ? '?' : '' + turnLabelNum);
         const ss = getAssignmentStatus(e, a);
         let bg, fg;
-        if (isPaidStatus(ss)) { bg='#dde2e5'; fg='#555'; } else if (ss === 'complete') { bg='#cfe3ef'; fg='#0a3a52'; } else if (ss === 'inservice') { bg='#c8e6c5'; fg='#1b5e20'; } else { bg='#ffe0b2'; fg='#6d3200'; }
+        if (isPaidStatus(ss)) { bg='#dde2e5'; fg='#555'; } else if (ss === 'complete') { bg='#d8ecdf'; fg='#1b4d33'; } else if (ss === 'inservice') { bg='#cfe0e0'; fg='#123c3c'; } else { bg='#ffe9c4'; fg='#5c4010'; }
         const outline = e.groupId ? `;outline:2px solid ${e.groupColor||'#e8a230'};outline-offset:-1px` : '';
         const s = svc(a.serviceId);
         const svcLabel = s ? s.label : (e.services.map(sid => svc(sid)?.label || '?').join(', '));

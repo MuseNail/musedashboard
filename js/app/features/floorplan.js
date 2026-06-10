@@ -134,14 +134,14 @@ function stationHtml(id, entry) {
   const live = !!entry && (entryInservice(entry) || entry.status === 'inservice');
   const complete = !!entry && !live && entry.status === 'complete';
   // Empty (or any station while editing the layout) shows the editor's custom color.
-  // In the live view, an occupied seat MATCHES the customer's status:
-  // GREEN in service, BLUE complete (ready to pay), ORANGE waiting.
+  // In the live view, an occupied seat MATCHES the customer's status (C9 palette):
+  // TEAL in service, GREEN complete/done (ready to pay), AMBER waiting.
   const accent = catColor(stationType(id));
   let bg = (L.fill || accent) + '17', border = L.outline || accent;
   if (entry && !floorEditMode) {
-    if (live) { bg = '#bfe6bd'; border = '#2a7a4f'; }
-    else if (complete) { bg = '#cfe3ef'; border = '#1a5c7a'; }
-    else { bg = '#ffe0c2'; border = '#e8730a'; }
+    if (live) { bg = '#cfe0e0'; border = '#1a5252'; }
+    else if (complete) { bg = '#d8ecdf'; border = '#2a7a4f'; }
+    else { bg = '#ffe9c4'; border = '#d4860a'; }
   }
   let content;
   if (entry) {
@@ -216,7 +216,7 @@ export function renderFloorPlan() {
       <div class="text-[11px] font-body font-semibold text-on-surface-variant">All guests seated — drag a guest here to un-seat.</div></div>`;
     else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not seated — drag onto a station (${unplaced.length})</div>
-      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#c8e6c5' : '#ffe0b2'};color:#1f2937;font-size:11px">${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${escHtml(e.name)}</span></div>`).join('')}</div></div>`;
+      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#cfe0e0' : '#ffe9c4'};color:#1f2937;font-size:11px">${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${escHtml(e.name)}</span></div>`).join('')}</div></div>`;
   }
 
   grid.style.position = 'relative';
