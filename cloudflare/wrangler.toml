@@ -45,6 +45,15 @@ new_sqlite_classes = ["MuseSalonDO"]
 #                         wrangler secret put GCAL_CLIENT_SECRET
 #                       ALSO add this Authorized redirect URI to that OAuth client in Google Cloud Console:
 #                         https://musedashboard.musenailandspa.workers.dev/gcal/callback
+# HELCIM_API_TOKEN    — Helcim "Payment Hardware API" token (api-token header; stays server-side, never in
+#                       the client). Powers /helcim/purchase|refund|transactions. Set once:
+#                         wrangler secret put HELCIM_API_TOKEN
+# HELCIM_WEBHOOK_VERIFIER — Helcim webhook "verifier token" (base64) for HMAC-SHA256 (Svix scheme) signature
+#                       checks on the terminal result webhook. Set once:
+#                         wrangler secret put HELCIM_WEBHOOK_VERIFIER
+#                       Register the webhook in Helcim → All Tools → Integrations → Webhooks with URL:
+#                         https://musedashboard.musenailandspa.workers.dev/terminal/webhook
+#                       (Helcim rejects webhook URLs containing the word "helcim" — hence /terminal/webhook.)
 
 # ── Environment variables ──────────────────────────────────────────────────────
 [vars]

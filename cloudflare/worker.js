@@ -40,6 +40,30 @@ function json(data, status = 200) {
   });
 }
 
+// ── Helcim terminal webhook signature (Svix HMAC-SHA256) ────────────────────
+// Verify by signing "<webhook-id>.<webhook-timestamp>.<rawBody>" with the base64-decoded
+// verifier token; the base64 result must match one of the space-delimited "v1,<sig>" values
+// in the webhook-signature header. (Helcim's webhooks use the Svix signing scheme.)
+function _hcSafeEq(a, b) {
+  if (a.length !== b.length) return false;
+  let r = 0; for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return r === 0;
+}
+async function verifyHelcimWebhook(request, rawBody, verifierToken) {
+  if (!verifierToken) return false;
+  const id = request.headers.get('webhook-id');
+  const ts = request.headers.get('webhook-timestamp');
+  const sigHeader = request.headers.get('webhook-signature') || '';
+  if (!id || !ts || !sigHeader) return false;
+  const secretB64 = verifierToken.startsWith('whsec_') ? verifierToken.slice(6) : verifierToken;
+  let keyBytes;
+  try { keyBytes = Uint8Array.from(atob(secretB64), c => c.charCodeAt(0)); } catch { return false; }
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${id}.${ts}.${rawBody}`));
+  const expected = btoa(String.fromCharCode(...new Uint8Array(mac)));
+  return sigHeader.split(' ').map(p => (p.includes(',') ? p.split(',')[1] : p)).some(p => _hcSafeEq(p, expected));
+}
+
 // Stale-write guard: true when the stored copy is strictly NEWER (by updatedAt) than an
 // incoming write — so a lingering stale device copy can't clobber a good queue entry / record
 // (the fee-drop root cause). Writes missing a timestamp on either side are never treated as stale.
@@ -376,6 +400,53 @@ export default {
       }
 
       return json({ error: 'Not found' }, 404);
+    }
+
+    // ── Helcim (Payment Hardware API — Smart Terminal) ───────────────────────────
+    // The api-token stays server-side (HELCIM_API_TOKEN secret), same as the Square proxy.
+    // /helcim/ping       GET  → list paired terminals (confirm token + device code)
+    // /helcim/purchase   POST → start a card purchase on the terminal { deviceCode, amount(dollars), invoiceNumber }
+    // /helcim/result     GET  → ?invoiceNumber= → look up the card transaction(s) (poll / reconcile / fallback)
+    // /terminal/webhook  POST → Helcim pushes the result here (HMAC-verified; NOT origin-gated — Helcim isn't a browser)
+    if (path === '/helcim/ping' && method === 'GET') {
+      const r = await fetch('https://api.helcim.com/v2/devices/?limit=25', { headers: { 'api-token': env.HELCIM_API_TOKEN, 'accept': 'application/json' } });
+      const body = await r.text();
+      if (r.status >= 400) console.error('[helcim ping]', r.status, body.slice(0, 200));
+      return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+    }
+    if (path === '/helcim/purchase' && method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const deviceCode    = String(b.deviceCode || '').trim();
+      const amount        = Number(b.amount);                 // DOLLARS — Helcim expects dollars, not cents
+      const invoiceNumber = String(b.invoiceNumber || '').trim();
+      if (!deviceCode)        return json({ error: 'deviceCode required' }, 400);
+      if (!(amount > 0))      return json({ error: 'amount (dollars) must be > 0' }, 400);
+      if (!invoiceNumber)     return json({ error: 'invoiceNumber required' }, 400);
+      const r = await fetch(`https://api.helcim.com/v2/devices/${encodeURIComponent(deviceCode)}/payment/purchase`, {
+        method:  'POST',
+        headers: { 'api-token': env.HELCIM_API_TOKEN, 'Content-Type': 'application/json', 'accept': 'application/json' },
+        body:    JSON.stringify({ currency: 'USD', transactionAmount: amount, invoiceNumber, ...(b.customerCode ? { customerCode: String(b.customerCode) } : {}) }),
+      });
+      const body = await r.text();
+      if (r.status >= 400) console.error('[helcim purchase]', r.status, body.slice(0, 300));
+      return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+    }
+    if (path === '/helcim/result' && method === 'GET') {
+      const inv = url.searchParams.get('invoiceNumber') || '';
+      if (!inv) return json({ error: 'invoiceNumber required' }, 400);
+      const r = await fetch(`https://api.helcim.com/v2/card-transactions?invoiceNumber=${encodeURIComponent(inv)}`, { headers: { 'api-token': env.HELCIM_API_TOKEN, 'accept': 'application/json' } });
+      const body = await r.text();
+      if (r.status >= 400) console.error('[helcim result]', r.status, body.slice(0, 200));
+      return new Response(body, { status: r.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+    }
+    if (path === '/terminal/webhook' && method === 'POST') {
+      const raw = await request.text();
+      const ok  = await verifyHelcimWebhook(request, raw, env.HELCIM_WEBHOOK_VERIFIER);
+      if (!ok) { console.error('[terminal webhook] signature verify FAILED'); return new Response('bad signature', { status: 401 }); }
+      let evt = {}; try { evt = JSON.parse(raw); } catch {}
+      console.log('[terminal webhook] verified:', JSON.stringify(evt).slice(0, 400));
+      // Phase 1b: on a cardTransaction event → GET the full txn → DO finalize (mark the ticket paid) + broadcast.
+      return new Response('{"ok":true}', { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
 
     // ── Square Proxy ──────────────────────────────────────────────────────────
