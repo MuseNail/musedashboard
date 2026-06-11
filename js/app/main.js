@@ -504,6 +504,7 @@ function boot() {
 
   wireKeyboard();
   armMidnightRollover();
+  utils.initAmountFieldCalc();   // desktop: evaluate "40+5" typed into an amount field on blur
   checkAppVersion();
   registerServiceWorker();
 }

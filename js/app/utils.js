@@ -467,6 +467,42 @@ export function commitNumpad() {
   const m = document.getElementById('numpad-modal');
   if (m && !m.classList.contains('hidden')) numpadConfirm();
 }
+
+// ── Desktop "silent calculator" on amount fields (QuickBooks-style) ──────────
+// Type an arithmetic expression into any money/amount field ("40+5*2") and it evaluates when you
+// leave the field. LEFT-TO-RIGHT running eval — same as the on-screen numpad, so iPad and desktop
+// agree (40+5*2 = 90, not 50). Safe: a hand-written tokenizer, never eval(). Returns null when the
+// value isn't an expression (a plain number is left untouched).
+export function evalAmountExpression(str) {
+  const norm = String(str == null ? '' : str).replace(/×/g, '*').replace(/÷/g, '/').replace(/[^0-9.+\-*/]/g, '');
+  if (!/\d\s*[+\-*/]/.test(norm)) return null;   // needs a number followed by an operator → it's an expression
+  const tokens = norm.match(/(\d+\.?\d*|\.\d+|[+\-*/])/g);
+  if (!tokens) return null;
+  let acc = parseFloat(tokens[0]); if (isNaN(acc)) return null;
+  for (let i = 1; i + 1 < tokens.length; i += 2) {
+    const op = tokens[i], n = parseFloat(tokens[i + 1]);
+    if (isNaN(n)) break;
+    acc = op === '+' ? acc + n : op === '-' ? acc - n : op === '*' ? acc * n : op === '/' ? (n === 0 ? acc : acc / n) : acc;
+  }
+  return Math.round(acc * 100) / 100;
+}
+// Install once: on blur of an amount-style input (inputmode none/decimal, not a phone field),
+// replace an arithmetic expression with its result and fire `input` so downstream totals recompute.
+// Harmless on touch (the numpad already writes a plain number → no operator → ignored).
+let _amountCalcInstalled = false;
+export function initAmountFieldCalc() {
+  if (_amountCalcInstalled) return; _amountCalcInstalled = true;
+  document.addEventListener('focusout', e => {
+    const el = e.target;
+    if (!el || el.tagName !== 'INPUT' || el.type === 'tel') return;
+    const im = (el.getAttribute('inputmode') || '').toLowerCase();
+    if (im !== 'none' && im !== 'decimal') return;             // amount-style fields only
+    const result = evalAmountExpression(el.value);
+    if (result == null || String(result) === el.value) return;
+    el.value = String(result);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
 function _closeNumpadModal() {
   if (_numpadHostObs) { _numpadHostObs.disconnect(); _numpadHostObs = null; }
   const m = document.getElementById('numpad-modal');
