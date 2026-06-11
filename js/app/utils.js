@@ -203,6 +203,36 @@ export function formatPhone(input) {
 // ── Numeric Keypad ────────────────────────────────
 let _numpadTarget = null, _numpadRaw = '', _numpadMode = 'cost';
 let _numpadHostObs = null;
+
+// ── Money-field calculator (mode 'cost') ─────────────────────────────────────
+// The money numpad doubles as an adding machine: digits build a plain-dollar operand ("40", "12.50")
+// and the operator keys (+ − × ÷) chain them with LEFT-TO-RIGHT running evaluation (40 + 5 × 2 = 90,
+// like a cash register), keeping a small receipt tape. The field updates live to the running result,
+// so any close path keeps it (no "=" needed). _numpadRaw holds the operand currently being typed.
+let _calcAcc = null;    // running accumulated result (null until the first operator commits)
+let _calcOp = null;     // pending operator: '+' '-' '*' '/'
+let _calcTape = [];      // committed receipt lines, e.g. ['40.00', '+ 5.00']
+const _isCalc = () => _numpadMode === 'cost';
+const _opSym = op => ({ '+': '+', '-': '−', '*': '×', '/': '÷' }[op] || op);
+const _operandVal = () => parseFloat(_numpadRaw || '0') || 0;
+function _applyOp(a, op, b) { a = a || 0; if (op === '+') return a + b; if (op === '-') return a - b; if (op === '*') return a * b; if (op === '/') return b === 0 ? a : a / b; return b; }
+// The live evaluated value = acc combined with the operand being typed (rounded to cents).
+function _calcValue() {
+  let v;
+  if (_calcOp === null) v = _operandVal();                 // no operator yet → just the operand
+  else if (_numpadRaw === '') v = _calcAcc;                // operator pressed, awaiting the next operand
+  else v = _applyOp(_calcAcc, _calcOp, _operandVal());
+  return Math.round((v || 0) * 100) / 100;
+}
+function _calcReset() { _calcAcc = null; _calcOp = null; _calcTape = []; }
+// Commit the current operand under the pending operator, then arm `op` as the next operator.
+function _calcPushOp(op) {
+  if (_numpadRaw === '' && _calcAcc === null) { _calcOp = op; return; }   // leading operator → just arm it
+  if (_calcAcc === null) { _calcAcc = _operandVal(); _calcTape = [_operandVal().toFixed(2)]; }
+  else if (_numpadRaw !== '') { _calcTape.push(`${_opSym(_calcOp)} ${_operandVal().toFixed(2)}`); _calcAcc = _applyOp(_calcAcc, _calcOp, _operandVal()); }
+  _calcOp = op;
+  _numpadRaw = '';
+}
 // Auto-close the numpad if the modal/popup that owns the field it's editing closes
 // (gets `hidden`, display:none, or removed) — so closing a modal also dismisses the
 // numpad without needing to hit OK. Watches the field's nearest containing modal.
@@ -231,16 +261,17 @@ export function openNumpad(inputEl, label, mode) {
     const n = parseInt(existing.replace(/\./g, ''), 10);
     _numpadRaw = isFinite(n) && n > 0 ? String(n) : '';
     document.getElementById('numpad-plus-key').textContent = '';
-  } else if (_wholeDollars()) {
-    // Whole-dollar mode: keep the entered value as a plain decimal string ("45", "45.5").
-    _numpadRaw = existing && !isNaN(parseFloat(existing)) ? String(parseFloat(existing)) : '';
-    document.getElementById('numpad-plus-key').textContent = '+';
   } else {
-    _numpadRaw = existing && !isNaN(parseFloat(existing)) ? Math.round(parseFloat(existing) * 100).toString() : '';
+    // Money mode = the calculator: plain-dollar operand entry ("45", "12.50") + operators with a tape.
+    _numpadRaw = existing && !isNaN(parseFloat(existing)) ? String(parseFloat(existing)) : '';
+    _calcReset();
     document.getElementById('numpad-plus-key').textContent = '+';
   }
   document.getElementById('numpad-label').textContent = label || (_numpadMode === 'percent' ? 'Percent' : _numpadMode === 'int' ? 'Count' : 'Cost');
   document.getElementById('numpad-dot-key').textContent  = _numpadMode === 'int' ? '' : '.';
+  // Operator rail + receipt tape only in money mode (hidden for percent/int).
+  const ops = document.getElementById('numpad-ops'); if (ops) ops.style.display = _isCalc() ? 'flex' : 'none';
+  const tape = document.getElementById('numpad-tape'); if (tape) tape.classList.toggle('hidden', !_isCalc());
   _numpadUpdateDisplay();
   _setNumpadChrome(false);   // amounts: dimmed modal (no autocomplete to preserve)
   const m = document.getElementById('numpad-modal');
@@ -313,12 +344,9 @@ function _numpadSyncAmount() {
   if (_numpadMode === 'percent') {
     const v = parseFloat(_numpadRaw);
     _numpadTarget.value = !isNaN(v) && v > 0 ? String(v) : '';
-  } else if (_wholeDollars()) {
-    const v = parseFloat(_numpadRaw || '0') || 0;
-    _numpadTarget.value = v > 0 ? String(v) : '';
   } else {
-    const cents = parseInt(_numpadRaw || '0', 10);
-    _numpadTarget.value = cents > 0 ? (cents / 100).toString() : '';
+    const v = _calcValue();   // money mode: the live running result
+    _numpadTarget.value = v > 0 ? String(v) : '';
   }
   _numpadTarget.dispatchEvent(new Event('input', { bubbles: true }));
 }
@@ -342,11 +370,16 @@ function _numpadUpdateDisplay() {
     el.textContent = f || '—';
   } else if (_numpadMode === 'percent') {
     el.textContent = (_numpadRaw || '0') + '%';
-  } else if (_wholeDollars()) {
-    el.textContent = '$' + (parseFloat(_numpadRaw || '0') || 0).toFixed(2);
   } else {
-    const cents = parseInt(_numpadRaw || '0', 10);
-    el.textContent = '$' + (cents / 100).toFixed(2);
+    // Money mode = the calculator: big display shows the running value; the tape shows the steps.
+    el.textContent = '$' + _calcValue().toFixed(2);
+    const tape = document.getElementById('numpad-tape');
+    if (tape) {
+      const lines = [..._calcTape];
+      if (_numpadRaw !== '') lines.push((_calcOp && _calcAcc !== null ? _opSym(_calcOp) + ' ' : '') + _numpadRaw);   // live current operand
+      tape.innerHTML = lines.length > 1 ? lines.map(l => `<div>${l}</div>`).join('') : '';
+      tape.scrollTop = tape.scrollHeight;
+    }
   }
 }
 
@@ -380,30 +413,22 @@ export function numpadKey(key) {
     _numpadRaw = raw; _numpadUpdateDisplay(); _numpadSyncAmount();
     return;
   }
-  if (key === '+') return;
-  if (_wholeDollars()) {
-    // Digits build whole dollars; the dot adds optional cents (max 2 places).
-    let raw = _numpadRaw;
-    if (key === '.') { if (raw.includes('.')) return; raw = (raw === '' ? '0' : raw) + '.'; }
-    else if (key === '00') {
-      if (raw.includes('.')) { const dec = raw.split('.')[1] || ''; if (dec.length === 0) raw += '00'; else if (dec.length === 1) raw += '0'; }
-      else if (raw !== '' && raw !== '0') raw += '00';
-    } else {
-      if (raw.includes('.')) { const [i, d = ''] = raw.split('.'); if (d.length >= 2) return; raw = i + '.' + d + key; }
-      else raw = raw === '0' ? key : raw + key;
-    }
-    if (raw.split('.')[0].length > 6) return;
-    _numpadRaw = raw; _numpadUpdateDisplay(); _numpadSyncAmount();
-    return;
-  }
-  if (key === '.') return;
+  // Money mode = the calculator. Operators chain operands (left-to-right running eval); digits and
+  // the dot build the current plain-dollar operand (max 2 decimals), same as whole-dollar entry.
+  if (key === '+' || key === '-' || key === '*' || key === '/') { _calcPushOp(key); _numpadUpdateDisplay(); _numpadSyncAmount(); return; }
   let raw = _numpadRaw;
-  if (key === '00') { if (raw === '' || raw === '0') return; raw += '00'; }
-  else { raw = raw === '0' ? key : raw + key; }
-  if (raw.length > 6) return;   // reject an over-length keystroke (don't truncate, which would jump to a wrong amount)
+  if (key === '.') { if (raw.includes('.')) return; raw = (raw === '' ? '0' : raw) + '.'; }
+  else if (key === '00') {
+    if (raw.includes('.')) { const dec = raw.split('.')[1] || ''; if (dec.length === 0) raw += '00'; else if (dec.length === 1) raw += '0'; }
+    else if (raw !== '' && raw !== '0') raw += '00';
+  } else {
+    if (raw.includes('.')) { const [i, d = ''] = raw.split('.'); if (d.length >= 2) return; raw = i + '.' + d + key; }
+    else raw = raw === '0' ? key : raw + key;
+  }
+  if (raw.split('.')[0].length > 6) return;
   _numpadRaw = raw; _numpadUpdateDisplay(); _numpadSyncAmount();
 }
-export function numpadClear() { _numpadRaw = ''; _numpadUpdateDisplay(); if (_numpadMode === 'phone') _numpadSyncPhone(); else _numpadSyncAmount(); }
+export function numpadClear() { _numpadRaw = ''; if (_isCalc()) _calcReset(); _numpadUpdateDisplay(); if (_numpadMode === 'phone') _numpadSyncPhone(); else _numpadSyncAmount(); }
 
 export function numpadBackspace() { _numpadRaw = _numpadRaw.slice(0, -1); _numpadUpdateDisplay(); if (_numpadMode === 'phone') _numpadSyncPhone(); else _numpadSyncAmount(); }
 
@@ -421,12 +446,9 @@ export function numpadConfirm() {
     } else if (_numpadMode === 'percent') {
       const v = parseFloat(_numpadRaw);
       _numpadTarget.value = !isNaN(v) && v > 0 ? String(v) : '';
-    } else if (_wholeDollars()) {
-      const v = parseFloat(_numpadRaw || '0') || 0;
-      _numpadTarget.value = v > 0 ? String(v) : '';
     } else {
-      const cents = parseInt(_numpadRaw || '0', 10);
-      _numpadTarget.value = cents > 0 ? (cents / 100).toString() : '';
+      const v = _calcValue();   // money mode: the final running result
+      _numpadTarget.value = v > 0 ? String(v) : '';
     }
     _numpadTarget.dispatchEvent(new Event('input', { bubbles: true }));
   }

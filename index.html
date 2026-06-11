@@ -2690,6 +2690,8 @@ tailwind.config = {
     <!-- Matching customers (phone mode) — mirrored from the field's autocomplete, which the
          numpad sheet otherwise covers on the iPad. Tap a match → fills the form + closes. -->
     <div id="numpad-ac" class="hidden border-b border-surface-container-high max-h-44 overflow-y-auto no-scroll" onclick="setTimeout(()=>dismissNumpad(),50)"></div>
+    <!-- Calculator receipt tape (money mode only) — running list of the operands/operators typed -->
+    <div id="numpad-tape" class="hidden px-6 pt-2 text-right text-xs text-on-surface-variant max-h-16 overflow-y-auto no-scroll" style="font-variant-numeric:tabular-nums;line-height:1.5"></div>
     <!-- Display -->
     <div class="px-6 pt-5 pb-3 border-b border-surface-container-high flex items-end justify-between gap-3">
       <div class="min-w-0">
@@ -2701,7 +2703,8 @@ tailwind.config = {
       </button>
     </div>
     <!-- Keys -->
-    <div class="grid grid-cols-4 gap-px bg-surface-container-high" style="padding:1px">
+    <div style="display:flex;gap:1px;background:var(--surface-container-high,#c2cacd)">
+    <div class="grid grid-cols-4 gap-px bg-surface-container-high flex-1" style="padding:1px">
       <button onpointerdown="event.preventDefault();numpadKey('1')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">1</button>
       <button onpointerdown="event.preventDefault();numpadKey('2')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">2</button>
       <button onpointerdown="event.preventDefault();numpadKey('3')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">3</button>
@@ -2722,6 +2725,13 @@ tailwind.config = {
       <button onpointerdown="event.preventDefault();numpadKey('00')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">00</button>
       <button onpointerdown="event.preventDefault();numpadKey('0')" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">0</button>
       <button onpointerdown="event.preventDefault();numpadKey('.')" id="numpad-dot-key" class="numpad-key bg-surface-container-lowest text-on-surface text-2xl font-headline font-semibold py-5 hover:bg-surface-container active:bg-surface-container-high transition-colors">.</button>
+    </div>
+    <!-- Operator rail (money mode only; shown by openNumpad). The grid's + key is the 4th operator. -->
+    <div id="numpad-ops" style="display:none;flex-direction:column;gap:1px;background:var(--surface-container-high,#c2cacd)">
+      <button onpointerdown="event.preventDefault();numpadKey('/')" class="numpad-key bg-surface-container-lowest text-primary text-2xl font-headline font-bold hover:bg-surface-container active:bg-surface-container-high transition-colors" style="flex:1;width:60px">÷</button>
+      <button onpointerdown="event.preventDefault();numpadKey('*')" class="numpad-key bg-surface-container-lowest text-primary text-2xl font-headline font-bold hover:bg-surface-container active:bg-surface-container-high transition-colors" style="flex:1;width:60px">×</button>
+      <button onpointerdown="event.preventDefault();numpadKey('-')" class="numpad-key bg-surface-container-lowest text-primary text-2xl font-headline font-bold hover:bg-surface-container active:bg-surface-container-high transition-colors" style="flex:1;width:60px">−</button>
+    </div>
     </div>
   </div>
 </div>
