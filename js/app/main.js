@@ -120,7 +120,7 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
-  { v: 'v4.79', items: [
+  { v: 'v4.80', items: [
     { icon: 'palette',       t: 'Clearer status colors',     d: 'In Service is now green and Done (waiting to pay) is now blue — easy to tell apart at a glance on the Turns and Queue boards.' },
     { icon: 'calculate',     t: 'Calculator in money fields', d: 'Type math right in any price/amount box — e.g. 40+5+10. On the iPad keypad use the + − × ÷ keys; on a computer just type it. A running tape shows the total; press Enter to confirm the number, Enter again to save.' },
     { icon: 'groups',        t: 'Per-person subtotals',      d: 'Assign & Price now shows each guest’s subtotal just above the Party Total.' },
@@ -133,7 +133,11 @@ const WHATS_NEW = [
 ];
 let _whatsNewChecked = false;
 function maybeShowWhatsNew() {
-  if (_whatsNewChecked) return; _whatsNewChecked = true;
+  if (_whatsNewChecked) return;
+  // Staff dashboard only (never the customer kiosk). Don't mark checked until the desk is actually
+  // active — so an early call while still on the welcome screen retries later instead of blocking.
+  if (!document.getElementById('screen-desk')?.classList.contains('active')) return;
+  _whatsNewChecked = true;
   let seen = null; try { seen = localStorage.getItem('muse_whatsnew_seen'); } catch {}
   if (seen === APP_VERSION) return;                                   // already saw this version
   const usedBefore = (() => { try { return !!(localStorage.getItem('muse_device_id') || localStorage.getItem('muse_state_cache')); } catch { return false; } })();
@@ -221,6 +225,7 @@ function showDashPanel(panel) {
     const di = document.getElementById('turns-history-date'); if (di && !di.value) di.value = utils.todayStr();
     turns.renderTurns();
   }
+  maybeShowWhatsNew();   // fallback trigger: catches the dashboard being reached by any path (gated to the desk screen)
 }
 function toggleStaffScheduleView() {
   const listView = document.getElementById('staff-list-view'), scheduleView = document.getElementById('staff-schedule-view'), btn = document.getElementById('schedule-view-btn');
