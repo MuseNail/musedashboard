@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — Payroll: pick staff before printing Staff PDF</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --primary:#1a5252; --surface:#f7f8f8; --lowest:#fff; --container:#eceeee; --high:#dde1e1; --on-surface:#171d1d; --variant:#3f4948; --outline:#6f7979; }
+  body { background:#8b9494; font-family:Inter,sans-serif; color:var(--on-surface); }
+  .font-headline { font-family:Manrope,sans-serif; }
+</style>
+</head>
+<body class="flex items-start justify-center gap-10 py-10 flex-wrap">
+
+<!-- The picker modal -->
+<div>
+  <div class="text-center font-headline font-bold text-sm mb-2 text-white/90">Tapping “Staff PDF” now opens this picker</div>
+  <div class="w-[380px] rounded-2xl p-5 shadow-2xl" style="background:var(--lowest)">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-headline font-bold text-lg">Print staff receipts</h3>
+      <button class="w-8 h-8 rounded-full flex items-center justify-center" style="color:var(--outline)">✕</button>
+    </div>
+    <p class="text-xs mb-3" style="color:var(--variant)">Jun 7 – 13 · checked staff get a receipt</p>
+    <div class="flex items-center gap-4 mb-2 text-sm font-semibold" style="color:var(--primary)">
+      <button class="hover:underline">Select all</button>
+      <button class="hover:underline" style="color:var(--outline)">Deselect all</button>
+      <span class="ml-auto text-xs font-normal" style="color:var(--outline)">7 of 9 selected</span>
+    </div>
+    <div class="rounded-xl border overflow-y-auto" style="border-color:var(--high);max-height:330px">
+      <label class="flex items-center gap-3 px-4 py-2.5 border-b cursor-pointer hover:bg-gray-50" style="border-color:var(--high)">
+        <input type="checkbox" checked class="w-5 h-5 accent-[#1a5252]"><span class="font-semibold">Christina</span><span class="ml-auto text-sm" style="color:var(--outline)">$1,240</span>
+      </label>
+      <label class="flex items-center gap-3 px-4 py-2.5 border-b cursor-pointer hover:bg-gray-50" style="border-color:var(--high)">
+        <input type="checkbox" checked class="w-5 h-5 accent-[#1a5252]"><span class="font-semibold">Emily</span><span class="ml-auto text-sm" style="color:var(--outline)">$985</span>
+      </label>
+      <label class="flex items-center gap-3 px-4 py-2.5 border-b cursor-pointer hover:bg-gray-50" style="border-color:var(--high)">
+        <input type="checkbox" class="w-5 h-5 accent-[#1a5252]"><span class="font-semibold">John</span><span class="ml-auto text-sm" style="color:var(--outline)">$770</span>
+      </label>
+      <label class="flex items-center gap-3 px-4 py-2.5 border-b cursor-pointer hover:bg-gray-50" style="border-color:var(--high)">
+        <input type="checkbox" checked class="w-5 h-5 accent-[#1a5252]"><span class="font-semibold">Kat</span><span class="ml-auto text-sm" style="color:var(--outline)">$1,105</span>
+      </label>
+      <label class="flex items-center gap-3 px-4 py-2.5 border-b cursor-pointer hover:bg-gray-50" style="border-color:var(--high)">
+        <input type="checkbox" checked class="w-5 h-5 accent-[#1a5252]"><span class="font-semibold">Lee</span><span class="ml-auto text-sm" style="color:var(--outline)">$640</span>
+      </label>
+      <label class="flex items-center gap-3 px-4 py-2.5 border-b cursor-pointer hover:bg-gray-50" style="border-color:var(--high)">
+        <input type="checkbox" class="w-5 h-5 accent-[#1a5252]"><span class="font-semibold">Lyn</span><span class="ml-auto text-sm" style="color:var(--outline)">$890</span>
+      </label>
+      <label class="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50">
+        <input type="checkbox" checked class="w-5 h-5 accent-[#1a5252]"><span class="font-semibold">Mary</span><span class="ml-auto text-sm" style="color:var(--outline)">$1,030</span>
+      </label>
+    </div>
+    <div class="flex justify-end gap-2 mt-4">
+      <button class="px-4 py-2 rounded-xl border font-semibold text-sm" style="border-color:var(--high);color:var(--variant)">Cancel</button>
+      <button class="px-5 py-2 rounded-xl text-white font-headline font-bold text-sm" style="background:var(--primary)">Print 7 receipts</button>
+    </div>
+  </div>
+</div>
+
+<!-- Notes on the other two changes -->
+<div class="w-[430px] rounded-2xl p-5 text-sm leading-relaxed" style="background:rgba(255,255,255,.95)">
+  <div class="font-headline font-bold text-base mb-2">Also in this batch (no new UI)</div>
+  <p class="mb-3"><b>2 — Manager PDF smart pages:</b> instead of one ultra-wide table that clips
+  staff off the right edge, the PDF now prints <b>4 staff per landscape page</b> — each page repeats
+  the title, period, and column headers, and the row labels (Total / Check / Cash / By-day) appear on
+  every page. Long periods also repeat the header when a page breaks vertically.</p>
+  <p class="mb-3"><b>3 — Excel export with per-staff tabs:</b> the CSV button becomes <b>Excel (.xlsx)</b>.
+  First tab = the same totals table as today. Then <b>one tab per staff</b>: their pay summary
+  (billed, commission, refunds, check, deduction, cash, total), a by-day table, and an itemized
+  list of every service line (date · customer · service · billed · commission). Amounts are real
+  numbers so you can sum/filter in Excel.</p>
+  <p style="color:var(--variant)"><b>Consistency fix riding along:</b> the PDF + Excel exports now use the
+  same numbers as the on-screen page — manual right-click overrides and locked-period snapshots
+  are honored (previously the exports silently recomputed from the live rules).</p>
+</div>
+
+</body>
+</html>

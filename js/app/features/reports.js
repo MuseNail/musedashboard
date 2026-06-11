@@ -3,7 +3,7 @@
 //   record.save (complete/historical/refund), record.delete (soft delete).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, localDateStr, todayStr, partyLetterMap, ticketTotal, newEntryId, dateBtnLabel } from '../utils.js';
+import { showToast, localDateStr, todayStr, partyLetterMap, ticketTotal, newEntryId, dateBtnLabel, xlsxBlob } from '../utils.js';
 import { canDo, getActiveUser } from '../session.js';
 import { classifyTurn } from './turns.js';
 import { isPaidStatus } from './status.js';
@@ -1795,32 +1795,109 @@ export function tcSave() {
   closeDrillDown(); renderPayrollPage();
 }
 export function tcCancel() { _tcDraft = null; _tcUser = null; _tcOrig = ''; closeDrillDown(); }
-function payrollExportRows() {
-  const cur = payrollPeriodAt(_payrollOffset), data = payrollRange(cur.from, cur.to), perKey = localDateStr(cur.from);
-  const order = cfg().turns_order || [];
-  return {
-    cur,
-    rows: (cfg().staff || []).filter(s => !cfg().inactive_staff.includes(s.id))
-      .sort((a, b) => { const ra = order.indexOf(a.id), rb = order.indexOf(b.id); return (ra === -1 ? 1e9 : ra) - (rb === -1 ? 1e9 : rb); })
-      .map(t => { const c = data[t.id] || { billed: 0, commission: 0, refund: 0, refundComm: 0 }; const net = _netComm(c); const chk = techCheckAmount(t, net, perKey); const cashGross = Math.max(0, net - chk); const ded = techCashDeduction(t, cashGross); const cash = Math.max(0, cashGross - ded); return { name: t.name, billed: c.billed, commission: c.commission, refund: c.refund || 0, check: chk, deduction: ded, cash, total: chk + cash }; })
-      .filter(r => r.billed || r.commission || r.check || r.refund),
-  };
+// Apply the same per-period adjustments the Payroll PAGE applies, so every export
+// matches what's on screen: manual right-click overrides (config.payroll_adj) and,
+// when the period is locked, the frozen snapshot (config.payroll_locks).
+function payrollComputedRows() {
+  const { cur, T, curDays, prevDays } = payrollGrid();
+  const curKey = localDateStr(cur.from);
+  const adjAll = cfg().payroll_adj || {};
+  T.forEach(x => {
+    const a = adjAll[x.tech.id + ':' + curKey] || {};
+    x.adj = a;
+    if (a.check != null || a.deduction != null || a.cash != null) {
+      const cComm = _netComm(x.c);
+      const cChk = a.check != null ? a.check : techCheckAmount(x.tech, cComm, curKey);
+      const gross = Math.max(0, cComm - cChk);
+      const cDed = a.deduction != null ? a.deduction : techCashDeduction(x.tech, gross);
+      const cCash = a.cash != null ? a.cash : Math.max(0, gross - cDed);
+      x.cChk = cChk; x.cDed = cDed; x.cCash = cCash; x.cTotal = cChk + cCash;
+    }
+  });
+  const lock = (cfg().payroll_locks || {})[curKey];
+  if (lock) {
+    const byId = {}; (lock.techs || []).forEach(s => byId[s.techId] = s);
+    T.forEach(x => {
+      const s = byId[x.tech.id]; if (!s) return;
+      x.c = { ...x.c, billed: s.billed, commission: s.commission, refund: s.refund || 0, refundComm: s.refundComm || 0, refundNotes: s.refundNotes || x.c.refundNotes, daily: s.daily || x.c.daily };
+      x.cChk = s.check; x.cDed = s.deduction; x.cCash = s.cash; x.cTotal = s.total;
+    });
+  }
+  return { cur, T, curDays, prevDays, locked: !!lock };
 }
-export function payrollExportCSV() {
-  const { cur, rows } = payrollExportRows();
+// Every paid service line a tech worked in the period — the per-staff "itemized" tab.
+function payrollTechLines(techId, from, to) {
+  const tech = staffById(techId), pct = tech?.commission != null ? tech.commission : 0;
+  const inRange = r => { const d = new Date(r.checkinTime); return d >= from && d <= to; };
+  const lines = [];
+  buildCombinedRecords().filter(r => r.status !== 'deleted' && isPaidStatus(r.status) && inRange(r)).forEach(r => {
+    (r.assignments || []).forEach(a => {
+      if (a.techId !== techId) return;
+      const cost = a.cost || 0;
+      lines.push({
+        date: localDateStr(new Date(r.checkinTime)),
+        customer: r.name || 'Guest',
+        service: (cfg().services || []).find(s => s.id === a.serviceId)?.label || a.serviceId || 'Service',
+        billed: cost, comm: cost * pct / 100,
+      });
+    });
+  });
+  return lines.sort((a, b) => a.date.localeCompare(b.date) || a.customer.localeCompare(b.customer));
+}
+// Excel workbook: a Totals tab (same layout the old CSV had) + one tab per tech with
+// their pay summary, by-day table, and itemized service lines. Amounts are NUMBERS so
+// the owner can sum/filter in Excel. Numbers match the on-screen page (overrides + locks).
+export function payrollExportExcel() {
+  const { cur, T, curDays, locked } = payrollComputedRows();
+  const rows = T.filter(x => x.c.billed || x.c.refund || x.cChk || x.cCash);
   if (!rows.length) { showToast('No payroll data for this period.'); return; }
   const fmt = d => d.toLocaleDateString();
-  const t = k => rows.reduce((s, r) => s + r[k], 0);
-  const matrix = [
-    ['Muse Nails & Spa — Payroll'], [`Pay period: ${fmt(cur.from)} – ${fmt(cur.to)}`], [],
-    ['Technician', 'Billed', 'Commission', 'Refunds', 'Check', 'Cash deduction', 'Cash', 'Total paid'],
-    ...rows.map(r => [r.name, `$${r.billed.toFixed(2)}`, `$${r.commission.toFixed(2)}`, r.refund ? `-$${Math.abs(r.refund).toFixed(2)}` : '$0.00', `$${r.check.toFixed(2)}`, r.deduction ? `-$${r.deduction.toFixed(2)}` : '$0.00', `$${r.cash.toFixed(2)}`, `$${r.total.toFixed(2)}`]),
-    [], ['Totals', `$${t('billed').toFixed(2)}`, `$${t('commission').toFixed(2)}`, t('refund') ? `-$${Math.abs(t('refund')).toFixed(2)}` : '$0.00', `$${t('check').toFixed(2)}`, t('deduction') ? `-$${t('deduction').toFixed(2)}` : '$0.00', `$${t('cash').toFixed(2)}`, `$${t('total').toFixed(2)}`],
-  ];
-  const csv = matrix.map(line => line.map(c => `"${String(c == null ? '' : c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-  const url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' }));
-  const a = document.createElement('a'); a.href = url; a.download = `muse-payroll-${localDateStr(cur.from)}.csv`; a.click(); URL.revokeObjectURL(url);
-  showToast('Payroll exported as CSV');
+  const r2 = n => Math.round((n || 0) * 100) / 100;
+  const period = `Pay period: ${fmt(cur.from)} – ${fmt(cur.to)}${locked ? ' · LOCKED snapshot' : ''}`;
+  const sum = k => r2(rows.reduce((s, x) => s + (k(x) || 0), 0));
+  const totals = {
+    name: 'Totals',
+    rows: [
+      ['Muse Nails & Spa — Payroll'], [period], [],
+      ['Technician', 'Billed', 'Commission', 'Refunds', 'Check', 'Cash deduction', 'Cash', 'Total paid'],
+      ...rows.map(x => [x.tech.name, r2(x.c.billed), r2(x.c.commission), x.c.refund ? -r2(Math.abs(x.c.refund)) : 0, r2(x.cChk), x.cDed ? -r2(x.cDed) : 0, r2(x.cCash), r2(x.cTotal)]),
+      [],
+      ['Totals', sum(x => x.c.billed), sum(x => x.c.commission), -sum(x => Math.abs(x.c.refund || 0)), sum(x => x.cChk), -sum(x => x.cDed), sum(x => x.cCash), sum(x => x.cTotal)],
+    ],
+  };
+  const techSheets = rows.map(x => {
+    const daily = curDays.map(day => {
+      const d = x.c.daily[day] || { billed: 0, commission: 0 };
+      const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+      return [dl, r2(d.billed), r2(d.commission)];
+    });
+    const lines = payrollTechLines(x.tech.id, cur.from, cur.to);
+    return {
+      name: x.tech.name || 'Tech',
+      rows: [
+        [`${x.tech.name}${x.tech.commission != null ? ` — ${x.tech.commission}% commission` : ''}`], [period], [],
+        ['Summary'],
+        ['Billed', r2(x.c.billed)],
+        ...(x.c.refund ? [['Refunds', -r2(Math.abs(x.c.refund))]] : []),
+        ['Commission', r2(x.c.commission)],
+        ['Check', r2(x.cChk)],
+        ...(x.cDed ? [['Cash deduction', -r2(x.cDed)]] : []),
+        ['Cash', r2(x.cCash)],
+        ['Total paid', r2(x.cTotal)],
+        [],
+        ['By day', 'Billed', 'Commission'],
+        ...daily,
+        [],
+        ['Itemized services'],
+        ['Date', 'Customer', 'Service', 'Billed', 'Commission'],
+        ...lines.map(l => [l.date, l.customer, l.service, r2(l.billed), r2(l.comm)]),
+      ],
+    };
+  });
+  const blob = xlsxBlob([totals, ...techSheets]);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `muse-payroll-${localDateStr(cur.from)}.xlsx`; a.click(); URL.revokeObjectURL(url);
+  showToast('Payroll exported — Totals tab + one tab per staff');
 }
 function payrollGrid() {
   const cur = payrollPeriodAt(_payrollOffset), prev = prevPayPeriod(cur);
@@ -1833,54 +1910,120 @@ function payrollGrid() {
   const T = techs.map(tech => { const c = curData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] }, p = prevData[tech.id] || { billed: 0, commission: 0, daily: {}, refund: 0, refundComm: 0, refundNotes: [] }; const cComm = _netComm(c), pComm = _netComm(p); const cChk = techCheckAmount(tech, cComm, curKey), pChk = techCheckAmount(tech, pComm, prevKey); const cCashGross = Math.max(0, cComm - cChk), pCashGross = Math.max(0, pComm - pChk); const cDed = techCashDeduction(tech, cCashGross), pDed = techCashDeduction(tech, pCashGross); const cCash = Math.max(0, cCashGross - cDed), pCash = Math.max(0, pCashGross - pDed); return { tech, c, p, cChk, pChk, cDed, pDed, cCash, pCash, cTotal: cChk + cCash, pTotal: pChk + pCash }; });
   return { cur, T, curDays, prevDays };
 }
-// Manager PDF: the full grid, landscape, with repeating header + per-row page breaks.
+// Manager PDF: the full grid, landscape. Smart pagination: techs are CHUNKED into
+// groups of 4 column-blocks per page (one full table each, row labels + headers
+// repeated), so a wide roster can't run off the right edge of the page any more.
+// Vertical overflow inside a page still repeats the header (thead display rule).
+// Numbers match the on-screen page (overrides + lock snapshots applied).
 export function payrollExportPDF() {
-  const { cur, T, curDays, prevDays } = payrollGrid();
+  const { cur, T, curDays, prevDays, locked } = payrollComputedRows();
   if (!T.length) { showToast('No technicians.'); return; }
   const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const period = `${fmt(cur.from)} – ${fmt(cur.to)}`;
+  const period = `${fmt(cur.from)} – ${fmt(cur.to)}${locked ? ' · locked snapshot' : ''}`;
   const pc = (cv, pv) => { if (!pv && !cv) return ''; if (!pv) return ' <b style="color:#16a34a">▲</b>'; const up = cv >= pv; return ` <b style="color:${up ? '#16a34a' : '#dc2626'};font-size:8px">${up ? '▲' : '▼'}${Math.abs((cv - pv) / pv * 100).toFixed(0)}%</b>`; };
   const m0 = n => '$' + Math.round(n || 0);
   const quad = (cb, cc, pb, pc2) => `<td class="num sep">${_m2(cb)}${pc(cb, pb)}</td><td class="num">${_m2(cc)}${pc(cc, pc2)}</td><td class="num last lsep">${_m2(pb)}</td><td class="num last">${_m2(pc2)}</td>`;
   const dquad = (cd, pd) => `<td class="num sep">${m0(cd.billed)}${pc(cd.billed, pd.billed)}</td><td class="num">${m0(cd.commission)}${pc(cd.commission, pd.commission)}</td><td class="num last lsep">${m0(pd.billed)}</td><td class="num last">${m0(pd.commission)}</td>`;
   const span2 = (cVal, pVal) => `<td class="num sep" colspan="2">${cVal}</td><td class="num last lsep" colspan="2">${_m2(pVal)}</td>`;
-  const rows = [
-    `<tr><td class="rl">Total</td>${T.map(x => quad(x.c.billed, x.c.commission, x.p.billed, x.p.commission)).join('')}</tr>`,
-    ...(T.some(x => x.c.refund || x.p.refund) ? [
-      `<tr><td class="rl">Refunds</td>${T.map(x => `<td class="num sep" style="color:#dc2626">${x.c.refund ? '-$' + Math.abs(x.c.refund).toFixed(0) : '—'}</td><td class="num" style="color:#dc2626">${x.c.refundComm ? '-$' + Math.abs(x.c.refundComm).toFixed(0) : '—'}</td><td class="num last lsep" style="color:#dc2626">${x.p.refund ? '-$' + Math.abs(x.p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${x.p.refundComm ? '-$' + Math.abs(x.p.refundComm).toFixed(0) : '—'}</td>`).join('')}</tr>`,
-    ] : []),
-    `<tr><td class="rl">Check</td>${T.map(x => span2(_m2(x.cChk), x.pChk)).join('')}</tr>`,
-    ...(T.some(x => x.cDed || x.pDed) ? [
-      `<tr><td class="rl">Cash deduction</td>${T.map(x => `<td class="num sep" colspan="2" style="color:#dc2626">${x.cDed ? '-' + _m2(x.cDed) : '—'}</td><td class="num last lsep" colspan="2" style="color:#dc2626">${x.pDed ? '-' + _m2(x.pDed) : '—'}</td>`).join('')}</tr>`,
-    ] : []),
-    `<tr><td class="rl">Cash</td>${T.map(x => span2(_m2(x.cCash), x.pCash)).join('')}</tr>`,
-    `<tr><td class="rl" style="font-weight:700">Total paid</td>${T.map(x => span2(_m2(x.cTotal), x.pTotal)).join('')}</tr>`,
-    `<tr class="sec"><td class="rl">By day · billed / commission</td><td colspan="${T.length * 4}"></td></tr>`,
-    ...curDays.map((day, i) => { const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }); return `<tr><td class="rl">${dl}</td>${T.map(x => dquad(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`; }),
-  ].join('');
-  const th1 = T.map(x => `<th colspan="4" class="sep" style="text-align:center">${_eTxn(x.tech.name)}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</th>`).join('');
-  const th2 = T.map(() => `<th colspan="2" class="sep" style="text-align:center">This</th><th colspan="2" class="lsep" style="text-align:center">Last</th>`).join('');
-  const th3 = T.map(() => `<th class="num sep">Billed</th><th class="num">Comm</th><th class="num lsep">Billed</th><th class="num">Comm</th>`).join('');
+  const TECHS_PER_PAGE = 4;
+  const pages = [];
+  for (let p = 0; p < T.length; p += TECHS_PER_PAGE) {
+    const G = T.slice(p, p + TECHS_PER_PAGE);
+    const rows = [
+      `<tr><td class="rl">Total</td>${G.map(x => quad(x.c.billed, x.c.commission, x.p.billed, x.p.commission)).join('')}</tr>`,
+      ...(G.some(x => x.c.refund || x.p.refund) ? [
+        `<tr><td class="rl">Refunds</td>${G.map(x => `<td class="num sep" style="color:#dc2626">${x.c.refund ? '-$' + Math.abs(x.c.refund).toFixed(0) : '—'}</td><td class="num" style="color:#dc2626">${x.c.refundComm ? '-$' + Math.abs(x.c.refundComm).toFixed(0) : '—'}</td><td class="num last lsep" style="color:#dc2626">${x.p.refund ? '-$' + Math.abs(x.p.refund).toFixed(0) : '—'}</td><td class="num last" style="color:#dc2626">${x.p.refundComm ? '-$' + Math.abs(x.p.refundComm).toFixed(0) : '—'}</td>`).join('')}</tr>`,
+      ] : []),
+      `<tr><td class="rl">Check</td>${G.map(x => span2(_m2(x.cChk), x.pChk)).join('')}</tr>`,
+      ...(G.some(x => x.cDed || x.pDed) ? [
+        `<tr><td class="rl">Cash deduction</td>${G.map(x => `<td class="num sep" colspan="2" style="color:#dc2626">${x.cDed ? '-' + _m2(x.cDed) : '—'}</td><td class="num last lsep" colspan="2" style="color:#dc2626">${x.pDed ? '-' + _m2(x.pDed) : '—'}</td>`).join('')}</tr>`,
+      ] : []),
+      `<tr><td class="rl">Cash</td>${G.map(x => span2(_m2(x.cCash), x.pCash)).join('')}</tr>`,
+      `<tr><td class="rl" style="font-weight:700">Total paid</td>${G.map(x => span2(_m2(x.cTotal), x.pTotal)).join('')}</tr>`,
+      `<tr class="sec"><td class="rl">By day · billed / commission</td><td colspan="${G.length * 4}"></td></tr>`,
+      ...curDays.map((day, i) => { const dl = new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }); return `<tr><td class="rl">${dl}</td>${G.map(x => dquad(x.c.daily[day] || { billed: 0, commission: 0 }, x.p.daily[prevDays[i]] || { billed: 0, commission: 0 })).join('')}</tr>`; }),
+    ].join('');
+    const th1 = G.map(x => `<th colspan="4" class="sep" style="text-align:center">${_eTxn(x.tech.name)}${x.tech.commission != null ? ` ${x.tech.commission}%` : ''}</th>`).join('');
+    const th2 = G.map(() => `<th colspan="2" class="sep" style="text-align:center">This</th><th colspan="2" class="lsep" style="text-align:center">Last</th>`).join('');
+    const th3 = G.map(() => `<th class="num sep">Billed</th><th class="num">Comm</th><th class="num lsep">Billed</th><th class="num">Comm</th>`).join('');
+    const pageNo = Math.floor(p / TECHS_PER_PAGE) + 1, pageCount = Math.ceil(T.length / TECHS_PER_PAGE);
+    pages.push(`<div class="pg"${p + TECHS_PER_PAGE < T.length ? ' style="page-break-after:always"' : ''}>
+      <h1>Muse Nails &amp; Spa — Payroll · ${_eTxn(period)}${pageCount > 1 ? ` <span class="pgno">· staff ${p + 1}–${p + G.length} of ${T.length} (page ${pageNo}/${pageCount})</span>` : ''}</h1>
+      <table><thead><tr><th class="rl"></th>${th1}</tr><tr><th class="rl"></th>${th2}</tr><tr><th class="rl"></th>${th3}</tr></thead><tbody>${rows}</tbody></table>
+    </div>`);
+  }
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Payroll — ${_eTxn(period)}</title><style>
     @page{size:11in 8.5in;margin:.4in} body{font-family:Arial,sans-serif;margin:0;color:#222}
-    h1{color:#1a5252;font-size:15px;margin:0 0 8px} table{border-collapse:collapse;width:auto;font-size:9px}
+    h1{color:#1a5252;font-size:15px;margin:0 0 8px} .pgno{color:#888;font-weight:400;font-size:11px} table{border-collapse:collapse;width:auto;font-size:9px}
     th,td{padding:3px 6px;border-bottom:1px solid #ddd;white-space:nowrap;text-align:left}
     thead th{background:#1a5252;color:#fff} thead{display:table-header-group} tr{page-break-inside:avoid}
     .num{text-align:right} .last{color:#888} .rl{font-weight:700;background:#f0f3f3} .sep{border-left:2px solid #1a5252} .lsep{border-left:1px solid #cfd8d8} .sec td{background:#e8eded;font-weight:700;text-transform:uppercase;font-size:8px}
-  </style></head><body>
-    <h1>Muse Nails &amp; Spa — Payroll · ${_eTxn(period)}</h1>
-    <table><thead><tr><th class="rl"></th>${th1}</tr><tr><th class="rl"></th>${th2}</tr><tr><th class="rl"></th>${th3}</tr></thead><tbody>${rows}</tbody></table>
-  </body></html>`;
+  </style></head><body>${pages.join('')}</body></html>`;
   const u = URL.createObjectURL(new Blob([html], { type: 'text/html' })); const w = window.open(u, '_blank'); if (w) setTimeout(() => w.print(), 600); URL.revokeObjectURL(u);
   showToast('Payroll PDF opened — Print → Save as PDF (landscape)');
 }
 // Staff PDF: a landscape GRID of compact per-tech cards (4 across) — billed total +
 // billed-by-day only (no commission/check/cash/%). Many techs per page so a printed
-// sheet can be cut into individual handouts.
+// sheet can be cut into individual handouts. The button opens a PICKER first so the
+// owner can print receipts for just the staff who need one.
 export function payrollExportStaffPDF() {
-  const { cur, T, curDays } = payrollGrid();
+  const { cur, T } = payrollComputedRows();
   const techs = T.filter(x => x.c.billed || x.c.refund);
   if (!techs.length) { showToast('No billing this period.'); return; }
+  const fmtD = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  document.getElementById('_staffpdf-modal')?.remove();
+  const m = document.createElement('div');
+  m.id = '_staffpdf-modal';
+  m.className = 'fixed inset-0 z-[90] flex items-center justify-center bg-on-surface/40 px-4';
+  m.onclick = e => { if (e.target === m) m.remove(); };
+  const boxes = techs.map(x => `
+    <label class="flex items-center gap-3 px-4 py-2.5 border-b border-surface-container-high last:border-0 cursor-pointer hover:bg-surface-container transition-colors">
+      <input type="checkbox" class="staffpdf-cb w-5 h-5 accent-primary flex-shrink-0" value="${_eTxn(x.tech.id)}" checked onchange="staffPdfCount()">
+      <span class="font-body font-semibold text-on-surface min-w-0 truncate">${_eTxn(x.tech.name)}</span>
+      <span class="ml-auto text-sm font-body text-on-surface-variant flex-shrink-0">$${Math.round(x.c.billed)}</span>
+    </label>`).join('');
+  m.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-headline font-bold text-on-surface text-lg">Print staff receipts</h3>
+      <button onclick="this.closest('.fixed').remove()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button>
+    </div>
+    <p class="text-xs font-body text-on-surface-variant mb-3">${fmtD(cur.from)} – ${fmtD(cur.to)} · checked staff get a receipt</p>
+    <div class="flex items-center gap-4 mb-2 text-sm font-body font-semibold">
+      <button onclick="staffPdfAll(true)" class="text-primary hover:underline">Select all</button>
+      <button onclick="staffPdfAll(false)" class="text-on-surface-variant hover:underline">Deselect all</button>
+      <span id="staffpdf-count" class="ml-auto text-xs font-normal text-on-surface-variant"></span>
+    </div>
+    <div class="rounded-xl border border-surface-container-high overflow-y-auto" style="max-height:50vh">${boxes}</div>
+    <div class="flex justify-end gap-2 mt-4">
+      <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 rounded-xl border border-surface-container-high text-on-surface-variant font-body font-semibold text-sm">Cancel</button>
+      <button id="staffpdf-go" onclick="staffPdfPrint()" class="px-5 py-2 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm">Print</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+  staffPdfCount();
+}
+export function staffPdfAll(on) {
+  document.querySelectorAll('#_staffpdf-modal .staffpdf-cb').forEach(cb => { cb.checked = on; });
+  staffPdfCount();
+}
+export function staffPdfCount() {
+  const all = document.querySelectorAll('#_staffpdf-modal .staffpdf-cb');
+  const sel = document.querySelectorAll('#_staffpdf-modal .staffpdf-cb:checked');
+  const lbl = document.getElementById('staffpdf-count');
+  if (lbl) lbl.textContent = `${sel.length} of ${all.length} selected`;
+  const go = document.getElementById('staffpdf-go');
+  if (go) { go.textContent = sel.length ? `Print ${sel.length} receipt${sel.length > 1 ? 's' : ''}` : 'Print'; go.disabled = !sel.length; go.style.opacity = sel.length ? '' : '0.5'; }
+}
+export function staffPdfPrint() {
+  const ids = new Set([...document.querySelectorAll('#_staffpdf-modal .staffpdf-cb:checked')].map(cb => cb.value));
+  if (!ids.size) { showToast('Select at least one staff member.'); return; }
+  document.getElementById('_staffpdf-modal')?.remove();
+  _staffReceiptsPdf(ids);
+}
+function _staffReceiptsPdf(idSet) {
+  const { cur, T, curDays } = payrollComputedRows();
+  const techs = T.filter(x => (x.c.billed || x.c.refund) && idSet.has(x.tech.id));
+  if (!techs.length) { showToast('No billing for the selected staff.'); return; }
   const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const period = `${fmt(cur.from)} – ${fmt(cur.to)}`;
   // Each tech = a plain receipt: centered shop / name / period, the day list, then the total.
