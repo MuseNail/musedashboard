@@ -248,8 +248,13 @@ function _watchNumpadHost(inputEl) {
   if (host.parentElement) _numpadHostObs.observe(host.parentElement, { childList: true });
 }
 
+// On a touch device the on-screen numpad replaces the OS keyboard; on a desktop (pointer:fine) the
+// native input is used instead. A device can opt INTO the on-screen numpad anyway (desktop testing,
+// or a desktop with a touchscreen) by setting localStorage muse_numpad_force = '1' — off by default,
+// so prod behavior is unchanged.
+const _numpadForced = () => { try { return localStorage.getItem('muse_numpad_force') === '1'; } catch { return false; } };
 export function openNumpad(inputEl, label, mode) {
-  if (window.matchMedia('(pointer: fine)').matches) return;
+  if (window.matchMedia('(pointer: fine)').matches && !_numpadForced()) return;
   _numpadMode = mode === 'percent' ? 'percent' : (mode === 'int' ? 'int' : 'cost'); _numpadTarget = inputEl;
   const existing = (inputEl.value || '').replace(/[^0-9.]/g, '');
   if (_numpadMode === 'percent') {
@@ -284,7 +289,7 @@ export function openNumpad(inputEl, label, mode) {
 // live as you type, so the customer autocomplete stays visible and tappable above
 // it. iPad's native "tel" keyboard is the full QWERTY, so this gives a clean numpad.
 export function openPhoneNumpad(inputEl, label) {
-  if (window.matchMedia('(pointer: fine)').matches) return;
+  if (window.matchMedia('(pointer: fine)').matches && !_numpadForced()) return;
   _numpadMode = 'phone'; _numpadTarget = inputEl;
   _numpadRaw = (inputEl.value || '').replace(/\D/g, '').slice(0, 10);
   document.getElementById('numpad-label').textContent = label || 'Phone Number';
