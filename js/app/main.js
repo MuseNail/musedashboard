@@ -410,6 +410,9 @@ window.promptPwaInstall = () => { if (!_pwaInstallEvent) return; _pwaInstallEven
 function wireKeyboard() {
   document.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
+      // A calc in progress (an amount field with a typed expression) → Enter CONFIRMS the number and
+      // keeps the modal open. A second Enter (now a plain number) falls through to Save below.
+      if (utils.commitAmountField(document.activeElement)) { e.preventDefault(); return; }
       const gm = document.getElementById('group-assign-modal');
       if (gm && !gm.classList.contains('hidden')) { e.preventDefault(); queue.saveGroupAssignments(); return; }
       const mm = document.getElementById('manual-modal');

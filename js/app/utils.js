@@ -488,7 +488,7 @@ export function evalAmountExpression(str) {
 }
 // An amount-style field = the money/percent inputs the numpad serves (inputmode none/decimal), never
 // a phone field. These are the fields the desktop calculator + select-on-focus apply to.
-const _isAmountField = el => !!el && el.tagName === 'INPUT' && el.type !== 'tel' && ['none', 'decimal'].includes((el.getAttribute('inputmode') || '').toLowerCase());
+export const isAmountField = el => !!el && el.tagName === 'INPUT' && el.type !== 'tel' && ['none', 'decimal'].includes((el.getAttribute('inputmode') || '').toLowerCase());
 // Build the running tape (left-to-right) for the live popup: lines like ['40','+ 5','× 2'] + result.
 function _calcSteps(str) {
   const norm = String(str == null ? '' : str).replace(/×/g, '*').replace(/÷/g, '/').replace(/[^0-9.+\-*/]/g, '');
@@ -529,6 +529,15 @@ function _commitAmount(el) {
   el.dispatchEvent(new Event('input', { bubbles: true }));
   return true;
 }
+// Confirm a running calc in an amount field (commit + hide the tape). Called by the global Enter
+// handler (main.js) so calc-confirm and modal-save Enter behaviour live in ONE place. Returns true
+// if a calc was committed (so Enter knows NOT to also save/close the modal).
+export function commitAmountField(el) {
+  if (!isAmountField(el) || evalAmountExpression(el.value) == null) return false;
+  _commitAmount(el); _hideCalcPop();
+  setTimeout(() => { try { el.select(); } catch {} }, 0);
+  return true;
+}
 // Install once. Desktop money fields behave like the QuickBooks register amount field:
 //  • focus selects the existing value (type to replace),
 //  • typing an expression shows a live adding-machine tape popup,
@@ -539,29 +548,16 @@ export function initAmountFieldCalc() {
   if (_amountCalcInstalled) return; _amountCalcInstalled = true;
   let _selectPending = null;
   document.addEventListener('focusin', e => {
-    if (!_isAmountField(e.target)) return;
+    if (!isAmountField(e.target)) return;
     const el = e.target; _selectPending = el;
     setTimeout(() => { if (document.activeElement === el) { try { el.select(); } catch {} } }, 0);   // highlight existing value
   });
   // A click after focus would collapse the selection — stop it so the value stays highlighted.
   document.addEventListener('mouseup', e => { if (e.target === _selectPending) { e.preventDefault(); _selectPending = null; } });
-  document.addEventListener('input', e => { if (_isAmountField(e.target)) _showCalcPop(e.target); });
-  document.addEventListener('focusout', e => { if (_isAmountField(e.target)) { _commitAmount(e.target); _hideCalcPop(); } });
-  document.addEventListener('keydown', e => {
-    if (e.key !== 'Enter' || !_isAmountField(e.target)) return;
-    const el = e.target;
-    // Calc in progress (an expression / the tape is showing) → Enter CONFIRMS the number and keeps
-    // the modal open (so you can keep working). A second Enter (now a plain number) saves + closes.
-    if (evalAmountExpression(el.value) != null) {
-      e.preventDefault(); _commitAmount(el); _hideCalcPop();
-      setTimeout(() => { try { el.select(); } catch {} }, 0);
-      return;
-    }
-    // No calc running → Enter saves + closes the enclosing modal (clicks its primary Save button).
-    const modal = el.closest('[id$="-modal"]') || el.closest('.fixed.inset-0');
-    const saveBtn = modal && modal.querySelector('button[onclick^="save"], button[onclick*="qsCheckout"]');
-    if (saveBtn) { e.preventDefault(); saveBtn.click(); }
-  });
+  document.addEventListener('input', e => { if (isAmountField(e.target)) _showCalcPop(e.target); });
+  document.addEventListener('focusout', e => { if (isAmountField(e.target)) { _commitAmount(e.target); _hideCalcPop(); } });
+  // NB: Enter is handled by the single global handler in main.js wireKeyboard (calc-confirm vs
+  // modal-save), so the two don't both fire and save+close while a calc is mid-entry.
 }
 function _closeNumpadModal() {
   if (_numpadHostObs) { _numpadHostObs.disconnect(); _numpadHostObs = null; }
