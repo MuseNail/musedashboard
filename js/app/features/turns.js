@@ -805,10 +805,15 @@ function renderTurnsHistoryView() {
     }).join('');
 
     return `<div class="flex items-center border-b border-surface-container-high py-2 gap-2">${techCol}
-      <div class="flex gap-1.5 overflow-x-auto pb-0.5" style="min-width:0;flex:1;scrollbar-width:thin">${slotHtml}</div></div>`;
+      <div class="turns-slot-row flex gap-1.5 overflow-x-auto pb-0.5" style="min-width:0;flex:1;scrollbar-width:thin">${slotHtml}</div></div>`;
   };
 
   grid.innerHTML = banner + order.map(rowFor).filter(Boolean).join('') + rowFor('__unassigned__');
+  // Mouse-wheel → horizontal scroll for each tech's turn row (same as the live grid; the past-day
+  // rows were missing this handler, so the wheel didn't scroll them).
+  grid.querySelectorAll('.turns-slot-row').forEach(row => {
+    row.addEventListener('wheel', e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && row.scrollWidth > row.clientWidth) { row.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
+  });
 }
 
 // ── Export (CSV + PDF) — the currently-viewed day (today or a history date) ────

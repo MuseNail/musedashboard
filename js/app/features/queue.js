@@ -1401,12 +1401,21 @@ export function updateGroupTotal() {
   // guest's subtotal line. Tabbed: active tab from DOM, the rest from the store.
   let activeSvc = 0, partySvc = 0;
   if (ASSIGN_ONELIST) {
+    const _bd = [];
     document.querySelectorAll('#group-assign-content [data-assign-entry]').forEach(sec => {
       let s = 0; sec.querySelectorAll('.assign-cost').forEach(i => { s += parseFloat(i.value) || 0; });
       partySvc += s;
       const sub = document.getElementById('ga-sub-' + sec.dataset.assignEntry); if (sub) sub.textContent = '$' + s.toFixed(2);
+      const e = q().find(x => String(x.id) === sec.dataset.assignEntry);
+      _bd.push({ name: ((e?.name || 'Guest').split(' ')[0]) || 'Guest', sub: s });
     });
     activeSvc = partySvc;
+    // Per-person service subtotals pinned above Party Total (party only) — visible after scrolling.
+    const bdEl = document.getElementById('group-party-breakdown');
+    if (bdEl) {
+      if (_bd.length > 1) { bdEl.innerHTML = _bd.map(p => `<div class="flex items-center justify-between"><span class="truncate">${escHtml(p.name)}</span><span class="flex-shrink-0 ml-2">$${p.sub.toFixed(2)}</span></div>`).join(''); bdEl.classList.remove('hidden'); }
+      else { bdEl.innerHTML = ''; bdEl.classList.add('hidden'); }
+    }
   } else {
     activeSvc = [...document.querySelectorAll('#group-assign-content .assign-cost')].reduce((a,i)=>a+(parseFloat(i.value)||0),0);
     partySvc = activeSvc;

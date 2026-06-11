@@ -163,6 +163,10 @@ export function openSquarePOS(entryId) {
   // Group check-in → the whole party is on one ticket. To pay separately, split the
   // ticket in-app first (then each member is its own non-grouped entry).
   const party = entry.groupId ? queue().filter(e => e.groupId === entry.groupId) : [entry];
+  // Snapshot each ticket's fees BEFORE the default fee is auto-applied, so backing out of
+  // checkout (Cancel/X/backdrop, no payment) can restore them — otherwise the default service
+  // fee, persisted just below, lingers on the Assign modal's Party Total (services $0 + $2 fee).
+  const feesSnapshot = party.map(e => ({ id: String(e.id), fees: (e.fees || []).map(f => ({ ...f })) }));
   // Default-ON service fee: applied to the anchor ticket at checkout (was the Assign & Price modal).
   // Persisted with the party just below; toggle it off in the Confirm Payment modal.
   _payApplyDefaultFees(party);
@@ -185,7 +189,7 @@ export function openSquarePOS(entryId) {
   // person — often not even the first — making groups hard to recognize/match).
   const nameList = party.map(e => e.name).filter(Boolean);
   const payNames = (party.length > 1 ? `Party of ${party.length} — ` : '') + nameList.join(', ');
-  _pendingPay = { cents, ids: party.map(e => String(e.id)), names: payNames.slice(0, 120) };
+  _pendingPay = { cents, ids: party.map(e => String(e.id)), names: payNames.slice(0, 120), feesSnapshot };
   // R6: tie recorded gift cards to the tapped entry; preload any already staged (e.g. Pay was
   // tapped earlier but the charge wasn't completed). Balances are only drawn down when paid.
   _payTicketId = String(entryId);
@@ -197,7 +201,20 @@ export function openSquarePOS(entryId) {
   if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
 }
 
-export function closeSquareConfirm() {
+export function closeSquareConfirm(paid) {
+  // Backed out without paying → restore each ticket's fees to their pre-checkout snapshot, so the
+  // auto-applied default fee (persisted when the pay screen opened) doesn't cling to the still-open
+  // Assign modal's Party Total. Skip when paying (paid) or mid-charge (_charging — terminal flow).
+  if (!paid && !_charging && _pendingPay?.feesSnapshot) {
+    _pendingPay.feesSnapshot.forEach(snap => {
+      const e = queue().find(x => String(x.id) === snap.id); if (!e) return;
+      if (JSON.stringify(e.fees || []) === JSON.stringify(snap.fees)) return;   // unchanged → no write
+      e.fees = snap.fees.map(f => ({ ...f }));
+      e.totalCost = ticketTotal(e);
+      dispatch('queue.upsert', { entry: e });
+    });
+    window.updateGroupTotal?.();   // refresh the Assign modal total if it's still open behind this
+  }
   // A cancelled Quick Sale leaves no trace — drop the transient no-service ticket. Never mid-charge
   // (_charging is set before proceedTerminalPayment closes the modal), and never once it's paid.
   if (_payTicketId && !_charging) {
@@ -239,7 +256,7 @@ export function proceedSquarePayment() {
     const ge = queue().find(x => String(x.id) === _payTicketId);
     if (ge) { ge.giftcardRedemptions = _payGc.map(t => ({ giftcardId: t.giftcardId, serial: t.serial, who: t.who, amount: t.amount })); dispatch('queue.upsert', { entry: ge }); }
   }
-  closeSquareConfirm();
+  closeSquareConfirm(true);   // paying → keep the applied fee
   window.location.href = `square-commerce-v1://payment/create?data=${encodeURIComponent(JSON.stringify(data))}`;
 }
 export function openSquarePOSFromModal() {
