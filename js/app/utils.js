@@ -549,7 +549,18 @@ export function initAmountFieldCalc() {
   document.addEventListener('focusout', e => { if (_isAmountField(e.target)) { _commitAmount(e.target); _hideCalcPop(); } });
   document.addEventListener('keydown', e => {
     if (e.key !== 'Enter' || !_isAmountField(e.target)) return;
-    if (evalAmountExpression(e.target.value) != null) { e.preventDefault(); _commitAmount(e.target); _hideCalcPop(); const el = e.target; setTimeout(() => { try { el.select(); } catch {} }, 0); }
+    const el = e.target;
+    // Calc in progress (an expression / the tape is showing) → Enter CONFIRMS the number and keeps
+    // the modal open (so you can keep working). A second Enter (now a plain number) saves + closes.
+    if (evalAmountExpression(el.value) != null) {
+      e.preventDefault(); _commitAmount(el); _hideCalcPop();
+      setTimeout(() => { try { el.select(); } catch {} }, 0);
+      return;
+    }
+    // No calc running → Enter saves + closes the enclosing modal (clicks its primary Save button).
+    const modal = el.closest('[id$="-modal"]') || el.closest('.fixed.inset-0');
+    const saveBtn = modal && modal.querySelector('button[onclick^="save"], button[onclick*="qsCheckout"]');
+    if (saveBtn) { e.preventDefault(); saveBtn.click(); }
   });
 }
 function _closeNumpadModal() {
