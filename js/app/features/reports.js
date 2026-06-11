@@ -1255,10 +1255,25 @@ export async function helcimReconcile() {
   const helcimCents = txns.reduce((s, t) => s + Math.round((+t.amount || 0) * 100), 0);
   const $ = c => '$' + (c / 100).toFixed(2);
   const fmtTime = iso => { try { return new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); } catch { return ''; } };
+  // Reconciliation identity: recorded card (+tips) + the surcharge Helcim adds on top (Fee Saver —
+  // customer-paid, NOT salon revenue) + charges not yet recorded in the app = Helcim's gross total.
+  // The surcharge is why the app's card total reads lower than Helcim's: the app books the bill, Helcim
+  // charges bill + surcharge. (A real per-ticket mismatch still shows in the two lists below.)
+  let matchedRecCents = 0, surchargeCents = 0;
+  matched.forEach(t => {
+    const r = recByTxn.get(txnId(t));
+    const recCard = Math.round(((r?.tenders?.card || 0) + (r?.tip || 0)) * 100);
+    matchedRecCents += recCard;
+    surchargeCents += Math.round((+t.amount || 0) * 100) - recCard;
+  });
+  const unrecordedCents = inHelcimNotApp.reduce((s, t) => s + Math.round((+t.amount || 0) * 100), 0);
   const summary = [
     ['Helcim charged', $(helcimCents)],
     ['Card charges', String(txns.length)],
     ['Matched to a record', `${matched.length}/${txns.length}`],
+    ['Recorded card + tips', $(matchedRecCents)],
+    ['Surcharge (Fee Saver)', $(surchargeCents)],
+    ['Charged, not yet recorded', $(unrecordedCents)],
   ];
   const card = (title, sub, amt) => `<div class="bg-surface-container-lowest rounded-xl px-4 py-2.5 border border-surface-container-high flex items-center justify-between"><div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate">${_eTxn(title)}</div><div class="text-[11px] font-body text-outline">${_eTxn(sub)}</div></div><div class="font-headline font-bold text-on-surface flex-shrink-0 ml-3">${amt}</div></div>`;
   const hRows = inHelcimNotApp.length ? inHelcimNotApp.map(t => card(t.cardHolderName || t.invoiceNumber || '(charge)', `${fmtTime(t.dateCreated)} · ${t.cardType || t.type || 'card'}`, '$' + (+t.amount || 0).toFixed(2))).join('') : '<p class="text-xs font-body text-on-surface-variant py-2 px-1 opacity-70">None — every Helcim charge ties to an app record. ✓</p>';
@@ -1273,8 +1288,10 @@ export async function helcimReconcile() {
     ],
     summary,
   };
+  const reconNote = `<div class="text-[11px] font-body text-on-surface-variant mb-1 px-1 py-2 bg-surface-container-low rounded-lg">Recorded card + tips <b>${$(matchedRecCents)}</b> + Fee Saver surcharge <b>${$(surchargeCents)}</b> + not-yet-recorded <b>${$(unrecordedCents)}</b> = Helcim <b>${$(helcimCents)}</b>. The surcharge is the customer-paid card fee Helcim adds on top — it isn't salon revenue, so the app's card total is correctly lower than Helcim's gross.</div>`;
   showDrillPanel('Helcim Reconciliation',
     _drillSummaryBar(summary)
+    + reconNote
     + section('In Helcim, not in the app', inHelcimNotApp.length, hRows, 'Charged on the terminal but no app record carries this transaction id — charged-but-unrecorded.')
     + section('In the app, not matched to Helcim', inAppNotHelcim.length, aRows, 'Marked paid with a card in the app but no matching Helcim charge — a Square-era card sale, or a possible mismatch.'));
 }
