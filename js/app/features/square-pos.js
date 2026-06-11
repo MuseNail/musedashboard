@@ -197,6 +197,10 @@ export function openSquarePOS(entryId) {
   _gcPickerOpen = false; _newGcOpen = false; _payCash = 0; _payTip = 0; _payZelle = 0;
   _payTipFromDrawer = !!cfg().cash_drawer;   // default ON when a drawer is open (the common card-tip → cash-payout case)
   renderPayGc();
+  // Admin/manager only: reveal the "record without charging" escape hatch (for a payment taken
+  // outside the app, e.g. keyed manually on the terminal). Front desk never sees it.
+  const mpBtn = document.getElementById('sq-markpaid-btn');
+  if (mpBtn) { const role = getActiveUser()?.role; mpBtn.classList.toggle('hidden', !(role === 'admin' || role === 'manager')); }
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
 }
@@ -226,6 +230,69 @@ export function closeSquareConfirm(paid) {
   const gs = document.getElementById('square-gc-section'); if (gs) gs.innerHTML = '';
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.add('hidden'); m.style.display = ''; }
+}
+
+// ── Admin/manager: record a payment taken OUTSIDE the app (no charge) ─────────
+// Two confirmation steps (a warning, then a tender form) so it can't be a one-tap mistake. Reuses
+// _finalizeTerminalPaid → a real record + commission + audit are created, with the chosen method as
+// the tender and an optional external reference (e.g. the Helcim txn id) for reconcile matching.
+export function markPaidNoCharge() {
+  if (!_pendingPay) return;
+  const role = getActiveUser()?.role;
+  if (role !== 'admin' && role !== 'manager') { showToast('Manager or admin only.'); return; }
+  window.showWarnModal?.(
+    'Record payment without charging?',
+    'This marks the ticket PAID without charging a card. Use ONLY when the customer already paid another way (for example, the charge was keyed manually on the terminal). Nothing will be charged.',
+    () => _markPaidForm(),
+    'Continue');
+}
+function _markPaidForm() {
+  if (!_pendingPay) return;
+  const amount = (_pendingPay.cents || 0) / 100;
+  let method = 'card';
+  document.getElementById('_markpaid-modal')?.remove();
+  const methods = [['card','Card'],['cash','Cash'],['zelle','Zelle'],['gift','Gift'],['other','Other']];
+  const m = document.createElement('div');
+  m.id = '_markpaid-modal';
+  m.className = 'fixed inset-0 z-[90] flex items-center justify-center px-4';
+  m.style.cssText = 'background:rgba(15,26,26,.5)';
+  m.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-full max-w-sm shadow-2xl fade-up" onclick="event.stopPropagation()">
+    <div class="text-base font-headline font-bold text-on-surface mb-0.5">Record as already paid</div>
+    <div class="text-xs font-body text-on-surface-variant mb-3">No charge will be sent — this creates the sale record with the tender below.</div>
+    <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Method</label>
+    <div class="flex gap-1.5 flex-wrap mb-3" id="_mp-methods">${methods.map(([k,l]) => `<button type="button" data-m="${k}" class="flex-1 py-2 rounded-xl border-2 font-body font-semibold text-sm transition-all ${k==='card'?'border-primary bg-primary text-on-primary':'border-outline-variant bg-transparent text-on-surface'}">${l}</button>`).join('')}</div>
+    <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Amount</label>
+    <input id="_mp-amount" type="text" inputmode="decimal" value="${amount.toFixed(2)}" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-headline focus:border-primary outline-none mb-3">
+    <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Reference / txn id (optional)</label>
+    <input id="_mp-ref" type="text" placeholder="e.g. Helcim transaction id" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none mb-4">
+    <div class="flex gap-2">
+      <button id="_mp-cancel" class="flex-1 border border-outline-variant text-on-surface-variant hover:bg-surface-container py-2.5 rounded-xl font-headline font-semibold">Cancel</button>
+      <button id="_mp-confirm" class="flex-1 bg-primary hover:bg-primary-dim text-on-primary py-2.5 rounded-xl font-headline font-bold">Confirm — mark paid</button>
+    </div></div>`;
+  m.addEventListener('click', () => m.remove());
+  document.body.appendChild(m);
+  m.querySelectorAll('#_mp-methods button').forEach(b => b.addEventListener('click', () => {
+    method = b.dataset.m;
+    m.querySelectorAll('#_mp-methods button').forEach(x => { const on = x === b; x.classList.toggle('border-primary',on); x.classList.toggle('bg-primary',on); x.classList.toggle('text-on-primary',on); x.classList.toggle('border-outline-variant',!on); x.classList.toggle('bg-transparent',!on); x.classList.toggle('text-on-surface',!on); });
+  }));
+  m.querySelector('#_mp-cancel').addEventListener('click', () => m.remove());
+  m.querySelector('#_mp-confirm').addEventListener('click', () => {
+    const amt = parseFloat(document.getElementById('_mp-amount').value) || 0;
+    const ref = (document.getElementById('_mp-ref').value || '').trim();
+    m.remove();
+    _markPaidCommit(method, amt, ref);
+  });
+}
+function _markPaidCommit(method, amount, ref) {
+  const ids = (_pendingPay?.ids || []).slice();
+  if (!ids.length) return;
+  const tenders = (method && method !== 'other' && amount > 0) ? { [method]: amount } : {};
+  const refIds = ref ? [ref] : [];
+  // Finalize FIRST (marks each ticket paid → a quickSale is no longer 'waiting'), THEN close the
+  // confirm modal — so closeSquareConfirm's cancelled-quickSale cleanup doesn't drop a paid ticket.
+  _finalizeTerminalPaid(ids, tenders, refIds, 0, []);
+  closeSquareConfirm(true);
+  window.logAudit?.('Manual paid', `Recorded without charging · ${method}${amount ? ' $' + amount.toFixed(2) : ''}${ref ? ' · ref ' + ref : ''}`);
 }
 
 export function proceedSquarePayment() {

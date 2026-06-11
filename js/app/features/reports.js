@@ -2506,7 +2506,19 @@ export function confirmDeleteTransaction() {
 }
 
 // ── Historical transaction entry (admin) ──────────
-let _histMode = 'add', _histEditId = null, _histType = 'Walk-In', _histSelectedSvcs = [], _histAssignments = {}, _histItems = [], _histFees = [];
+let _histMode = 'add', _histEditId = null, _histType = 'Walk-In', _histSelectedSvcs = [], _histAssignments = {}, _histItems = [], _histFees = [], _histMethod = 'card';
+// Payment-method selector for a historical entry → recorded as a `tenders` map so the sale shows in
+// the Payment Mix + reconcile (was previously saved with NO tender → landed in Other/Untracked).
+// 'other' = leave untracked (no tender). card/cash/zelle/gift write tenders[method] = bill total.
+export function setHistMethod(m) {
+  _histMethod = m;
+  ['card', 'cash', 'zelle', 'gift', 'other'].forEach(k => {
+    const el = document.getElementById('hist-method-' + k); if (!el) return;
+    const on = k === m;
+    el.classList.toggle('border-primary', on); el.classList.toggle('bg-primary', on); el.classList.toggle('text-on-primary', on);
+    el.classList.toggle('border-outline-variant', !on); el.classList.toggle('bg-transparent', !on); el.classList.toggle('text-on-surface', !on);
+  });
+}
 export function showHistoricalEntryModal(editId, prefillDate) {
   if (!canDo('historicalEntry')) { showToast('Permission denied'); return; }
   _histMode = editId ? 'edit' : 'add'; _histEditId = editId || null;
@@ -2533,6 +2545,8 @@ export function showHistoricalEntryModal(editId, prefillDate) {
     _histItems = (rec.items||[]).map(i => ({ itemId: i.itemId, qty: i.qty||1, price: i.price||0 }));
     _histFees = (rec.fees||[]).map(f => ({ feeId: f.feeId, amount: f.amount||0 }));
     _histType = rec.isAppointment ? 'Appointment' : 'Walk-In';
+    const t = rec.tenders || {}; _histMethod = ['card','cash','zelle','gift'].find(k => (t[k]||0) > 0) || 'other';
+    { const rf = document.getElementById('hist-ref'); if (rf) rf.value = (rec.squarePaymentIds || [])[0] || ''; }
   } else {
     if (title) title.textContent = 'Add Historical Transaction';
     document.getElementById('hist-date').value = (prefillDate && prefillDate < todayStr()) ? prefillDate : yesterdayStr;
@@ -2542,9 +2556,10 @@ export function showHistoricalEntryModal(editId, prefillDate) {
     document.getElementById('hist-discount').value = '';
     document.getElementById('hist-discount-note').value = '';
     { const t = document.getElementById('hist-tip'); if (t) t.value = ''; }
-    _histType = 'Walk-In';
+    { const rf = document.getElementById('hist-ref'); if (rf) rf.value = ''; }
+    _histType = 'Walk-In'; _histMethod = 'card';
   }
-  setHistType(_histType); _renderHistServices(); _renderHistAssignments(); _renderHistItems(); _renderHistFees(); _computeHistTotal();
+  setHistType(_histType); setHistMethod(_histMethod); _renderHistServices(); _renderHistAssignments(); _renderHistItems(); _renderHistFees(); _computeHistTotal();
   const m = document.getElementById('historical-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
 export function closeHistoricalModal() { const m = document.getElementById('historical-modal'); m.classList.add('hidden'); m.style.display = ''; }
@@ -2626,7 +2641,12 @@ export function saveHistoricalTransaction() {
   // the items/fees are already counted and a synthetic assignment carrying the FULL total would DOUBLE
   // them when buildCombinedRecords re-derives the record via ticketTotal (assignments + items + fees).
   if (assignments.length === 0 && items.length === 0 && fees.length === 0 && total > 0) assignments.push({ serviceId:'', techId:'', station:'', cost: total, status:'paid', assignedAt: checkinTime.getTime() });
-  const base = { name, phone, services: _histSelectedSvcs, assignments, items, fees, discount, discountNote, tip, totalCost: total, checkinTime: checkinTime.toISOString(), status: 'paid', isAppointment: _histType === 'Appointment', loggedBy: getActiveUser()?.name || 'Admin' };
+  // Tender from the selected method (so it shows in the Payment Mix + reconcile). 'other' → no
+  // tender (untracked, as before). Always set both keys (even to undefined) so editing a record to
+  // 'other'/clearing the ref drops the old value rather than the spread keeping a stale one.
+  const _ref = (document.getElementById('hist-ref')?.value || '').trim();
+  const tenders = (_histMethod && _histMethod !== 'other' && total > 0) ? { [_histMethod]: total } : undefined;
+  const base = { name, phone, services: _histSelectedSvcs, assignments, items, fees, discount, discountNote, tip, totalCost: total, checkinTime: checkinTime.toISOString(), status: 'paid', isAppointment: _histType === 'Appointment', loggedBy: getActiveUser()?.name || 'Admin', tenders, squarePaymentIds: _ref ? [_ref] : undefined };
   if (_histMode === 'edit') {
     const existing = records().find(r => String(r.id) === String(_histEditId));
     dispatch('record.save', { record: { ...existing, ...base, id: String(_histEditId), completedAt: existing?.completedAt || checkinTime.toISOString() } });
