@@ -120,6 +120,15 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.82', items: [
+    { icon: 'calendar_view_week', t: 'Calendar week view',          d: 'A new Day | Week toggle on the Calendar. Week shows all 7 days side by side, colored by tech — tap a day to jump into it, tap a booking for the usual popup.' },
+    { icon: 'event',              t: 'Techs see their appointments', d: 'The Muse Staff app has a new “Appts” tab — each tech sees their own upcoming appointments for the week, with services and notes.' },
+    { icon: 'notifications_active', t: 'New-booking alerts for techs', d: 'When the front desk books an appointment for a tech, their phone gets a notification with the customer and time (uses the same alerts switch as assignment pings).' },
+    { icon: 'badge',              t: 'Pick who to print',            d: 'Staff PDF now asks which staff receipts to print — check just the ones you need, with Select all / Deselect all.' },
+    { icon: 'picture_as_pdf',     t: 'Payroll PDF fits the page',    d: 'The payroll PDF now prints 4 staff per page with headers repeated — nothing gets cut off on the right anymore.' },
+    { icon: 'table_view',         t: 'Excel payroll export',         d: 'The CSV button is now Excel: a Totals tab plus a tab per staff with their pay summary, day-by-day numbers, and every service line itemized.' },
+    { icon: 'lock_person',        t: 'Role permissions are live',    d: 'The toggles in Settings → Role Permissions now really control access — View Reports & Payroll, Manage Staff, Manage Services, and Mark Paid without charging.' },
+  ] },
   { v: 'v4.80', items: [
     { icon: 'palette',       t: 'Clearer status colors',     d: 'In Service is now green and Done (waiting to pay) is now blue — easy to tell apart at a glance on the Turns and Queue boards.' },
     { icon: 'calculate',     t: 'Calculator in money fields', d: 'Type math right in any price/amount box — e.g. 40+5+10. On the iPad keypad use the + − × ÷ keys; on a computer just type it. A running tape shows the total; press Enter to confirm the number, Enter again to save.' },
