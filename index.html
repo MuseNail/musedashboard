@@ -441,30 +441,35 @@ tailwind.config = {
         <div class="grid grid-cols-2 gap-3 mb-5">
           <div onclick="drillDownPay('card')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Card charges including tips — matches your Square deposit. Tap for the tickets behind it.">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-card">$0.00</div>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-card"></div>
             <span class="rpt-delta" id="rpt-pay-card-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Card (incl. tips)</div>
             <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
           </div>
           <div onclick="drillDownPay('cash')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Cash collected (drawer). Tap for the tickets behind it.">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-cash">$0.00</div>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-cash"></div>
             <span class="rpt-delta" id="rpt-pay-cash-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Cash</div>
             <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
           </div>
           <div onclick="drillDownPay('zelle')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Paid via Zelle. Tap for the tickets behind it.">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-zelle">$0.00</div>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-zelle"></div>
             <span class="rpt-delta" id="rpt-pay-zelle-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Zelle</div>
             <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
           </div>
           <div onclick="drillDownPay('gift')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Gift cards redeemed as payment. Tap for the tickets behind it.">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-gift">$0.00</div>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-gift"></div>
             <span class="rpt-delta" id="rpt-pay-gift-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Gift Card</div>
             <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
           </div>
           <div onclick="drillDownPay('other')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Sales with no recorded payment method (older / direct Mark-Paid / historical). Tap for the tickets behind it.">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-other">$0.00</div>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-other"></div>
             <span class="rpt-delta" id="rpt-pay-other-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Other / Untracked</div>
             <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>

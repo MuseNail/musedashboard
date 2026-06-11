@@ -110,12 +110,19 @@ function isOtherTender(r, tenderedGroups) {
 // tips together). Single source of truth for the four+one mix figures.
 function paymentMix(filtered, tipsTotal) {
   const tg = tenderedGroupIds(filtered);
+  const cnt = pred => filtered.reduce((n, r) => pred(r) ? n + 1 : n, 0);
   return {
     cardMix:  filtered.reduce((s,r)=>s+(r.tenders?.card||0),0) + tipsTotal,
     cashMix:  filtered.reduce((s,r)=>s+(r.tenders?.cash||0),0),
     giftMix:  filtered.reduce((s,r)=>s+(r.tenders?.gift||0),0),
     zelleMix: filtered.reduce((s,r)=>s+(r.tenders?.zelle||0),0),
     otherMix: filtered.reduce((s,r)=> isOtherTender(r, tg) ? s+(r.totalCost||0) : s, 0),
+    // Ticket counts per tender (shown beside the amount on the Payment Mix cards).
+    cardCnt:  cnt(r => (r.tenders?.card  || 0) > 0),
+    cashCnt:  cnt(r => (r.tenders?.cash  || 0) > 0),
+    giftCnt:  cnt(r => (r.tenders?.gift  || 0) > 0),
+    zelleCnt: cnt(r => (r.tenders?.zelle || 0) > 0),
+    otherCnt: cnt(r => isOtherTender(r, tg)),
   };
 }
 
@@ -508,9 +515,11 @@ export function runReport() {
   const avgTicket = guestCount > 0 ? totalIncome / guestCount : 0;
   const tipsTotal = filtered.reduce((s,r)=>s+(r.tip||0),0);
   // Payment Mix — how the money was actually collected (single source: paymentMix()).
-  const { cardMix, cashMix, giftMix, zelleMix, otherMix } = paymentMix(filtered, tipsTotal);
+  const { cardMix, cashMix, giftMix, zelleMix, otherMix, cardCnt, cashCnt, giftCnt, zelleCnt, otherCnt } = paymentMix(filtered, tipsTotal);
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  const tix = n => n > 0 ? (n === 1 ? '1 ticket' : n + ' tickets') : '';
+  set('rpt-paycnt-card', tix(cardCnt)); set('rpt-paycnt-cash', tix(cashCnt)); set('rpt-paycnt-gift', tix(giftCnt)); set('rpt-paycnt-zelle', tix(zelleCnt)); set('rpt-paycnt-other', tix(otherCnt));
   set('rpt-total-guests', guestCount); set('rpt-avg-ticket', `$${avgTicket.toFixed(2)}`);
   set('rpt-svc-total', `$${svcTotal.toFixed(2)}`); set('rpt-items-total', `$${itemsTotal.toFixed(2)}`); set('rpt-fees-total', `$${feesTotal.toFixed(2)}`);
   set('rpt-discount-total', discountTotal > 0 ? `-$${discountTotal.toFixed(2)}` : '-$0.00');
