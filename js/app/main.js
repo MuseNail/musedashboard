@@ -158,7 +158,7 @@ function showWhatsNew(entries) {
       <div class="min-w-0"><div class="font-headline font-bold text-on-surface text-sm">${esc(it.t)}</div>
         <div class="text-[13px] font-body text-on-surface-variant leading-snug">${esc(it.d)}</div></div>
     </div>`).join('');
-  const vEl = document.getElementById('whatsnew-version'); if (vEl) vEl.textContent = '· ' + APP_VERSION;
+  const vEl = document.getElementById('whatsnew-version'); if (vEl) vEl.textContent = '· ' + (list[0]?.v || APP_VERSION);
   const m = document.getElementById('whatsnew-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
 }
 function closeWhatsNew() {
@@ -358,10 +358,13 @@ function onStateChange(state, changed) {
 async function checkAppVersion() {
   const badge = document.getElementById('app-version-badge');
   if (!badge) return;
+  // Up to date → tapping the version shows the latest "What's new". When an update is available
+  // (below) it becomes a reload button instead.
   badge.textContent = APP_VERSION;
-  badge.title = 'Tap to reload to the latest version';
+  badge.title = 'What’s new in this version';
   badge.style.cursor = 'pointer';
-  badge.onclick = promptHardReload;
+  badge.classList.remove('update-pulse');
+  badge.onclick = () => showWhatsNew();
   try {
     const res = await fetch('/musedashboard/version.json?_=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
@@ -370,6 +373,7 @@ async function checkAppVersion() {
       badge.textContent = data.version + ' ↻';
       badge.title = `Update ${data.version} available — tap to reload`;
       badge.classList.add('update-pulse');   // E2: make the update glyph discoverable
+      badge.onclick = promptHardReload;
     }
   } catch (e) {}
 }
