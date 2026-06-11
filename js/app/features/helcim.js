@@ -6,9 +6,10 @@
 // (covers a missed broadcast / briefly-disconnected socket) and a hard timeout.
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast } from '../utils.js';
+import { showToast, ticketTotal, localDateStr } from '../utils.js';
 import { HELCIM_PROXY } from '../config.js';
 import { getActiveUser } from '../session.js';
+import { isPaidStatus } from './status.js';
 
 const cfg = () => getState().config;
 export function helcimDeviceCode() { return String(cfg().helcim_device_code || '').trim(); }
@@ -148,4 +149,65 @@ export async function helcimRunTest() {
   const res = await chargeOnHelcim(1, inv, { timeoutMs: 120000 });
   if (res.ok) _setStatus(`<span style="color:#2a7a4f">Test APPROVED ✓</span> — txn ${res.transactionId} ($${Number(res.amount || 1).toFixed(2)}). Refund it in your Helcim dashboard.`);
   else _setStatus(`<span style="color:#c0392b">Test not completed: ${res.error || res.status}</span>`);
+}
+
+// ── Webhook-miss safety net ──────────────────────────────────────────────────
+// chargeOnHelcim stamps each purchase with invoiceNumber `tkt-<entryId>-<cents>`. If BOTH the
+// result broadcast and the fallback poll miss (app closed/offline at the wrong moment), the charge
+// succeeds but the ticket stays unpaid with no record — money taken, invisible. On load/focus we
+// pull recent APPROVED charges and match their ticket id to a still-unpaid queue entry; a hit is
+// offered for one-tap finalize. SAFE: the charge already exists, so this records it — never charges
+// again. (Charges keyed manually on the terminal carry no `tkt-` invoice → handled by the admin
+// "record without charging" flow instead.)
+let _ucBusy = false, _ucLast = 0;
+const _ucDismissed = new Set();
+export async function checkUnfinalizedCharges() {
+  if (!helcimActive() || !helcimDeviceCode()) return;
+  if (_ucBusy || Date.now() - _ucLast < 60000) return;   // throttle: at most once a minute
+  _ucBusy = true;
+  try {
+    const now = Date.now();
+    const r = await fetch(`${HELCIM_PROXY}/transactions?dateFrom=${localDateStr(new Date(now - 2 * 86400000))}&dateTo=${localDateStr(new Date(now + 86400000))}`);
+    if (!r.ok) return;
+    const j = await r.json().catch(() => ({}));
+    const arr = Array.isArray(j) ? j : (j.value || j.data || j.transactions || j.cardTransactions || []);
+    const txns = arr.filter(t => String(t.type || '').toLowerCase().includes('purchase') && String(t.status || '').toUpperCase() === 'APPROVED');
+    const q = getState().queue || [];
+    const entryIdOf = inv => { const s = String(inv || ''); return s.startsWith('tkt-') ? s.slice(4).replace(/-\d+$/, '') : null; };   // strip the trailing -<cents>
+    for (const t of txns) {
+      const eid = entryIdOf(t.invoiceNumber); if (!eid || _ucDismissed.has(eid)) continue;
+      const e = q.find(x => String(x.id) === eid);
+      if (!e || isPaidStatus(e.status)) continue;                                          // already paid / gone
+      if ((e.squarePaymentIds || []).map(String).includes(String(t.transactionId))) continue;   // already linked
+      _promptUnfinalized(e, t);
+      break;   // one prompt at a time
+    }
+  } catch {} finally { _ucBusy = false; _ucLast = Date.now(); }
+}
+function _promptUnfinalized(e, t) {
+  const amt = (+t.amount || 0).toFixed(2);
+  let when = ''; try { when = ' (' + new Date(t.dateCreated).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ')'; } catch {}
+  window.showWarnModal?.(
+    'Completed charge found — mark paid?',
+    `A completed card charge of $${amt}${when} was found for ${e.name || 'this ticket'}, but the ticket isn't marked paid (the result was likely missed). Mark it paid now? This records the existing charge — it does NOT charge the card again.`,
+    () => _finalizeFoundCharge(String(e.id), t),
+    'Mark paid');
+  // If the operator dismisses (X / Cancel), don't nag again this session for this ticket.
+  _ucDismissed.add(String(e.id));
+}
+function _finalizeFoundCharge(entryId, t) {
+  const q = getState().queue || [];
+  const anchor = q.find(x => String(x.id) === String(entryId));
+  if (!anchor || isPaidStatus(anchor.status)) return;
+  const party = anchor.groupId ? q.filter(x => x.groupId === anchor.groupId) : [anchor];
+  const billTotal = party.reduce((s, m) => s + ticketTotal(m), 0);
+  party.forEach(m => {
+    m.squarePaymentIds = [String(t.transactionId)];
+    if (String(m.id) === String(entryId)) m.tenders = { card: billTotal };   // tender on the anchor (the bill; surcharge is Helcim-side)
+    m.totalCost = ticketTotal(m);
+    dispatch('queue.upsert', { entry: m });
+    window.updateStatus?.(String(m.id), 'paid');   // → saveRecord: record + commission + audit
+  });
+  window.logAudit?.('Recovered charge', `${anchor.name || '—'} · $${(+t.amount || 0).toFixed(2)} · txn ${t.transactionId}`);
+  showToast('Recorded the found charge — marked paid ✓');
 }

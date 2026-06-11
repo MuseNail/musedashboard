@@ -229,7 +229,7 @@ window.addEventListener('storage', e => { if (e.key === 'muse_sq_paid' && e.newV
 // on stale cached config before a resync lands (and could wrongly clear the roster). The resync
 // fired on tab-visible pulls a fresh snapshot whose hydrate runs runDayRolloverIfNeeded with
 // server-confirmed state (see onStateChange 'hydrate').
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); checkAppVersion(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); checkAppVersion(); helcim.checkUnfinalizedCharges?.(); } });
 
 // Installed-PWA fallback for the Square charge. On iOS a Home-Screen app is resumed
 // after the Square hand-off WITHOUT the callback data, so the muse_sq_paid handoff
@@ -276,7 +276,7 @@ function updateSyncIndicator(state) {
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
   if (changed === 'connection') return;
-  if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); }   // apply pending Square auto-paid + roll over the day if needed, once the queue loads
+  if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync(); timeclock.renderClockButton(); helcim.syncProcessorClass();
     // The customer directory is now a DO entity — it hydrates from the snapshot like records,
