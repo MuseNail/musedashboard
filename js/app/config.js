@@ -12,6 +12,7 @@ export const STATE_PROXY  = ORIGIN + '/state';
 export const AI_PROXY     = ORIGIN + '/ai';
 export const PUSH_PROXY   = ORIGIN + '/push';
 export const SMS_PROXY    = ORIGIN + '/sms';
+export const GCAL_PROXY   = ORIGIN + '/gcal';
 // Web Push VAPID public key (non-secret; the matching private key is the Worker's
 // VAPID_PRIVATE_KEY secret). Used by the Muse Staff app to subscribe for assignment
 // notifications. base64url-encoded uncompressed P-256 point.

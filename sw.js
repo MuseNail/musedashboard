@@ -106,15 +106,24 @@ async function networkFirst(req) {
 }
 
 // ── Web Push (Muse Staff) ────────────────────────────────────────────────────
-// Payload-less pushes: show a generic notification; the tech taps to open the app.
+// Payload-less pushes show the generic assignment text; encrypted payloads
+// ({title, body, tag} — e.g. new-appointment alerts) override it. Distinct tags
+// keep an appointment alert from replacing an unread assignment alert.
 self.addEventListener('push', event => {
-  let body = 'New customer assigned — tap to open';
-  try { if (event.data) { const d = event.data.json(); if (d && d.body) body = d.body; } } catch {}
-  event.waitUntil(self.registration.showNotification('Muse Staff', {
+  let title = 'Muse Staff', body = 'New customer assigned — tap to open', tag = 'muse-assign';
+  try {
+    if (event.data) {
+      const d = event.data.json();
+      if (d && d.title) title = d.title;
+      if (d && d.body)  body  = d.body;
+      if (d && d.tag)   tag   = d.tag;
+    }
+  } catch {}
+  event.waitUntil(self.registration.showNotification(title, {
     body,
     icon: '/musedashboard/icons/icon-192.png',
     badge: '/musedashboard/icons/icon-192.png',
-    tag: 'muse-assign',
+    tag,
     renotify: true,
   }));
 });

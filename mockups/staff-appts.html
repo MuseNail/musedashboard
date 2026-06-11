@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — Muse Staff: My Appointments tab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<style>
+  :root { --primary:#1a5252; --on-primary:#fff; --surface:#f7f8f8; --lowest:#ffffff; --container:#eceeee; --high:#dde1e1; --on-surface:#171d1d; --variant:#3f4948; --outline:#6f7979; }
+  body { background:#c9cdcd; font-family:Inter,sans-serif; }
+  .font-headline { font-family:Manrope,sans-serif; }
+  .font-body { font-family:Inter,sans-serif; }
+  .phone { width:390px; min-height:760px; background:var(--surface); border-radius:28px; box-shadow:0 12px 40px rgba(0,0,0,.35); overflow:hidden; }
+  .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 500,'GRAD' 0,'opsz' 24; }
+</style>
+</head>
+<body class="flex flex-wrap items-start justify-center gap-10 py-10">
+
+<!-- ── Variant: Appts tab active ─────────────────────────────────────────── -->
+<div>
+  <div class="text-center font-headline font-bold text-sm mb-2 text-white/90">Staff app — new “Appts” tab</div>
+  <div class="phone mx-auto">
+    <!-- header (unchanged) -->
+    <div class="flex items-center justify-between px-5 pt-5 pb-3">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full" style="background:#2a7a4f"></span>
+        <span class="font-headline font-extrabold text-xl" style="color:var(--on-surface)">Tina</span>
+      </div>
+      <button class="text-sm font-body font-semibold" style="color:var(--outline)">Switch user</button>
+    </div>
+    <div class="px-4 pb-6">
+      <!-- today card (unchanged) -->
+      <div class="rounded-2xl px-5 py-4 mb-3 flex items-end justify-between shadow-sm" style="background:var(--primary);color:var(--on-primary)">
+        <div><div class="text-xs font-body uppercase tracking-widest opacity-80">Today</div>
+          <div class="font-headline font-extrabold leading-none" style="font-size:40px">$245</div></div>
+        <div class="text-right font-body opacity-90"><div class="text-2xl font-headline font-bold leading-none">6</div>
+          <div class="text-xs uppercase tracking-widest">services</div></div>
+      </div>
+      <!-- 3 tabs now -->
+      <div class="flex gap-2 mb-3">
+        <button class="flex-1 py-3 rounded-xl font-headline font-bold text-base" style="background:var(--container);color:var(--variant)">Now (2)</button>
+        <button class="flex-1 py-3 rounded-xl font-headline font-bold text-base" style="background:var(--primary);color:var(--on-primary)">Appts</button>
+        <button class="flex-1 py-3 rounded-xl font-headline font-bold text-base" style="background:var(--container);color:var(--variant)">History</button>
+      </div>
+
+      <!-- day group: Today -->
+      <div class="flex items-center justify-between mb-2 px-1">
+        <span class="text-sm font-headline font-bold uppercase tracking-widest" style="color:var(--variant)">Today · Thu Jun 11</span>
+        <span class="text-xs font-body font-semibold" style="color:var(--outline)">2 appointments</span>
+      </div>
+      <div class="rounded-2xl border overflow-hidden mb-4" style="background:var(--lowest);border-color:var(--high)">
+        <div class="flex gap-3 px-4 py-3 border-b" style="border-color:var(--high)">
+          <div class="flex-shrink-0 text-center w-16">
+            <div class="font-headline font-extrabold text-lg leading-tight" style="color:var(--primary)">2:30</div>
+            <div class="text-[11px] font-body font-semibold" style="color:var(--outline)">PM · 60m</div>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="font-headline font-bold text-lg leading-tight" style="color:var(--on-surface)">Jessica Tran</div>
+            <div class="text-sm font-body mt-0.5" style="color:var(--variant)">Gel Manicure · Pedicure</div>
+            <div class="text-xs font-body mt-1" style="color:var(--outline)">📝 prefers chrome top coat</div>
+          </div>
+          <span class="self-start mt-1 text-[11px] font-body font-bold px-2 py-0.5 rounded-full" style="background:#2a7a4f;color:#fff">Confirmed</span>
+        </div>
+        <div class="flex gap-3 px-4 py-3">
+          <div class="flex-shrink-0 text-center w-16">
+            <div class="font-headline font-extrabold text-lg leading-tight" style="color:var(--primary)">5:00</div>
+            <div class="text-[11px] font-body font-semibold" style="color:var(--outline)">PM · 45m</div>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="font-headline font-bold text-lg leading-tight" style="color:var(--on-surface)">Mai Pham <span class="text-xs font-body font-semibold" style="color:var(--outline)">+1 guest</span></div>
+            <div class="text-sm font-body mt-0.5" style="color:var(--variant)">Dip Powder</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- day group: Tomorrow -->
+      <div class="flex items-center justify-between mb-2 px-1">
+        <span class="text-sm font-headline font-bold uppercase tracking-widest" style="color:var(--variant)">Tomorrow · Fri Jun 12</span>
+        <span class="text-xs font-body font-semibold" style="color:var(--outline)">1 appointment</span>
+      </div>
+      <div class="rounded-2xl border overflow-hidden mb-4" style="background:var(--lowest);border-color:var(--high)">
+        <div class="flex gap-3 px-4 py-3">
+          <div class="flex-shrink-0 text-center w-16">
+            <div class="font-headline font-extrabold text-lg leading-tight" style="color:var(--primary)">11:00</div>
+            <div class="text-[11px] font-body font-semibold" style="color:var(--outline)">AM · 90m</div>
+          </div>
+          <div class="min-w-0 flex-1">
+            <div class="font-headline font-bold text-lg leading-tight" style="color:var(--on-surface)">Linda Vo</div>
+            <div class="text-sm font-body mt-0.5" style="color:var(--variant)">Full Set · Nail Art</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- empty further days note + refresh stamp -->
+      <p class="text-xs font-body text-center mt-2" style="color:var(--outline)">Showing the next 7 days · updated 12:04 PM — pull the tab again to refresh</p>
+    </div>
+  </div>
+</div>
+
+<!-- ── Variant: push notification ────────────────────────────────────────── -->
+<div>
+  <div class="text-center font-headline font-bold text-sm mb-2 text-white/90">Lock-screen push when a new appointment is booked</div>
+  <div class="phone mx-auto flex items-start justify-center pt-16" style="min-height:300px;background:#232929">
+    <div class="w-[350px] rounded-2xl px-4 py-3 flex gap-3 items-start" style="background:rgba(250,250,250,.96);box-shadow:0 8px 30px rgba(0,0,0,.4)">
+      <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style="background:var(--primary)">
+        <span class="material-symbols-outlined" style="color:#fff;font-size:20px">spa</span>
+      </div>
+      <div class="min-w-0">
+        <div class="flex items-baseline justify-between gap-2">
+          <span class="font-headline font-bold text-[15px]" style="color:#111">New appointment 📅</span>
+          <span class="text-[11px] font-body" style="color:#777">now</span>
+        </div>
+        <div class="text-[13px] font-body leading-snug" style="color:#333">Jessica Tran — Thu Jun 11, 2:30 PM · Gel Manicure, Pedicure</div>
+      </div>
+    </div>
+  </div>
+  <div class="mt-3 w-[390px] text-[13px] font-body leading-relaxed rounded-xl px-4 py-3" style="background:rgba(255,255,255,.92);color:#222">
+    <b>Behavior:</b> the tech gets this push the moment the front desk books (or rebooks them onto) an appointment.
+    Tapping it opens the staff app on the Appts tab. Uses the same alerts opt-in that assignment pings use today —
+    no new permission prompt. Edits that only change time/notes don’t re-ping.
+  </div>
+</div>
+
+</body>
+</html>

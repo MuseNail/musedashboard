@@ -109,8 +109,10 @@ function toE164(raw) {
 }
 
 // ── Web Push (VAPID) helpers ────────────────────────────────────────────────────
-// Payload-less push: only a VAPID JWT (ES256) is needed — no aes128gcm body
-// encryption. (Pure helpers exported for unit tests.)
+// A VAPID JWT (ES256) authenticates every push. Pushes WITHOUT a payload show the
+// service worker's generic text; pushes WITH a payload ({title, body, tag}) are
+// aes128gcm-encrypted per RFC 8291 (encryptPushPayload below) so the staff app can
+// show a specific message (e.g. "New appointment"). (Pure helpers exported for unit tests.)
 export function b64urlFromBytes(bytes) {
   const b = new Uint8Array(bytes); let s = '';
   for (let i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
@@ -130,6 +132,46 @@ async function vapidJwt(privJwkStr, aud, sub) {
 async function pushKeyHash(endpoint) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(endpoint));
   return [...new Uint8Array(buf)].slice(0, 8).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// RFC 8291 Web Push payload encryption (aes128gcm), WebCrypto only. `sub` is the stored
+// PushSubscription JSON (endpoint + keys.p256dh/auth); returns the full encrypted body
+// (header ‖ ciphertext) ready to POST with Content-Encoding: aes128gcm.
+function b64urlToBytes(b64) {
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+export async function encryptPushPayload(sub, payloadStr) {
+  const enc = new TextEncoder();
+  const uaPub = b64urlToBytes(sub.keys.p256dh);          // subscriber's P-256 point (65B uncompressed)
+  const authSecret = b64urlToBytes(sub.keys.auth);       // subscriber's 16B auth secret
+  const asKeys = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const asPub = new Uint8Array(await crypto.subtle.exportKey('raw', asKeys.publicKey));
+  const uaKey = await crypto.subtle.importKey('raw', uaPub, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const ecdh = new Uint8Array(await crypto.subtle.deriveBits({ name: 'ECDH', public: uaKey }, asKeys.privateKey, 256));
+  const hkdf = async (salt, ikmBytes, info, len) => {
+    const key = await crypto.subtle.importKey('raw', ikmBytes, 'HKDF', false, ['deriveBits']);
+    return new Uint8Array(await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, key, len * 8));
+  };
+  const keyInfo = new Uint8Array([...enc.encode('WebPush: info\0'), ...uaPub, ...asPub]);
+  const ikm = await hkdf(authSecret, ecdh, keyInfo, 32);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const cek = await hkdf(salt, ikm, enc.encode('Content-Encoding: aes128gcm\0'), 16);
+  const nonce = await hkdf(salt, ikm, enc.encode('Content-Encoding: nonce\0'), 12);
+  const aesKey = await crypto.subtle.importKey('raw', cek, 'AES-GCM', false, ['encrypt']);
+  const plain = new Uint8Array([...enc.encode(payloadStr), 2]);   // 0x02 = final-record delimiter
+  const cipher = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv: nonce }, aesKey, plain));
+  const header = new Uint8Array(16 + 4 + 1 + 65);                 // salt ‖ rs ‖ idlen ‖ as_public
+  header.set(salt, 0);
+  new DataView(header.buffer).setUint32(16, 4096);
+  header[20] = 65;
+  header.set(asPub, 21);
+  const body = new Uint8Array(header.length + cipher.length);
+  body.set(header, 0);
+  body.set(cipher, header.length);
+  return body;
 }
 
 // ── Origin gate (OFF by default; flip on live via the ORIGIN_GATE_ENABLED secret) ──
@@ -658,6 +700,21 @@ export class MuseSalonDO {
       if (body.techId && body.endpoint) await this.state.storage.delete('push:' + body.techId + ':' + (await pushKeyHash(body.endpoint)));
       return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
+    // POST /push/notify { techIds|techId, title, body, tag } — app-triggered notification
+    // (e.g. the dashboard booked a new appointment for a tech). Lengths capped; best-effort.
+    if (url.pathname === '/push/notify' && request.method === 'POST') {
+      let body = {}; try { body = await request.json(); } catch {}
+      const techIds = [...new Set([...(Array.isArray(body.techIds) ? body.techIds : []), ...(body.techId ? [body.techId] : [])])]
+        .map(String).filter(Boolean).slice(0, 20);
+      if (techIds.length === 0) return new Response(JSON.stringify({ error: 'techIds required' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      const payload = {
+        title: String(body.title || 'Muse Staff').slice(0, 80),
+        body:  String(body.body || '').slice(0, 200),
+        tag:   String(body.tag || 'muse-assign').slice(0, 40),
+      };
+      await Promise.all(techIds.map(t => this.sendPushToTech(t, payload).catch(() => {})));
+      return new Response(JSON.stringify({ ok: true, sent: techIds.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
 
     // ── Helcim terminal result fan-out ──────────────────────────────────────────
     // Called server-side by the /terminal/webhook receiver. Pushes the terminal result to
@@ -675,18 +732,31 @@ export class MuseSalonDO {
     return new Response('Expected WebSocket upgrade or /state/*', { status: 426 });
   }
 
-  // Send a payload-less push to every device subscribed for this tech; prune dead subs.
-  async sendPushToTech(techId) {
+  // Push to every device subscribed for this tech; prune dead subs. With `payload`
+  // ({title, body, tag}) the body is aes128gcm-encrypted so the SW shows that message;
+  // without it (or if encryption fails) a payload-less ping falls back to the SW's
+  // generic assignment text.
+  async sendPushToTech(techId, payload) {
     if (!this.env.VAPID_PRIVATE_KEY) return;
     const subs = await this.state.storage.list({ prefix: 'push:' + techId + ':' });
     if (subs.size === 0) return;
     const subject = this.env.VAPID_SUBJECT || 'mailto:admin@musenailandspa.com';
     const pub = this.env.VAPID_PUBLIC_KEY || '';
+    const payloadStr = payload ? JSON.stringify(payload) : null;
     await Promise.all([...subs.entries()].map(async ([key, sub]) => {
       try {
         if (!sub || !sub.endpoint) { await this.state.storage.delete(key); return; }
         const jwt = await vapidJwt(this.env.VAPID_PRIVATE_KEY, new URL(sub.endpoint).origin, subject);
-        const res = await fetch(sub.endpoint, { method: 'POST', headers: { Authorization: `vapid t=${jwt}, k=${pub}`, TTL: '2592000' } });
+        const headers = { Authorization: `vapid t=${jwt}, k=${pub}`, TTL: '2592000' };
+        let body;
+        if (payloadStr && sub.keys && sub.keys.p256dh && sub.keys.auth) {
+          try {
+            body = await encryptPushPayload(sub, payloadStr);
+            headers['Content-Encoding'] = 'aes128gcm';
+            headers['Content-Type'] = 'application/octet-stream';
+          } catch { body = undefined; }
+        }
+        const res = await fetch(sub.endpoint, { method: 'POST', headers, body });
         if (res.status === 404 || res.status === 410) await this.state.storage.delete(key);   // subscription gone
         else if (!res.ok) console.warn('[push]', res.status, 'tech', techId);
       } catch (e) { console.error('[push] send failed:', (e && e.message) || String(e)); }
