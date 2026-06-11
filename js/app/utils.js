@@ -486,21 +486,70 @@ export function evalAmountExpression(str) {
   }
   return Math.round(acc * 100) / 100;
 }
-// Install once: on blur of an amount-style input (inputmode none/decimal, not a phone field),
-// replace an arithmetic expression with its result and fire `input` so downstream totals recompute.
-// Harmless on touch (the numpad already writes a plain number → no operator → ignored).
+// An amount-style field = the money/percent inputs the numpad serves (inputmode none/decimal), never
+// a phone field. These are the fields the desktop calculator + select-on-focus apply to.
+const _isAmountField = el => !!el && el.tagName === 'INPUT' && el.type !== 'tel' && ['none', 'decimal'].includes((el.getAttribute('inputmode') || '').toLowerCase());
+// Build the running tape (left-to-right) for the live popup: lines like ['40','+ 5','× 2'] + result.
+function _calcSteps(str) {
+  const norm = String(str == null ? '' : str).replace(/×/g, '*').replace(/÷/g, '/').replace(/[^0-9.+\-*/]/g, '');
+  const tokens = norm.match(/(\d+\.?\d*|\.\d+|[+\-*/])/g);
+  if (!tokens) return null;
+  let acc = parseFloat(tokens[0]); if (isNaN(acc)) return null;
+  const lines = [tokens[0]];
+  for (let i = 1; i + 1 < tokens.length; i += 2) {
+    const op = tokens[i], n = parseFloat(tokens[i + 1]); if (isNaN(n)) break;
+    acc = op === '+' ? acc + n : op === '-' ? acc - n : op === '*' ? acc * n : op === '/' ? (n === 0 ? acc : acc / n) : acc;
+    lines.push(_opSym(op) + ' ' + tokens[i + 1]);
+  }
+  return { lines, result: Math.round(acc * 100) / 100 };
+}
+function _hideCalcPop() { const p = document.getElementById('amt-calc-pop'); if (p) p.style.display = 'none'; }
+// QuickBooks-style adding-machine tape: a small popup under the field, live as you type an expression.
+function _showCalcPop(el) {
+  if (!/\d\s*[+\-*/×÷]/.test(el.value)) { _hideCalcPop(); return; }   // only once it's an expression
+  const steps = _calcSteps(el.value); if (!steps) { _hideCalcPop(); return; }
+  let pop = document.getElementById('amt-calc-pop');
+  if (!pop) {
+    pop = document.createElement('div'); pop.id = 'amt-calc-pop';
+    pop.style.cssText = 'position:fixed;z-index:300;pointer-events:none;background:var(--surface-container-lowest,#fff);border:1px solid var(--outline-variant,#c2cacd);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:7px 12px;font-family:Inter,sans-serif;font-variant-numeric:tabular-nums;text-align:right;min-width:110px';
+    document.body.appendChild(pop);
+  }
+  pop.innerHTML = steps.lines.map(l => `<div style="font-size:12px;color:var(--on-surface-variant,#5a6b70);line-height:1.55">${l}</div>`).join('')
+    + `<div style="border-top:1px solid var(--outline-variant,#c2cacd);margin-top:3px;padding-top:3px;font-size:15px;font-weight:700;color:var(--primary,#1a5252)">$${steps.result.toFixed(2)}</div>`;
+  pop.style.display = 'block';
+  const r = el.getBoundingClientRect();
+  pop.style.left = Math.max(4, Math.min(r.left, window.innerWidth - pop.offsetWidth - 6)) + 'px';
+  pop.style.top = (r.bottom + 4) + 'px';
+}
+// Commit an expression in the field to its result; fire `input` so downstream totals recompute.
+function _commitAmount(el) {
+  const result = evalAmountExpression(el.value);
+  if (result == null || String(result) === el.value) return false;
+  el.value = String(result);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  return true;
+}
+// Install once. Desktop money fields behave like the QuickBooks register amount field:
+//  • focus selects the existing value (type to replace),
+//  • typing an expression shows a live adding-machine tape popup,
+//  • Tab/click-away or Enter commits the result.
+// Inert on touch (the numpad serves those fields; it writes plain numbers → no operator → no popup).
 let _amountCalcInstalled = false;
 export function initAmountFieldCalc() {
   if (_amountCalcInstalled) return; _amountCalcInstalled = true;
-  document.addEventListener('focusout', e => {
-    const el = e.target;
-    if (!el || el.tagName !== 'INPUT' || el.type === 'tel') return;
-    const im = (el.getAttribute('inputmode') || '').toLowerCase();
-    if (im !== 'none' && im !== 'decimal') return;             // amount-style fields only
-    const result = evalAmountExpression(el.value);
-    if (result == null || String(result) === el.value) return;
-    el.value = String(result);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
+  let _selectPending = null;
+  document.addEventListener('focusin', e => {
+    if (!_isAmountField(e.target)) return;
+    const el = e.target; _selectPending = el;
+    setTimeout(() => { if (document.activeElement === el) { try { el.select(); } catch {} } }, 0);   // highlight existing value
+  });
+  // A click after focus would collapse the selection — stop it so the value stays highlighted.
+  document.addEventListener('mouseup', e => { if (e.target === _selectPending) { e.preventDefault(); _selectPending = null; } });
+  document.addEventListener('input', e => { if (_isAmountField(e.target)) _showCalcPop(e.target); });
+  document.addEventListener('focusout', e => { if (_isAmountField(e.target)) { _commitAmount(e.target); _hideCalcPop(); } });
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || !_isAmountField(e.target)) return;
+    if (evalAmountExpression(e.target.value) != null) { e.preventDefault(); _commitAmount(e.target); _hideCalcPop(); const el = e.target; setTimeout(() => { try { el.select(); } catch {} }, 0); }
   });
 }
 function _closeNumpadModal() {
