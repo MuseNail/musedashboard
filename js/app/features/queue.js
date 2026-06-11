@@ -5,7 +5,7 @@
 
 import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
-import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, escHtml, dateBtnLabel } from '../utils.js';
+import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, escHtml, escAttrJs, dateBtnLabel } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle } from './status.js';
@@ -957,7 +957,7 @@ export function renderGroupAssignContent() {
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
             <input type="text" inputmode="none" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.comped ? '' : (a.cost != null && a.cost !== 0 ? a.cost : '')}" ${a.comped ? 'disabled' : ''}
               class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer${a.comped ? ' opacity-50' : ''}"
-              onfocus="openNumpad(this,'Cost — ' + '${s.label}')" onclick="openNumpad(this,'Cost — ' + '${s.label}')" oninput="updateGroupTotal()"></div>
+              onfocus="openNumpad(this,'Cost — ${escAttrJs(s.label)}')" onclick="openNumpad(this,'Cost — ${escAttrJs(s.label)}')" oninput="updateGroupTotal()"></div>
         </div>
         <div class="flex items-center gap-2 mt-2">
           <label class="flex items-center gap-1.5 text-[11px] font-body text-on-surface-variant cursor-pointer select-none">
@@ -990,7 +990,7 @@ export function renderGroupAssignContent() {
               <button type="button" onclick="stepItemQty(this,1)" aria-label="Increase quantity" class="px-2.5 py-1.5 text-on-surface-variant font-headline font-bold text-base leading-none active:bg-surface-container-high">＋</button>
             </div>
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">$</label>
-            <input type="text" inputmode="none" value="${existing.price != null && existing.price !== 0 ? existing.price : ''}" placeholder="${item.price || '0.00'}" class="item-price w-16 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" onfocus="openNumpad(this,'${item.label}')" onclick="openNumpad(this,'${item.label}')" oninput="updateGroupTotal()">
+            <input type="text" inputmode="none" value="${existing.price != null && existing.price !== 0 ? existing.price : ''}" placeholder="${item.price || '0.00'}" class="item-price w-16 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" onfocus="openNumpad(this,'${escAttrJs(item.label)}')" onclick="openNumpad(this,'${escAttrJs(item.label)}')" oninput="updateGroupTotal()">
           </div></div></div>`;
   }).join('');
 
@@ -1057,7 +1057,10 @@ export function assignToggleGcForm() {
   if (!f.classList.contains('hidden')) setTimeout(() => document.getElementById('ga-gc-amount')?.focus(), 60);
 }
 export function assignAddGiftCard() {
-  const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]); if (!entry) return;
+  // One-list has no active tab — the gift-card form is a whole-party extra, so anchor new
+  // cards on the first party member deterministically (tabbed mode keeps the active tab).
+  const targetId = ASSIGN_ONELIST ? groupAssignEntries[0] : groupAssignEntries[activeGroupTab];
+  const entry = q().find(e => String(e.id) === targetId); if (!entry) return;
   const amount = parseFloat(document.getElementById('ga-gc-amount')?.value) || 0;
   if (!(amount > 0)) { showToast('Enter the gift card amount.'); return; }
   entry.giftcardSales = [...(entry.giftcardSales || []), {
@@ -1072,6 +1075,12 @@ export function assignAddGiftCard() {
 }
 export function assignRemoveGiftCard(idx) {
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]); if (!entry) return;
+  if (entry.giftcardSales && idx >= 0 && idx < entry.giftcardSales.length) { entry.giftcardSales.splice(idx, 1); saveCurrentGroupTabInputs(); renderGroupAssignContent(); }
+}
+// One-list: remove a card from a SPECIFIC party member's array (the rendered line carries
+// its owner id + local index), so multi-member parties remove the right card.
+export function assignRemoveGiftCardFor(entryId, idx) {
+  const entry = q().find(e => String(e.id) === String(entryId)); if (!entry) return;
   if (entry.giftcardSales && idx >= 0 && idx < entry.giftcardSales.length) { entry.giftcardSales.splice(idx, 1); saveCurrentGroupTabInputs(); renderGroupAssignContent(); }
 }
 
@@ -1103,7 +1112,7 @@ function _assignSvcRowHtml(entry, sid, techOptions, stationOptions, allowRemove)
         <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Cost ($)</label>
           <input type="text" inputmode="none" placeholder="${s.baseCost != null ? Number(s.baseCost).toFixed(2) : '0.00'}" value="${a.comped ? '' : (a.cost != null && a.cost !== 0 ? a.cost : '')}" ${a.comped ? 'disabled' : ''}
             class="assign-cost w-full bg-surface-container border border-surface-container-high rounded-lg px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary cursor-pointer${a.comped ? ' opacity-50' : ''}"
-            onfocus="openNumpad(this,'Cost — ' + '${s.label}')" onclick="openNumpad(this,'Cost — ' + '${s.label}')" oninput="updateGroupTotal()"></div>
+            onfocus="openNumpad(this,'Cost — ${escAttrJs(s.label)}')" onclick="openNumpad(this,'Cost — ${escAttrJs(s.label)}')" oninput="updateGroupTotal()"></div>
       </div>
       <div class="flex items-center gap-2 mt-2">
         <label class="flex items-center gap-1.5 text-[11px] font-body text-on-surface-variant cursor-pointer select-none">
@@ -1181,11 +1190,14 @@ function _renderAssignOneList() {
               <button type="button" onclick="stepItemQty(this,1)" aria-label="Increase quantity" class="px-2.5 py-1.5 text-on-surface-variant font-headline font-bold text-base leading-none active:bg-surface-container-high">＋</button>
             </div>
             <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest">$</label>
-            <input type="text" inputmode="none" value="${existing.price != null && existing.price !== 0 ? existing.price : ''}" placeholder="${item.price || '0.00'}" class="item-price w-16 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" onfocus="openNumpad(this,'${item.label}')" onclick="openNumpad(this,'${item.label}')" oninput="updateGroupTotal()">
+            <input type="text" inputmode="none" value="${existing.price != null && existing.price !== 0 ? existing.price : ''}" placeholder="${item.price || '0.00'}" class="item-price w-16 bg-surface-container border border-surface-container-high rounded-lg px-2 py-1.5 text-sm font-body focus:outline-none focus:border-primary text-right cursor-pointer" onfocus="openNumpad(this,'${escAttrJs(item.label)}')" onclick="openNumpad(this,'${escAttrJs(item.label)}')" oninput="updateGroupTotal()">
           </div></div></div>`;
   }).join('');
 
-  const anyGc = party.flatMap(e => e.giftcardSales || []);
+  // Each gift-card line carries its OWNING entry id + that entry's local index, so the ✕
+  // removes the right card on a party where cards sit on more than one member (a flat
+  // party-wide index would address the wrong guest's array).
+  const anyGc = party.flatMap(e => (e.giftcardSales || []).map((g, gi) => ({ g, ownerId: e.id, gi })));
   const extrasOpen = gDiscount > 0 || gcCount > 0 || [...gItems.values()].some(i => (i.qty || 0) > 0);
   const extrasSummary = [
     [...gItems.values()].reduce((s,i)=>s+(i.qty||0),0) ? `${[...gItems.values()].reduce((s,i)=>s+(i.qty||0),0)} item(s)` : '',
@@ -1223,7 +1235,7 @@ function _renderAssignOneList() {
                 <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">From <span class="normal-case tracking-normal text-on-surface-variant">(note)</span></label><input id="ga-gc-from" type="text" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
                 <button type="button" onclick="assignAddGiftCard()" class="w-full py-2 rounded-lg bg-primary text-on-primary font-body font-bold text-sm hover:bg-primary-dim transition-colors">Add gift card to ticket</button>
               </div>
-              ${anyGc.map((g, i) => `<div class="flex items-center gap-2 py-1.5 mt-1 border-t border-surface-container first:border-t-0"><span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:18px">card_giftcard</span><span class="flex-1 min-w-0 truncate font-body text-on-surface text-sm">Gift Card${g.serial ? ' #' + String(g.serial).replace(/[<>&"]/g, '') : ''}${g.to ? ' → ' + String(g.to).replace(/[<>&"]/g, '') : ''}</span><button type="button" onclick="assignRemoveGiftCard(${i})" class="text-on-surface-variant hover:text-error flex-shrink-0"><span class="material-symbols-outlined" style="font-size:16px">close</span></button><span class="font-headline font-bold text-primary text-sm flex-shrink-0">$${(+g.amount).toFixed(2)}</span></div>`).join('')}
+              ${anyGc.map(({ g, ownerId, gi }) => `<div class="flex items-center gap-2 py-1.5 mt-1 border-t border-surface-container first:border-t-0"><span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:18px">card_giftcard</span><span class="flex-1 min-w-0 truncate font-body text-on-surface text-sm">Gift Card${g.serial ? ' #' + escHtml(g.serial) : ''}${g.to ? ' → ' + escHtml(g.to) : ''}</span><button type="button" onclick="assignRemoveGiftCardFor('${escAttrJs(String(ownerId))}',${gi})" class="text-on-surface-variant hover:text-error flex-shrink-0"><span class="material-symbols-outlined" style="font-size:16px">close</span></button><span class="font-headline font-bold text-primary text-sm flex-shrink-0">$${(+g.amount).toFixed(2)}</span></div>`).join('')}
             </div>
             <div class="pt-1"><div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-2">Discount</div>
               <div class="bg-surface-container-low rounded-xl p-3 border border-surface-container-high">
@@ -1266,7 +1278,7 @@ export function assignCatalogTap(sid) {
       return `<button onclick="assignServiceToggleFor('${e.id}','${sid}'); this.querySelector('.gp-check').textContent = this.querySelector('.gp-check').textContent ? '' : 'check';"
         class="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border border-surface-container-high hover:border-primary hover:bg-primary/5 transition-colors text-left">
         <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${e.groupColor || '#1a5252'}"></span>
-        <span class="flex-1 font-body font-semibold text-sm text-on-surface">${(e.name || 'Guest').split(' ')[0]}</span>
+        <span class="flex-1 font-body font-semibold text-sm text-on-surface">${escHtml((e.name || 'Guest').split(' ')[0])}</span>
         <span class="material-symbols-outlined gp-check text-primary" style="font-size:18px">${has ? 'check' : ''}</span></button>`;
     }).join('')}</div>
     <button onclick="closeAssignGuestPick()" class="w-full py-2.5 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm">Done</button></div>`;

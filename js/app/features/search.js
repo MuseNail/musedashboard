@@ -3,10 +3,14 @@
 // customers, today's queue, recent transactions (90 days), gift cards, and today's
 // not-yet-checked-in appointments. Tap a result to jump straight to it.
 import { getState } from '../store.js';
+import { escHtml, escAttrJs } from '../utils.js';
 
-const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
-const nameOf  = c => c.name || [c.given_name, c.family_name].filter(Boolean).join(' ');
-const phoneOf = c => c.phone_number || c.phone || '';
+// DO customer entities (state.customers) carry firstName/lastName/phone — match the
+// directory's real shape (square-customers.js rebuildDirectory), not the old Square
+// given_name/phone_number fields. esc kept as an alias of the shared HTML escaper.
+const esc = escHtml;
+const nameOf  = c => [c.firstName, c.lastName].filter(Boolean).join(' ') || c.name || '';
+const phoneOf = c => c.phone || c.phone_number || '';
 
 export function openGlobalSearch() {
   closeGlobalSearch();
@@ -29,7 +33,14 @@ export function openGlobalSearch() {
 }
 export function closeGlobalSearch() { document.getElementById('global-search-modal')?.remove(); }
 
+let _gsTimer = null;
 export function gsInput(val) {
+  // Debounce: the scan touches customers + queue + 90 days of records + gift cards +
+  // today's appointments — re-running it on every keystroke janks on a busy iPad.
+  clearTimeout(_gsTimer);
+  _gsTimer = setTimeout(() => _gsRender(val), 140);
+}
+function _gsRender(val) {
   const box = document.getElementById('gs-results'); if (!box) return;
   const qstr = String(val || '').trim();
   if (qstr.length < 2) { box.innerHTML = ''; return; }
@@ -37,7 +48,7 @@ export function gsInput(val) {
   if (!groups.length) { box.innerHTML = '<div class="px-5 py-4 text-sm font-body text-on-surface-variant">No matches.</div>'; return; }
   box.innerHTML = groups.map(g => `
     <div class="px-4 pt-2.5 pb-1 text-[10px] font-body font-bold uppercase tracking-widest text-outline bg-surface-container-low">${g.label}</div>
-    ${g.rows.map(r => `<button onclick='${r.go}' class="w-full flex items-center gap-3 px-4 py-2.5 border-b border-surface-container hover:bg-surface-container-low transition-colors text-left">
+    ${g.rows.map(r => `<button onclick="${r.go}" class="w-full flex items-center gap-3 px-4 py-2.5 border-b border-surface-container hover:bg-surface-container-low transition-colors text-left">
       <span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:19px">${g.icon}</span>
       <span class="min-w-0 flex-1"><span class="block font-body font-semibold text-sm text-on-surface truncate">${r.title}</span>
         ${r.sub ? `<span class="block text-[11px] font-body text-on-surface-variant truncate">${r.sub}</span>` : ''}</span>
@@ -57,7 +68,7 @@ function _gsSearch(qstr) {
   const custs = (st.customers || []).filter(Boolean).filter(c => nameHit(nameOf(c)) || phoneHit(phoneOf(c))).slice(0, 5);
   if (custs.length) out.push({ label: 'Customers', icon: 'person', rows: custs.map(c => ({
     title: esc(nameOf(c) || '(no name)'), sub: esc(phoneOf(c)),
-    go: `gsGo("cust","${esc(String(c.squareId || c.id))}")`,
+    go: `gsGo('cust','${escAttrJs(String(c.id))}')`,
   })) });
 
   // In the queue today
@@ -65,7 +76,7 @@ function _gsSearch(qstr) {
   if (qrows.length) out.push({ label: 'In the queue today', icon: 'confirmation_number', rows: qrows.map(e => ({
     title: esc(e.name || '(no name)'),
     sub: esc(`${(e.services || []).length} service(s) · ${e.status === 'inservice' ? 'In Service' : e.status === 'complete' ? 'Done' : e.status === 'paid' || e.status === 'done' ? 'Paid' : 'Waiting'}`),
-    go: `gsGo("queue","${esc(String(e.id))}")`,
+    go: `gsGo('queue','${escAttrJs(String(e.id))}')`,
   })) });
 
   // Today's appointments (not yet checked in — checked-in ones surface via the queue above)
@@ -74,7 +85,7 @@ function _gsSearch(qstr) {
     if (appts.length) out.push({ label: "Today's appointments", icon: 'event', rows: appts.map(a => ({
       title: esc(a.name),
       sub: esc(`${new Date(a.startMs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}${a.svc ? ' · ' + a.svc : ''}${a.techName ? ' · ' + a.techName : ''}`),
-      go: `gsGo("appt","${esc(a.name)}")`,
+      go: `gsGo('appt','${escAttrJs(a.name)}')`,
     })) });
   } catch {}
 
@@ -90,7 +101,7 @@ function _gsSearch(qstr) {
     const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     return { title: esc(`${r.name || '(no name)'} — $${(r.totalCost || 0).toFixed(2)}`),
       sub: esc(d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + (r.status === 'refund' ? ' · refund' : '')),
-      go: `gsGo("txn","${day}")` };
+      go: `gsGo('txn','${day}')` };
   }) });
 
   // Gift cards (serial or recipient)
@@ -101,7 +112,7 @@ function _gsSearch(qstr) {
   if (gcs.length) out.push({ label: 'Gift cards', icon: 'card_giftcard', rows: gcs.map(g => ({
     title: esc(`GC${g.serial ? ' #' + g.serial : ''} — $${(+g.amount || 0).toFixed(2)}`),
     sub: esc([g.to ? 'to ' + g.to : '', g.from ? 'from ' + g.from : ''].filter(Boolean).join(' · ')),
-    go: `gsGo("gc","${esc(String(g.id))}")`,
+    go: `gsGo('gc','${escAttrJs(String(g.id))}')`,
   })) });
 
   return out;
