@@ -75,12 +75,12 @@ const fdByPin = pin => { const p = String(pin == null ? '' : pin).trim(); return
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 function parsePrice(v) { if (v == null || String(v).trim() === '') return null; const n = parseFloat(v); return (isFinite(n) && n >= 0) ? n : null; }
 
-// Same vocabulary + filled palette as the dashboard's serviceLineStyle (C9/D13):
-// Waiting (amber) · In Service (teal) · Done (green) · Paid (slate).
+// Same vocabulary + filled palette as the dashboard's serviceLineStyle (C9/D13; recolored v4.79):
+// Waiting (amber) · In Service (green) · Done (blue) · Paid (slate).
 const STATUS_CHIP = {
   waiting:   { bg:'#f5c870', fg:'#3a2800', label:'Waiting'    },
-  inservice: { bg:'#1a5252', fg:'#ffffff', label:'In Service' },
-  complete:  { bg:'#2a7a4f', fg:'#ffffff', label:'Done'       },
+  inservice: { bg:'#2a7a4f', fg:'#ffffff', label:'In Service' },
+  complete:  { bg:'#1a5c7a', fg:'#ffffff', label:'Done'       },
   paid:      { bg:'#5b6166', fg:'#ffffff', label:'Paid'       },
 };
 function statusChip(status) {

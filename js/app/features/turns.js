@@ -344,7 +344,7 @@ export function renderTurnsTechGrid() {
         const turnLabel = tt === 'bonus' ? 'Bonus' : (cost === 0 ? '?' : '' + turnLabelNum);
         const ss = getAssignmentStatus(e, a);
         let bg, fg;
-        if (isPaidStatus(ss)) { bg='#dde2e5'; fg='#555'; } else if (ss === 'complete') { bg='#d8ecdf'; fg='#1b4d33'; } else if (ss === 'inservice') { bg='#cfe0e0'; fg='#123c3c'; } else { bg='#ffe9c4'; fg='#5c4010'; }
+        if (isPaidStatus(ss)) { bg='#dde2e5'; fg='#555'; } else if (ss === 'complete') { bg='#d3e4ef'; fg='#14425e'; } else if (ss === 'inservice') { bg='#d8ecdf'; fg='#1b4d33'; } else { bg='#ffe9c4'; fg='#5c4010'; }
         const outline = e.groupId ? `;outline:2px solid ${e.groupColor||'#e8a230'};outline-offset:-1px` : '';
         const s = svc(a.serviceId);
         const svcLabel = s ? s.label : (e.services.map(sid => svc(sid)?.label || '?').join(', '));
@@ -407,9 +407,11 @@ export function renderTurnsQueue() {
     const timeStr = new Date(e.checkinTime).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
     const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:5px;background:${e.groupColor||'#888'};color:#fff;font-size:9px;font-weight:800;flex-shrink:0">${partyLetters.get(e.groupId) || '•'}</span>` : '';
     const groupLbl = e.groupLabel ? `<span class="text-[10px] font-body italic ml-0.5" style="color:${e.groupColor||'#888'}">${e.groupLabel}</span>` : '';
-    const avatar = e.groupId
-      ? `<div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-headline font-bold" style="background:${e.groupColor}20;color:${e.groupColor};border:2px solid ${e.groupColor}">${e.name.charAt(0).toUpperCase()}</div>`
-      : `<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center flex-shrink-0"><span class="text-xs font-headline font-bold text-primary">${e.name.charAt(0).toUpperCase()}</span></div>`;
+    // Avatar bubble is STATUS-colored + consistent for everyone (green in service · blue done ·
+    // amber waiting), so it reads at a glance and party members no longer get a different-colored
+    // bubble. Party grouping still shows via the small letter badge (groupDot) beside the name.
+    const _av = serviceLineStyle(e.status).pill;
+    const avatar = `<div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-headline font-bold" style="background:${_av.bg};color:${_av.fg}">${escHtml(e.name.charAt(0).toUpperCase())}</div>`;
     const assignments = (e.assignments||[]).filter(a => a.techId || a.serviceId);
     const es = suggestions[e.id] || {};
     let serviceContent;
@@ -438,10 +440,10 @@ export function renderTurnsQueue() {
         <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
       </div>`; }).join('');
     }
-    // C9/D13 vocabulary: In Service = teal, Done(complete) = green, Waiting = amber —
-    // match the status pills rendered inside this same card (and the floor-plan tints).
-    const borderColor = e.status==='inservice' ? '#1a5252' : e.status==='complete' ? '#2a7a4f' : '#d4860a';
-    const bgTint = e.status==='inservice' ? 'rgba(26,82,82,0.10)' : e.status==='complete' ? 'rgba(42,122,79,0.12)' : 'rgba(255,224,178,0.25)';
+    // C9/D13 vocabulary (recolored v4.79): In Service = green, Done(complete) = blue, Waiting = amber
+    // — match the status pills rendered inside this same card (and the floor-plan tints).
+    const borderColor = e.status==='inservice' ? '#2a7a4f' : e.status==='complete' ? '#1a5c7a' : '#d4860a';
+    const bgTint = e.status==='inservice' ? 'rgba(42,122,79,0.10)' : e.status==='complete' ? 'rgba(26,92,122,0.12)' : 'rgba(255,224,178,0.25)';
     return `<div class="px-3 py-2 cursor-grab hover:brightness-95 transition-all select-none border-b border-surface-container-high border-l-4" style="border-left-color:${borderColor};background:${bgTint}" data-entry-id="${e.id}" onclick="showGroupAssignModal('${e.id}')">
       <div class="flex items-start gap-2 pointer-events-none">${avatar}
         <div class="min-w-0 flex-grow"><div class="flex items-center gap-1 flex-wrap leading-tight">${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span>${groupLbl}<span class="text-[10px] font-body text-on-surface-variant ml-1">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></span></div>${serviceContent}</div></div></div>`;

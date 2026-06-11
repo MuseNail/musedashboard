@@ -2473,13 +2473,15 @@ tailwind.config = {
 
       <!-- Customer -->
       <div class="grid grid-cols-2 gap-3">
-        <div>
+        <div class="ac-input-wrap">
           <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Customer Name *</label>
-          <input type="text" id="hist-name" placeholder="Full name" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+          <input type="text" id="hist-name" placeholder="Full name" autocomplete="off" oninput="histAcSearch(this,'first')" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+          <div id="hist-ac-name" class="autocomplete-list hidden"></div>
         </div>
-        <div>
+        <div class="ac-input-wrap">
           <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
-          <input type="tel" id="hist-phone" placeholder="(555) 000-0000" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+          <input type="tel" id="hist-phone" placeholder="(555) 000-0000" autocomplete="off" oninput="histAcSearch(this,'phone')" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">
+          <div id="hist-ac-phone" class="autocomplete-list hidden"></div>
         </div>
       </div>
 

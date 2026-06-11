@@ -934,7 +934,7 @@ export function renderGroupAssignContent() {
     const a = (entry.assignments || []).find(x => x.serviceId === sid) || {};
     const st = getAssignmentStatus(entry, a);
     const sug = !a.techId ? (window.suggestTechForService?.(sid) || null) : null;
-    const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#1a5252;color:#fff', complete:'background:#2a7a4f;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[st] || 'background:#f5c870;color:#3a2800';
+    const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#2a7a4f;color:#fff', complete:'background:#1a5c7a;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[st] || 'background:#f5c870;color:#3a2800';
     const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[st] || 'Waiting';
     const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', paid:'waiting', done:'waiting' }[st];
     // Correct an accidental status change (e.g. marked In Service by mistake). Not offered
@@ -1090,7 +1090,7 @@ function _assignSvcRowHtml(entry, sid, techOptions, stationOptions, allowRemove)
   const a = (entry.assignments || []).find(x => x.serviceId === sid) || {};
   const st = getAssignmentStatus(entry, a);
   const sug = !a.techId ? (window.suggestTechForService?.(sid) || null) : null;
-  const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#1a5252;color:#fff', complete:'background:#2a7a4f;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[st] || 'background:#f5c870;color:#3a2800';
+  const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#2a7a4f;color:#fff', complete:'background:#1a5c7a;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[st] || 'background:#f5c870;color:#3a2800';
   const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Done', paid:'Paid', done:'Paid' }[st] || 'Waiting';
   const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', paid:'waiting', done:'waiting' }[st];
   const prevStatus = { inservice:'waiting', complete:'inservice' }[st];

@@ -139,8 +139,9 @@ function stationHtml(id, entry) {
   const accent = catColor(stationType(id));
   let bg = (L.fill || accent) + '17', border = L.outline || accent;
   if (entry && !floorEditMode) {
-    if (live) { bg = '#cfe0e0'; border = '#1a5252'; }
-    else if (complete) { bg = '#d8ecdf'; border = '#2a7a4f'; }
+    // C9/D13 (recolored v4.79): In Service = green, Done/complete = blue, Waiting = amber.
+    if (live) { bg = '#d8ecdf'; border = '#2a7a4f'; }
+    else if (complete) { bg = '#d3e4ef'; border = '#1a5c7a'; }
     else { bg = '#ffe9c4'; border = '#d4860a'; }
   }
   let content;

@@ -77,13 +77,15 @@ export function applyAssignmentStatus(a, newStatus) {
 // status. Drawing the circle keeps every status the EXACT same diameter — Unicode glyphs
 // (● vs ◍) render at different sizes.
 // Render it as: <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;{dot}"></span>
-// One vocabulary + one filled-pill palette everywhere (C9/D13):
-// Waiting (amber) · In Service (teal) · Done (green) · Paid (slate).
+// One vocabulary + one filled-pill palette everywhere (C9/D13; recolored v4.79):
+// Waiting (amber) · In Service (green = actively working) · Done (blue = finished, awaiting
+// payment) · Paid (slate). Green/blue (not teal/green) so In Service and Done read as clearly
+// different on the busy Turns board.
 export function serviceLineStyle(status) {
-  if (isPaidStatus(status))    return { key: 'paid',      dot: 'background:#8a9298', bar: '#8a9298', tint: '',                   pill: { bg: '#5b6166', fg: '#ffffff', label: 'Paid'       }, rowOpacity: 0.6 };
-  if (status === 'inservice')  return { key: 'inservice', dot: 'background:#1a5252', bar: '#1a5252', tint: 'rgba(26,82,82,.07)', pill: { bg: '#1a5252', fg: '#ffffff', label: 'In Service' }, rowOpacity: 1 };
-  if (status === 'complete')   return { key: 'complete',  dot: 'background:#2a7a4f', bar: '#2a7a4f', tint: '',                   pill: { bg: '#2a7a4f', fg: '#ffffff', label: 'Done'       }, rowOpacity: 1 };
-  return                              { key: 'waiting',   dot: 'background:#d4860a', bar: '#d4860a', tint: '',                   pill: { bg: '#f5c870', fg: '#3a2800', label: 'Waiting'    }, rowOpacity: 0.9 };
+  if (isPaidStatus(status))    return { key: 'paid',      dot: 'background:#8a9298', bar: '#8a9298', tint: '',                    pill: { bg: '#5b6166', fg: '#ffffff', label: 'Paid'       }, rowOpacity: 0.6 };
+  if (status === 'inservice')  return { key: 'inservice', dot: 'background:#2a7a4f', bar: '#2a7a4f', tint: 'rgba(42,122,79,.08)', pill: { bg: '#2a7a4f', fg: '#ffffff', label: 'In Service' }, rowOpacity: 1 };
+  if (status === 'complete')   return { key: 'complete',  dot: 'background:#1a5c7a', bar: '#1a5c7a', tint: '',                    pill: { bg: '#1a5c7a', fg: '#ffffff', label: 'Done'       }, rowOpacity: 1 };
+  return                              { key: 'waiting',   dot: 'background:#d4860a', bar: '#d4860a', tint: '',                    pill: { bg: '#f5c870', fg: '#3a2800', label: 'Waiting'    }, rowOpacity: 0.9 };
 }
 
 export function setAssignmentStatus(entry, serviceId, newStatus, isRevert) {

@@ -274,6 +274,31 @@ export function acSearchManual(input, idx, field) {
   const other = document.getElementById(field === 'phone' ? `mac-first-${idx}` : `mac-phone-${idx}`);
   if (other) { other.innerHTML = ''; other.classList.add('hidden'); }
 }
+// Add Historical modal autocomplete — a single full-name field + phone (no first/last split),
+// so it can't reuse buildDropdown's first/last fill. Reuses filterCustomers; fills hist-name
+// (full display) + hist-phone on pick. The global outside-click handler (utils.js) closes it.
+export function histAcSearch(input, field) {
+  if (field === 'phone') formatPhone(input);
+  const results = filterCustomers(input.value, field);
+  const drop = document.getElementById(field === 'phone' ? 'hist-ac-phone' : 'hist-ac-name');
+  const other = document.getElementById(field === 'phone' ? 'hist-ac-name' : 'hist-ac-phone');
+  if (other) { other.innerHTML = ''; other.classList.add('hidden'); }
+  if (!drop) return;
+  if (!results.length) { drop.innerHTML = ''; drop.classList.add('hidden'); return; }
+  drop.innerHTML = results.map(c => {
+    const d = (c.phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1').slice(0, 10);
+    const ph = d.length === 10 ? `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}` : (c.phone || '');
+    return `<div class="autocomplete-item" onmousedown="fillHistCustomer('${escAttrJs(c.display || '')}','${escAttrJs(c.phone || '')}')">
+      <div class="ac-name">${escHtml(c.display) || '—'}</div><div class="ac-phone">${escHtml(ph) || 'No phone'}</div></div>`;
+  }).join('');
+  drop.classList.remove('hidden');
+}
+export function fillHistCustomer(name, phone) {
+  const n = document.getElementById('hist-name'); if (n) n.value = name;
+  const p = document.getElementById('hist-phone');
+  if (p) { const d = (phone || '').replace(/\D/g, '').replace(/^1(\d{10})$/, '$1').slice(0, 10); p.value = d.length === 10 ? `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}` : (phone || ''); }
+  ['hist-ac-name', 'hist-ac-phone'].forEach(id => { const el = document.getElementById(id); if (el) { el.innerHTML = ''; el.classList.add('hidden'); } });
+}
 
 // ── Customers tab (dedicated panel; replaces the old directory modal) ─────────
 // Back-compat shims: the Settings "Customer Directory" leaf + main.js closeAllModals
