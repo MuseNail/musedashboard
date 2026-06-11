@@ -1,6 +1,8 @@
 # TurnDesk — new-project kickoff prompt
 
+> **STATUS: PAUSED (2026-06-03)** until musedashboard is fully stable — do not start without the owner un-pausing it.
 > **How to use:** start a brand-new chat (ideally in the new TurnDesk repo once it exists, or in any working folder to begin) and paste everything below the line. It's self-contained.
+> **Note (2026-06-11):** the old `TURNDESK-PORT.md` port tracker was deleted — the authoritative replay list when resuming is simply `git log` on musedashboard since the fork point (or re-fork fresh; much has shipped since, incl. the in-repo Helcim integration which supersedes parts of the adapter plan below).
 
 ---
 

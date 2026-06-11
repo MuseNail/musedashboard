@@ -2,7 +2,7 @@
 
 All planned phases (Split through Phase 7) are complete. The app is live and operational. This document preserves the build history and defines the post-launch development direction.
 
-> ⭐ **Active work (2026-06): post-audit hardening DONE → Square→Helcim migration next.** Production is **v4.33**. The full system-wide audit (§1–§15) is COMPLETE and **all HIGHs are fixed/shipped** (v4.11–v4.33). Phases 1–3 of the post-audit plan are done — security + robustness fixes, and **customers + the service/item/fees catalog moved OFF Square** into the Durable Object (customers are now a `customer:<id>` entity with a dedicated **Customers tab**; Square catalog sync + Bookings removed). **Next major project = the Square→Helcim payment migration** (`HELCIM-MIGRATION.md`; gated on the Smart Terminal hardware). Audit record: **`AUDIT-2026-06.md`**; backlog + ordered plan: **`PRIORITIES.md`** / **`NEXT-SESSION-KICKOFF.md`**.
+> ⭐ **State (2026-06-11): the 2026-06 audit, the post-audit hardening, AND the Square→Helcim migration are all DONE — Helcim is the live processor.** The app is the source of truth for customers + catalog; appointments are Google-backed (server-side OAuth); a large UX overhaul (consolidated nav, unified buttons/status vocabulary, global search, one-list Assign & Price, calculator money fields, What's-New popup) shipped v4.59–v4.81. **The live pipeline is `PRIORITIES.md`** (top: Helcim refund path · §13 Worker auth · retire Square). Audit record: `AUDIT-2026-06.md` · migration record + API findings: `HELCIM-MIGRATION.md`.
 
 ---
 
