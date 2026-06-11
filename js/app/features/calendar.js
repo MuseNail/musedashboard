@@ -442,7 +442,13 @@ export function setCalView(v) {
   calLoadAndRender();
 }
 export function syncCalViewToggle() {
-  const set = (id, on) => { const b = document.getElementById(id); if (!b) return; b.style.background = on ? 'var(--md-primary, #1a5252)' : ''; b.style.color = on ? '#ffffff' : ''; };
+  // Segmented-control look (shared .subnav-seg/.subnav-btn styles): the selected side
+  // is the raised white pill and shows a ✓ so the active view is unmistakable.
+  const set = (id, on) => {
+    const b = document.getElementById(id); if (!b) return;
+    b.classList.toggle('on', on);
+    const c = b.querySelector('.cal-view-check'); if (c) c.style.display = on ? '' : 'none';
+  };
   set('cal-view-day', !calIsWeek());
   set('cal-view-week', calIsWeek());
 }
@@ -769,7 +775,16 @@ function calRenderWeekGrid() {
   });
   body += '</div>';
 
-  grid.innerHTML = `<div id="cal-scroll" style="height:100%;overflow:auto;position:relative;-webkit-overflow-scrolling:touch"><div style="min-width:${TIME_W + COL_W * 7}px;display:flex;flex-direction:column;min-height:100%">${hdr}${body}</div></div>`;
+  // Staff color key — week blocks are tinted by tech, so name the colors. Pinned above
+  // the scrollport (doesn't scroll away); one chip per visible calendar, grid order.
+  const legend = `<div id="cal-week-legend" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;flex-shrink:0;padding:6px 12px;border-bottom:1.5px solid var(--outline-variant, #cfd8d8);background:var(--surface-container-lowest, #f5f7f8)">`
+    + `<span style="font-size:10px;font-family:var(--font-body);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--on-surface-variant, #41484d)">Staff</span>`
+    + visible.map(cal => {
+        const color = cal.id === uCal ? '#9ca3af' : cal.color;
+        return `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-family:var(--font-body);font-weight:600;color:var(--on-surface, #0e1a1a)"><span style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></span>${escHtml(calDisplayName(cal))}</span>`;
+      }).join('')
+    + `</div>`;
+  grid.innerHTML = `<div style="height:100%;display:flex;flex-direction:column">${legend}<div id="cal-scroll" style="flex:1;min-height:0;overflow:auto;position:relative;-webkit-overflow-scrolling:touch"><div style="min-width:${TIME_W + COL_W * 7}px;display:flex;flex-direction:column;min-height:100%">${hdr}${body}</div></div></div>`;
   const gb = document.getElementById('cal-scroll');
   if (gb) { const scrollToHour = Math.max(START_HOUR, now.getHours() - 1); gb.scrollTop = Math.max(0, (scrollToHour - START_HOUR) * (60 / SLOT_MINS) * SLOT_H - 10); }
   startCalNowLine();

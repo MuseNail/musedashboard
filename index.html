@@ -734,10 +734,11 @@ tailwind.config = {
             <button onclick="calNavDay(1)" class="flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors" style="width:32px;height:32px;flex-shrink:0">
               <span class="material-symbols-outlined" style="font-size:18px">chevron_right</span>
             </button>
-            <!-- Day | Week view toggle (active styling set by syncCalViewToggle) -->
-            <div class="flex rounded-xl overflow-hidden border border-surface-container-high ml-1" style="height:32px;flex-shrink:0">
-              <button id="cal-view-day" onclick="setCalView('day')" class="text-xs font-headline font-bold transition-colors bg-surface" style="padding:0 14px">Day</button>
-              <button id="cal-view-week" onclick="setCalView('week')" class="text-xs font-headline font-bold transition-colors bg-surface" style="padding:0 14px">Week</button>
+            <!-- Day | Week view toggle — same segmented style as the panel view switchers;
+                 the selected side gets the raised white pill + a check (syncCalViewToggle). -->
+            <div class="subnav-seg ml-1" style="flex-shrink:0">
+              <button id="cal-view-day" onclick="setCalView('day')" class="subnav-btn"><span class="material-symbols-outlined cal-view-check" style="font-size:15px;display:none">check</span><span>Day</span></button>
+              <button id="cal-view-week" onclick="setCalView('week')" class="subnav-btn"><span class="material-symbols-outlined cal-view-check" style="font-size:15px;display:none">check</span><span>Week</span></button>
             </div>
           </div>
           <div class="flex items-center gap-2 flex-wrap">
@@ -2753,6 +2754,11 @@ tailwind.config = {
     <div class="flex items-center gap-2 p-5 border-b border-surface-container-high flex-shrink-0">
       <span class="material-symbols-outlined text-primary" style="font-size:22px">auto_awesome</span>
       <h2 class="text-lg font-headline font-bold text-on-surface">What's new <span id="whatsnew-version" class="text-on-surface-variant font-body font-semibold text-sm"></span></h2>
+      <!-- Browse earlier release notes (up to 5 back) -->
+      <div class="ml-auto flex items-center gap-1 flex-shrink-0">
+        <button id="whatsnew-prev" onclick="whatsNewNav(1)" title="Older update" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center disabled:opacity-30"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">chevron_left</span></button>
+        <button id="whatsnew-next" onclick="whatsNewNav(-1)" title="Newer update" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center disabled:opacity-30"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">chevron_right</span></button>
+      </div>
     </div>
     <div id="whatsnew-body" class="flex-1 overflow-y-auto p-5 space-y-3"></div>
     <div class="p-5 border-t border-surface-container-high flex-shrink-0">

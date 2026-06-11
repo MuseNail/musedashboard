@@ -158,7 +158,19 @@ function maybeShowWhatsNew() {
   showWhatsNew(entries);
 }
 function showWhatsNew(entries) {
-  const list = entries || [WHATS_NEW[0]];
+  _wnIdx = 0;
+  _renderWhatsNew(entries || [WHATS_NEW[0]]);
+  const m = document.getElementById('whatsnew-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
+}
+// ‹ › in the popup header page one release at a time, up to 5 releases back.
+const WHATSNEW_MAX_BACK = 5;
+let _wnIdx = 0;   // 0 = newest release
+function whatsNewNav(delta) {   // +1 = older, -1 = newer
+  const maxIdx = Math.min(WHATS_NEW.length, WHATSNEW_MAX_BACK) - 1;
+  _wnIdx = Math.max(0, Math.min(maxIdx, _wnIdx + delta));
+  _renderWhatsNew([WHATS_NEW[_wnIdx]]);
+}
+function _renderWhatsNew(list) {
   const body = document.getElementById('whatsnew-body'); if (!body) return;
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   body.innerHTML = list.flatMap(e => e.items).map(it => `
@@ -167,14 +179,19 @@ function showWhatsNew(entries) {
       <div class="min-w-0"><div class="font-headline font-bold text-on-surface text-sm">${esc(it.t)}</div>
         <div class="text-[13px] font-body text-on-surface-variant leading-snug">${esc(it.d)}</div></div>
     </div>`).join('');
+  body.scrollTop = 0;
   const vEl = document.getElementById('whatsnew-version'); if (vEl) vEl.textContent = '· ' + (list[0]?.v || APP_VERSION);
-  const m = document.getElementById('whatsnew-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
+  const maxIdx = Math.min(WHATS_NEW.length, WHATSNEW_MAX_BACK) - 1;
+  const prev = document.getElementById('whatsnew-prev'), next = document.getElementById('whatsnew-next');
+  if (prev) prev.disabled = _wnIdx >= maxIdx;
+  if (next) next.disabled = _wnIdx <= 0;
+  const wrap = prev?.parentElement; if (wrap) wrap.style.display = maxIdx <= 0 ? 'none' : '';   // nothing to browse yet
 }
 function closeWhatsNew() {
   try { localStorage.setItem('muse_whatsnew_seen', APP_VERSION); } catch {}
   const m = document.getElementById('whatsnew-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; }
 }
-Object.assign(window, { showWhatsNew, closeWhatsNew });
+Object.assign(window, { showWhatsNew, closeWhatsNew, whatsNewNav });
 // ── Grouped top nav (v4.74) ──────────────────────
 // 5 tabs; grouped panels switch via the subnav segments under the header. The Reports group
 // (Reports | Payroll) is gated by the viewReports role permission (Settings → Role
