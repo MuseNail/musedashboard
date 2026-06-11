@@ -1,6 +1,7 @@
 // ── Google Calendar + Tasks ─────────────────────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
+import { PUSH_PROXY } from '../config.js';
 import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer } from './square-customers.js';
 
@@ -33,6 +34,11 @@ let _calDate = new Date(), _calCalendars = [], _calEvents = {}, _calPrimaryId = 
 // at least once this session); otherwise empty and callers fall back to _calEvents when it's today.
 let _todayEvents = {}, _todayEventsAt = 0, _todayLoading = false;
 let _unassignedOnly = false;
+// Day | Week view (device-local). Week = a 7-day overview: all visible techs' bookings
+// merged per day column, colored by tech; tapping a day drills into the Day view.
+let _calView = localStorage.getItem('muse_cal_view') === 'week' ? 'week' : 'day';
+const calIsWeek = () => _calView === 'week';
+function calWeekStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; }
 // Today's-Appointments panel filter (device-local): hide past-time + finished rows.
 let _apptsUpcomingOnly = localStorage.getItem('muse_cal_upcoming') === '1';
 export function toggleApptsUpcoming() {
@@ -414,12 +420,42 @@ function calSetStatus(msg) {
 }
 
 // ── Date nav ──────────────────────────────────────
-function calUpdateDateLabel() { const el = document.getElementById('cal-date-label'); if (el) el.textContent = _calDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); calUpdateDateInput(); }
+function calWeekRangeLabel() {
+  const ws = calWeekStart(_calDate), we = new Date(ws); we.setDate(we.getDate() + 6);
+  const f = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return ws.getMonth() === we.getMonth() ? `${f(ws)} – ${we.getDate()}` : `${f(ws)} – ${f(we)}`;
+}
+function calUpdateDateLabel() { const el = document.getElementById('cal-date-label'); if (el) el.textContent = calIsWeek() ? calWeekRangeLabel() : _calDate.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' }); calUpdateDateInput(); }
 function calUpdateDateInput() {
   const btn = document.getElementById('cal-date-btn-val');
-  if (btn) btn.textContent = dateBtnLabel(_calDate);   // "Today · Tue, Jun 9" / "Mon, Jun 8" — same as every tab
+  if (btn) btn.textContent = calIsWeek() ? calWeekRangeLabel() : dateBtnLabel(_calDate);   // "Today · Tue, Jun 9" / "Jun 14 – 20"
+  syncCalViewToggle();
 }
-export function calNavDay(delta) { _calOffPeek = new Set(); _calDate = new Date(_calDate); _calDate.setDate(_calDate.getDate() + delta); calUpdateDateLabel(); calLoadAndRender(); }
+// Day | Week toggle (toolbar). The buttons live in static HTML; active styling is set here.
+export function setCalView(v) {
+  const next = v === 'week' ? 'week' : 'day';
+  if (next === _calView) return;
+  _calView = next;
+  try { localStorage.setItem('muse_cal_view', _calView); } catch {}
+  _calOffPeek = new Set();
+  calUpdateDateLabel();
+  calLoadAndRender();
+}
+export function syncCalViewToggle() {
+  const set = (id, on) => { const b = document.getElementById(id); if (!b) return; b.style.background = on ? 'var(--md-primary, #1a5252)' : ''; b.style.color = on ? '#ffffff' : ''; };
+  set('cal-view-day', !calIsWeek());
+  set('cal-view-week', calIsWeek());
+}
+// Tap a week-view day header / empty slot → that day in Day view.
+export function calWeekOpenDay(dateStr) {
+  _calOffPeek = new Set();
+  _calDate = new Date(dateStr + 'T12:00:00');
+  _calView = 'day';
+  try { localStorage.setItem('muse_cal_view', 'day'); } catch {}
+  calUpdateDateLabel();
+  calLoadAndRender();
+}
+export function calNavDay(delta) { _calOffPeek = new Set(); _calDate = new Date(_calDate); _calDate.setDate(_calDate.getDate() + delta * (calIsWeek() ? 7 : 1)); calUpdateDateLabel(); calLoadAndRender(); }
 export function calGoToday() { _calOffPeek = new Set(); _calDate = new Date(); calUpdateDateLabel(); calLoadAndRender(); }
 export function calPickDate(val) { if (!val) return; _calOffPeek = new Set(); _calDate = new Date(val + 'T12:00:00'); calUpdateDateLabel(); calLoadAndRender(); }
 // Square-style date popup: Today / In 1–6 weeks presets + month calendar (shared openDayPicker).
@@ -438,14 +474,15 @@ export async function calLoadAndRender(silent) {
     _calCalendars = items.filter(c => { const name = (c.summary||'').toLowerCase(); return !systemNames.some(s => name.includes(s)) && c.id !== 'primary'; }).map(c => ({ id: c.id, name: c.summary, color: c.backgroundColor || '#1a5252' }));
     if (_calCalendars.length === 0) { const p = items.find(c => c.id === 'primary' || c.primary); if (p) _calCalendars = [{ id: p.id, name: 'Primary', color: '#1a5252' }]; }
     _calPrimaryId = (items.find(c => c.primary) || {}).id || _calPrimaryId;
-    const dayStart = new Date(_calDate); dayStart.setHours(0,0,0,0);
-    const dayEnd = new Date(_calDate); dayEnd.setHours(23,59,59,999);
+    // Day view fetches the viewed day; week view fetches Sun–Sat of the viewed week.
+    const dayStart = calIsWeek() ? calWeekStart(_calDate) : new Date(_calDate); dayStart.setHours(0,0,0,0);
+    const dayEnd = new Date(dayStart); if (calIsWeek()) dayEnd.setDate(dayEnd.getDate() + 6); dayEnd.setHours(23,59,59,999);
     applyCalOrder();
     // Keep the prior day's per-cal events on a transient fetch failure instead of blanking the
     // column — an empty column reads as "no appointments" and the front desk books over real
     // bookings. Track anyFail so a partial load shows the error pill rather than a healthy green.
     const prev = _calEvents; _calEvents = {}; let anyFail = false;
-    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); _calEvents[cal.id] = r.result.items || []; } catch (e) { anyFail = true; console.warn('[calendar] events.list failed for', cal.name, e); _calEvents[cal.id] = prev[cal.id] || []; } }));
+    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: calIsWeek() ? 250 : 100 }); _calEvents[cal.id] = r.result.items || []; } catch (e) { anyFail = true; console.warn('[calendar] events.list failed for', cal.name, e); _calEvents[cal.id] = prev[cal.id] || []; } }));
     const gbBefore = document.getElementById('cal-scroll'); const savedScroll = gbBefore ? gbBefore.scrollTop : null;
     calRenderGrid();
     if (savedScroll !== null) requestAnimationFrame(() => { const gb = document.getElementById('cal-scroll'); if (gb) gb.scrollTop = savedScroll; });
@@ -460,6 +497,8 @@ export async function calLoadAndRender(silent) {
 export function calRenderGrid() {
   const grid = document.getElementById('cal-grid');
   if (!grid) return;
+  syncCalViewToggle();
+  if (calIsWeek()) return calRenderWeekGrid();
   const uCal = unassignedCalId();
   // "Unassigned only" view isolates the unassigned calendar full-width; turning it
   // off falls straight back to the previous calendars + order (nothing persisted).
@@ -612,6 +651,131 @@ export function calRenderGrid() {
 }
 function calRenderGridPreserveScroll() { const gb = document.getElementById('cal-scroll'); const saved = gb ? gb.scrollTop : null; calRenderGrid(); if (saved !== null) requestAnimationFrame(() => { const n = document.getElementById('cal-scroll'); if (n) n.scrollTop = saved; }); }
 
+// ── Week view grid ─────────────────────────────────
+// 7 day columns (Sun–Sat) with every VISIBLE calendar's bookings merged per day,
+// tinted by each booking's tech (calendar) color — the overview competitors call
+// "week view". One block per booking (museGroupId-deduped; a copy on a tech calendar
+// wins over the unassigned copy for color/click ownership). Manual show/hide applies;
+// the per-day off-duty auto-hide does not (it's a single-day concept). Tap a block →
+// the normal appointment popover; tap a day header or empty space → that day's Day view.
+function calRenderWeekGrid() {
+  const grid = document.getElementById('cal-grid');
+  if (!grid) return;
+  const uCal = unassignedCalId();
+  const visible = (_unassignedOnly && uCal && _calCalendars.some(c => c.id === uCal))
+    ? _calCalendars.filter(c => c.id === uCal)
+    : _calCalendars.filter(c => !_calHidden.has(c.id));
+  if (_calCalendars.length === 0) { calSetStatus('No technician calendars found.'); return; }
+  if (visible.length === 0) {
+    calSetStatus('All calendars hidden. Use Calendars filter.');
+    document.getElementById('cal-loading').classList.remove('hidden'); grid.classList.add('hidden'); return;
+  }
+  calSetStatus(''); document.getElementById('cal-loading').classList.add('hidden'); grid.classList.remove('hidden');
+  try {
+
+  const c = JSON.parse(localStorage.getItem('muse_cal_hours') || 'null');
+  const START_HOUR = c?.start ?? 6, END_HOUR = c?.end ?? 22, SLOT_MINS = _calSlotMins || 30;
+  const SLOTS = (END_HOUR - START_HOUR) * (60 / SLOT_MINS), SLOT_H = _calSlotH || 52, HEADER_H = 48, TIME_W = 64;
+  const railEl = document.getElementById('cal-right-rail');
+  const railW = (railEl && railEl.style.display !== 'none') ? 280 : 0;
+  const COL_W = Math.max(110, Math.floor((window.innerWidth - TIME_W - railW - 48) / 7));
+  const ws = calWeekStart(_calDate);
+  const days = [...Array(7)].map((_, i) => { const d = new Date(ws); d.setDate(d.getDate() + i); return d; });
+  const todayKey = localDateStr(new Date());
+  const now = new Date(), nowMin = now.getHours() * 60 + now.getMinutes();
+  const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,' ').replace(/\r/g,'');
+  const escHtml = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // Dedup bookings across visible calendars (a booking is one event per calendar).
+  // ownEv = the event copy that lives ON the owning calendar — calEventClick() looks
+  // the id up in _calEvents[calId], so the clicked id must belong to that calendar.
+  const seen = new Map();   // bookingKey -> { evs, calId, ownEv }
+  visible.forEach(cal => (_calEvents[cal.id] || []).forEach(ev => {
+    if (!ev.start) return;
+    const k = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id);
+    let b = seen.get(k);
+    if (!b) { b = { evs: [], calId: cal.id, ownEv: ev }; seen.set(k, b); }
+    b.evs.push(ev);
+    if (b.calId === uCal && cal.id !== uCal) { b.calId = cal.id; b.ownEv = ev; }
+  }));
+  const byDay = days.map(() => []);
+  const dayKeys = days.map(d => localDateStr(d));
+  seen.forEach(({ evs, calId, ownEv }) => {
+    const first = evs[0];
+    const startDt = new Date(first.start.dateTime || first.start.date);
+    const endDt = new Date(first.end?.dateTime || first.end?.date || startDt.getTime() + 3600000);
+    const di = dayKeys.indexOf(localDateStr(startDt));
+    if (di < 0) return;
+    const sMin = startDt.getHours() * 60 + startDt.getMinutes(), eMin = endDt.getHours() * 60 + endDt.getMinutes();
+    const topMin = sMin - START_HOUR * 60, durMin = Math.max(eMin - sMin, 15);
+    if (topMin < 0 || topMin >= (END_HOUR - START_HOUR) * 60) return;
+    byDay[di].push({ evs, calId, ownEv, first, startDt, startMin: sMin, endMin: sMin + durMin, top: (topMin / SLOT_MINS) * SLOT_H, ht: (durMin / SLOT_MINS) * SLOT_H });
+  });
+
+  let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;position:sticky;top:0;z-index:4;border-bottom:2px solid var(--outline-variant, #7a858a);background:var(--surface-container-lowest, #f5f7f8)"><div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;position:sticky;left:0;z-index:5;background:var(--surface-container-lowest, #f5f7f8);border-right:2px solid var(--outline-variant, #7a858a)"></div>`;
+  days.forEach((d, i) => {
+    const isToday = dayKeys[i] === todayKey, isLast = i === 6;
+    hdr += `<div onclick="calWeekOpenDay('${dayKeys[i]}')" title="Open this day" style="width:${COL_W}px;flex-shrink:0;height:${HEADER_H}px;cursor:pointer;background:${isToday ? 'rgba(26,82,82,0.10)' : 'transparent'};border-bottom:3px solid ${isToday ? 'var(--md-primary, #1a5252)' : 'transparent'};border-right:${isLast ? 'none' : '2px solid rgba(0,0,0,0.12)'};display:flex;flex-direction:column;align-items:center;justify-content:center">`
+      + `<span style="font-size:10px;font-family:var(--font-body);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:${isToday ? 'var(--md-primary, #1a5252)' : 'var(--on-surface-variant, #41484d)'}">${d.toLocaleDateString('en-US', { weekday: 'short' })}${isToday ? ' · Today' : ''}</span>`
+      + `<span style="font-size:16px;font-family:var(--font-headline);font-weight:800;line-height:1.1;color:${isToday ? 'var(--md-primary, #1a5252)' : 'var(--on-surface, #0e1a1a)'}">${d.getDate()}</span></div>`;
+  });
+  hdr += `</div>`;
+
+  let body = `<div id="cal-grid-body" style="display:flex;min-width:${TIME_W + COL_W * 7}px"><div style="width:${TIME_W}px;flex-shrink:0;position:sticky;left:0;z-index:3;background:var(--surface-container-lowest, #f5f7f8);border-right:2px solid var(--outline-variant, #7a858a)">`;
+  for (let s = 0; s < SLOTS; s++) { const h = Math.floor((START_HOUR*60 + s*SLOT_MINS)/60), m = (START_HOUR*60 + s*SLOT_MINS)%60, isHour = m === 0; const label = isHour ? `${h>12?h-12:(h===0?12:h)} ${h>=12?'PM':'AM'}` : (SLOT_MINS<=15&&m===30?`${h>12?h-12:(h===0?12:h)}:30`:''); body += `<div style="height:${SLOT_H}px;display:flex;align-items:flex-start;padding:${isHour?'3px':'1px'} 8px 0">${label?`<span style="font-size:10px;font-family:var(--font-body);font-weight:${isHour?'600':'400'};color:var(--on-surface-variant, #41484d);white-space:nowrap;margin-top:-6px">${label}</span>`:''}</div>`; }
+  body += '</div>';
+
+  days.forEach((d, di) => {
+    const isToday = dayKeys[di] === todayKey, isLast = di === 6, isFirst = di === 0;
+    body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;${isToday ? 'background:rgba(26,82,82,0.04);' : ''}${isFirst ? 'border-left:2px solid rgba(0,0,0,0.12);' : ''}${isLast ? '' : 'border-right:2px solid rgba(0,0,0,0.12);'}min-height:${SLOTS*SLOT_H}px"><div style="position:relative;height:${SLOTS*SLOT_H}px">`;
+    for (let s = 0; s < SLOTS; s++) { const isHour = s % (60/SLOT_MINS) === 0; body += `<div style="position:absolute;left:0;right:0;top:${s*SLOT_H}px;height:${SLOT_H}px;border-top:${isHour?'1.5px solid rgba(0,0,0,0.12)':'1px solid rgba(0,0,0,0.05)'};cursor:pointer" onclick="calWeekOpenDay('${dayKeys[di]}')"></div>`; }
+    if (isToday) { const lineTop = ((nowMin - START_HOUR*60)/SLOT_MINS)*SLOT_H; if (lineTop >= 0 && lineTop <= SLOTS*SLOT_H) body += `<div class="cal-now-line" data-date="${dayKeys[di]}" data-start="${START_HOUR}" data-slotmins="${SLOT_MINS}" data-sloth="${SLOT_H}" data-slots="${SLOTS}" style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;border-top:2px dashed #e53935;z-index:5;pointer-events:none"><div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div></div>`; }
+
+    const layout = byDay[di];
+    layout.sort((a,b) => a.startMin - b.startMin || a.endMin - b.endMin);
+    let cluster = [], clusterEnd = -1;
+    const finalizeCluster = cl => { const laneEnds = []; cl.forEach(b => { let li = laneEnds.findIndex(end => end <= b.startMin); if (li === -1) { li = laneEnds.length; laneEnds.push(0); } laneEnds[li] = b.endMin; b.lane = li; }); cl.forEach(b => b.laneCount = laneEnds.length); };
+    layout.forEach(b => { if (cluster.length && b.startMin >= clusterEnd) { finalizeCluster(cluster); cluster = []; clusterEnd = -1; } cluster.push(b); clusterEnd = Math.max(clusterEnd, b.endMin); });
+    if (cluster.length) finalizeCluster(cluster);
+
+    layout.forEach(({ evs, calId, ownEv, first, startDt, top, ht, lane = 0, laneCount = 1 }) => {
+      try {
+      const cal = _calCalendars.find(x => x.id === calId);
+      const color = (calId === uCal || !cal) ? '#9ca3af' : cal.color;
+      const timeStr = startDt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const primaryEv = evs.find(e => (e.extendedProperties?.private || {}).musePrimary === '1') || first;
+      const ppriv = primaryEv.extendedProperties?.private || {};
+      const primaryName = ppriv.musePrimaryName || ppriv.museName || (primaryEv.summary || '').split(' — ')[0] || 'Guest';
+      const notes = _apptNotes(first);
+      const confirmed = evs.some(e => (e.extendedProperties?.private || {}).museConfirmed === '1');
+      const noShow = evs.some(e => (e.extendedProperties?.private || {}).museNoShow === '1');
+      const guests = Math.max(0, [...new Set(evs.map(e => (e.extendedProperties?.private || {}).museName).filter(Boolean))].length - 1);
+      let isAppt = false;
+      for (const ev of evs) {
+        const ext = ev.extendedProperties?.private || {}, dsc = ev.description || '', t = ev.summary || '';
+        if (!!ext.musePhone || ext.museLines !== undefined || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(dsc) || cfg().services.some(s => s.label && t.toLowerCase().includes(s.label.toLowerCase()))) { isAppt = true; break; }
+      }
+      const gap = laneCount > 1 ? 3 : 0;
+      const laneW = (COL_W - 8 - gap * (laneCount - 1)) / laneCount;
+      const bLeft = 4 + lane * (laneW + gap);
+      const bg = noShow ? '#fee2e2' : color + '1f', border = noShow ? '#dc2626' : color, tc = noShow ? '#991b1b' : '#1a1a1a';
+      body += `<div onclick="event.stopPropagation();calEventClick(event,'${_e(calId)}','${_e((ownEv || first).id)}','${_e(primaryName)}','${_e(notes)}',${isAppt})" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,24)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:2px 5px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
+        + `<div style="display:flex;align-items:center;gap:3px;overflow:hidden;line-height:1.25">${confirmed ? '<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0;font-size:10px">✓</span>' : ''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}${guests ? ` +${guests}` : ''}</span></div>`
+        + (ht > 30 ? `<div style="font-size:10px;color:${tc};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(timeStr)}${cal && calId !== uCal ? ' · ' + escHtml(calDisplayName(cal)) : ''}</div>` : '')
+        + `</div>`;
+      } catch (_bErr) { console.warn('[calendar] skipped a week booking render:', _bErr); }
+    });
+    body += '</div></div>';
+  });
+  body += '</div>';
+
+  grid.innerHTML = `<div id="cal-scroll" style="height:100%;overflow:auto;position:relative;-webkit-overflow-scrolling:touch"><div style="min-width:${TIME_W + COL_W * 7}px;display:flex;flex-direction:column;min-height:100%">${hdr}${body}</div></div>`;
+  const gb = document.getElementById('cal-scroll');
+  if (gb) { const scrollToHour = Math.max(START_HOUR, now.getHours() - 1); gb.scrollTop = Math.max(0, (scrollToHour - START_HOUR) * (60 / SLOT_MINS) * SLOT_H - 10); }
+  startCalNowLine();
+  } catch (_calErr) { console.warn('[calendar] week grid render failed:', _calErr); }
+}
+
 // ── "Now" line keep-alive ─────────────────────────
 // The red current-time line is positioned at grid-render time, so on its own it only moves when
 // the grid re-renders (every CAL_SYNC_INTERVAL) and FREEZES while a backgrounded / asleep iPad
@@ -623,7 +787,9 @@ function updateCalNowLine() {
   const lines = document.querySelectorAll('.cal-now-line');
   if (!lines.length) return;
   const now = new Date();
-  if (now.toDateString() !== _calDate.toDateString()) return;   // not viewing today — a re-render owns the line's presence
+  // Week view stamps the line's own date (today's column); day view checks the viewed day.
+  const lineDate = lines[0].dataset.date;
+  if (lineDate ? lineDate !== localDateStr(now) : now.toDateString() !== _calDate.toDateString()) return;
   const g = lines[0].dataset, startHour = +g.start, slotMins = +g.slotmins || 30, slotH = +g.sloth || 52, slots = +g.slots;
   const nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60;
   const lineTop = ((nowMin - startHour*60)/slotMins)*slotH;
@@ -640,10 +806,10 @@ async function calSilentSync() {
   if (!_tokenFresh(0)) { try { await ensureFreshToken(); } catch (e) { setCalSyncIndicator('error'); return; } }
   try {
     setCalSyncIndicator('syncing');
-    const dayStart = new Date(_calDate); dayStart.setHours(0,0,0,0);
-    const dayEnd = new Date(_calDate); dayEnd.setHours(23,59,59,999);
+    const dayStart = calIsWeek() ? calWeekStart(_calDate) : new Date(_calDate); dayStart.setHours(0,0,0,0);
+    const dayEnd = new Date(dayStart); if (calIsWeek()) dayEnd.setDate(dayEnd.getDate() + 6); dayEnd.setHours(23,59,59,999);
     const newEvents = {}; let anyFail = false;
-    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); newEvents[cal.id] = r.result.items || []; } catch (e) { anyFail = true; console.warn('[calendar] silent sync failed for', cal.name, e); newEvents[cal.id] = _calEvents[cal.id] || []; } }));
+    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: calIsWeek() ? 250 : 100 }); newEvents[cal.id] = r.result.items || []; } catch (e) { anyFail = true; console.warn('[calendar] silent sync failed for', cal.name, e); newEvents[cal.id] = _calEvents[cal.id] || []; } }));
     _calEvents = newEvents;
     // Preserve the user's scroll position on a silent refresh — calRenderGrid()
     // re-scrolls to ~1hr-before-now, which yanked the view away mid-use.
@@ -1383,6 +1549,15 @@ export async function saveAppt() {
     }));
   }
 
+  // Calendars the booking was ALREADY on before this save (edit path) vs the ones we
+  // insert below — a tech is push-notified only when their calendar newly gains it.
+  const oldCals = new Set();
+  if (_apptEditId) {
+    const oc = document.getElementById('appt-cal-id')?.value; if (oc) oldCals.add(oc);
+    oldGroupRefs.forEach(r => oldCals.add(r.calId));
+  }
+  const wroteCals = new Set();
+
   const saveBtn = document.querySelector('#appt-modal button[onclick="saveAppt()"]');
   _apptSaving = true; if (saveBtn) saveBtn.disabled = true;
   try {
@@ -1402,25 +1577,50 @@ export async function saveAppt() {
         const newPrimary = cals[0] || oldCalId;
         if (oldCalId && oldCalId !== newPrimary) {
           await gapi.client.calendar.events.insert({ calendarId: newPrimary, resource: body });
+          wroteCals.add(newPrimary);
           try { await gapi.client.calendar.events.delete({ calendarId: oldCalId, eventId: _apptEditId }); } catch {}
         } else {
           await gapi.client.calendar.events.update({ calendarId: oldCalId, eventId: _apptEditId, resource: body });
         }
-        for (const cid of cals) { if (cid !== newPrimary && cid !== oldCalId) await gapi.client.calendar.events.insert({ calendarId: cid, resource: body }); }
+        for (const cid of cals) { if (cid !== newPrimary && cid !== oldCalId) { await gapi.client.calendar.events.insert({ calendarId: cid, resource: body }); wroteCals.add(cid); } }
       } else {
         const finalCals = cals.length ? cals : [uCal];
-        for (const cid of finalCals) await gapi.client.calendar.events.insert({ calendarId: cid, resource: body });
+        for (const cid of finalCals) { await gapi.client.calendar.events.insert({ calendarId: cid, resource: body }); wroteCals.add(cid); }
       }
       if (p.phone) squareUpsertCustomer({ name: p.name, phone: p.phone });   // add/refresh each booked customer in Square
     }
     // Remove the booking's stale pre-edit events (old guest events + old extra-cal
     // copies) now that fresh ones are inserted — keeps the calendar duplicate-free.
     for (const ref of oldGroupRefs) { try { await gapi.client.calendar.events.delete({ calendarId: ref.calId, eventId: ref.id }); } catch {} }
+    try { _notifyApptTechs(wroteCals, oldCals, people[0].name, startDt); } catch {}   // best-effort push to newly-booked techs
     closeApptModal(); await calLoadAndRender(true);
     showToast(people.length > 1 ? `Appointment saved for ${people.length} guests ✓` : 'Appointment saved ✓');
   } catch (err) { _calWriteError(err, 'Save'); }
   finally { _apptSaving = false; if (saveBtn) saveBtn.disabled = false; }   // re-enable for the error path (success already closed the modal)
 }
+// Push-notify each tech whose Google calendar just RECEIVED this booking (a new
+// appointment, or an edit that moved/added them). Calendar → tech by the same
+// name-match rule as the grid; the unassigned calendar and calendars the booking
+// was already on are skipped. Fire-and-forget — a push failure never blocks a save.
+function _notifyApptTechs(wroteCals, oldCals, custName, startDt) {
+  const uCal = unassignedCalId();
+  const staff = cfg().staff || [];
+  const techIds = [...new Set([...wroteCals]
+    .filter(cid => cid && cid !== uCal && !oldCals.has(cid))
+    .map(cid => {
+      const nm = _calCalendars.find(c => c.id === cid)?.name;
+      return nm ? (staff.find(s => (s.name || '').trim().toLowerCase() === nm.trim().toLowerCase())?.id || null) : null;
+    })
+    .filter(Boolean))];
+  if (!techIds.length) return;
+  const when = startDt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+    + ', ' + startDt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  fetch(PUSH_PROXY + '/notify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ techIds, title: 'New appointment 📅', body: `${custName} — ${when}`, tag: 'muse-appt' }),
+  }).catch(() => {});
+}
+
 export async function deleteAppt(calIdParam, eventIdParam) {
   const calId = calIdParam || document.getElementById('appt-cal-id')?.value, eventId = eventIdParam || document.getElementById('appt-event-id')?.value;
   if (!calId || !eventId) return;

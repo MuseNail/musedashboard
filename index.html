@@ -734,6 +734,11 @@ tailwind.config = {
             <button onclick="calNavDay(1)" class="flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors" style="width:32px;height:32px;flex-shrink:0">
               <span class="material-symbols-outlined" style="font-size:18px">chevron_right</span>
             </button>
+            <!-- Day | Week view toggle (active styling set by syncCalViewToggle) -->
+            <div class="flex rounded-xl overflow-hidden border border-surface-container-high ml-1" style="height:32px;flex-shrink:0">
+              <button id="cal-view-day" onclick="setCalView('day')" class="text-xs font-headline font-bold transition-colors bg-surface" style="padding:0 14px">Day</button>
+              <button id="cal-view-week" onclick="setCalView('week')" class="text-xs font-headline font-bold transition-colors bg-surface" style="padding:0 14px">Week</button>
+            </div>
           </div>
           <div class="flex items-center gap-2 flex-wrap">
             <!-- Unassigned-only toggle -->

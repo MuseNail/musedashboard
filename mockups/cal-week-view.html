@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — Calendar week view (Day | Week toggle)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --primary:#1a5252; --surface:#f7f8f8; --lowest:#fff; --container:#eceeee; --high:#dde1e1; --on-surface:#171d1d; --variant:#3f4948; --outline:#6f7979; }
+  body { background:var(--surface); font-family:Inter,sans-serif; color:var(--on-surface); }
+  .font-headline { font-family:Manrope,sans-serif; }
+  .slot { height:26px; border-bottom:1px solid #eef0f0; }
+  .slot.hour { border-bottom:1px solid var(--high); }
+</style>
+</head>
+<body class="p-6">
+
+<div class="max-w-[1180px] mx-auto">
+  <div class="font-headline font-extrabold text-xl mb-1">Calendar — Week view</div>
+  <p class="text-sm text-[color:var(--variant)] mb-4 max-w-3xl">
+    A <b>Day | Week</b> toggle joins the date nav. Week view is the <b>overview</b>: 7 day columns, every visible tech's
+    appointments merged per day and <b>colored by tech</b> (same colors as the day columns). A party that spans techs shows
+    as ONE block. Tap a day header (or any empty space in a column) to jump into that day's normal Day view; tap a block
+    for the usual appointment popover. ←/→ move a whole week.
+  </p>
+
+  <!-- toolbar -->
+  <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+    <div class="flex items-center gap-2">
+      <button class="px-3 py-2 rounded-xl border border-[color:var(--high)] bg-white font-bold">←</button>
+      <button class="px-3 py-2 rounded-xl border border-[color:var(--high)] bg-white font-semibold text-sm">📅 Jun 14 – 20</button>
+      <button class="px-3 py-2 rounded-xl border border-[color:var(--high)] bg-white font-bold">→</button>
+      <!-- NEW: view toggle -->
+      <div class="flex rounded-xl overflow-hidden border border-[color:var(--high)] ml-1">
+        <button class="px-4 py-2 text-sm font-headline font-bold bg-white text-[color:var(--variant)]">Day</button>
+        <button class="px-4 py-2 text-sm font-headline font-bold text-white" style="background:var(--primary)">Week</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button class="px-3 py-2 rounded-xl border border-[color:var(--high)] bg-white text-sm font-semibold">Calendars</button>
+      <button class="px-4 py-2 rounded-xl text-white text-sm font-headline font-bold" style="background:var(--primary)">New Appointment</button>
+    </div>
+  </div>
+
+  <!-- tech color legend -->
+  <div class="flex items-center gap-4 mb-2 px-1 text-xs font-semibold text-[color:var(--variant)]">
+    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:#1a5252"></span>Emily</span>
+    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:#785a1a"></span>Kat</span>
+    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:#5c3d8f"></span>Lyn</span>
+    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:#1a5c7a"></span>Christina</span>
+    <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full" style="background:#9ca3af"></span>Unassigned</span>
+  </div>
+
+  <!-- week grid -->
+  <div class="rounded-2xl border border-[color:var(--high)] bg-white overflow-hidden">
+    <!-- day headers -->
+    <div class="flex border-b-2 border-[color:var(--high)]">
+      <div class="w-16 flex-shrink-0"></div>
+      <div class="flex-1 grid grid-cols-7">
+        <div class="py-2 text-center border-l border-[color:var(--high)]"><div class="text-[11px] font-bold uppercase text-[color:var(--outline)]">Sun</div><div class="font-headline font-extrabold">14</div></div>
+        <div class="py-2 text-center border-l border-[color:var(--high)]"><div class="text-[11px] font-bold uppercase text-[color:var(--outline)]">Mon</div><div class="font-headline font-extrabold">15</div></div>
+        <div class="py-2 text-center border-l border-[color:var(--high)]"><div class="text-[11px] font-bold uppercase text-[color:var(--outline)]">Tue</div><div class="font-headline font-extrabold">16</div></div>
+        <div class="py-2 text-center border-l border-[color:var(--high)]" style="background:rgba(26,82,82,.08)"><div class="text-[11px] font-bold uppercase" style="color:var(--primary)">Wed · Today</div><div class="font-headline font-extrabold" style="color:var(--primary)">17</div></div>
+        <div class="py-2 text-center border-l border-[color:var(--high)]"><div class="text-[11px] font-bold uppercase text-[color:var(--outline)]">Thu</div><div class="font-headline font-extrabold">18</div></div>
+        <div class="py-2 text-center border-l border-[color:var(--high)]"><div class="text-[11px] font-bold uppercase text-[color:var(--outline)]">Fri</div><div class="font-headline font-extrabold">19</div></div>
+        <div class="py-2 text-center border-l border-[color:var(--high)]"><div class="text-[11px] font-bold uppercase text-[color:var(--outline)]">Sat</div><div class="font-headline font-extrabold">20</div></div>
+      </div>
+    </div>
+    <!-- body: time rail + 7 columns -->
+    <div class="flex" style="height:420px;overflow:hidden">
+      <div class="w-16 flex-shrink-0 text-right pr-2 pt-0 text-[11px] text-[color:var(--outline)] font-semibold">
+        <div class="slot hour pt-1">9 AM</div><div class="slot"></div>
+        <div class="slot hour pt-1">10 AM</div><div class="slot"></div>
+        <div class="slot hour pt-1">11 AM</div><div class="slot"></div>
+        <div class="slot hour pt-1">12 PM</div><div class="slot"></div>
+        <div class="slot hour pt-1">1 PM</div><div class="slot"></div>
+        <div class="slot hour pt-1">2 PM</div><div class="slot"></div>
+        <div class="slot hour pt-1">3 PM</div><div class="slot"></div>
+        <div class="slot hour pt-1">4 PM</div><div class="slot"></div>
+      </div>
+      <div class="flex-1 grid grid-cols-7 relative">
+        <!-- 7 columns of slots -->
+        <div class="relative border-l border-[color:var(--high)]">
+          <div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div>
+          <div class="absolute rounded-md px-1.5 py-0.5 text-[11px] font-bold overflow-hidden" style="top:54px;height:50px;left:3px;right:3px;background:#1a525226;border-left:3px solid #1a5252;color:#0e3434">10:00 Jessica T.</div>
+        </div>
+        <div class="relative border-l border-[color:var(--high)]">
+          <div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div>
+          <div class="absolute rounded-md px-1.5 py-0.5 text-[11px] font-bold overflow-hidden" style="top:54px;height:76px;left:3px;width:46%;background:#785a1a26;border-left:3px solid #785a1a;color:#3d2e0d">10:00 Noemi</div>
+          <div class="absolute rounded-md px-1.5 py-0.5 text-[11px] font-bold overflow-hidden" style="top:80px;height:50px;right:3px;width:46%;background:#5c3d8f26;border-left:3px solid #5c3d8f;color:#2e1f48">10:30 Amy ✓</div>
+          <div class="absolute rounded-md px-1.5 py-0.5 text-[11px] font-bold overflow-hidden" style="top:210px;height:50px;left:3px;right:3px;background:#1a525226;border-left:3px solid #1a5252;color:#0e3434">1:00 Mai P. +1</div>
+        </div>
+        <div class="relative border-l border-[color:var(--high)]">
+          <div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div>
+        </div>
+        <div class="relative border-l border-[color:var(--high)]" style="background:rgba(26,82,82,.04)">
+          <div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div>
+          <div class="absolute left-0 right-0" style="top:196px;border-top:2px solid #e53935"></div>
+          <div class="absolute rounded-md px-1.5 py-0.5 text-[11px] font-bold overflow-hidden" style="top:106px;height:50px;left:3px;right:3px;background:#1a5c7a26;border-left:3px solid #1a5c7a;color:#0d2e3d">11:00 Linda Vo ✓</div>
+          <div class="absolute rounded-md px-1.5 py-0.5 text-[11px] font-bold overflow-hidden" style="top:262px;height:76px;left:3px;right:3px;background:#9ca3af33;border-left:3px solid #9ca3af;color:#374151">2:00 Walk-in hold</div>
+        </div>
+        <div class="relative border-l border-[color:var(--high)]">
+          <div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div>
+          <div class="absolute rounded-md px-1.5 py-0.5 text-[11px] font-bold overflow-hidden" style="top:2px;height:50px;left:3px;right:3px;background:#785a1a26;border-left:3px solid #785a1a;color:#3d2e0d">9:00 Tina N.</div>
+        </div>
+        <div class="relative border-l border-[color:var(--high)]">
+          <div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div>
+          <div class="absolute rounded-md px-1.5 py-0.5 text-[11px] font-bold overflow-hidden" style="top:54px;height:102px;left:3px;right:3px;background:#5c3d8f26;border-left:3px solid #5c3d8f;color:#2e1f48">10:00 Bridal party ×4</div>
+        </div>
+        <div class="relative border-l border-[color:var(--high)]">
+          <div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div><div class="slot hour"></div><div class="slot"></div>
+          <div class="absolute rounded-md px-1.5 py-0.5 text-[11px] font-bold overflow-hidden" style="top:2px;height:50px;left:3px;right:3px;background:#1a525226;border-left:3px solid #1a5252;color:#0e3434">9:00 Kim L.</div>
+          <div class="absolute rounded-md px-1.5 py-0.5 text-[11px] font-bold overflow-hidden" style="top:158px;height:50px;left:3px;right:3px;background:#1a5c7a26;border-left:3px solid #1a5c7a;color:#0d2e3d">12:00 Hoa T.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <ul class="text-sm text-[color:var(--variant)] mt-4 space-y-1 max-w-3xl list-disc pl-5">
+    <li><b>Block color = tech</b> (their Google-calendar color, same as day view). “Calendars” show/hide filtering applies here too.</li>
+    <li><b>One block per booking</b> — a multi-tech party is deduped and shown once, colored by the primary tech.</li>
+    <li><b>Tap a day header / empty space</b> → that day in Day view. <b>Tap a block</b> → the normal appointment popover (check-in, confirm, edit…).</li>
+    <li><b>New Appointment</b> works as today (defaults to the viewed week's day after drill-in). Creating by tapping a slot stays a Day-view gesture.</li>
+    <li>The red “now” line shows in today's column; the visible-hours setting (<code>muse_cal_hours</code>) and Ctrl+wheel zoom apply unchanged.</li>
+    <li>View choice is remembered per device (<code>muse_cal_view</code>).</li>
+  </ul>
+</div>
+
+</body>
+</html>
