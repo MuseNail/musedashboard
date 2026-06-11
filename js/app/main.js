@@ -67,6 +67,7 @@ const MODAL_CLOSERS = [
   ['rpt-drill-modal', reports.closeDrillDown], ['cash-register-modal', cashdrawer.closeCashRegister],
   ['square-modal', () => { const m = document.getElementById('square-modal'); m.classList.add('hidden'); m.style.display = ''; }],
   ['global-search-modal', search.closeGlobalSearch],
+  ['whatsnew-modal', () => closeWhatsNew()],
   ['numpad-modal', utils.numpadConfirm],
 ];
 // Generic force-hide on navigation (does NOT invoke each modal's close fn, so a programmatic/
@@ -111,8 +112,56 @@ function goTo(screenId, param) {
       ? '<span class="inline-flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:14px;color:#785a1a">calendar_today</span> Appointment Check-In</span>'
       : 'Walk-In Check-In';
   }
-  if (screenId === 'screen-desk') { utils.updateDeskDate(); settings.initCalHoursSelectors(); }
+  if (screenId === 'screen-desk') { utils.updateDeskDate(); settings.initCalHoursSelectors(); maybeShowWhatsNew(); }
 }
+
+// ── "What's new" — one-time popup after a device loads a new version ──────────
+// Shown on the staff dashboard (never the customer kiosk) when this device's last-seen version
+// differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
+// English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
+const WHATS_NEW = [
+  { v: 'v4.79', items: [
+    { icon: 'palette',       t: 'Clearer status colors',     d: 'In Service is now green and Done (waiting to pay) is now blue — easy to tell apart at a glance on the Turns and Queue boards.' },
+    { icon: 'calculate',     t: 'Calculator in money fields', d: 'Type math right in any price/amount box — e.g. 40+5+10. On the iPad keypad use the + − × ÷ keys; on a computer just type it. A running tape shows the total; press Enter to confirm the number, Enter again to save.' },
+    { icon: 'groups',        t: 'Per-person subtotals',      d: 'Assign & Price now shows each guest’s subtotal just above the Party Total.' },
+    { icon: 'receipt_long',  t: 'Payment Mix counts',        d: 'Reports now shows how many tickets per payment type (e.g. Card · 16 tickets · $1,004).' },
+    { icon: 'sync_alt',      t: 'Clearer reconcile',         d: 'Reconcile with Helcim now spells out the Fee Saver surcharge, so the app total and the Helcim total line up.' },
+    { icon: 'history',       t: 'Better historical entries', d: 'Adding a past sale now lets you pick the payment method (and a reference/transaction #), and the customer name auto-fills as you type.' },
+    { icon: 'price_check',   t: 'Record an outside payment', d: 'Managers can mark a ticket paid without charging — for a payment taken another way, like keyed straight on the terminal. Two-step confirm on the pay screen.' },
+    { icon: 'verified',      t: 'Missed-charge safety net',  d: 'If a card charge went through but the ticket wasn’t marked paid, the app now finds the matching charge and offers to fix it — never charges again.' },
+  ] },
+];
+let _whatsNewChecked = false;
+function maybeShowWhatsNew() {
+  if (_whatsNewChecked) return; _whatsNewChecked = true;
+  let seen = null; try { seen = localStorage.getItem('muse_whatsnew_seen'); } catch {}
+  if (seen === APP_VERSION) return;                                   // already saw this version
+  const usedBefore = (() => { try { return !!(localStorage.getItem('muse_device_id') || localStorage.getItem('muse_state_cache')); } catch { return false; } })();
+  const markSeen = () => { try { localStorage.setItem('muse_whatsnew_seen', APP_VERSION); } catch {} };
+  if (seen == null && !usedBefore) { markSeen(); return; }            // brand-new device → record silently
+  const idx = WHATS_NEW.findIndex(e => e.v === seen);
+  const entries = idx > 0 ? WHATS_NEW.slice(0, idx) : (idx === 0 ? [] : [WHATS_NEW[0]]);   // everything newer than seen (or the latest)
+  if (!entries.length) { markSeen(); return; }
+  showWhatsNew(entries);
+}
+function showWhatsNew(entries) {
+  const list = entries || [WHATS_NEW[0]];
+  const body = document.getElementById('whatsnew-body'); if (!body) return;
+  const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  body.innerHTML = list.flatMap(e => e.items).map(it => `
+    <div class="flex items-start gap-3">
+      <span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:20px;margin-top:1px">${esc(it.icon)}</span>
+      <div class="min-w-0"><div class="font-headline font-bold text-on-surface text-sm">${esc(it.t)}</div>
+        <div class="text-[13px] font-body text-on-surface-variant leading-snug">${esc(it.d)}</div></div>
+    </div>`).join('');
+  const vEl = document.getElementById('whatsnew-version'); if (vEl) vEl.textContent = '· ' + APP_VERSION;
+  const m = document.getElementById('whatsnew-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
+}
+function closeWhatsNew() {
+  try { localStorage.setItem('muse_whatsnew_seen', APP_VERSION); } catch {}
+  const m = document.getElementById('whatsnew-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; }
+}
+Object.assign(window, { showWhatsNew, closeWhatsNew });
 // ── Grouped top nav (v4.74) ──────────────────────
 // 5 tabs; grouped panels switch via the subnav segments under the header. The Reports group
 // (Reports | Payroll) is admin/manager-only — the tab is hidden and direct opens are blocked.

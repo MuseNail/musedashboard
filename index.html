@@ -2740,6 +2740,22 @@ tailwind.config = {
      CUSTOMER NOTE POPUP (dashboard check-in: view + edit a returning customer's note)
 ═══════════════════════════════════════════════ -->
 
+<!-- ═══════════════════════════════════════════════
+     WHAT'S NEW (one-time per device after a version update)
+═══════════════════════════════════════════════ -->
+<div id="whatsnew-modal" class="fixed inset-0 z-[110] hidden items-center justify-center bg-on-surface/40 px-4" style="display:none" onclick="if(event.target===this)closeWhatsNew()">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-md shadow-2xl fade-up max-h-[85vh] flex flex-col">
+    <div class="flex items-center gap-2 p-5 border-b border-surface-container-high flex-shrink-0">
+      <span class="material-symbols-outlined text-primary" style="font-size:22px">auto_awesome</span>
+      <h2 class="text-lg font-headline font-bold text-on-surface">What's new <span id="whatsnew-version" class="text-on-surface-variant font-body font-semibold text-sm"></span></h2>
+    </div>
+    <div id="whatsnew-body" class="flex-1 overflow-y-auto p-5 space-y-3"></div>
+    <div class="p-5 border-t border-surface-container-high flex-shrink-0">
+      <button onclick="closeWhatsNew()" class="w-full bg-primary text-on-primary py-3 rounded-xl font-headline font-bold hover:bg-primary-dim transition-all active:scale-95">Got it</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] hidden pointer-events-none">
   <div class="bg-on-surface text-surface px-5 py-3 rounded-xl text-sm font-body font-medium shadow-2xl fade-up" id="toast-text"></div>
 </div>
