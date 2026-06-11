@@ -168,7 +168,8 @@ function closeWhatsNew() {
 Object.assign(window, { showWhatsNew, closeWhatsNew });
 // ── Grouped top nav (v4.74) ──────────────────────
 // 5 tabs; grouped panels switch via the subnav segments under the header. The Reports group
-// (Reports | Payroll) is admin/manager-only — the tab is hidden and direct opens are blocked.
+// (Reports | Payroll) is gated by the viewReports role permission (Settings → Role
+// Permissions) — the tab is hidden and direct opens are blocked.
 const NAV_GROUPS = {
   floor:      { navId: 'nav-floor',      panels: [['turns','swap_vert','Turns'], ['queue','queue','Queue'], ['floorplan','grid_view','Floor Plan']] },
   money:      { navId: 'nav-money',      panels: [['transactions','receipt_long','Transactions'], ['giftcards','card_giftcard','Gift Cards']] },
@@ -179,7 +180,7 @@ const NAV_GROUPS = {
 };
 const groupOf = p => Object.keys(NAV_GROUPS).find(g => NAV_GROUPS[g].panels.some(t => t[0] === p));
 const lastGroupView = {};
-const canViewReportsGroup = () => ['admin', 'manager'].includes(session.getActiveUser()?.role);
+const canViewReportsGroup = () => session.canDo('viewReports');
 function showDashGroup(g) { showDashPanel(lastGroupView[g] || NAV_GROUPS[g].panels[0][0]); }
 function syncNavForRole() {
   const btn = document.getElementById('nav-reportsgrp');
@@ -197,7 +198,7 @@ function renderDashSubnav(grp, activePanel) {
 }
 
 function showDashPanel(panel) {
-  if ((panel === 'reports' || panel === 'payroll') && !canViewReportsGroup()) { utils.showToast('Only a manager or admin can view Reports & Payroll.'); return; }
+  if ((panel === 'reports' || panel === 'payroll') && !canViewReportsGroup()) { utils.showToast('Your role doesn’t have permission to view Reports & Payroll.'); return; }
   closeAllModals();
   ['queue','reports','transactions','payroll','turns','settings','giftcards','calendar','floorplan','customers'].forEach(p => {
     document.getElementById(`panel-${p}`)?.classList.remove('active');
@@ -333,6 +334,7 @@ function onStateChange(state, changed) {
   if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync(); timeclock.renderClockButton(); helcim.syncProcessorClass();
+    syncNavForRole();   // a role_permissions toggle (any device) can show/hide the Reports tab
     // The customer directory is now a DO entity — it hydrates from the snapshot like records,
     // so no Square auto-pull on boot. (A one-time "Import from Square" seeds it; see the
     // Customers tab.) square-customers.js rebuilds its directory caches on every store change.

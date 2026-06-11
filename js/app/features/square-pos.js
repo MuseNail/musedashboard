@@ -1,7 +1,7 @@
 // ── Square POS deep link, orders, appointments, bookings ────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { getActiveUser } from '../session.js';
+import { canDo, getActiveUser } from '../session.js';
 import { showToast, commitNumpad, ticketTotal } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
 import { squareUpsertCustomer } from './square-customers.js';
@@ -197,10 +197,10 @@ export function openSquarePOS(entryId) {
   _gcPickerOpen = false; _newGcOpen = false; _payCash = 0; _payTip = 0; _payZelle = 0;
   _payTipFromDrawer = !!cfg().cash_drawer;   // default ON when a drawer is open (the common card-tip → cash-payout case)
   renderPayGc();
-  // Admin/manager only: reveal the "record without charging" escape hatch (for a payment taken
-  // outside the app, e.g. keyed manually on the terminal). Front desk never sees it.
+  // Permission-gated (markPaidDirect): reveal the "record without charging" escape hatch
+  // (for a payment taken outside the app, e.g. keyed manually on the terminal).
   const mpBtn = document.getElementById('sq-markpaid-btn');
-  if (mpBtn) { const role = getActiveUser()?.role; mpBtn.classList.toggle('hidden', !(role === 'admin' || role === 'manager')); }
+  if (mpBtn) mpBtn.classList.toggle('hidden', !canDo('markPaidDirect'));
   const m = document.getElementById('square-confirm-modal');
   if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
 }
@@ -238,8 +238,7 @@ export function closeSquareConfirm(paid) {
 // the tender and an optional external reference (e.g. the Helcim txn id) for reconcile matching.
 export function markPaidNoCharge() {
   if (!_pendingPay) return;
-  const role = getActiveUser()?.role;
-  if (role !== 'admin' && role !== 'manager') { showToast('Manager or admin only.'); return; }
+  if (!canDo('markPaidDirect')) { showToast('Your role doesn’t have permission to mark paid without charging.'); return; }
   window.showWarnModal?.(
     'Record payment without charging?',
     'This marks the ticket PAID without charging a card. Use ONLY when the customer already paid another way (for example, the charge was keyed manually on the terminal). Nothing will be charged.',

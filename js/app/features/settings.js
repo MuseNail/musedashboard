@@ -22,14 +22,19 @@ export function toggleDoneVisibility() {
 // ── Role permissions (config.role_permissions) ────
 const _PERM_LABELS = {
   historicalEntry: 'Add / Edit Historical Transactions', deleteTransaction: 'Delete Transactions',
-  refund: 'Issue Refunds', viewReports: 'View Reports & Transactions',
+  refund: 'Issue Refunds', viewReports: 'View Reports & Payroll',
   manageStaff: 'Manage Staff', manageServices: 'Manage Services & Catalog',
-  markPaidDirect: 'Mark Paid without the Pay flow (skips Square)',
+  markPaidDirect: 'Mark Paid without charging (payment taken outside the app)',
   viewClockedIn: 'See Who’s Clocked In',
 };
+// Merged per role+key over the defaults, mirroring canDo() — the toggles must show
+// what is actually enforced, even for keys added after the map was last saved.
 function rolePerms() {
-  const stored = cfg().role_permissions;
-  return (stored && Object.keys(stored).length) ? stored : DEFAULT_ROLE_PERMISSIONS;
+  const stored = cfg().role_permissions || {};
+  const roles = [...new Set([...Object.keys(DEFAULT_ROLE_PERMISSIONS), ...Object.keys(stored)])];
+  const out = {};
+  roles.forEach(r => { out[r] = { ...(DEFAULT_ROLE_PERMISSIONS[r] || {}), ...(stored[r] || {}) }; });
+  return out;
 }
 export function renderRolePermissions() {
   const el = document.getElementById('role-permissions-list');
@@ -233,12 +238,12 @@ export function setNumpadWholeDollars(val) {
 // by renderSettingsPanel(); nav just toggles which section wrapper is visible.
 const SETTINGS_NAV = [
   { id:'catalog', title:'Services, Items & Fees', desc:'What you sell', items:[
-    { label:'Services', sub:'Add, edit, delete & visibility', content:'services-merged-section', render:'renderServicesMerged' },
-    { label:'Retail Items', sub:'Add-on items', content:'items-section' },
-    { label:'Fees', sub:'Flat or percentage fees', content:'fees-section' },
+    { label:'Services', sub:'Add, edit, delete & visibility', content:'services-merged-section', render:'renderServicesMerged', perm:'manageServices' },
+    { label:'Retail Items', sub:'Add-on items', content:'items-section', perm:'manageServices' },
+    { label:'Fees', sub:'Flat or percentage fees', content:'fees-section', perm:'manageServices' },
   ]},
   { id:'staff', title:'Staff & Access', desc:'People & permissions', items:[
-    { label:'Technicians', sub:'Staff, photos, schedule & active toggle', content:'staff-merged-section', render:'renderStaffMerged' },
+    { label:'Technicians', sub:'Staff, photos, schedule & active toggle', content:'staff-merged-section', render:'renderStaffMerged', perm:'manageStaff' },
     { label:'Front Desk Users', sub:'Dashboard PIN login accounts', content:'fdusers-merged-section', render:'renderFdUsersList', adminOnly:true },
     { label:'Role Permissions', sub:'What each role can do', content:'settings-perms-section', render:'renderRolePermissions', adminOnly:true },
   ]},
@@ -297,7 +302,8 @@ export function settingsOpenCategory(catId) {
   document.getElementById('settings-root')?.classList.add('hidden');
   const isAdmin = getActiveUser()?.role === 'admin';
   const list = document.getElementById('settings-category');
-  list.innerHTML = g.items.filter(it => !it.hidden && (!it.adminOnly || isAdmin)).map(it => `
+  const items = g.items.filter(it => !it.hidden && (!it.adminOnly || isAdmin) && (!it.perm || canDo(it.perm)));
+  list.innerHTML = items.length === 0 ? '<p class="text-sm font-body text-on-surface-variant px-1 py-3">Your role doesn’t have access to these settings.</p>' : items.map(it => `
     <button onclick="${it.action ? it.action + '()' : `settingsOpenLeaf('${it.content}')`}" class="w-full flex items-center justify-between px-5 py-4 bg-surface-container-lowest rounded-xl border border-surface-container-high mb-2 hover:bg-surface-container transition-colors text-left">
       <div><div class="font-headline font-bold text-on-surface">${it.label}</div><div class="text-xs font-body text-on-surface-variant mt-0.5">${it.sub || ''}</div></div>
       <span class="material-symbols-outlined text-on-surface-variant">${it.action ? 'open_in_new' : 'chevron_right'}</span>
@@ -308,6 +314,8 @@ export function settingsOpenCategory(catId) {
 export function settingsOpenLeaf(contentId) {
   let item = null;
   SETTINGS_NAV.forEach(g => g.items.forEach(it => { if (it.content === contentId) item = it; }));
+  if (item?.adminOnly && getActiveUser()?.role !== 'admin') { showToast('Admin only.'); return; }
+  if (item?.perm && !canDo(item.perm)) { showToast(`Your role doesn’t have access to ${item.label}.`); return; }
   _settingsView = 'leaf';
   _hideAllSettingsSections();
   document.getElementById('settings-root')?.classList.add('hidden');
