@@ -120,6 +120,13 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.84', items: [
+    { icon: 'smartphone',   t: 'Muse Reports — on your phone', d: 'A new installable app at /reports.html: the full Reports + Payroll numbers, phone-sized and read-only. Front-desk PIN login; only roles with “View Reports & Payroll” can get in.' },
+    { icon: 'payments',     t: 'Payroll page reworked',        d: 'Switch between Technicians and Front Desk pay; Front Desk now has a Check / Cash split (right-click to adjust) and is included when you lock a pay period. Only the table scrolls sideways now, and the period arrows moved up next to the clocked-in box.' },
+    { icon: 'point_of_sale', t: 'Drawer tip payouts fixed',    d: 'Tips covered by Zelle or a gift card now record a drawer cash-out automatically when you pay the tech from the drawer — the drawer no longer comes up short on those.' },
+    { icon: 'event_repeat', t: 'Cleaner appointment edits',    d: 'Editing an appointment — especially with multiple staff — no longer briefly shows duplicates or the old version on the calendar.' },
+    { icon: 'tune',         t: 'Staff app controls per tech',  d: 'In the technician editor you can now switch off the PDF download, the History tab, or customer names in history for each tech’s Muse Staff app.' },
+  ] },
   { v: 'v4.83', items: [
     { icon: 'palette',    t: 'Staff color key on week view', d: 'The weekly calendar now shows a color key above the grid, so you can tell whose appointments are whose at a glance.' },
     { icon: 'swap_horiz', t: 'Browse past updates',          d: 'Use the ‹ › arrows at the top of this popup to look back through earlier update notes (and a clearer Day | Week switch on the Calendar).' },
