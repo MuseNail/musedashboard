@@ -107,8 +107,9 @@ function isOtherTender(r, tenderedGroups) {
   return !r.tenders && !(r.groupId && tenderedGroups.has(r.groupId));
 }
 // Payment Mix totals from a filtered record set. Tips ride on the card (Square deposits card +
-// tips together). Single source of truth for the four+one mix figures.
-function paymentMix(filtered, tipsTotal) {
+// tips together). Single source of truth for the four+one mix figures. (Exported for the
+// Muse Reports phone app.)
+export function paymentMix(filtered, tipsTotal) {
   const tg = tenderedGroupIds(filtered);
   const cnt = pred => filtered.reduce((n, r) => pred(r) ? n + 1 : n, 0);
   return {
@@ -699,8 +700,9 @@ export function aiOpenClaude() { window.open('https://claude.ai/new', '_blank');
 
 // ── Comparison metrics + delta badges ─────────────
 // Scalar metrics for an arbitrary window, mirroring runReport's definitions exactly so
-// the comparison side lines up with the displayed cards. Used only for the prior period.
-function computeMetrics(from, to) {
+// the comparison side lines up with the displayed cards. Used for the prior period and
+// by the Muse Reports phone app.
+export function computeMetrics(from, to) {
   const filtered = buildCombinedRecords().filter(r => { if (r.status === 'deleted') return false; const d = new Date(r.checkinTime); return d >= from && d <= to && (isPaidStatus(r.status) || r.status === 'refund'); });
   const sum = (arr, f) => arr.reduce((s,x)=>s+f(x),0);
   const svcTotal = sum(filtered, r => sum(r.assignments||[], x => x.cost||0));
@@ -1387,7 +1389,7 @@ function nextPayPeriod({ from }) {
   const t = new Date(f.getTime() + (len - 1) * msDay); t.setHours(23,59,59,999);
   return { from: f, to: t };
 }
-function payrollPeriodAt(offset) {
+export function payrollPeriodAt(offset) {
   let p = payPeriodDates(new Date());
   const step = offset < 0 ? prevPayPeriod : nextPayPeriod;
   for (let i = 0; i < Math.abs(offset); i++) p = step(p);
@@ -1529,6 +1531,30 @@ export function payrollUnlockPeriod() {
   if (window.showWarnModal) window.showWarnModal('Unlock this pay period?', 'Payroll will recompute from current settings — the saved snapshot is discarded.', doIt, 'Unlock');
   else doIt();
 }
+// Front-desk pay rows for a period (clocked hours × rate + Check/Cash split), with the
+// payroll_adj overrides and the lock snapshot applied — shared by the Payroll page and
+// the Muse Reports phone app. Check defaults to the FULL pay.
+export function payrollFdRows(offset = _payrollOffset) {
+  const cur = payrollPeriodAt(offset);
+  const curKey = localDateStr(cur.from);
+  const adjAll = cfg().payroll_adj || {};
+  const lock = (cfg().payroll_locks || {})[curKey];
+  const snapById = lock?.fd ? Object.fromEntries(lock.fd.map(s => [s.userId, s])) : null;
+  const from = new Date(cur.from); from.setHours(0, 0, 0, 0);
+  const to = new Date(cur.to); to.setHours(23, 59, 59, 999);
+  const rows = (cfg().fd_users || []).map(u => {
+    const a = adjAll[u.id + ':' + curKey] || {};
+    const snap = snapById?.[u.id];
+    if (snap) return { u, hours: snap.hours, open: false, flagged: 0, rate: snap.rate, pay: snap.pay, chk: snap.check, cash: snap.cash, adj: a };
+    const r = fdPaidHours(u.id, +from, +to);
+    const pay = r.hours * (u.hourlyRate || 0);
+    const chk = a.check != null ? a.check : pay;
+    const cash = a.cash != null ? a.cash : Math.max(0, pay - chk);
+    return { u, hours: r.hours, open: r.openShift, flagged: r.flagged, rate: u.hourlyRate || 0, pay, chk, cash, adj: a };
+  });
+  return { rows, locked: !!lock, cur };
+}
+
 export function renderPayrollPage() {
   window.renderClockedInNow?.();   // live "clocked in now" card (gated by viewClockedIn)
   const wrap = document.getElementById('payroll-cards'); if (!wrap) return;
@@ -1632,20 +1658,8 @@ export function renderPayrollPage() {
   // Same mechanics as techs: Check defaults to the FULL pay; right-click Check or Cash
   // to override (payroll_adj keyed by the fd user id); a locked period renders the
   // frozen snapshot (lock.fd) so later punch/rate fixes don't rewrite paid history.
-  const _fdFrom = new Date(cur.from); _fdFrom.setHours(0, 0, 0, 0);
-  const _fdTo   = new Date(cur.to);   _fdTo.setHours(23, 59, 59, 999);
   const _fdEdit = ['admin', 'manager'].includes(getActiveUser()?.role);
-  const _fdSnap = _plock?.fd ? Object.fromEntries(_plock.fd.map(s => [s.userId, s])) : null;
-  const _fdRows = (cfg().fd_users || []).map(u => {
-    const a = _adj[u.id + ':' + curKey] || {};
-    const snap = _fdSnap?.[u.id];
-    if (snap) return { u, hours: snap.hours, open: false, flagged: 0, rate: snap.rate, pay: snap.pay, chk: snap.check, cash: snap.cash, adj: a };
-    const r = fdPaidHours(u.id, +_fdFrom, +_fdTo);
-    const pay = r.hours * (u.hourlyRate || 0);
-    const chk = a.check != null ? a.check : pay;
-    const cash = a.cash != null ? a.cash : Math.max(0, pay - chk);
-    return { u, hours: r.hours, open: r.openShift, flagged: r.flagged, rate: u.hourlyRate || 0, pay, chk, cash, adj: a };
-  });
+  const _fdRows = payrollFdRows(_payrollOffset).rows;
   _payrollLiveFd = _fdRows;   // Lock snapshots these (see payrollLockPeriod)
   const _fdT = k => _fdRows.reduce((s, r) => s + (r[k] || 0), 0);
   const _fdOv = (r, field, val) => {
@@ -1831,8 +1845,9 @@ export function tcCancel() { _tcDraft = null; _tcUser = null; _tcOrig = ''; clos
 // Apply the same per-period adjustments the Payroll PAGE applies, so every export
 // matches what's on screen: manual right-click overrides (config.payroll_adj) and,
 // when the period is locked, the frozen snapshot (config.payroll_locks).
-function payrollComputedRows() {
-  const { cur, T, curDays, prevDays } = payrollGrid();
+// (Exported for the Muse Reports phone app.)
+export function payrollComputedRows(offset = _payrollOffset) {
+  const { cur, T, curDays, prevDays } = payrollGrid(offset);
   const curKey = localDateStr(cur.from);
   const adjAll = cfg().payroll_adj || {};
   T.forEach(x => {
@@ -1932,8 +1947,8 @@ export function payrollExportExcel() {
   const a = document.createElement('a'); a.href = url; a.download = `muse-payroll-${localDateStr(cur.from)}.xlsx`; a.click(); URL.revokeObjectURL(url);
   showToast('Payroll exported — Totals tab + one tab per staff');
 }
-function payrollGrid() {
-  const cur = payrollPeriodAt(_payrollOffset), prev = prevPayPeriod(cur);
+function payrollGrid(offset = _payrollOffset) {
+  const cur = payrollPeriodAt(offset), prev = prevPayPeriod(cur);
   const curData = payrollRange(cur.from, cur.to), prevData = payrollRange(prev.from, prev.to);
   const curKey = localDateStr(cur.from), prevKey = localDateStr(prev.from);
   const curDays = payrollDaysInRange(cur.from, cur.to), prevDays = payrollDaysInRange(prev.from, prev.to);
