@@ -120,6 +120,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.85', items: [
+    { icon: 'event_available', t: 'Booking status on every column', d: 'A checked-in or paid appointment with multiple staff now shows its status on ALL of its calendar columns (including Unassigned) — no more “not checked in” on a paid booking.' },
+  ] },
   { v: 'v4.84', items: [
     { icon: 'smartphone',   t: 'Muse Reports — on your phone', d: 'A new installable app at /reports.html: the full Reports + Payroll numbers, phone-sized and read-only. Front-desk PIN login; only roles with “View Reports & Payroll” can get in.' },
     { icon: 'payments',     t: 'Payroll page reworked',        d: 'Switch between Technicians and Front Desk pay; Front Desk now has a Check / Cash split (right-click to adjust) and is included when you lock a pay period. Only the table scrolls sideways now, and the period arrows moved up next to the clocked-in box.' },
