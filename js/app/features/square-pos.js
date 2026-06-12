@@ -6,6 +6,7 @@ import { showToast, commitNumpad, ticketTotal } from '../utils.js';
 import { SQUARE_PROXY } from '../config.js';
 import { squareUpsertCustomer } from './square-customers.js';
 import { chargeOnHelcim, helcimActive, helcimCustomerCode } from './helcim.js';
+import { drawerTipPayoutCents } from './cashdrawer.js';
 
 const cfg     = () => getState().config;
 const sqConfig = () => cfg().square_config || null;
@@ -390,10 +391,11 @@ export async function proceedTerminalPayment() {
   // Capture BEFORE closeSquareConfirm() — it nulls _pendingPay / _payTicketId / _payCash / _payTip.
   const payNames = _pendingPay.names || '', ticketId = _payTicketId, partyIds = party.map(e => String(e.id));
   const tenders  = { cash: cashBillC / 100, card: cardBillC / 100, gift: giftCents / 100, zelle: zelleBillC / 100, cashReceived: cashReceivedC / 100, change: changeCents / 100 };
-  // Card-collected tip = the part of the tip the CARD paid (termCharge minus its bill share); cash/
-  // Zelle-covered tip is excluded (that money never sat in the drawer to pay out). Logged from the
-  // drawer on success when the operator left the "pay tip in cash" box checked.
-  const tipPayout = (_payTipFromDrawer && (termCharge - cardBillC) > 0) ? +(((termCharge - cardBillC) / 100).toFixed(2)) : 0;
+  // Drawer tip payout: the FULL tip minus the part the customer physically handed over in cash —
+  // a tip collected by card, ZELLE or GIFT never reached the drawer, so handing it to the tech
+  // needs a cash-out entry or the drawer reconciles short. (The old card-share-only rule missed
+  // Zelle/gift-covered tips.) Logged on success when the "pay tip in cash" box is checked.
+  const tipPayout = drawerTipPayoutCents(tipCents, cashAppliedC, cashBillC, _payTipFromDrawer) / 100;
   // Stash recorded gift cards on the ticket so they're drawn down when marked Paid.
   if (ticketId) {
     const ge = queue().find(x => String(x.id) === ticketId);
@@ -480,8 +482,8 @@ export async function proceedTerminalPayment() {
       }
     }
     _finalizeTerminalPaid(partyIds, tenders, [cardPaymentId, cashPaymentId, zellePaymentId].filter(Boolean), tipCents / 100, unrecorded);
-    // Pay the card tip to the tech in cash from the drawer (no-op if no drawer is open).
-    if (tipPayout > 0) window.cdRecordCashOut?.(tipPayout, ('Card tip — ' + payNames).slice(0, 80), 'tip');
+    // Pay the tip to the tech in cash from the drawer (no-op if no drawer is open).
+    if (tipPayout > 0) window.cdRecordCashOut?.(tipPayout, ('Tip — ' + payNames).slice(0, 80), 'tip');
   } catch (e) { hideTerminalModal(); _unstageGift(ticketId); showToast('Square: ' + (e.message || 'error')); }
   finally { _charging = false; }
 }

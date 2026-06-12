@@ -1,7 +1,7 @@
 import './setup-globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { countTotal, shiftCashSales, drawerExpected } from '../js/app/features/cashdrawer.js';
+import { countTotal, shiftCashSales, drawerExpected, drawerTipPayoutCents } from '../js/app/features/cashdrawer.js';
 
 // The cash drawer reconciles physical cash against expected:
 //   expected = opening + cash sales + cash-in − cash-out
@@ -53,4 +53,21 @@ test('over/short is counted minus expected; cents fall into it (bills-only count
   const counted = countTotal({ 100: 2, 50: 1, 20: 1, 5: 1, 1: 1 });   // 276 (bills only)
   const overShort = counted - expected;
   assert.ok(Math.abs(overShort - -0.75) < 1e-9);   // 75¢ short — the unbankable cents
+});
+
+// drawerTipPayoutCents(tip, cashApplied, cashBill, fromDrawer) — the auto cash-out for a tip
+// handed to the tech from the drawer. Full tip minus the part the customer paid in physical cash.
+// Bill $100 / tip $10 across tender mixes (all cents):
+test('drawerTipPayoutCents: card-collected tip pays out of the drawer (unchanged behavior)', () => {
+  assert.equal(drawerTipPayoutCents(1000, 0, 0, true), 1000);          // card pays bill+tip
+  assert.equal(drawerTipPayoutCents(1000, 0, 0, false), 0);            // box unchecked → no payout
+  assert.equal(drawerTipPayoutCents(0, 0, 0, true), 0);                // no tip
+});
+test('drawerTipPayoutCents: customer cash covering the tip is NOT paid out again', () => {
+  assert.equal(drawerTipPayoutCents(1000, 11000, 10000, true), 0);     // cash $110 covers bill $100 + tip $10
+  assert.equal(drawerTipPayoutCents(1000, 10500, 10000, true), 500);   // cash covers half the tip → pay out the rest
+});
+test('drawerTipPayoutCents: Zelle/gift-covered tips DO pay out of the drawer (the v4.83 bug)', () => {
+  assert.equal(drawerTipPayoutCents(1000, 0, 0, true), 1000);          // Zelle $110: no customer cash → full payout
+  assert.equal(drawerTipPayoutCents(1000, 5000, 5000, true), 1000);    // cash $50 all went to the bill; Zelle covered the tip
 });

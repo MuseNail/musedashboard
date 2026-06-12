@@ -48,6 +48,17 @@ export function shiftCashSales(records, drawer, endMs) {
     return s + (r.tenders.cash || 0);
   }, 0);
 }
+// Drawer tip payout (pure, cents): when "pay the tip in cash from the drawer" is on, the tech is
+// handed the FULL tip from the drawer — except any part the customer physically paid in cash
+// (that cash entered and left the drawer in one motion; recording it would double-count). The part
+// collected by CARD, ZELLE or GIFT never reached the drawer, so it needs a cash-out entry or the
+// drawer reconciles short. (Counting only the card's share was the old bug: a tip covered by
+// Zelle/gift and paid out of the drawer was never recorded.)
+export function drawerTipPayoutCents(tipCents, cashAppliedCents, cashBillCents, fromDrawer) {
+  if (!fromDrawer || !(tipCents > 0)) return 0;
+  const cashTip = Math.max(0, Math.min((cashAppliedCents || 0) - (cashBillCents || 0), tipCents));
+  return Math.max(0, tipCents - cashTip);
+}
 function movementTotals(drawer) {
   let inc = 0, out = 0, tipOut = 0;
   (drawer?.movements || []).forEach(m => { if (m.type === 'out') { out += m.amount || 0; if (m.kind === 'tip') tipOut += m.amount || 0; } else inc += m.amount || 0; });
