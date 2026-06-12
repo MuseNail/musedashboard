@@ -1358,6 +1358,13 @@ export function payrollToggleCompare() {
   localStorage.setItem('muse_payroll_compare', _payrollCompare ? '1' : '0');
   renderPayrollPage();
 }
+// Technicians | Front Desk pay view (device-local).
+let _payrollView = localStorage.getItem('muse_payroll_view') === 'fd' ? 'fd' : 'tech';
+export function payrollSetView(v) {
+  _payrollView = v === 'fd' ? 'fd' : 'tech';
+  try { localStorage.setItem('muse_payroll_view', _payrollView); } catch {}
+  renderPayrollPage();
+}
 function prevPayPeriod({ from }) {
   const pp = cfg().pay_period || {}, type = pp.type || 'weekly', msDay = 86400000;
   if (type === 'bimonthly') {
@@ -1460,7 +1467,7 @@ const _refNote   = notes => (notes && notes.length)
 const _refCells  = (cur, prev) => `<td class="num staff-sep" style="color:#dc2626">${cur.refund ? '-$' + Math.abs(cur.refund).toFixed(2) : '—'}${_refNote(cur.refundNotes)}</td><td class="num last" style="color:#dc2626">${prev.refund ? '-$' + Math.abs(prev.refund).toFixed(2) : '—'}</td>`;
 // ── Payroll lock: manually freeze a pay period's numbers against later %/check/rule changes ──
 // _payrollLiveT holds the live-computed rows from the last render so Lock can snapshot them.
-let _payrollLiveT = [], _payrollLiveKey = '', _payrollLiveSpan = null;
+let _payrollLiveT = [], _payrollLiveKey = '', _payrollLiveSpan = null, _payrollLiveFd = [];
 // Per-tech per-period manual overrides (config.payroll_adj[techId:perKey] = {check?,deduction?,cash?,checkNum?}).
 export function payrollSetOverride(techId, field, val) {
   if (!['check', 'deduction', 'cash'].includes(field)) return;
@@ -1505,8 +1512,12 @@ export function payrollLockPeriod() {
     billed: x.c.billed || 0, commission: x.c.commission || 0, refund: x.c.refund || 0, refundComm: x.c.refundComm || 0, refundNotes: x.c.refundNotes || [],
     check: x.cChk || 0, deduction: x.cDed || 0, cash: x.cCash || 0, total: x.cTotal || 0, daily: x.c.daily || {},
   }));
+  // Front-desk hourly pay is frozen in the same snapshot (hours · rate · check/cash).
+  const fd = (_payrollLiveFd || []).filter(r => r.hours || r.pay).map(r => ({
+    userId: r.u.id, name: r.u.name, hours: r.hours || 0, rate: r.rate || 0, pay: r.pay || 0, check: r.chk || 0, cash: r.cash || 0,
+  }));
   const locks = { ...(cfg().payroll_locks || {}) };
-  locks[_payrollLiveKey] = { lockedAt: new Date().toISOString(), lockedBy: getActiveUser()?.name || '', from: _payrollLiveSpan?.from, to: _payrollLiveSpan?.to, techs: rows };
+  locks[_payrollLiveKey] = { lockedAt: new Date().toISOString(), lockedBy: getActiveUser()?.name || '', from: _payrollLiveSpan?.from, to: _payrollLiveSpan?.to, techs: rows, fd };
   dispatch('config.set', { key: 'payroll_locks', value: locks });
   showToast('Pay period locked 🔒');
   renderPayrollPage();
@@ -1617,35 +1628,57 @@ export function renderPayrollPage() {
   const head3 = T.map(() => cmp
     ? `<th class="num staff-sep">Billed</th><th class="num">Comm</th><th class="arrow-col"></th><th class="num thislast-sep">Billed</th><th class="num">Comm</th>`
     : `<th class="num staff-sep">Billed</th><th class="num">Comm</th>`).join('');
-  // ── Front-desk hourly pay (clocked hours × rate). Tap a row → adjust times. ──
+  // ── Front-desk hourly pay (clocked hours × rate) + Check/Cash split ──
+  // Same mechanics as techs: Check defaults to the FULL pay; right-click Check or Cash
+  // to override (payroll_adj keyed by the fd user id); a locked period renders the
+  // frozen snapshot (lock.fd) so later punch/rate fixes don't rewrite paid history.
   const _fdFrom = new Date(cur.from); _fdFrom.setHours(0, 0, 0, 0);
   const _fdTo   = new Date(cur.to);   _fdTo.setHours(23, 59, 59, 999);
   const _fdEdit = ['admin', 'manager'].includes(getActiveUser()?.role);
+  const _fdSnap = _plock?.fd ? Object.fromEntries(_plock.fd.map(s => [s.userId, s])) : null;
   const _fdRows = (cfg().fd_users || []).map(u => {
+    const a = _adj[u.id + ':' + curKey] || {};
+    const snap = _fdSnap?.[u.id];
+    if (snap) return { u, hours: snap.hours, open: false, flagged: 0, rate: snap.rate, pay: snap.pay, chk: snap.check, cash: snap.cash, adj: a };
     const r = fdPaidHours(u.id, +_fdFrom, +_fdTo);
-    return { u, hours: r.hours, open: r.openShift, flagged: r.flagged, rate: u.hourlyRate || 0, pay: r.hours * (u.hourlyRate || 0) };
+    const pay = r.hours * (u.hourlyRate || 0);
+    const chk = a.check != null ? a.check : pay;
+    const cash = a.cash != null ? a.cash : Math.max(0, pay - chk);
+    return { u, hours: r.hours, open: r.openShift, flagged: r.flagged, rate: u.hourlyRate || 0, pay, chk, cash, adj: a };
   });
-  const _fdTotal = _fdRows.reduce((s, r) => s + r.pay, 0);
-  // ALWAYS rendered (even with no FD staff / no hourly rate set) so it's a stable, discoverable
+  _payrollLiveFd = _fdRows;   // Lock snapshots these (see payrollLockPeriod)
+  const _fdT = k => _fdRows.reduce((s, r) => s + (r[k] || 0), 0);
+  const _fdOv = (r, field, val) => {
+    const txt = val ? _m2(val) : '—';
+    const mark = (r.adj && r.adj[field] != null) ? '<span title="Manual override — right-click to change" style="color:#c77700;font-weight:700"> *</span>' : '';
+    return `<td class="num" data-tech="${r.u.id}" data-field="${field}" data-val="${val || 0}"${_locked ? ' data-locked="1"' : ''} oncontextmenu="payrollEditCell(event)" ondblclick="payrollEditCell(event)" title="Right-click to override" style="cursor:context-menu">${txt}${mark}</td>`;
+  };
+  const _fdCheckNum = r => `<td data-tech="${r.u.id}" data-field="checkNum" data-val="${r.adj?.checkNum ? _eTxn(r.adj.checkNum) : ''}" oncontextmenu="payrollEditCell(event)" ondblclick="payrollEditCell(event)" title="Right-click to enter the check #" style="text-align:center;cursor:context-menu;color:var(--md-on-surface-variant)">${r.adj?.checkNum ? _eTxn(r.adj.checkNum) : '—'}</td>`;
+  // ALWAYS available (even with no FD staff / no hourly rate set) so it's a stable, discoverable
   // home for front-desk hours — empty state guides the operator to add staff.
   const _fdBody = _fdRows.length
-    ? _fdRows.map(r => `<tr ${_fdEdit ? `onclick="openTimecard('${r.u.id}')" style="cursor:pointer"` : ''}><td class="sticky-col">${_eTxn(r.u.name)}${r.open ? ' <span title="Still clocked in" style="color:#c77700">⏱</span>' : ''}${r.flagged ? ` <span title="${r.flagged} punch(es) need review — a forgotten clock-out/in, not counted. Tap to fix." style="color:#c0392b">⚠${r.flagged}</span>` : ''}</td><td class="num">${r.hours.toFixed(2)}</td><td class="num">$${r.rate.toFixed(2)}</td><td class="num">$${r.pay.toFixed(2)}</td></tr>`).join('')
-      + `<tr style="font-weight:700"><td class="sticky-col">Total</td><td class="num"></td><td class="num"></td><td class="num">$${_fdTotal.toFixed(2)}</td></tr>`
-    : `<tr><td colspan="4" style="text-align:center;color:var(--md-on-surface-variant);padding:16px;font-style:italic">No front-desk staff yet — add them in Settings → Staff &amp; Access.</td></tr>`;
-  const _fdHtml = `<div class="mt-6">
-      <div class="flex items-center gap-2 mb-2"><h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest">Front Desk — Hourly</h3>${_fdEdit ? '<span class="text-[11px] font-body text-on-surface-variant">tap a row to adjust times</span>' : ''}</div>
-      <div class="overflow-x-auto rounded-xl border border-surface-container-high"><table class="data-table">
-        <thead><tr><th class="sticky-col">Staff</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Pay</th></tr></thead>
+    ? _fdRows.map(r => `<tr><td class="sticky-col"${_fdEdit ? ` onclick="openTimecard('${r.u.id}')" style="cursor:pointer" title="Tap to adjust clock times"` : ''}>${_eTxn(r.u.name)}${r.open ? ' <span title="Still clocked in" style="color:#c77700">⏱</span>' : ''}${r.flagged ? ` <span title="${r.flagged} punch(es) need review — a forgotten clock-out/in, not counted. Tap to fix." style="color:#c0392b">⚠${r.flagged}</span>` : ''}</td><td class="num">${r.hours.toFixed(2)}</td><td class="num">$${r.rate.toFixed(2)}</td><td class="num" style="font-weight:700">$${r.pay.toFixed(2)}</td>${_fdOv(r, 'check', r.chk)}${_fdOv(r, 'cash', r.cash)}${_fdCheckNum(r)}</tr>`).join('')
+      + `<tr style="font-weight:700"><td class="sticky-col">Total</td><td class="num">${_fdT('hours').toFixed(2)}</td><td class="num"></td><td class="num">$${_fdT('pay').toFixed(2)}</td><td class="num">$${_fdT('chk').toFixed(2)}</td><td class="num">$${_fdT('cash').toFixed(2)}</td><td></td></tr>`
+    : `<tr><td colspan="7" style="text-align:center;color:var(--md-on-surface-variant);padding:16px;font-style:italic">No front-desk staff yet — add them in Settings → Staff &amp; Access.</td></tr>`;
+  const _fdHtml = `<div>
+      <div class="flex items-center gap-2 mb-2 flex-wrap"><h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest">Front Desk — Hourly</h3><span class="text-[11px] font-body text-on-surface-variant">check defaults to the full pay · right-click Check or Cash to override${_fdEdit ? ' · tap a name to adjust times' : ''}</span></div>
+      <div class="overflow-x-auto rounded-xl border border-surface-container-high" style="scrollbar-width:thin"><table class="data-table">
+        <thead><tr><th class="sticky-col">Staff</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Pay</th><th class="num">Check</th><th class="num">Cash</th><th style="text-align:center">Check #</th></tr></thead>
         <tbody>${_fdBody}</tbody>
       </table></div></div>`;
   const _isAdmin = ['admin', 'manager'].includes(getActiveUser()?.role);
   const _lockBar = _plock
     ? `<div class="flex items-center justify-between gap-2 mb-3 px-4 py-2.5 rounded-xl" style="background:rgba(26,82,82,.08);border:1px solid rgba(26,82,82,.28)"><div class="flex items-center gap-2 text-sm font-body text-on-surface"><span class="material-symbols-outlined text-primary" style="font-size:18px">lock</span><span><b>Locked</b>${_plock.lockedAt ? ' · ' + new Date(_plock.lockedAt).toLocaleDateString() : ''}${_plock.lockedBy ? ' by ' + _eTxn(_plock.lockedBy) : ''} — showing the saved snapshot.</span></div>${_isAdmin ? '<button onclick="payrollUnlockPeriod()" class="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-surface-container-high text-on-surface font-body font-semibold text-xs hover:bg-surface-container flex-shrink-0"><span class="material-symbols-outlined" style="font-size:15px">lock_open</span> Unlock</button>' : ''}</div>`
     : (_isAdmin ? `<div class="flex items-center justify-between gap-2 mb-3 px-4 py-2.5 rounded-xl border border-surface-container-high flex-wrap"><div class="text-sm font-body text-on-surface-variant">Lock this pay period to freeze it against future commission / check / deduction changes.</div><button onclick="payrollLockPeriod()" class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-on-primary font-body font-semibold text-xs hover:bg-primary-dim flex-shrink-0"><span class="material-symbols-outlined" style="font-size:15px">lock</span> Lock this pay period</button></div>` : '');
-  wrap.innerHTML = _lockBar + `<table class="data-table"><thead>${cmp
+  // (b) Technicians | Front Desk — one pay table at a time; (a) ONLY the table's own
+  // wrapper scrolls horizontally, never the page.
+  const _techHtml = `<div class="overflow-x-auto rounded-xl border border-surface-container-high" style="scrollbar-width:thin"><table class="data-table"><thead>${cmp
       ? `<tr><th class="sticky-col" rowspan="3"></th>${head1}</tr><tr>${head2}</tr><tr>${head3}</tr>`
       : `<tr><th class="sticky-col" rowspan="2"></th>${head1}</tr><tr>${head3}</tr>`}</thead>
-    <tbody>${rows.join('')}</tbody></table>${_fdHtml}`;
+    <tbody>${rows.join('')}</tbody></table></div>`;
+  wrap.innerHTML = _lockBar + (_payrollView === 'fd' ? _fdHtml : _techHtml);
+  document.getElementById('payroll-view-tech')?.classList.toggle('on', _payrollView !== 'fd');
+  document.getElementById('payroll-view-fd')?.classList.toggle('on', _payrollView === 'fd');
   // Reflect the toggle state on the header button.
   const _cbtn = document.getElementById('payroll-compare-btn');
   if (_cbtn) {

@@ -626,22 +626,33 @@ tailwind.config = {
 
       <!-- ── PAYROLL PANEL ── -->
       <div class="dash-panel" id="panel-payroll">
-        <div class="flex items-start justify-between gap-2 mb-4 flex-wrap">
+        <!-- One header row: [subnav + period nav + view seg] | clocked-in card | exports.
+             The period nav sits IN LINE with the always-≥2-line clocked-in card to save
+             the whole row it used to occupy. -->
+        <div class="flex items-start gap-4 mb-2 flex-wrap">
+          <div class="flex flex-col gap-2 flex-shrink-0">
+            <span class="subnav-slot" id="subnav-slot-payroll"></span>
+            <div class="flex items-center gap-2">
+              <button onclick="payrollNav(-1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
+              <span id="payroll-period-label" class="font-headline font-bold text-on-surface text-sm min-w-[150px] text-center">Pay Period</span>
+              <button onclick="payrollNav(1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+              <button onclick="payrollToggleCompare()" id="payroll-compare-btn" title="Show/hide the prior pay period comparison columns (This vs Last)" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">compare_arrows</span> <span id="payroll-compare-label">Comparing: Last</span></button>
+            </div>
+            <!-- Technicians | Front Desk pay view -->
+            <div class="subnav-seg" style="align-self:flex-start">
+              <button id="payroll-view-tech" onclick="payrollSetView('tech')" class="subnav-btn on">Technicians</button>
+              <button id="payroll-view-fd" onclick="payrollSetView('fd')" class="subnav-btn">Front Desk</button>
+            </div>
+          </div>
           <div id="clocked-in-now" class="hidden flex-1 min-w-[240px]"></div>
-          <span class="subnav-slot" id="subnav-slot-payroll"></span>
           <div class="flex items-center gap-2 flex-wrap flex-shrink-0 ml-auto">
             <button onclick="payrollExportPDF()" title="Full payroll table (landscape)" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
             <button onclick="payrollExportStaffPDF()" title="Per-tech billed total + by day — for handing to staff" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">badge</span> Staff PDF</button>
             <button onclick="payrollExportExcel()" title="Excel workbook — Totals tab + a detailed tab per staff" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> Excel</button>
           </div>
         </div>
-        <div class="flex items-center justify-center gap-3 mb-4 flex-wrap">
-          <button onclick="payrollNav(-1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
-          <span id="payroll-period-label" class="font-headline font-bold text-on-surface text-sm min-w-[180px] text-center">Pay Period</span>
-          <button onclick="payrollNav(1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
-          <button onclick="payrollToggleCompare()" id="payroll-compare-btn" title="Show/hide the prior pay period comparison columns (This vs Last)" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">compare_arrows</span> <span id="payroll-compare-label">Comparing: Last</span></button>
-        </div>
-        <div id="payroll-cards" class="overflow-x-auto pb-3 rounded-xl border border-surface-container-high" style="scrollbar-width:thin"></div>
+        <!-- No overflow here — only the pay TABLE inside scrolls horizontally. -->
+        <div id="payroll-cards" class="pb-3"></div>
       </div>
 
       <!-- ── TURNS PANEL ── -->

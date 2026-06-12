@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — Payroll layout v2 (header, Tech|Front Desk toggle, FD pay)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --primary:#1a5252; --surface:#f7f8f8; --lowest:#fff; --container:#eceeee; --high:#dde1e1; --on-surface:#171d1d; --variant:#3f4948; --outline:#6f7979; }
+  body { background:var(--surface); font-family:Inter,sans-serif; color:var(--on-surface); }
+  .font-headline { font-family:Manrope,sans-serif; }
+  .seg { display:inline-flex; background:#e4e8ea; border-radius:12px; padding:3px; gap:2px; }
+  .seg button { border:none; background:transparent; font-weight:700; font-size:13px; padding:7px 18px; border-radius:10px; color:#5b6166; }
+  .seg button.on { background:#fff; color:#1a5252; box-shadow:0 1px 4px rgba(0,0,0,.14); }
+  th, td { padding:6px 10px; font-size:13px; white-space:nowrap; }
+  th { background:var(--primary); color:#fff; text-align:left; }
+  td.num, th.num { text-align:right; }
+  tbody tr { border-bottom:1px solid var(--high); }
+</style>
+</head>
+<body class="p-6">
+<div class="max-w-[1100px] mx-auto">
+  <div class="font-headline font-extrabold text-xl mb-1">Payroll — new header layout + Front Desk pay</div>
+  <ul class="text-sm mb-5 list-disc pl-5 space-y-1" style="color:var(--variant)">
+    <li><b>(d)</b> Period nav moves UP next to the clocked-in box (which is always ≥2 lines tall anyway) — the whole top row it used to occupy is gone.</li>
+    <li><b>(b)</b> A <b>Technicians | Front Desk</b> switcher picks which pay table shows (same segmented style as everywhere else).</li>
+    <li><b>(a)</b> The pay table scrolls horizontally <i>inside its own box</i> — the page itself never scrolls sideways.</li>
+    <li><b>(c)</b> Front Desk gets the same style header and a <b>Check / Cash split</b>: right-click Check to set it, Cash auto-fills as Pay − Check (both overrideable, like tech cells).</li>
+    <li><b>(e)</b> The 🔒 lock now freezes Front Desk pay too (hours · rate · check/cash snapshot), same flow as techs.</li>
+  </ul>
+
+  <!-- header: subnav + clocked-in + period nav share one row -->
+  <div class="flex items-start gap-4 flex-wrap mb-3">
+    <div class="flex flex-col gap-2">
+      <div class="seg"><button>Reports</button><button class="on">Payroll</button></div>
+      <!-- (d) period nav now lives here, in line with the clocked-in card -->
+      <div class="flex items-center gap-2">
+        <button class="w-9 h-9 rounded-lg border bg-white" style="border-color:var(--high)">‹</button>
+        <span class="font-headline font-bold text-sm min-w-[150px] text-center">Jun 7 – 13 · current</span>
+        <button class="w-9 h-9 rounded-lg border bg-white" style="border-color:var(--high)">›</button>
+        <button class="px-3 py-2 rounded-lg border bg-white text-xs font-semibold" style="border-color:var(--high)">Compare: Off</button>
+      </div>
+      <!-- (b) tech | front desk -->
+      <div class="seg"><button class="on">Technicians</button><button>Front Desk</button></div>
+    </div>
+    <div class="flex-1 min-w-[260px] rounded-xl border bg-white p-4" style="border-color:var(--high)">
+      <div class="flex items-center gap-2 mb-1"><span class="text-sm font-headline font-bold uppercase">Clocked in now</span><span class="text-[10px] border rounded px-1.5" style="color:var(--outline);border-color:var(--high)">live</span></div>
+      <div class="text-sm" style="color:var(--variant)">Hien · since 9:02 AM &nbsp;&nbsp; Lina · since 12:30 PM</div>
+    </div>
+    <div class="flex items-center gap-2 ml-auto">
+      <button class="px-3 py-2 rounded-lg border bg-white text-xs font-semibold" style="border-color:var(--high)">PDF</button>
+      <button class="px-3 py-2 rounded-lg border bg-white text-xs font-semibold" style="border-color:var(--high)">Staff PDF</button>
+      <button class="px-3 py-2 rounded-lg border bg-white text-xs font-semibold" style="border-color:var(--high)">Excel</button>
+    </div>
+  </div>
+
+  <!-- (c)+(e) the FRONT DESK view -->
+  <div class="rounded-xl border bg-white overflow-hidden" style="border-color:var(--high)">
+    <div class="px-4 py-2.5 flex items-center justify-between" style="background:rgba(26,82,82,.08)">
+      <span class="text-sm font-headline font-bold uppercase tracking-widest">Front Desk — Hourly · Jun 7 – 13</span>
+      <button class="px-3 py-1.5 rounded-lg text-white text-xs font-bold" style="background:var(--primary)">🔒 Lock this pay period</button>
+    </div>
+    <div style="overflow-x:auto"><!-- (a) scroll lives HERE -->
+      <table class="w-full" style="border-collapse:collapse">
+        <thead><tr><th>Staff</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Pay</th><th class="num">Check</th><th class="num">Cash</th><th>Check #</th></tr></thead>
+        <tbody>
+          <tr><td class="font-semibold">Hien</td><td class="num">38.25</td><td class="num">$18.00</td><td class="num font-bold">$688.50</td><td class="num">$500.00 <span style="color:#c77700">*</span></td><td class="num">$188.50</td><td style="text-align:center;color:var(--outline)">1042</td></tr>
+          <tr><td class="font-semibold">Lina</td><td class="num">22.00</td><td class="num">$17.00</td><td class="num font-bold">$374.00</td><td class="num">$374.00</td><td class="num">—</td><td style="text-align:center;color:var(--outline)">—</td></tr>
+          <tr><td class="font-semibold">Parents</td><td class="num">8.50</td><td class="num">$15.00</td><td class="num font-bold">$127.50</td><td class="num">—</td><td class="num">$127.50 <span style="color:#c77700">*</span></td><td style="text-align:center;color:var(--outline)">—</td></tr>
+          <tr class="font-bold" style="background:#f0f3f3"><td>Total</td><td class="num">68.75</td><td></td><td class="num">$1,190.00</td><td class="num">$874.00</td><td class="num">$316.00</td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="px-4 py-2 text-xs" style="color:var(--outline)">Check defaults to the full pay · right-click (or double-tap) Check / Cash to override — a <span style="color:#c77700">*</span> marks a manual value · tap a row to adjust clock times</div>
+  </div>
+</div>
+</body>
+</html>
