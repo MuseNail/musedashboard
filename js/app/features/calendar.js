@@ -632,13 +632,15 @@ export function calRenderGrid() {
       const primaryPhone = ppriv.musePrimaryPhone || _apptPhone(primaryEv);
       const notes = _apptNotes(first), confirmed = evs.some(e => (e.extendedProperties?.private||{}).museConfirmed === '1'), isPast = startDt < now;
       const noShow = evs.some(e => (e.extendedProperties?.private||{}).museNoShow === '1');
-      // Appointment-ness + a queue match from ANY event in the booking. Match a queue
-      // entry only by the check-in link or exact phone — never by loose name prefix.
-      let isAppt = false, qm = null;
+      // Appointment-ness + a queue match for the booking. The check-in link is matched
+      // against EVERY copy's id (all calendars), so the Paid/Checked-In badge shows on
+      // every column — not just the copy the check-in went through. Phone fallback only
+      // after that; never a loose name prefix.
+      let isAppt = false, qm = _queueByEventIds(_bookingEventIds(first));
       for (const ev of evs) {
         const ext = ev.extendedProperties?.private || {}, d = ev.description || '', t = ev.summary || '';
         if (!!ext.musePhone || /\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/.test(d) || cfg().services.some(s => s.label && t.toLowerCase().includes(s.label.toLowerCase())) || ext.museLines !== undefined) isAppt = true;
-        if (!qm) { qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g,''), startDt.getTime()); }
+        if (!qm) qm = _phoneQueueMatch(_apptPhone(ev).replace(/\D/g,''), startDt.getTime());
       }
       const qs = qm?.status || null;
       // One row per service in THIS column: "FirstName — Service".
@@ -1006,7 +1008,7 @@ export function calEventClick(e, calId, eventId, title, desc, isAppt) {
   const phone = _apptPhone(ev), rawPhone = phone.replace(/\D/g, ''), notes = _apptNotes(ev);
   const confirmed = ev.extendedProperties?.private?.museConfirmed === '1';
   const noShow = ev.extendedProperties?.private?.museNoShow === '1';
-  let queueMatch = queue().find(x => x.calEventId && x.calEventId === eventId) || _phoneQueueMatch(rawPhone, startDt.getTime());
+  let queueMatch = _queueByEventIds(_bookingEventIds(ev)) || _phoneQueueMatch(rawPhone, startDt.getTime());
   // Read-only services + staff summary for the whole booking (every guest in the group).
   const svcSummaryHtml = (() => {
     const uCal = unassignedCalId();
@@ -1070,6 +1072,38 @@ function _phoneQueueMatch(rawPhone, apptStartMs) {
     return isFinite(t) && t >= apptStartMs - before && t <= apptStartMs + after;
   }) || null;
 }
+
+// ── Booking ↔ queue matching across calendar copies ──────────────────────────
+// A check-in stores ONE copy's id as the queue entry's calEventId — whichever copy it
+// went through — but a booking has a copy per calendar (each tech + Unassigned). Any
+// queue lookup must therefore match against a SET of ids, or sibling copies read as
+// "not checked in" after check-in/payment (the Melissa-Smith bug: Paid on the tech's
+// column, orange on Unassigned). Booking-wide set = the status badge; person-scoped
+// set = the per-guest "already checked in" guards (a party member must not be blocked
+// by ANOTHER member's entry). Pure on (ev, eventsMap) — exported for unit tests.
+export function _bookingEventIds(ev, eventsMap = _calEvents) {
+  const ids = new Set([String(ev.id)]);
+  const gid = ev.extendedProperties?.private?.museGroupId || '';
+  if (gid) Object.values(eventsMap).forEach(list => (list || []).forEach(e => {
+    if ((e.extendedProperties?.private?.museGroupId || '') === gid) ids.add(String(e.id));
+  }));
+  return ids;
+}
+const _evPersonName = e => (e.extendedProperties?.private?.museName || (e.summary || '').split(' — ')[0] || '').trim().toLowerCase();
+export function _personEventIds(ev, eventsMap = _calEvents) {
+  const ids = new Set([String(ev.id)]);
+  const gid = ev.extendedProperties?.private?.museGroupId || '';
+  if (!gid) return ids;
+  const pname = _evPersonName(ev);
+  Object.values(eventsMap).forEach(list => (list || []).forEach(e => {
+    if ((e.extendedProperties?.private?.museGroupId || '') === gid && _evPersonName(e) === pname) ids.add(String(e.id));
+  }));
+  return ids;
+}
+export function _queueEntryForEventIds(queueArr, ids) {
+  return (queueArr || []).find(x => x.calEventId && ids.has(String(x.calEventId))) || null;
+}
+const _queueByEventIds = ids => _queueEntryForEventIds(queue(), ids);
 
 // Every calendar copy of a booking. A multi-staff/party appointment is stored as one
 // Google event per staff column, all sharing museGroupId — so confirm / no-show must
@@ -1169,7 +1203,7 @@ export async function autoNoShowStaleAppts() {
 // already checked in). queueGroupId links party members in the queue.
 function _buildCheckinEntry(ev, fallbackCalId, queueGroupId) {
   const title = ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || 'Guest';
-  const already = queue().find(x => x.calEventId === ev.id || (x.isAppointment && x.name === title && x.status !== 'paid' && x.status !== 'done'));
+  const already = _queueByEventIds(_personEventIds(ev)) || queue().find(x => x.isAppointment && x.name === title && x.status !== 'paid' && x.status !== 'done');
   if (already) return null;
   const rawP = _apptPhone(ev).replace(/\D/g,'');
   const phone = rawP ? rawP.replace(/^1?(\d{3})(\d{3})(\d{4})$/,'($1) $2-$3') : '';
@@ -1202,7 +1236,7 @@ function _gatherParty(calId, eventId) {
   } else {
     party = [{ ev, calId, name: ev.extendedProperties?.private?.museName || (ev.summary||'').split(' — ')[0] || 'Guest', groupId: '' }];
   }
-  party.forEach(p => { p.already = !!queue().find(x => x.calEventId === p.ev.id || (x.isAppointment && x.name === p.name && x.status !== 'paid' && x.status !== 'done')); });
+  party.forEach(p => { p.already = !!(_queueByEventIds(_personEventIds(p.ev)) || queue().find(x => x.isAppointment && x.name === p.name && x.status !== 'paid' && x.status !== 'done')); });
   return party;
 }
 // Check in the given party members. All check-ins from one multi-person booking
@@ -1282,7 +1316,7 @@ export function findTodayApptFor(phone, name) {
     const evPhone = _apptPhone(ev).replace(/\D/g, '');
     const evName = (ext.museName || (ev.summary || '').split(' — ')[0] || '').trim().toLowerCase();
     if (!((p && evPhone && evPhone === p) || (nm && evName && evName === nm))) return;
-    if (queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id))) return;   // that appt is already checked in
+    if (_queueByEventIds(_personEventIds(ev, todayApptSource()))) return;   // that appt (any of its copies) is already checked in
     const lines = _parseApptLines(ev, cid).map(l => {
       const svc = cfg().services.find(s => s.id === l.svcId)?.label || '';
       if (!svc) return '';
