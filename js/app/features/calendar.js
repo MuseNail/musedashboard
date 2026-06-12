@@ -62,6 +62,44 @@ let _calOrder = JSON.parse(localStorage.getItem('gcal_order') || 'null');
 let _calOffPeek = new Set();
 const CAL_SYNC_INTERVAL = 60000;
 
+// ── Google eventual-consistency guards ────────────────────────────────────────
+// Right after a write, events.list can still RETURN just-deleted events (ghosts) and
+// MISS just-inserted/updated ones for several seconds. That made edits — especially
+// multi-staff bookings, which are delete+reinsert fan-outs — "not display properly"
+// (duplicates, stale copies) until a later sync. Every delete records a tombstone and
+// every insert/update/patch pins the resource Google returned; _gcalApplyGuards()
+// reconciles each fetched list against both for a couple of minutes.
+const GCAL_LAG_MS = 120000;
+const _calGhosts = new Map();   // `${calId}|${eventId}` -> expiresAt
+const _calPins   = new Map();   // `${calId}|${eventId}` -> { ev, expiresAt }
+export function _gcalNoteDeleted(calId, eventId) {
+  if (!calId || !eventId) return;
+  _calGhosts.set(calId + '|' + eventId, Date.now() + GCAL_LAG_MS);
+  _calPins.delete(calId + '|' + eventId);
+}
+export function _gcalNoteWritten(calId, ev) {
+  if (!calId || !ev || !ev.id) return;
+  _calPins.set(calId + '|' + ev.id, { ev, expiresAt: Date.now() + GCAL_LAG_MS });
+  _calGhosts.delete(calId + '|' + ev.id);
+}
+export function _gcalApplyGuards(calId, items) {
+  const now = Date.now();
+  for (const [k, exp] of _calGhosts) if (exp <= now) _calGhosts.delete(k);
+  for (const [k, v] of _calPins) if (v.expiresAt <= now) _calPins.delete(k);
+  let out = (items || []).filter(e => !_calGhosts.has(calId + '|' + e.id));
+  // Prefer the pinned (post-write) copy while the fetched one is older; once Google
+  // catches up the fetched copy wins and the pin ages out.
+  out = out.map(e => {
+    const p = _calPins.get(calId + '|' + e.id);
+    return (p && +new Date(p.ev.updated || 0) > +new Date(e.updated || 0)) ? p.ev : e;
+  });
+  for (const [k, v] of _calPins) {
+    const sep = k.indexOf('|');
+    if (k.slice(0, sep) === calId && !out.some(e => e.id === k.slice(sep + 1))) out.push(v.ev);
+  }
+  return out;
+}
+
 // A calendar's tech is off on the viewed date? Maps Google calendar → staff by NAME
 // (case-insensitive, trimmed), reads the in-app schedule only (off/sick/vacation for
 // _calDate), never Google. No match (incl. Unassigned) or working/unset = not off.
@@ -124,7 +162,7 @@ async function ensureTodayApptEvents(force) {
   const next = {};
   try {
     await Promise.all(_calCalendars.map(async cal => {
-      try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); next[cal.id] = r.result.items || []; }
+      try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); next[cal.id] = _gcalApplyGuards(cal.id, r.result.items); }
       catch (e) { next[cal.id] = _todayEvents[cal.id] || []; }
     }));
     _todayEvents = next; _todayEventsAt = Date.now();
@@ -488,7 +526,7 @@ export async function calLoadAndRender(silent) {
     // column — an empty column reads as "no appointments" and the front desk books over real
     // bookings. Track anyFail so a partial load shows the error pill rather than a healthy green.
     const prev = _calEvents; _calEvents = {}; let anyFail = false;
-    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: calIsWeek() ? 250 : 100 }); _calEvents[cal.id] = r.result.items || []; } catch (e) { anyFail = true; console.warn('[calendar] events.list failed for', cal.name, e); _calEvents[cal.id] = prev[cal.id] || []; } }));
+    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: calIsWeek() ? 250 : 100 }); _calEvents[cal.id] = _gcalApplyGuards(cal.id, r.result.items); } catch (e) { anyFail = true; console.warn('[calendar] events.list failed for', cal.name, e); _calEvents[cal.id] = prev[cal.id] || []; } }));
     const gbBefore = document.getElementById('cal-scroll'); const savedScroll = gbBefore ? gbBefore.scrollTop : null;
     calRenderGrid();
     if (savedScroll !== null) requestAnimationFrame(() => { const gb = document.getElementById('cal-scroll'); if (gb) gb.scrollTop = savedScroll; });
@@ -824,7 +862,7 @@ async function calSilentSync() {
     const dayStart = calIsWeek() ? calWeekStart(_calDate) : new Date(_calDate); dayStart.setHours(0,0,0,0);
     const dayEnd = new Date(dayStart); if (calIsWeek()) dayEnd.setDate(dayEnd.getDate() + 6); dayEnd.setHours(23,59,59,999);
     const newEvents = {}; let anyFail = false;
-    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: calIsWeek() ? 250 : 100 }); newEvents[cal.id] = r.result.items || []; } catch (e) { anyFail = true; console.warn('[calendar] silent sync failed for', cal.name, e); newEvents[cal.id] = _calEvents[cal.id] || []; } }));
+    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: calIsWeek() ? 250 : 100 }); newEvents[cal.id] = _gcalApplyGuards(cal.id, r.result.items); } catch (e) { anyFail = true; console.warn('[calendar] silent sync failed for', cal.name, e); newEvents[cal.id] = _calEvents[cal.id] || []; } }));
     _calEvents = newEvents;
     // Preserve the user's scroll position on a silent refresh — calRenderGrid()
     // re-scrolls to ~1hr-before-now, which yanked the view away mid-use.
@@ -1057,7 +1095,7 @@ export async function calToggleConfirmed(calId, eventId) {
   try {
     showToast('Saving…');
     await ensureFreshToken();
-    await Promise.all(refs.map(r => gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museConfirmed: target } } } })));
+    await Promise.all(refs.map(async r => { const p = await gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museConfirmed: target } } } }); _gcalNoteWritten(r.calId, p.result); }));
     showToast(nowConfirmed ? 'Marked unconfirmed' : 'Appointment confirmed ✓');
     await calLoadAndRender(true);
   } catch (err) { _calWriteError(err, 'Update'); }
@@ -1075,7 +1113,7 @@ export async function calMarkNoShow(calId, eventId) {
   try {
     showToast('Saving…');
     await ensureFreshToken();
-    await Promise.all(refs.map(r => gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museNoShow: isNoShow ? null : '1' } } } })));
+    await Promise.all(refs.map(async r => { const p = await gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museNoShow: isNoShow ? null : '1' } } } }); _gcalNoteWritten(r.calId, p.result); }));
     showToast(isNoShow ? 'No-show cleared' : 'Marked No Show');
     await calLoadAndRender(true);
     if (isNoShow) return;
@@ -1117,7 +1155,7 @@ export async function autoNoShowStaleAppts() {
     for (const { calId, eventId } of stale.values()) {
       _autoNoShowAttempted.add(eventId);   // before the await: never retry a failing event in a tight loop
       const refs = _eventGroupRefs(calId, eventId);
-      await Promise.all(refs.map(r => gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museNoShow: '1' } } } })));
+      await Promise.all(refs.map(async r => { const p = await gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museNoShow: '1' } } } }); _gcalNoteWritten(r.calId, p.result); }));
       marked++;
     }
     await calLoadAndRender(true);
@@ -1591,22 +1629,25 @@ export async function saveAppt() {
         const oldCalId = document.getElementById('appt-cal-id').value;
         const newPrimary = cals[0] || oldCalId;
         if (oldCalId && oldCalId !== newPrimary) {
-          await gapi.client.calendar.events.insert({ calendarId: newPrimary, resource: body });
+          const ins = await gapi.client.calendar.events.insert({ calendarId: newPrimary, resource: body });
+          _gcalNoteWritten(newPrimary, ins.result);
           wroteCals.add(newPrimary);
           try { await gapi.client.calendar.events.delete({ calendarId: oldCalId, eventId: _apptEditId }); } catch {}
+          _gcalNoteDeleted(oldCalId, _apptEditId);
         } else {
-          await gapi.client.calendar.events.update({ calendarId: oldCalId, eventId: _apptEditId, resource: body });
+          const upd = await gapi.client.calendar.events.update({ calendarId: oldCalId, eventId: _apptEditId, resource: body });
+          _gcalNoteWritten(oldCalId, upd.result);
         }
-        for (const cid of cals) { if (cid !== newPrimary && cid !== oldCalId) { await gapi.client.calendar.events.insert({ calendarId: cid, resource: body }); wroteCals.add(cid); } }
+        for (const cid of cals) { if (cid !== newPrimary && cid !== oldCalId) { const ins = await gapi.client.calendar.events.insert({ calendarId: cid, resource: body }); _gcalNoteWritten(cid, ins.result); wroteCals.add(cid); } }
       } else {
         const finalCals = cals.length ? cals : [uCal];
-        for (const cid of finalCals) { await gapi.client.calendar.events.insert({ calendarId: cid, resource: body }); wroteCals.add(cid); }
+        for (const cid of finalCals) { const ins = await gapi.client.calendar.events.insert({ calendarId: cid, resource: body }); _gcalNoteWritten(cid, ins.result); wroteCals.add(cid); }
       }
       if (p.phone) squareUpsertCustomer({ name: p.name, phone: p.phone });   // add/refresh each booked customer in Square
     }
     // Remove the booking's stale pre-edit events (old guest events + old extra-cal
     // copies) now that fresh ones are inserted — keeps the calendar duplicate-free.
-    for (const ref of oldGroupRefs) { try { await gapi.client.calendar.events.delete({ calendarId: ref.calId, eventId: ref.id }); } catch {} }
+    for (const ref of oldGroupRefs) { try { await gapi.client.calendar.events.delete({ calendarId: ref.calId, eventId: ref.id }); } catch {} _gcalNoteDeleted(ref.calId, ref.id); }
     try { _notifyApptTechs(wroteCals, oldCals, people[0].name, startDt); } catch {}   // best-effort push to newly-booked techs
     closeApptModal(); await calLoadAndRender(true);
     showToast(people.length > 1 ? `Appointment saved for ${people.length} guests ✓` : 'Appointment saved ✓');
@@ -1648,6 +1689,8 @@ export async function deleteAppt(calIdParam, eventIdParam) {
     const refs = _eventGroupRefs(calId, eventId);
     await ensureFreshToken();
     const results = await Promise.allSettled(refs.map(r => gapi.client.calendar.events.delete({ calendarId: r.calId, eventId: r.eventId })));
+    // Tombstone every copy that's actually gone (fulfilled, or already-missing 404).
+    results.forEach((res, i) => { if (res.status === 'fulfilled' || res.reason?.status === 404 || res.reason?.result?.error?.code === 404) _gcalNoteDeleted(refs[i].calId, refs[i].eventId); });
     const failed = results.filter(r => r.status === 'rejected' && r.reason?.status !== 404 && r.reason?.result?.error?.code !== 404);
     if (!calIdParam) closeApptModal();
     await calLoadAndRender(true);
