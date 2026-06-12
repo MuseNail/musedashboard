@@ -2492,7 +2492,11 @@ export async function exportReportLink() {
   if (!d || d.filtered.length === 0) { showToast('No data to export.'); return; }
   showToast('Uploading report…');
   try {
-    const res = await fetch(`${PHOTOS_PROXY}/reports/${localDateStr(d.from)}.html`, { method: 'PUT', body: new TextEncoder().encode(buildReportHtml(d)), headers: { 'Content-Type': 'text/html;charset=utf-8' } });
+    // Unguessable key: GET /photos/* stays public (so the link is shareable without
+    // leaking the §13 app token), so a plain date key would let anyone enumerate
+    // daily reports — the random suffix makes the URL itself the capability.
+    const rand = Math.random().toString(36).slice(2, 10);
+    const res = await fetch(`${PHOTOS_PROXY}/reports/${localDateStr(d.from)}-${rand}.html`, { method: 'PUT', body: new TextEncoder().encode(buildReportHtml(d)), headers: { 'Content-Type': 'text/html;charset=utf-8' } });
     if (!res.ok) throw new Error(res.status);
     const url = (await res.json()).url;
     try { await navigator.clipboard.writeText(url); } catch (e) {}

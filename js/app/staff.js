@@ -7,6 +7,7 @@
 // It never renders the dashboard, reports, settings, or other customers. (UI-level
 // separation only — the open transport still sends full state; true per-tech
 // isolation is the server-auth item, intentionally out of scope here.)
+import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
 import * as store from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr } from './utils.js';

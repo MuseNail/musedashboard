@@ -3,6 +3,7 @@
 // inline onclick= markup keeps working), defines navigation, subscribes the
 // store to re-render on remote changes, and runs startup.
 
+import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
 import * as store from './store.js';
 import * as sync from './sync.js';
 import * as session from './session.js';
@@ -120,6 +121,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.86', items: [
+    { icon: 'verified_user', t: 'Server lock — access codes', d: 'The salon server can now require an access code from every device (dashboard, staff app, reports app). Set it once per device in Settings → Staff & Access → Device Access, or send a one-tap setup link. Nothing changes until the owner turns enforcement on.' },
+  ] },
   { v: 'v4.85', items: [
     { icon: 'event_available', t: 'Booking status on every column', d: 'A checked-in or paid appointment with multiple staff now shows its status on ALL of its calendar columns (including Unassigned) — no more “not checked in” on a paid booking.' },
   ] },

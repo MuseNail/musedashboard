@@ -11,6 +11,13 @@
 //
 // Required secrets (set via: wrangler secret put <NAME>)
 //   SQUARE_TOKEN         Square access token
+//   APP_AUTH_TOKEN       (optional → enforcing) shared bearer token for ALL app routes (§13).
+//                        UNSET = auth off (migration mode, behaves like before). SET = every
+//                        request needs `Authorization: Bearer <token>` or `?auth=<token>`,
+//                        except: OPTIONS, /terminal/webhook (HMAC-verified), /gcal/callback
+//                        (Google redirect, state-nonce checked), and GET /photos/* (<img>
+//                        loads can't send headers; writes ARE gated). Rollback = delete the
+//                        secret — instant, no redeploy.
 //   RESTORE_TOKEN        (optional) gates /state/restore and /state/reset
 //   ORIGIN_GATE_ENABLED  (optional) "true" turns on the Origin allow-list gate (default off)
 //   ALLOWED_ORIGINS      (optional) extra comma-separated origins to allow (prod origin is built in)
@@ -27,6 +34,9 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  // Authorization on every request makes them non-simple → a CORS preflight each;
+  // cache the preflight a day so the app isn't paying 2 round-trips per call.
+  'Access-Control-Max-Age':       '86400',
 };
 
 function corsHeaders(extra = {}) {
@@ -194,6 +204,25 @@ function originAllowed(request, env) {
   return allow.has(origin.toLowerCase());
 }
 
+// ── App auth (§13): shared bearer token, enforcing once APP_AUTH_TOKEN is set ──
+// One token shared by all trusted devices (front-desk iPad, tech phones, reports
+// phones); the client sends it as `Authorization: Bearer <t>` (fetch wrapper in
+// js/app/apptoken.js) or `?auth=<t>` where headers are impossible (the WebSocket,
+// the /gcal/connect top-level navigation). With the secret UNSET this is a no-op,
+// which is the migration mode: deploy this code, provision devices, then
+// `wrangler secret put APP_AUTH_TOKEN` to start enforcing (delete it to roll back).
+function appAuthOk(request, url, env) {
+  const required = env.APP_AUTH_TOKEN;
+  if (!required) return true;                                   // auth not enforced yet
+  const path = url.pathname;
+  if (path === '/terminal/webhook') return true;                // Helcim → HMAC-verified instead
+  if (path === '/gcal/callback')    return true;                // Google redirect → state-nonce checked
+  if (path.startsWith('/photos/') && request.method.toUpperCase() === 'GET') return true; // <img> src loads
+  const h = request.headers.get('Authorization') || '';
+  const presented = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
+  return !!presented && _hcSafeEq(presented, required);
+}
+
 export default {
   async fetch(request, env) {
     // Top-level guard: any unhandled throw is logged (visible in Workers Logs /
@@ -223,6 +252,11 @@ export default {
     // Origin gate (no-op unless ORIGIN_GATE_ENABLED = "true"). Covers /ws, /state,
     // /square, /photos, /backup — all share the same allow-list.
     if (!originAllowed(request, env)) return json({ error: 'forbidden origin' }, 403);
+
+    // App auth (§13): every route needs the shared bearer token once APP_AUTH_TOKEN
+    // is set (exemptions documented on appAuthOk). Sits before all routing so a new
+    // route added later is gated by default.
+    if (!appAuthOk(request, url, env)) return json({ error: 'unauthorized' }, 401);
 
     // ── R2 Photo Routes ───────────────────────────────────────────────────────
     if (path.startsWith('/photos/')) {

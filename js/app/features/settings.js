@@ -1,6 +1,7 @@
 // ── Settings panel ──────────────────────────────────────────────────────────
 import { getState } from '../store.js';
-import { dispatch } from '../sync.js';
+import { dispatch, resync } from '../sync.js';
+import { getAppToken, setAppToken } from '../apptoken.js';
 import { showToast, setSwitchVisual } from '../utils.js';
 import { canDo, getActiveUser, ui } from '../session.js';
 import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION } from '../config.js';
@@ -150,12 +151,65 @@ export function renderAppInfo() {
     ['Live sync', st.connected ? `Connected${st.pendingCount ? ` · ${st.pendingCount} pending` : ''}` : 'Offline'],
     ['Square', cfg().square_config ? `Connected · ${cfg().square_config.locationId}` : 'Not connected'],
     ['Google Calendar', gcalConnected() ? 'Connected' : 'Not connected'],
+    ['Access code', getAppToken() ? 'Set on this device' : 'Not set'],
   ];
   el.innerHTML = rows.map(([k, v]) => `
     <div class="flex items-center justify-between px-4 py-3 border-b border-surface-container-high last:border-0">
       <span class="text-sm font-body text-on-surface-variant">${k}</span>
       <span class="text-sm font-body font-semibold text-on-surface text-right break-all ml-4">${v}</span>
     </div>`).join('');
+}
+
+// ── Device Access (§13 backend access code) — device-local, never synced ────────
+// The Worker rejects every request without this code once its APP_AUTH_TOKEN secret
+// is set. It lives in localStorage only: syncing it through config would send it over
+// the very channel it protects (and create a bootstrap deadlock for a new device).
+export function renderAppTokenSettings() {
+  const el = document.getElementById('settings-apptoken-section'); if (!el) return;
+  const t = getAppToken();
+  const lbl = 'text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1';
+  el.innerHTML = `
+    <p class="text-sm font-body text-on-surface-variant mb-3">The backend access code this device sends with every server request. Each device needs it once — set it here, or open a setup link on the other device. Stored on this device only.</p>
+    <div class="flex items-center gap-2 mb-3">
+      <span class="material-symbols-outlined ${t ? 'text-primary' : 'text-on-surface-variant'}" style="font-size:18px">${t ? 'verified_user' : 'gpp_maybe'}</span>
+      <span class="text-sm font-body font-semibold text-on-surface">${t ? 'Access code set on this device' : 'No access code on this device'}</span>
+    </div>
+    <label class="${lbl}">Access code</label>
+    <div class="flex gap-2 mb-4">
+      <input id="apptoken-input" type="password" autocomplete="off" value="${t.replace(/"/g, '&quot;')}" placeholder="Paste the access code" class="flex-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface">
+      <button onclick="toggleAppTokenReveal()" class="px-3 py-2 rounded-xl bg-surface-container hover:bg-surface-container-high transition-colors" title="Show / hide"><span class="material-symbols-outlined" style="font-size:18px" id="apptoken-eye">visibility</span></button>
+      <button onclick="saveAppTokenSetting()" class="btn-primary px-4 py-2 rounded-xl font-body font-bold text-sm">Save</button>
+    </div>
+    ${t ? `
+    <label class="${lbl}">Set up another device</label>
+    <p class="text-xs font-body text-on-surface-variant mb-2">Send a link to the device, open it there once — the code saves itself.</p>
+    <div class="flex gap-2 flex-wrap">
+      <button onclick="copyAppTokenLink('index.html','Dashboard')" class="btn-secondary text-sm">Copy dashboard link</button>
+      <button onclick="copyAppTokenLink('staff.html','Staff app')" class="btn-secondary text-sm">Copy staff-app link</button>
+      <button onclick="copyAppTokenLink('reports.html','Reports app')" class="btn-secondary text-sm">Copy reports-app link</button>
+    </div>` : ''}`;
+}
+export function toggleAppTokenReveal() {
+  const i = document.getElementById('apptoken-input'), e = document.getElementById('apptoken-eye');
+  if (!i) return;
+  i.type = i.type === 'password' ? 'text' : 'password';
+  if (e) e.textContent = i.type === 'password' ? 'visibility' : 'visibility_off';
+}
+export function saveAppTokenSetting() {
+  const i = document.getElementById('apptoken-input'); if (!i) return;
+  const t = i.value.trim();
+  setAppToken(t);
+  showToast(t ? 'Access code saved on this device' : 'Access code removed from this device');
+  resync();                       // reconnect immediately so the new code takes effect
+  renderAppTokenSettings();
+}
+export async function copyAppTokenLink(page, label) {
+  const t = getAppToken(); if (!t) return;
+  // #fragment, not ?query — a fragment never leaves the browser, so the code can't
+  // land in server/proxy logs. The page captures + strips it on load (apptoken.js).
+  const link = new URL(page, location.href).href + '#auth=' + encodeURIComponent(t);
+  try { await navigator.clipboard.writeText(link); showToast(`${label} setup link copied — open it on that device`); }
+  catch { window.prompt?.(`Copy this ${label} setup link:`, link); }
 }
 
 // ── Pay period (config.pay_period) — drives the Reports/Transactions quick button ─
@@ -246,6 +300,7 @@ const SETTINGS_NAV = [
     { label:'Technicians', sub:'Staff, photos, schedule & active toggle', content:'staff-merged-section', render:'renderStaffMerged', perm:'manageStaff' },
     { label:'Front Desk Users', sub:'Dashboard PIN login accounts', content:'fdusers-merged-section', render:'renderFdUsersList', adminOnly:true },
     { label:'Role Permissions', sub:'What each role can do', content:'settings-perms-section', render:'renderRolePermissions', adminOnly:true },
+    { label:'Device Access', sub:'Backend access code for this device', content:'settings-apptoken-section', render:'renderAppTokenSettings', adminOnly:true },
   ]},
   { id:'workflow', title:'Workflow', desc:'How the floor runs', items:[
     { label:'Turn Thresholds', sub:'Full / half / bonus cutoffs', content:'turns-thresh-section' },

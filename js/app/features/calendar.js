@@ -2,6 +2,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { PUSH_PROXY } from '../config.js';
+import { withAuth } from '../apptoken.js';
 import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer } from './square-customers.js';
 
@@ -437,7 +438,8 @@ export function calSignIn(silent) {
   // Silent = re-mint from the Worker's stored refresh token (no user action). Interactive = send
   // the owner to Google's consent via the Worker; on return the app reloads and auto-connects.
   if (silent) { _fetchWorkerToken().then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); if (_calInitDone) calSilentSync(); else _calInitialLoad(); }).catch(() => {}); return; }
-  location.href = `${GCAL_PROXY}/connect?return=${encodeURIComponent(location.href.split('#')[0])}`;
+  // Top-level navigation — no headers possible, so the §13 app token rides as ?auth=.
+  location.href = withAuth(`${GCAL_PROXY}/connect?return=${encodeURIComponent(location.href.split('#')[0])}`);
 }
 export function calSignOut() {
   fetch(`${GCAL_PROXY}/disconnect`, { method: 'POST' }).catch(() => {});   // revoke + clear the refresh token server-side

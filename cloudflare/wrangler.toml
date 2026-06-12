@@ -32,6 +32,14 @@ new_sqlite_classes = ["MuseSalonDO"]
 #   wrangler secret put SQUARE_TOKEN
 #
 # SQUARE_TOKEN        — Square access token (sandbox or production)
+# APP_AUTH_TOKEN      — (§13 app auth) shared bearer token for ALL routes. UNSET = auth OFF
+#                       (migration mode). Rollout: deploy the Worker (no-op while unset),
+#                       provision every device (Settings → Staff & Access → Device Access,
+#                       or open an #auth= provisioning link), then
+#                         wrangler secret put APP_AUTH_TOKEN
+#                       to start enforcing. Rollback = delete the secret (instant, no redeploy).
+#                       Exempt: /terminal/webhook (HMAC), /gcal/callback (Google redirect),
+#                       GET /photos/* (<img> loads can't send headers; writes ARE gated).
 # RESTORE_TOKEN       — (optional) gates POST /state/restore and POST /state/reset
 # VAPID_PRIVATE_KEY   — Web Push signing key (JWK JSON string). Set once:
 #                         wrangler secret put VAPID_PRIVATE_KEY

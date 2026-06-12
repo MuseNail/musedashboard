@@ -1,6 +1,8 @@
 # Cloudflare Worker local state / logs — never commit (may hold account ids + live request data)
 cloudflare/.wrangler/
 cloudflare/tail.out
+cloudflare/.dev.vars
+cloudflare/dev.out
 
 # Local scratch / review artifacts
 .claude/review-*.diff

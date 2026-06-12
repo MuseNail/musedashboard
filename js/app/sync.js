@@ -6,6 +6,7 @@
 // outbox replays on reconnect and the DO dedupes by mutationId.
 
 import { hydrate, applyChange, setConnection, loadCache } from './store.js';
+import { withAuth } from './apptoken.js';
 
 const PROD_ORIGIN = 'https://musedashboard.musenailandspa.workers.dev';
 // When served from localhost (a static server in front of `wrangler dev`), talk to
@@ -114,7 +115,10 @@ export function resync() {
 function connect() {
   if (_ws && (_ws.readyState === WebSocket.OPEN || _ws.readyState === WebSocket.CONNECTING)) return;
   let ws;
-  try { ws = new WebSocket(WS_URL); } catch { scheduleReconnect(); return; }
+  // withAuth at connect time (not module load) so a token entered in Settings
+  // applies on the next reconnect without a reload. Headers are impossible on a
+  // browser WebSocket — the token rides as ?auth= and the Worker checks it there.
+  try { ws = new WebSocket(withAuth(WS_URL)); } catch { scheduleReconnect(); return; }
   _ws = ws;
   // A socket stuck in CONNECTING — e.g. created while a desktop tab was frozen/backgrounded —
   // is a zombie: it never fires open OR close, so it would block every future reconnect (resync
@@ -211,9 +215,22 @@ export function dispatch(op, payload) {
 }
 
 // ── HTTP fallbacks (used when the WebSocket is unavailable) ─────────────────────
+// A 401 means the Worker is enforcing the §13 app token and this device doesn't
+// have (the right) one. Without this signal the device just looks "offline"
+// forever — surface it so whoever's holding it knows it needs provisioning, not
+// better wifi. Throttled: resync fires on every focus/visibility change.
+let _lastAuthToast = 0;
+function notifyUnauthorized() {
+  console.warn('[sync] 401 — this device has no valid app access token');
+  if (Date.now() - _lastAuthToast < 60000) return;
+  _lastAuthToast = Date.now();
+  try { window.showToast?.('Device not authorized — enter the access code (Settings → Staff & Access → Device Access).'); } catch {}
+}
+
 async function httpSnapshot() {
   try {
     const res = await fetch(STATE + '/snapshot', { cache: 'no-store' });
+    if (res.status === 401) { notifyUnauthorized(); return; }
     if (!res.ok) return;
     hydrate(await res.json());
     reapplyOutbox();
@@ -226,6 +243,7 @@ async function httpMutate(msg) {
     const res = await fetch(STATE + '/mutate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(msg),
     });
+    if (res.status === 401) { notifyUnauthorized(); return; }   // not a data rejection — stays queued
     if (res.ok) { const d = await res.json(); if (d.applied) ackOutbox(msg.mutationId); }
   } catch (e) { /* stays in outbox for WebSocket replay on reconnect */ }
 }

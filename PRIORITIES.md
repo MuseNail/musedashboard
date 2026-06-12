@@ -7,9 +7,14 @@ The build pipeline for the live single-salon app, ordered by impact. Cleaned 202
 ## 1 — Helcim refund / void path
 App refunds still assume Square payment ids. Build the Helcim path: Worker proxy for `POST /v2/payment/refund` + `POST /v2/payment/reverse` (idempotency-key required; `cardTransactionId` + ipAddress — verified API findings in `HELCIM-MIGRATION.md`), client refund flow routes by processor, and the refund **reverses gift-card redemptions** (closes the old audit §7 finding). New records already store the Helcim `transactionId` in `squarePaymentIds`.
 
-## 2 — §13 Worker auth (the open backend) ← NEXT UP (owner-approved 2026-06-12)
-The Worker has **no app auth**: `/state` (read+write), `/helcim/*` (except the HMAC'd webhook), `/gcal/token|connect`, `/photos`, `/sms` are callable by anyone with the URL. Owner chose a proper full fix over patches: **shared bearer token** held by clients + checked by the Worker, coordinated client+Worker deploy. `RESTORE_TOKEN` is already set (reset/restore closed). This is the biggest open security item — bundle with any next Worker change.
-**Also now the prerequisite for Back Office M11** (Muse→BackOffice daily-sales sync; see `BACKOFFICE-KICKOFF.md` §5): the sync push hook lands behind this token. Owner-approved sequence: **§13 → Back Office M11+M12 → M13 (Helcim/Square processor sync)**.
+## 2 — §13 Worker auth — ✅ BUILT v4.86 (2026-06-12), awaiting owner rollout
+The shared-bearer-token fix is implemented and verified against the local stack. The Worker gates **every route** once the `APP_AUTH_TOKEN` secret is set (exempt: `/terminal/webhook` HMAC, `/gcal/callback` state-nonce, `GET /photos/*` for `<img>` loads — photo **writes** are gated; the report share-link now uses an unguessable key). Clients send `Authorization: Bearer` via the `js/app/apptoken.js` fetch wrapper (+ `?auth=` on the WebSocket and the `/gcal/connect` navigation). Token is device-local (`muse_auth_token`), provisioned in Settings → Staff & Access → **Device Access** or via `#auth=` setup links; unauthorized devices get a clear toast instead of silent "offline."
+**Owner rollout (each step independently safe):**
+1. `wrangler deploy` from `cloudflare/` — no-op while the secret is unset (verified).
+2. Approve the v4.86 push; let all devices update.
+3. Pick a long random code; enter it on the dashboard (Device Access), send setup links to the iPad/staff phones/reports phones.
+4. `wrangler secret put APP_AUTH_TOKEN` (same code) → enforcement live. Rollback = delete the secret (instant, no redeploy).
+**Unblocks Back Office M11** (Muse→BackOffice daily-sales sync; see `BACKOFFICE-KICKOFF.md` §5). Owner-approved sequence: **§13 → Back Office M11+M12 → M13 (Helcim/Square processor sync)**.
 
 ## 3 — Retire Square (owner calls the timing)
 Helcim is live and default; Square is still selectable. When called: stop the Square customer **dual-write**, remove the `/square` proxy + `SQUARE_TOKEN`, the Square config UI + deep-link path, and the Square reconcile; keep historical Square ids on old records. (Don't fix bugs in this doomed code.)
