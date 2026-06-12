@@ -16,7 +16,7 @@
 | Stack | Same as Muse: static PWA (no build step, vanilla ES modules, Tailwind CDN) + Cloudflare Worker + Durable Objects + R2 | Proven, owner-operable, zero build infra |
 | Tenancy | **One Durable Object per business** (`BusinessDO`, `idFromName(businessId)`) | Hard data separation — one business physically cannot read another's DO |
 | Ledger | **Double-entry under the hood, single-entry UX** | P&L + Balance Sheet + QuickBooks export all require it; retrofitting later is painful |
-| Auth | **Bearer token on EVERY Worker route from day one** + per-user PIN inside a business | Muse's biggest open debt (§13) — do not repeat it |
+| Auth | **Per-user sessions on EVERY Worker route from day one**: identifier + PIN → session token; membership checked server-side before any business data is touched (see §3b) | Muse's biggest open debt (§13) — do not repeat it; clients must only ever see their own business |
 | WebSockets | **Hibernation API from day one** (`state.acceptWebSocket()`) | Lesson from Muse's free-tier outage; non-hibernating WS bills DO duration continuously |
 | Storage keys | All browser storage prefixed `bo_` (never `muse_`/`turndesk_`) | Same GitHub Pages origin → localStorage/CacheStorage are shared per-ORIGIN |
 | QB export | IIF format (QuickBooks Desktop's import format) | Design the COA with IIF account-type vocabulary in mind from day one |
@@ -113,9 +113,23 @@ Every record carries `updatedAt`/`updatedBy` (stale-write guard, same as Muse) a
 | `recon:<id>` | Reconciliation session | bankacctId, statementEndDate, statementBalanceCents, clearedTxnIds[], status |
 | `lock:<period>` | Period lock | closed accounting periods reject postings (Muse payroll-lock precedent) |
 
-**RegistryDO (one global instance):** `business:<id>` (id, name, industry, createdAt) + which users may open it. The owner sees all businesses; staff see only theirs.
+**RegistryDO (one global instance):** `business:<id>` (id, name, industry, createdAt) + `membership:<userId>:<businessId>` (role). The owner belongs to all businesses; clients belong only to theirs.
 
 **Money is integer cents everywhere.** No floats in stored data, ever.
+
+### 3b. Access & visibility model — HARD REQUIREMENT (owner, 2026-06-11)
+
+> Clients get access ONLY to their own business. A Muse user must not even be able to learn that "Pham Properties LLC" *exists* — no name, no id, no count of other businesses — let alone see its data. The owner sees and switches between all businesses.
+
+**Enforcement is server-side; the UI merely reflects it.** Hiding a nav item is not the wall — the Worker is.
+
+1. **Login flow:** user enters identifier + PIN → Worker checks credentials → issues a session token. The login response (and every later response) contains ONLY the businesses that user is a member of. A single-business user's session literally never carries another business's name or id over the wire.
+2. **Worker middleware:** every `/b/:businessId/*` request resolves the session user's membership in that business (RegistryDO) BEFORE the request touches the BusinessDO. Non-members get the same `403` whether the business exists or not — no enumeration, no existence leak.
+3. **DO isolation as the backstop:** even a middleware bug can only ever expose ONE business's DO per request path — there is no query that spans businesses, because there is no shared table to query.
+4. **UI shaping:** a single-business user gets NO business switcher (the business name renders as a static label), NO "Businesses" screen, and lands directly in their business after PIN entry. Only multi-business users (the owner) get the switcher + selector.
+5. **Files too:** R2 receipt/statement objects are keyed `b/<businessId>/...` and served only through the same membership check — no public URLs.
+
+**Client-login hardening (because clients sign in from their own devices over the internet):** a bare 4-digit PIN is not enough remotely. Plan: per-device enrollment (first sign-in on a new device requires owner approval or a one-time invite code) + rate-limited PIN attempts with lockout. PIN stays the daily convenience; the enrolled device is the second factor. Details locked at M2.
 
 **Posting invariants (enforced in `lib/posting.js` AND in the DO on write):**
 - lines sum to exactly 0; at least 2 lines; every line references an active account
@@ -158,7 +172,7 @@ Every record carries `updatedAt`/`updatedBy` (stale-write guard, same as Muse) a
 |---|---|---|
 | M0 | Repo bootstrap: shell + router + Worker w/ auth + empty `BusinessDO` + deploy | Pages loads; `GET /b/test/state` 401s without token, returns empty state with it |
 | M1 | Business registry + setup wizard + COA templates | Create 2 businesses; each gets its own COA; data provably isolated |
-| M2 | Users / PIN / roles per business | PIN login; viewer can't edit; owner sees both businesses |
+| M2 | Users / PIN / roles + §3b access model (sessions, membership middleware, device enrollment, rate limiting) | PIN login; viewer can't edit; owner sees both businesses; **a client user's session provably never carries the other business's name/id; non-member request → indistinguishable 403** |
 | M3 | Chart of accounts CRUD | Add/rename/archive accounts; tree renders; template + custom coexist |
 | M4 | Posting engine + manual ledger entry + journal entries | `tests/posting` pass; unbalanced entry rejected; ledger renders |
 | M5 | Bank accounts + CSV import wizard + staging | Import 3 different real bank CSVs; columns auto-detect; dups flagged |
