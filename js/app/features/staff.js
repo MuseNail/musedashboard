@@ -106,6 +106,7 @@ export function showAddStaff() {
   _setStaffCheckFields('variable', '');
   _setStaffDeductFields('', '');
   renderStaffServicesPicker([]);
+  _setStaffAppFields({});   // new tech → all staff-app features on
   const m = document.getElementById('staff-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   setTimeout(() => document.getElementById('staff-name-input').focus(), 100);
 }
@@ -121,8 +122,23 @@ export function showEditStaff(id) {
   document.getElementById('staff-edit-id').value = id;
   _setStaffCheckFields(st.checkType || 'variable', st.checkValue != null ? st.checkValue : '');
   _setStaffDeductFields(st.cashDeductPct != null ? st.cashDeductPct : '', st.cashDeductThreshold != null ? st.cashDeductThreshold : '');
+  _setStaffAppFields(st.app || {});
   renderStaffServicesPicker(st.services || []);
   const m = document.getElementById('staff-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
+}
+// Staff-app feature switches — `app[key] !== false` is the read rule everywhere, so a
+// missing/legacy staff object (no `app` at all) keeps every feature ON.
+function _setStaffAppFields(app) {
+  const set = (id, on) => { const el = document.getElementById(id); if (el) el.checked = on; };
+  set('staff-app-pdf', app.pdf !== false);
+  set('staff-app-history', app.history !== false);
+  set('staff-app-histnames', app.histNames !== false);
+  staffAppHistChanged();
+}
+export function staffAppHistChanged() {
+  const histOn = !!document.getElementById('staff-app-history')?.checked;
+  const row = document.getElementById('staff-app-histnames-row');
+  if (row) { row.style.opacity = histOn ? '' : '0.4'; const cb = row.querySelector('input'); if (cb) cb.disabled = !histOn; }
 }
 
 export function closeStaffModal() {
@@ -167,12 +183,17 @@ export function saveStaff() {
   if (cashDeductThreshold !== null && (isNaN(cashDeductThreshold) || cashDeductThreshold < 0)) { showToast('Exempt threshold must be 0 or more.'); return; }
   // Soft-warn (don't block) if this Staff-App PIN collides with another tech's — same PIN logs in as whoever matches first.
   if (pin && cfg().staff.some(s => s.id !== editId && s.pin === pin)) showToast('Heads up: another tech already uses that PIN.');
+  const app = {
+    pdf: !!document.getElementById('staff-app-pdf')?.checked,
+    history: !!document.getElementById('staff-app-history')?.checked,
+    histNames: !!document.getElementById('staff-app-histnames')?.checked,
+  };
   const staff = [...cfg().staff];
   if (editId) {
     const i = staff.findIndex(s => s.id === editId);
-    if (i >= 0) staff[i] = { ...staff[i], name, legalName, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold };
+    if (i >= 0) staff[i] = { ...staff[i], name, legalName, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold, app };
   } else {
-    staff.push({ id: `staff-${Date.now()}`, name, legalName, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold });
+    staff.push({ id: `staff-${Date.now()}`, name, legalName, commission, services: selectedSvcs, pin, checkType, checkValue, cashDeductPct, cashDeductThreshold, app });
   }
   setStaff(staff);
   closeStaffModal();

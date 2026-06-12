@@ -1707,6 +1707,15 @@ tailwind.config = {
         <p class="text-[11px] font-body text-on-surface-variant mt-1">Personal code this tech uses to open the Staff app. Leave blank if they don't use it.</p>
       </div>
       <div>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Staff app features</label>
+        <div class="space-y-2.5">
+          <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">Download today's transactions PDF</span><input id="staff-app-pdf" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
+          <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">View transaction history</span><input id="staff-app-history" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0" onchange="staffAppHistChanged()"></label>
+          <label class="flex items-center justify-between gap-3 cursor-pointer" id="staff-app-histnames-row"><span class="text-sm font-body text-on-surface">Show customer names in history</span><input id="staff-app-histnames" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
+        </div>
+        <p class="text-[11px] font-body text-on-surface-variant mt-1">What this tech sees in the Muse Staff app on their phone.</p>
+      </div>
+      <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-2">Services this tech performs</label>
         <div class="grid grid-cols-4 gap-2" id="staff-services-picker"></div>
         <p class="text-[11px] font-body text-on-surface-variant mt-1">Leave all unselected to allow all services</p>

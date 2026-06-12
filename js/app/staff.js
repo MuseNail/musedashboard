@@ -70,6 +70,9 @@ export function myHistory(queueArr, recordsArr, deletions, techId) {
 }
 
 const me = () => (cfg().staff || []).find(s => s.id === myId) || null;
+// Per-tech staff-app feature switches (set in the dashboard's technician editor).
+// `app[key] !== false` so techs without the field (legacy) keep every feature ON.
+const appPerm = k => { const s = me(); return !s || !s.app || s.app[k] !== false; };
 const meFd = () => (cfg().fd_users || []).find(u => u.id === myFdId) || null;
 const fdByPin = pin => { const p = String(pin == null ? '' : pin).trim(); return p ? ((cfg().fd_users || []).find(u => u.pin && String(u.pin) === p) || null) : null; };
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -184,6 +187,7 @@ function todayStats() {
 }
 
 function renderMain(meStaff) {
+  if (_view === 'history' && !appPerm('history')) _view = 'active';   // feature switched off mid-session
   document.getElementById('staff-login').classList.add('hidden');
   document.getElementById('staff-main').classList.remove('hidden');
   document.getElementById('staff-tech-name').textContent = meStaff.name;
@@ -213,7 +217,7 @@ function renderMain(meStaff) {
       <div class="text-right font-body opacity-90"><div class="text-2xl font-headline font-bold leading-none">${st.count}</div>
         <div class="text-xs uppercase tracking-widest">${st.count === 1 ? 'service' : 'services'}</div></div>
     </div>
-    <div class="flex gap-2 mb-3">${tab('active', `Now (${activeCount})`)}${tab('appts', 'Appts')}${tab('history', 'History')}</div>
+    <div class="flex gap-2 mb-3">${tab('active', `Now (${activeCount})`)}${tab('appts', 'Appts')}${appPerm('history') ? tab('history', 'History') : ''}</div>
     <div>${_view === 'active' ? renderActiveHtml() : _view === 'appts' ? renderApptsHtml() : renderHistoryHtml()}</div>`;
 }
 
@@ -288,8 +292,8 @@ function renderHistoryHtml() {
   const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0); cutoff.setDate(cutoff.getDate() - 29);
   const lines = myHistory(queue(), records(), store.getState().deletions, myId)
     .filter(l => new Date(l.date + 'T12:00:00') >= cutoff);
-  const dlBtn = `<button onclick="staffDownloadTodayPdf()" class="w-full mb-3 rounded-xl bg-surface-container text-on-surface py-3 font-headline font-bold text-sm flex items-center justify-center gap-2 active:scale-95">
-    <span class="material-symbols-outlined" style="font-size:18px">picture_as_pdf</span> Download today's transactions (PDF)</button>`;
+  const dlBtn = appPerm('pdf') ? `<button onclick="staffDownloadTodayPdf()" class="w-full mb-3 rounded-xl bg-surface-container text-on-surface py-3 font-headline font-bold text-sm flex items-center justify-center gap-2 active:scale-95">
+    <span class="material-symbols-outlined" style="font-size:18px">picture_as_pdf</span> Download today's transactions (PDF)</button>` : '';
   if (lines.length === 0) {
     return dlBtn + `<div class="text-center text-on-surface-variant font-body py-16 px-6">
       <span class="material-symbols-outlined" style="font-size:52px;opacity:0.4">history</span>
@@ -303,8 +307,9 @@ function renderHistoryHtml() {
     const items = byDate[date];
     const total = items.reduce((s, l) => s + l.cost, 0);
     const dateLabel = date === today ? 'Today' : new Date(date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const showNames = appPerm('histNames');
     const rowsHtml = items.map(l => `<div class="flex items-center justify-between py-2 border-t border-surface-container-high first:border-t-0">
-      <div class="min-w-0"><div class="font-headline font-semibold text-on-surface truncate">${esc(l.name)}</div>
+      <div class="min-w-0"><div class="font-headline font-semibold text-on-surface truncate">${showNames ? esc(l.name) : 'Customer'}</div>
         <div class="text-sm font-body text-on-surface-variant truncate">${esc(svc(l.serviceId)?.label || 'Service')}</div></div>
       <div class="font-headline font-bold text-lg text-on-surface flex-shrink-0 ml-2">$${l.cost.toFixed(0)}${l.paid ? '' : ' <span class="text-xs text-outline-variant font-body">pending</span>'}</div>
     </div>`).join('');
@@ -456,8 +461,10 @@ function buildStaffTodayHtml(techName, lines) {
     <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
 }
 window.staffDownloadTodayPdf = () => {
+  if (!appPerm('pdf')) { showToast('PDF download is turned off for your account.'); return; }
   const today = todayStr();
-  const lines = myHistory(queue(), records(), store.getState().deletions, myId).filter(l => l.date === today);
+  let lines = myHistory(queue(), records(), store.getState().deletions, myId).filter(l => l.date === today);
+  if (!appPerm('histNames')) lines = lines.map(l => ({ ...l, name: 'Customer' }));
   if (!lines.length) { showToast('No transactions today yet.'); return; }
   const url = URL.createObjectURL(new Blob([buildStaffTodayHtml(me()?.name || 'Technician', lines)], { type: 'text/html' }));
   const win = window.open(url, '_blank');
