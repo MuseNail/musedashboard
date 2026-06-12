@@ -38,9 +38,10 @@ import * as fdSchedule from './features/fd-schedule.js';
 import * as helcim from './features/helcim.js';
 import * as quicksale from './features/quicksale.js';
 import * as search from './features/search.js';
+import * as boSync from './features/backoffice-sync.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -123,6 +124,7 @@ function goTo(screenId, param) {
 const WHATS_NEW = [
   { v: 'v4.86', items: [
     { icon: 'verified_user', t: 'Server lock — access codes', d: 'The salon server can now require an access code from every device (dashboard, staff app, reports app). Set it once per device in Settings → Staff & Access → Device Access, or send a one-tap setup link. Nothing changes until the owner turns enforcement on.' },
+    { icon: 'account_balance', t: 'Back Office sync', d: 'Push a day’s sales (and locked payroll periods) to the Back Office books app from Settings → Integrations → Back Office sync. Rows wait for approval over there — the books can never change anything here.' },
   ] },
   { v: 'v4.85', items: [
     { icon: 'event_available', t: 'Booking status on every column', d: 'A checked-in or paid appointment with multiple staff now shows its status on ALL of its calendar columns (including Unassigned) — no more “not checked in” on a paid booking.' },

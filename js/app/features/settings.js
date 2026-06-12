@@ -316,6 +316,7 @@ const SETTINGS_NAV = [
     { label:'Square', sub:'Location, connection & sync', content:'square-section', hidden:true },   // reached from the Payment Processing panel
     { label:'Google Calendar', sub:'Connect for appointments', content:'gcal-section', render:'renderGcalSettings' },
     { label:'Text Messaging', sub:'SMS confirmations & replies (httpSMS)', content:'sms-section', render:'renderSmsSettings', adminOnly:true },
+    { label:'Back Office sync', sub:'Push daily sales & payroll to the books app', content:'bosync-section', render:'renderBoSyncSettings', adminOnly:true },
     { label:'Customer Directory', sub:'Browse synced customers', action:'showCustomerDir' },
   ]},
   { id:'business', title:'Business', desc:'Branding', items:[

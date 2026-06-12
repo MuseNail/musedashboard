@@ -121,6 +121,7 @@ No server-side logic in the front end, no dynamic routes, no build artifacts —
 | In-memory app state + `applyChange` (op reducer) | `js/app/store.js` |
 | Sync, WebSocket, `dispatch`, offline outbox | `js/app/sync.js` |
 | §13 device access token (storage, fetch wrapper, `#auth=` capture) | `js/app/apptoken.js` (+ Device Access UI in `features/settings.js`, Worker `appAuthOk` in `cloudflare/worker.js`) |
+| Back Office sync (one-way daily-sales/payroll push to the books app) | `js/app/features/backoffice-sync.js` (Settings → Integrations card; `config.bo_sync` + device-local `muse_bo_token`; receiver lives in the BackOffice repo) |
 | Session / active user | `js/app/session.js` |
 | Utility fns, numpad, toast, `ticketTotal` | `js/app/utils.js` |
 | App init, navigation, version check, window glue | `js/app/main.js` |
