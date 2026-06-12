@@ -120,6 +120,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.83', items: [
+    { icon: 'palette',    t: 'Staff color key on week view', d: 'The weekly calendar now shows a color key above the grid, so you can tell whose appointments are whose at a glance.' },
+    { icon: 'swap_horiz', t: 'Browse past updates',          d: 'Use the ‹ › arrows at the top of this popup to look back through earlier update notes (and a clearer Day | Week switch on the Calendar).' },
+  ] },
   { v: 'v4.82', items: [
     { icon: 'calendar_view_week', t: 'Calendar week view',          d: 'A new Day | Week toggle on the Calendar. Week shows all 7 days side by side, colored by tech — tap a day to jump into it, tap a booking for the usual popup.' },
     { icon: 'event',              t: 'Techs see their appointments', d: 'The Muse Staff app has a new “Appts” tab — each tech sees their own upcoming appointments for the week, with services and notes.' },
