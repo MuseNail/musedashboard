@@ -130,7 +130,7 @@ const WHATS_NEW = [
     { icon: 'calendar_view_day', t: 'Unassigned view spreads out', d: 'Tapping “Unassigned” on the Calendar now widens the appointment cards to fill the column, so they’re actually easier to read.' },
     { icon: 'how_to_reg', t: 'Quick check-in stays put', d: 'Checking a guest in from the Turns upcoming-appointments strip no longer jumps you to the Queue tab — you stay on Turns.' },
     { icon: 'pin', t: 'See PINs inline', d: 'In Settings → Staff & Access, “View Login PINs” now reveals each front-desk PIN right next to the name instead of opening a separate list.' },
-    { icon: 'contrast', t: 'Half turns stand out', d: 'A half-turn customer now has a soft amber ring around its card in the Turns tab, so you can spot half turns at a glance.' },
+    { icon: 'contrast', t: 'Half turns stand out', d: 'A half-turn customer’s turn number (top-right of their card in the Turns tab) now sits in a small amber box, so you can spot half turns at a glance.' },
     { icon: 'more_time', t: 'Faster manual punches', d: 'Adding a punch to a timecard now defaults to today, 9:00 AM in and 5:00 PM out — less to change.' },
   ] },
   { v: 'v4.87', items: [
