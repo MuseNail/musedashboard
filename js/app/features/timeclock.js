@@ -58,8 +58,10 @@ export function onClockBtn() {
   toggleClockPopover();
 }
 export function renderClockButton() {
-  const btn = document.getElementById('clock-btn'); if (!btn) return;
-  const dot = document.getElementById('clock-btn-dot');
+  const btn     = document.getElementById('clock-btn'); if (!btn) return;
+  const dot     = document.getElementById('clock-btn-dot');
+  const label   = document.getElementById('clock-btn-label');
+  const divider = document.getElementById('user-menu-clock-divider');
   const u = getActiveUser();
   const isFd    = !!(u && u.id && u.id !== 'fallback' && (cfg().fd_users || []).some(x => x.id === u.id));
   const isAdmin = !!(u && u.role === 'admin');
@@ -71,23 +73,30 @@ export function renderClockButton() {
   else if (isAdmin && stationSet && !onStation && !_nudgeDismissed()) state = 'warn';
   _clockState = state;
 
-  if (state === 'hidden') { btn.style.display = 'none'; _hideClockPopover(); return; }
-  btn.style.display = 'inline-flex';
+  if (state === 'hidden') {
+    btn.style.display = 'none';
+    if (divider) divider.style.display = 'none';
+    dot?.classList.add('hidden');
+    _hideClockPopover();
+    return;
+  }
+  btn.style.display = 'flex';
+  if (divider) divider.style.display = 'block';
 
   if (state === 'clock') {
     const inNow = fdIsClockedIn(u.id), since = fdClockedSince(u.id);
-    btn.style.background  = inNow ? '#2a7a4f' : '';
-    btn.style.borderColor = inNow ? '#2a7a4f' : 'var(--primary)';
-    btn.style.color       = inNow ? '#fff' : 'var(--primary)';
+    btn.style.background = inNow ? '#2a7a4f' : '';
+    btn.style.color      = inNow ? '#fff' : 'var(--primary)';
     btn.title = inNow ? `Clocked in since ${_hhmm(since)} — tap to clock out` : 'Tap to clock in';
+    if (label) label.textContent = inNow ? 'Clock out' : 'Clock in';
     if (dot) dot.classList.add('hidden');
   } else {
     const warn = state === 'warn';
-    btn.style.background  = warn ? '#fef3c7' : 'var(--surface-container)';
-    btn.style.borderColor = warn ? '#f59e0b' : 'var(--surface-container-high)';
-    btn.style.color       = warn ? '#b45309' : '#94a3a1';
+    btn.style.background = warn ? '#fef3c7' : '';
+    btn.style.color      = warn ? '#b45309' : '#94a3a1';
     btn.title = warn ? 'Time-clock station changed — tap to fix'
       : (stationSet ? 'Clock-in unavailable on this device — tap for details' : 'Clock-in not set up — tap for details');
+    if (label) label.textContent = 'Time clock';
     if (dot) dot.classList.remove('hidden');
   }
   // Keep an already-open popover's contents fresh on re-render.

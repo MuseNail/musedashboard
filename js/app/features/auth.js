@@ -350,3 +350,20 @@ export function deleteFdUser(id) {
   renderFdUsersList();
   showToast(`${u.name} removed`);
 }
+
+// ── User account menu (top-right bubble → clock in/out + log out) ─────────────
+export function toggleUserMenu() {
+  const m = document.getElementById('user-menu');
+  if (!m) return;
+  m.classList.toggle('hidden');
+}
+export function closeUserMenu() {
+  document.getElementById('user-menu')?.classList.add('hidden');
+}
+document.addEventListener('click', (e) => {
+  const m = document.getElementById('user-menu');
+  if (!m || m.classList.contains('hidden')) return;
+  if (!document.getElementById('logged-in-user-btn')?.contains(e.target) && !m.contains(e.target)) {
+    m.classList.add('hidden');
+  }
+});
