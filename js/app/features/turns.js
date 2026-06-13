@@ -120,18 +120,65 @@ export function suggestTechForService(serviceId) {
   if (!best) return null;
   return { techId: best, techName: staffById(best)?.name || '?' };
 }
+// ── Coordinated per-customer suggestions (one tech per service) ───────────────
+// Preference ranking for regular services — most preferred (largest) first. The
+// most-preferred service is handed to the next-up (fewest-turns) tech. Wax / add-on
+// are bonus: assigned first to the limited techs who can do them, and those techs
+// are kept off regular work when a generalist can take it instead.
+const SERVICE_PREF_ORDER = ['fullset','fill','dip','manicure','pedicure','polishchange','kidpedicure'];
+const servicePrefRank = id => { const i = SERVICE_PREF_ORDER.indexOf(id); return i === -1 ? SERVICE_PREF_ORDER.length : i; };
+// A limited bonus tech = a RESTRICTED menu that includes a bonus service (the
+// "only 1–2 can do wax" specialists). Generalists (empty menu) are not flagged.
+function isLimitedBonusTech(id) {
+  const st = staffById(id); if (!st) return false;
+  const list = st.services || [];
+  return list.length > 0 && list.some(s => isAlwaysBonusService(s));
+}
+
+// For ONE customer: suggest a DIFFERENT tech for each still-waiting, unassigned
+// service. Bonus services route to the specialists first; regular services then go
+// out in preference order, the most-preferred to the fewest-turns tech, preferring
+// generalists so the specialists stay free for bonus work. No tech is reused within
+// the customer. Returns { serviceId: { techId, techName } }.
+export function suggestTechsForEntry(entry) {
+  const out = {};
+  if (!entry) return out;
+  const order = getActiveTurnsOrder();
+  if (!order.length) return out;
+  const need = (entry.services || []).filter(sid => {
+    const a = (entry.assignments || []).find(x => x.serviceId === sid);
+    const st = a ? getAssignmentStatus(entry, a) : 'waiting';
+    return st === 'waiting' && !(a && a.techId);
+  });
+  if (!need.length) return out;
+  const eligibleBase = order.filter(id =>
+    !cfg().turns_break.includes(id) && !cfg().turns_off.includes(id) && getActiveTechEntries(id).length === 0);
+  const used = new Set();
+  const canDo = (id, sid) => { const st = staffById(id); return !!st && !(st.services && st.services.length > 0 && !st.services.includes(sid)); };
+  // mode 'specialist' floats limited bonus techs to the front, 'generalist' to the back.
+  const pick = (sid, mode) => {
+    const cands = eligibleBase.filter(id => !used.has(id) && canDo(id, sid));
+    if (!cands.length) return null;
+    cands.sort((a, b) => {
+      if (mode) {
+        const la = isLimitedBonusTech(a) ? 1 : 0, lb = isLimitedBonusTech(b) ? 1 : 0;
+        if (la !== lb) return mode === 'specialist' ? lb - la : la - lb;
+      }
+      return getTechTurns(a).total - getTechTurns(b).total || order.indexOf(a) - order.indexOf(b);
+    });
+    return cands[0];
+  };
+  const assign = (sid, mode) => { const id = pick(sid, mode); if (id) { used.add(id); out[sid] = { techId: id, techName: staffById(id)?.name || '?' }; } };
+  need.filter(sid => isAlwaysBonusService(sid)).forEach(sid => assign(sid, 'specialist'));
+  need.filter(sid => !isAlwaysBonusService(sid))
+    .sort((a, b) => servicePrefRank(a) - servicePrefRank(b))
+    .forEach(sid => assign(sid, 'generalist'));
+  return out;
+}
+
 function buildSuggestions() {
   const suggestions = {};
-  q().filter(e => !isPaidStatus(e.status)).forEach(e => {
-    suggestions[e.id] = {};
-    e.services.forEach(sid => {
-      const a = (e.assignments || []).find(x => x.serviceId === sid);
-      const st = a ? getAssignmentStatus(e, a) : 'waiting';
-      if (st !== 'waiting' || (a && a.techId)) return;
-      const s = suggestTechForService(sid);
-      if (s) suggestions[e.id][sid] = s;
-    });
-  });
+  q().filter(e => !isPaidStatus(e.status)).forEach(e => { suggestions[e.id] = suggestTechsForEntry(e); });
   return suggestions;
 }
 
@@ -141,7 +188,7 @@ function buildSuggestions() {
 export function acceptSuggestion(entryId, serviceId) {
   const entry = q().find(e => String(e.id) === String(entryId));
   if (!entry) return;
-  const sug = suggestTechForService(serviceId);
+  const sug = suggestTechsForEntry(entry)[serviceId];
   if (!sug) { showToast('No available technician to suggest right now.'); return; }
   if (!entry.assignments) entry.assignments = [];
   let a = entry.assignments.find(x => x.serviceId === serviceId);

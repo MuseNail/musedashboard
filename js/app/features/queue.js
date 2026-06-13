@@ -929,11 +929,12 @@ export function renderGroupAssignContent() {
   };
   const stationOptions = sel => stationDefs().map(s => `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${s.label || s.id}</option>`).join('');
 
+  const _sugMap = window.suggestTechsForEntry?.(entry) || {};
   const serviceRows = entry.services.map(sid => {
     const s = svc(sid) || { id: sid, label: sid };
     const a = (entry.assignments || []).find(x => x.serviceId === sid) || {};
     const st = getAssignmentStatus(entry, a);
-    const sug = !a.techId ? (window.suggestTechForService?.(sid) || null) : null;
+    const sug = !a.techId ? (_sugMap[sid] || null) : null;
     const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#2a7a4f;color:#fff', complete:'background:#1a5c7a;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[st] || 'background:#f5c870;color:#3a2800';
     const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[st] || 'Waiting';
     const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', paid:'waiting', done:'waiting' }[st];
@@ -1089,7 +1090,7 @@ function _assignSvcRowHtml(entry, sid, techOptions, stationOptions, allowRemove)
   const s = svc(sid) || { id: sid, label: sid };
   const a = (entry.assignments || []).find(x => x.serviceId === sid) || {};
   const st = getAssignmentStatus(entry, a);
-  const sug = !a.techId ? (window.suggestTechForService?.(sid) || null) : null;
+  const sug = !a.techId ? (window.suggestTechsForEntry?.(entry)?.[sid] || null) : null;
   const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#2a7a4f;color:#fff', complete:'background:#1a5c7a;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[st] || 'background:#f5c870;color:#3a2800';
   const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Done', paid:'Paid', done:'Paid' }[st] || 'Waiting';
   const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', paid:'waiting', done:'waiting' }[st];
