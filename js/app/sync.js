@@ -215,16 +215,17 @@ export function dispatch(op, payload) {
 }
 
 // ── HTTP fallbacks (used when the WebSocket is unavailable) ─────────────────────
-// A 401 means the Worker is enforcing the §13 app token and this device doesn't
-// have (the right) one. Without this signal the device just looks "offline"
-// forever — surface it so whoever's holding it knows it needs provisioning, not
-// better wifi. Throttled: resync fires on every focus/visibility change.
+// A 401 means the Worker is enforcing §13 auth and this browser has no valid
+// session (never signed in here, expired, or the user was removed). Without
+// this signal the device just looks "offline" forever — surface it so whoever's
+// holding it knows to enter their PIN, not chase the wifi. Throttled: resync
+// fires on every focus/visibility change.
 let _lastAuthToast = 0;
 function notifyUnauthorized() {
-  console.warn('[sync] 401 — this device has no valid app access token');
+  console.warn('[sync] 401 — no valid sign-in session on this browser');
   if (Date.now() - _lastAuthToast < 60000) return;
   _lastAuthToast = Date.now();
-  try { window.showToast?.('Device not authorized — enter the access code (Settings → Staff & Access → Device Access).'); } catch {}
+  try { window.showToast?.('Sign in needed — enter your PIN to reconnect this device.'); } catch {}
 }
 
 async function httpSnapshot() {

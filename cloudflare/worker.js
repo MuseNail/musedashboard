@@ -11,13 +11,16 @@
 //
 // Required secrets (set via: wrangler secret put <NAME>)
 //   SQUARE_TOKEN         Square access token
-//   APP_AUTH_TOKEN       (optional → enforcing) shared bearer token for ALL app routes (§13).
-//                        UNSET = auth off (migration mode, behaves like before). SET = every
-//                        request needs `Authorization: Bearer <token>` or `?auth=<token>`,
-//                        except: OPTIONS, /terminal/webhook (HMAC-verified), /gcal/callback
-//                        (Google redirect, state-nonce checked), and GET /photos/* (<img>
-//                        loads can't send headers; writes ARE gated). Rollback = delete the
-//                        secret — instant, no redeploy.
+//   AUTH_ENFORCED        (§13 app auth) "true" = every route requires a session token from
+//                        POST /auth/login (staff PIN → 30-day browser session; the SAME
+//                        fd_users/staff PINs the app already uses — no provisioning).
+//                        UNSET/other = auth off (migration mode; /auth/login still works so
+//                        browsers collect sessions before the flip). Exempt when enforcing:
+//                        OPTIONS, /auth/login|logout, /terminal/webhook (HMAC-verified),
+//                        /gcal/callback (state-nonce checked), GET /photos/* (<img> loads
+//                        can't send headers; photo writes ARE gated). Wrong-PIN attempts get
+//                        escalating per-IP slow-downs (never a hard lockout). Rollback =
+//                        delete the secret — instant, no redeploy.
 //   RESTORE_TOKEN        (optional) gates /state/restore and /state/reset
 //   ORIGIN_GATE_ENABLED  (optional) "true" turns on the Origin allow-list gate (default off)
 //   ALLOWED_ORIGINS      (optional) extra comma-separated origins to allow (prod origin is built in)
@@ -204,23 +207,37 @@ function originAllowed(request, env) {
   return allow.has(origin.toLowerCase());
 }
 
-// ── App auth (§13): shared bearer token, enforcing once APP_AUTH_TOKEN is set ──
-// One token shared by all trusted devices (front-desk iPad, tech phones, reports
-// phones); the client sends it as `Authorization: Bearer <t>` (fetch wrapper in
-// js/app/apptoken.js) or `?auth=<t>` where headers are impossible (the WebSocket,
-// the /gcal/connect top-level navigation). With the secret UNSET this is a no-op,
-// which is the migration mode: deploy this code, provision devices, then
-// `wrangler secret put APP_AUTH_TOKEN` to start enforcing (delete it to roll back).
-function appAuthOk(request, url, env) {
-  const required = env.APP_AUTH_TOKEN;
-  if (!required) return true;                                   // auth not enforced yet
+// ── App auth (§13): PIN sign-in sessions, enforcing while AUTH_ENFORCED="true" ──
+// Staff sign in from ANY device/browser with their existing PIN; POST /auth/login
+// (handled by the DO) mints a 30-day session token the client then sends as
+// `Authorization: Bearer <t>` (fetch wrapper in js/app/apptoken.js) or `?auth=<t>`
+// where headers are impossible (the WebSocket, the /gcal/connect navigation).
+// Validation round-trips to the DO's /auth/check with a short per-isolate cache —
+// so deactivating/removing a user kills their sessions within ~a minute.
+const _sessCache = new Map();   // token → { ok, exp }
+async function appAuthOk(request, url, env, salonId) {
+  if (String(env.AUTH_ENFORCED || '').toLowerCase() !== 'true') return true;   // migration mode
   const path = url.pathname;
+  if (path === '/auth/login' || path === '/auth/logout') return true;          // the way IN
   if (path === '/terminal/webhook') return true;                // Helcim → HMAC-verified instead
   if (path === '/gcal/callback')    return true;                // Google redirect → state-nonce checked
   if (path.startsWith('/photos/') && request.method.toUpperCase() === 'GET') return true; // <img> src loads
   const h = request.headers.get('Authorization') || '';
-  const presented = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
-  return !!presented && _hcSafeEq(presented, required);
+  const token = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
+  if (!token) return false;
+  const hit = _sessCache.get(token);
+  if (hit && hit.exp > Date.now()) return hit.ok;
+  let ok = false;
+  try {
+    const stub = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
+    const r = await stub.fetch(new Request('https://do/auth/check', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
+    }));
+    ok = r.ok && (await r.json()).ok === true;
+  } catch { ok = false; }   // DO unreachable → fail closed; the client retries
+  _sessCache.set(token, { ok, exp: Date.now() + (ok ? 60000 : 10000) });
+  if (_sessCache.size > 2000) _sessCache.clear();
+  return ok;
 }
 
 export default {
@@ -253,10 +270,21 @@ export default {
     // /square, /photos, /backup — all share the same allow-list.
     if (!originAllowed(request, env)) return json({ error: 'forbidden origin' }, 403);
 
-    // App auth (§13): every route needs the shared bearer token once APP_AUTH_TOKEN
-    // is set (exemptions documented on appAuthOk). Sits before all routing so a new
+    // App auth (§13): every route needs a PIN-login session once AUTH_ENFORCED is
+    // "true" (exemptions documented on appAuthOk). Sits before all routing so a new
     // route added later is gated by default.
-    if (!appAuthOk(request, url, env)) return json({ error: 'unauthorized' }, 401);
+    if (!(await appAuthOk(request, url, env, salonId))) return json({ error: 'unauthorized' }, 401);
+
+    // ── PIN sign-in (§13 sessions) — forwarded to the DO, which owns the PINs ──
+    // Only login/logout are public; /auth/check is internal (the gate calls the
+    // DO stub directly and it never appears here).
+    if (path === '/auth/login' || path === '/auth/logout') {
+      if (method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+      const stub  = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
+      const doRes = await stub.fetch(request);
+      const body  = await doRes.text();
+      return new Response(body, { status: doRes.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+    }
 
     // ── R2 Photo Routes ───────────────────────────────────────────────────────
     if (path.startsWith('/photos/')) {
@@ -670,6 +698,14 @@ export class MuseSalonDO {
       return new Response(null, { status: 101, webSocket: client });
     }
 
+    // ── PIN sign-in sessions (§13) ────────────────────────────────────────────
+    // sess:<token> and authfail:<ip> keys are NOT buildSnapshot prefixes, so they
+    // never reach clients. Login checks the SAME fd_users/staff PINs the app
+    // already uses — one source of truth, nothing to provision or migrate.
+    if (url.pathname === '/auth/login'  && request.method === 'POST') return this.authLogin(request);
+    if (url.pathname === '/auth/logout' && request.method === 'POST') return this.authLogout(request);
+    if (url.pathname === '/auth/check'  && request.method === 'POST') return this.authCheck(request);
+
     // HTTP fallback API (used by the client when the WebSocket is unavailable)
     if (url.pathname === '/state/snapshot') {
       const snap = await this.buildSnapshot();
@@ -1019,6 +1055,85 @@ export class MuseSalonDO {
     return { applied: true, seq };
   }
 
+  // ── §13 PIN sign-in sessions ───────────────────────────────────────────────
+  // Escalating per-IP slow-down (never a hard lockout — the front desk must not
+  // be able to lock itself out mid-rush): 3 free misses, then 5s·2^(n−3) capped
+  // at 60s between tries. A human who fat-fingers twice never notices; a robot
+  // grinding a 10,000-PIN space needs days, and every salvo is visible in logs.
+  _authDelayMs(n) { return Math.min(5000 * 2 ** (n - 3), 60000); }
+  _authJson(data, status = 200) {
+    return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  async authLogin(request) {
+    let body = {}; try { body = await request.json(); } catch {}
+    const pin = String(body.pin || '').trim();
+    const ip  = request.headers.get('CF-Connecting-IP') || 'local';
+    const failKey = 'authfail:' + ip;
+    const fail = (await this.state.storage.get(failKey)) || { n: 0, last: 0 };
+    if (fail.n >= 3) {
+      const wait = this._authDelayMs(fail.n) - (Date.now() - fail.last);
+      if (wait > 0) return this._authJson({ error: 'slow_down', retryInSec: Math.ceil(wait / 1000) }, 429);
+    }
+    const reject = async () => {
+      await this.state.storage.put(failKey, { n: fail.n + 1, last: Date.now() });
+      const waitSec = fail.n + 1 >= 3 ? Math.ceil(this._authDelayMs(fail.n + 1) / 1000) : 0;
+      return this._authJson({ error: 'bad_pin', ...(waitSec ? { retryInSec: waitSec } : {}) }, 401);
+    };
+    if (!/^\d{4,8}$/.test(pin)) return reject();
+
+    const fdUsers  = (await this.state.storage.get('config:fd_users')) || [];
+    const staff    = (await this.state.storage.get('config:staff')) || [];
+    const inactive = new Set((await this.state.storage.get('config:inactive_staff')) || []);
+    const wantId   = body.userId ? String(body.userId) : null;
+    let user = null;
+    const fd = fdUsers.find(u => String(u.pin) === pin && (!wantId || u.id === wantId));
+    if (fd) user = { kind: 'fd', id: fd.id, name: fd.name, role: fd.role || 'frontdesk' };
+    if (!user) {
+      const t = staff.find(s => s.pin && String(s.pin) === pin && !inactive.has(s.id) && (!wantId || s.id === wantId));
+      if (t) user = { kind: 'tech', id: t.id, name: t.name, role: 'tech' };
+    }
+    // Fresh-system fallback (mirrors the client's Manager fallback, config.js
+    // STAFF_PIN): accepted ONLY while no front-desk users exist at all.
+    if (!user && !fdUsers.length && pin === '1234') user = { kind: 'fd', id: 'fallback', name: 'Manager', role: 'admin' };
+    if (!user) return reject();
+
+    await this.state.storage.delete(failKey);
+    const token   = crypto.randomUUID() + '-' + Math.random().toString(36).slice(2, 10);
+    const expires = Date.now() + 30 * 24 * 3600 * 1000;
+    await this.state.storage.put('sess:' + token, {
+      ...user, created: Date.now(), expires, device: String(body.device || '').slice(0, 40),
+    });
+    return this._authJson({ token, expires, user });
+  }
+
+  async authLogout(request) {
+    let body = {}; try { body = await request.json(); } catch {}
+    if (body.token) await this.state.storage.delete('sess:' + String(body.token));
+    return this._authJson({ ok: true });
+  }
+
+  async authCheck(request) {
+    let body = {}; try { body = await request.json(); } catch {}
+    const token = String(body.token || '');
+    const sess  = token ? await this.state.storage.get('sess:' + token) : null;
+    if (!sess) return this._authJson({ ok: false });
+    if (sess.expires < Date.now()) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
+    // Removing a front-desk user / removing-or-deactivating a tech revokes their
+    // sessions automatically (within the Worker's ~60s cache) — no extra UI needed.
+    if (sess.id !== 'fallback') {
+      if (sess.kind === 'fd') {
+        const fd = (await this.state.storage.get('config:fd_users')) || [];
+        if (!fd.some(u => u.id === sess.id)) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
+      } else {
+        const staff    = (await this.state.storage.get('config:staff')) || [];
+        const inactive = new Set((await this.state.storage.get('config:inactive_staff')) || []);
+        if (!staff.some(s => s.id === sess.id) || inactive.has(sess.id)) { await this.state.storage.delete('sess:' + token); return this._authJson({ ok: false }); }
+      }
+    }
+    return this._authJson({ ok: true, user: { kind: sess.kind, id: sess.id, name: sess.name, role: sess.role } });
+  }
+
   // Assemble the full state from storage (prefix scans skip mut:/meta: keys).
   async buildSnapshot() {
     const state = { config: {}, configMeta: {}, queue: [], records: [], giftcards: [], customers: [], deletions: [], customerDeletions: [], audit: [] };
@@ -1071,6 +1186,14 @@ export class MuseSalonDO {
           await this.state.storage.delete(toDelete.slice(i, i + 128));
         }
       }
+      // §13 housekeeping: drop expired sessions + stale wrong-PIN counters.
+      const now = Date.now();
+      const sessKeys = await this.state.storage.list({ prefix: 'sess:' });
+      const deadSess = [...sessKeys.entries()].filter(([, v]) => !v || v.expires < now).map(([k]) => k);
+      for (let i = 0; i < deadSess.length; i += 128) await this.state.storage.delete(deadSess.slice(i, i + 128));
+      const failKeys = await this.state.storage.list({ prefix: 'authfail:' });
+      const deadFail = [...failKeys.entries()].filter(([, v]) => !v || now - v.last > 3600000).map(([k]) => k);
+      for (let i = 0; i < deadFail.length; i += 128) await this.state.storage.delete(deadFail.slice(i, i + 128));
     } catch (e) { console.error('[alarm] backup failed:', (e && e.message) || String(e)); }   // best-effort; re-armed below
     await this.state.storage.setAlarm(Date.now() + this.BACKUP_INTERVAL_MS);
   }

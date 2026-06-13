@@ -8,6 +8,7 @@
 // Access: front-desk PIN, allowed only when the account's role has the
 // viewReports permission (admins always pass) — same canDo() the dashboard uses.
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
+import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr } from './utils.js';
@@ -58,7 +59,13 @@ const rangeLabel = ({ from, to }) => localDateStr(from) === localDateStr(to) ? f
 // ── Render ────────────────────────────────────────
 function render() {
   const u = meUser();
-  if (!u || !hasAccess(u)) { if (myUid) rappLogout(false); return renderLogin(); }
+  // Only auto-logout against LOADED data — on a fresh browser the §13 server
+  // login sets myUid before the snapshot arrives, and an empty fd_users list
+  // must read as "still hydrating," not "this user was removed."
+  if (!u || !hasAccess(u)) {
+    if (myUid && (cfg().fd_users || []).length) rappLogout(false);
+    return renderLogin(myUid ? 'Signing in…' : undefined);
+  }
   document.getElementById('rapp-login').classList.add('hidden');
   document.getElementById('rapp-main').classList.remove('hidden');
   document.getElementById('rapp-user-name').textContent = u.name;
@@ -161,16 +168,35 @@ function renderPayrollHtml() {
 window.rappTab = v => { _view = v === 'payroll' ? 'payroll' : 'reports'; render(); };
 window.rappRange = k => { _range = k; render(); };
 window.rappPayNav = d => { _payOffset += d; render(); };
-window.rappPinSubmit = () => {
+window.rappPinSubmit = async () => {
   const input = document.getElementById('rapp-pin-entry');
   const pin = (input?.value || '').trim();
-  if ((cfg().fd_users || []).length === 0) { renderLogin('Connecting… try again in a moment'); return; }
+  if ((cfg().fd_users || []).length === 0) {
+    // Fresh browser (no synced data yet): the server checks the PIN and mints
+    // the §13 session that unlocks the snapshot; access is re-checked from the
+    // hydrated config on render (hasAccess), same as always.
+    if (!/^\d{4,8}$/.test(pin)) { renderLogin('Connecting… try again in a moment'); return; }
+    renderLogin('Signing in…');
+    const res = await serverLogin({ pin, device: 'reports-app' });
+    if (input) input.value = '';
+    if (res.ok && res.user.kind === 'fd') {
+      myUid = res.user.id; localStorage.setItem(MY_KEY, myUid);
+      sync.resync();
+      render();
+      return;
+    }
+    renderLogin(res.ok ? 'Reports is for front-desk accounts.'
+      : res.error === 'slow_down' || res.retryInSec ? `Too many tries — wait ${res.retryInSec || 5}s`
+      : res.error === 'offline' ? 'Connecting… try again in a moment' : 'Incorrect PIN');
+    return;
+  }
   const u = (cfg().fd_users || []).find(x => x.pin && String(x.pin) === pin) || null;
   if (!u) { if (input) input.value = ''; renderLogin('Incorrect PIN'); return; }
   if (!hasAccess(u)) { if (input) input.value = ''; setActiveUser(null); renderLogin('Your account doesn’t have Reports access.'); return; }
   myUid = u.id; localStorage.setItem(MY_KEY, myUid);
   if (input) input.value = '';
   render();
+  serverLogin({ pin, userId: u.id, device: 'reports-app' }).then(r => { if (r.ok) sync.resync(); });   // §13 session mint/refresh
 };
 window.rappPinKey = ev => { if (ev.key === 'Enter') window.rappPinSubmit(); };
 window.rappPinInput = () => {

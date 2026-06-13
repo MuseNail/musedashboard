@@ -123,7 +123,7 @@ function goTo(screenId, param) {
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
   { v: 'v4.86', items: [
-    { icon: 'verified_user', t: 'Server lock — access codes', d: 'The salon server can now require an access code from every device (dashboard, staff app, reports app). Set it once per device in Settings → Staff & Access → Device Access, or send a one-tap setup link. Nothing changes until the owner turns enforcement on.' },
+    { icon: 'verified_user', t: 'Server lock — sign in with your PIN', d: 'The salon server can now require a sign-in before it hands out any data. Nothing new to learn: the first time you use a browser, enter your usual PIN and it stays signed in (~30 days). Works on any device or browser; wrong guesses get slowed down automatically. Nothing changes until the owner turns enforcement on.' },
     { icon: 'account_balance', t: 'Back Office sync', d: 'Push a day’s sales (and locked payroll periods) to the Back Office books app from Settings → Integrations → Back Office sync. Rows wait for approval over there — the books can never change anything here.' },
   ] },
   { v: 'v4.85', items: [

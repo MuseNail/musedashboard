@@ -2,10 +2,11 @@
 // activeUser lives in session.js (per-device). Front-desk users are synced config.
 
 import { getState } from '../store.js';
-import { dispatch } from '../sync.js';
+import { dispatch, resync } from '../sync.js';
 import { showToast, escHtml } from '../utils.js';
 import { getActiveUser, setActiveUser } from '../session.js';
 import { STAFF_PIN } from '../config.js';
+import { serverLogin } from '../apptoken.js';
 
 const cfg = () => getState().config;
 const isAdmin = () => getActiveUser()?.role === 'admin';   // only admins manage login accounts
@@ -81,6 +82,58 @@ export function pinBackspace() {
   document.getElementById('pin-matched-user').textContent = '';
 }
 
+// Shared success path for both the local PIN match and the server (§13) login.
+function _finishPinLogin(user) {
+  setActiveUser(user);
+  window.logAudit?.('Login', `${getActiveUser().name} signed in`);
+  pinCancel();
+  updateLoggedInDisplay();
+  window.goTo?.('screen-desk');
+  window.showDashPanel?.('turns');
+  showToast(`Welcome, ${getActiveUser().name}`);
+  // Cash-drawer reminder: non-Admin staff are prompted to open a drawer when none is open
+  // (taking cash is blocked until they do — see features/cashdrawer.js). Admin is exempt.
+  const cu = getActiveUser();
+  if (cu && cu.role !== 'admin' && !cfg().cash_drawer) {
+    setTimeout(() => window.showWarnModal?.('Open a cash drawer?', 'No cash drawer is open yet. Open one to take cash payments and track the register.', () => window.openCashRegister?.(), 'Open drawer'), 800);
+  }
+}
+
+function _showPinError() {
+  document.getElementById('pin-error')?.classList.remove('hidden');
+  pinBuffer = '';
+  const kb = document.getElementById('pin-keyboard-input'); if (kb) kb.value = '';
+  updatePinDots();
+  const matchedEl = document.getElementById('pin-matched-user'); if (matchedEl) matchedEl.textContent = '';
+  setTimeout(() => document.getElementById('pin-error')?.classList.add('hidden'), 2000);
+}
+
+// §13 server login on a FRESH browser (no synced data yet, so the local list
+// can't answer): the server checks the PIN, returns who it is, and mints the
+// session. Debounced so a 6-digit PIN doesn't fire half-typed attempts (each
+// miss feeds the server's slow-down counter).
+let _srvLoginTimer = null, _srvLoginBusy = false;
+async function _serverPinLogin(pin) {
+  if (_srvLoginBusy || pin.length < 4) return;
+  _srvLoginBusy = true;
+  const res = await serverLogin({ pin, device: 'dashboard' });
+  _srvLoginBusy = false;
+  if (pin !== pinBuffer) return;                       // kept typing — attempt is stale
+  if (res.ok) {
+    resync();                                          // reconnect with the new session → snapshot
+    _finishPinLogin(res.user);
+    return;
+  }
+  if (res.error === 'slow_down' || res.retryInSec) {
+    showToast(`Too many tries — wait ${res.retryInSec || 5}s and try again.`);
+    _showPinError();
+  } else if (res.error === 'offline') {
+    showToast('No connection — this browser needs internet for its first sign-in.');
+  } else if (pin.length >= 6) {
+    _showPinError();
+  }
+}
+
 function checkPin() {
   const fd = cfg().fd_users;
   const matched = fd.find(u => u.pin === pinBuffer) || (pinBuffer === STAFF_PIN ? { name: 'Manager', role: 'admin' } : null);
@@ -92,28 +145,19 @@ function checkPin() {
   const isFallback = pinBuffer === STAFF_PIN;
 
   if (user || isFallback) {
+    const pin = pinBuffer;
     setTimeout(() => {
-      setActiveUser(user || { id: 'fallback', name: 'Manager', pin: STAFF_PIN, role: 'admin' });
-      window.logAudit?.('Login', `${getActiveUser().name} signed in`);
-      pinCancel();
-      updateLoggedInDisplay();
-      window.goTo?.('screen-desk');
-      window.showDashPanel?.('turns');
-      showToast(`Welcome, ${getActiveUser().name}`);
-      // Cash-drawer reminder: non-Admin staff are prompted to open a drawer when none is open
-      // (taking cash is blocked until they do — see features/cashdrawer.js). Admin is exempt.
-      const cu = getActiveUser();
-      if (cu && cu.role !== 'admin' && !cfg().cash_drawer) {
-        setTimeout(() => window.showWarnModal?.('Open a cash drawer?', 'No cash drawer is open yet. Open one to take cash payments and track the register.', () => window.openCashRegister?.(), 'Open drawer'), 800);
-      }
+      _finishPinLogin(user || { id: 'fallback', name: 'Manager', pin: STAFF_PIN, role: 'admin' });
+      // Background §13 session mint/refresh — the server reads the same PIN list,
+      // so this normally just succeeds silently; resync makes the WS pick it up.
+      serverLogin({ pin, userId: user?.id, device: 'dashboard' }).then(r => { if (r.ok) resync(); });
     }, 300);
+  } else if (!fd.length) {
+    // Fresh browser: nothing synced yet — the server owns the PIN check (§13).
+    clearTimeout(_srvLoginTimer);
+    _srvLoginTimer = setTimeout(() => _serverPinLogin(pinBuffer), 650);
   } else if (pinBuffer.length >= 6) {
-    document.getElementById('pin-error').classList.remove('hidden');
-    pinBuffer = '';
-    document.getElementById('pin-keyboard-input').value = '';
-    updatePinDots();
-    matchedEl.textContent = '';
-    setTimeout(() => document.getElementById('pin-error').classList.add('hidden'), 2000);
+    _showPinError();
   }
 }
 
@@ -282,6 +326,11 @@ export function saveFdUser() {
   const fd = cfg().fd_users;
   const dup = fd.find(u => u.pin === pin && u.id !== editId);
   if (dup) { showToast(`PIN already used by ${dup.name}.`); return; }
+  // PINs are sign-in identity across BOTH lists now (§13 server login scans
+  // front desk first, then technicians) — a cross-list duplicate would shadow
+  // the tech's login entirely.
+  const techDup = (cfg().staff || []).find(s => s.pin && String(s.pin) === pin);
+  if (techDup) { showToast(`PIN already used by technician ${techDup.name}.`); return; }
 
   let next;
   if (editId) next = fd.map(u => u.id === editId ? { ...u, name, pin, role, hourlyRate } : u);

@@ -7,14 +7,14 @@ The build pipeline for the live single-salon app, ordered by impact. Cleaned 202
 ## 1 — Helcim refund / void path
 App refunds still assume Square payment ids. Build the Helcim path: Worker proxy for `POST /v2/payment/refund` + `POST /v2/payment/reverse` (idempotency-key required; `cardTransactionId` + ipAddress — verified API findings in `HELCIM-MIGRATION.md`), client refund flow routes by processor, and the refund **reverses gift-card redemptions** (closes the old audit §7 finding). New records already store the Helcim `transactionId` in `squarePaymentIds`.
 
-## 2 — §13 Worker auth — ✅ BUILT v4.86 (2026-06-12), awaiting owner rollout
-The shared-bearer-token fix is implemented and verified against the local stack. The Worker gates **every route** once the `APP_AUTH_TOKEN` secret is set (exempt: `/terminal/webhook` HMAC, `/gcal/callback` state-nonce, `GET /photos/*` for `<img>` loads — photo **writes** are gated; the report share-link now uses an unguessable key). Clients send `Authorization: Bearer` via the `js/app/apptoken.js` fetch wrapper (+ `?auth=` on the WebSocket and the `/gcal/connect` navigation). Token is device-local (`muse_auth_token`), provisioned in Settings → Staff & Access → **Device Access** or via `#auth=` setup links; unauthorized devices get a clear toast instead of silent "offline."
+## 2 — §13 Worker auth — ✅ BUILT v4.86 (2026-06-12, reworked to PIN sign-in same day), awaiting owner rollout
+**PIN sign-in sessions** (owner rejected per-device access codes — staff use ANY device/browser with their existing PIN). The DO's `POST /auth/login` checks the same `fd_users`/`staff` PINs the app already uses (4-digit kept, 6 fine, up to 8) and mints a 30-day browser session; the Worker gates **every route** while the `AUTH_ENFORCED` secret is `"true"` (exempt: `/auth/login|logout`, `/terminal/webhook` HMAC, `/gcal/callback`, `GET /photos/*` — photo **writes** are gated; the report share-link uses an unguessable key). Wrong PINs hit escalating per-IP slow-downs (3 free, then 5→60s — never a hard lockout); removing/deactivating a person revokes their sessions within ~a minute (verified). Fresh browsers sign in straight against the server (dashboard, staff app, reports app all verified); signed-in browsers keep working offline.
 **Owner rollout (each step independently safe):**
-1. `wrangler deploy` from `cloudflare/` — no-op while the secret is unset (verified).
-2. Approve the v4.86 push; let all devices update.
-3. Pick a long random code; enter it on the dashboard (Device Access), send setup links to the iPad/staff phones/reports phones.
-4. `wrangler secret put APP_AUTH_TOKEN` (same code) → enforcement live. Rollback = delete the secret (instant, no redeploy).
-**Unblocks Back Office M11** (Muse→BackOffice daily-sales sync; see `BACKOFFICE-KICKOFF.md` §5). Owner-approved sequence: **§13 → Back Office M11+M12 → M13 (Helcim/Square processor sync)**.
+1. `wrangler deploy` from `cloudflare/` — behavior unchanged while `AUTH_ENFORCED` is unset (verified); logins already mint sessions.
+2. Approve the v4.86 push; staff keep signing in with PINs as usual — browsers collect sessions automatically.
+3. Make sure every tech has a Staff-App PIN (Settings → Technicians) — techs without one can't sign in once enforced.
+4. `wrangler secret put AUTH_ENFORCED` (value `true`) → enforcement live. Rollback = delete the secret (instant, no redeploy).
+**Unblocked Back Office M11** (shipped — see `BACKOFFICE-KICKOFF.md`). Owner-approved sequence **§13 → M11+M12 → M13** is fully built.
 
 ## 3 — Retire Square (owner calls the timing)
 Helcim is live and default; Square is still selectable. When called: stop the Square customer **dual-write**, remove the `/square` proxy + `SQUARE_TOKEN`, the Square config UI + deep-link path, and the Square reconcile; keep historical Square ids on old records. (Don't fix bugs in this doomed code.)

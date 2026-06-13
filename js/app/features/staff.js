@@ -183,6 +183,8 @@ export function saveStaff() {
   if (cashDeductThreshold !== null && (isNaN(cashDeductThreshold) || cashDeductThreshold < 0)) { showToast('Exempt threshold must be 0 or more.'); return; }
   // Soft-warn (don't block) if this Staff-App PIN collides with another tech's — same PIN logs in as whoever matches first.
   if (pin && cfg().staff.some(s => s.id !== editId && s.pin === pin)) showToast('Heads up: another tech already uses that PIN.');
+  // §13: server login scans front-desk users FIRST — a PIN shared with an fd user would shadow this tech's sign-in entirely.
+  if (pin && (cfg().fd_users || []).some(u => String(u.pin) === pin)) showToast('Heads up: a front-desk user already uses that PIN — this tech won’t be able to sign in with it.');
   const app = {
     pdf: !!document.getElementById('staff-app-pdf')?.checked,
     history: !!document.getElementById('staff-app-history')?.checked,

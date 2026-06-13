@@ -32,14 +32,16 @@ new_sqlite_classes = ["MuseSalonDO"]
 #   wrangler secret put SQUARE_TOKEN
 #
 # SQUARE_TOKEN        — Square access token (sandbox or production)
-# APP_AUTH_TOKEN      — (§13 app auth) shared bearer token for ALL routes. UNSET = auth OFF
-#                       (migration mode). Rollout: deploy the Worker (no-op while unset),
-#                       provision every device (Settings → Staff & Access → Device Access,
-#                       or open an #auth= provisioning link), then
-#                         wrangler secret put APP_AUTH_TOKEN
-#                       to start enforcing. Rollback = delete the secret (instant, no redeploy).
-#                       Exempt: /terminal/webhook (HMAC), /gcal/callback (Google redirect),
-#                       GET /photos/* (<img> loads can't send headers; writes ARE gated).
+# AUTH_ENFORCED       — (§13 app auth) "true" = every route requires a session minted by
+#                       POST /auth/login (staff signs in with their existing PIN from any
+#                       device/browser → 30-day session; wrong PINs hit escalating per-IP
+#                       slow-downs, never a hard lockout). UNSET/other = auth OFF (migration
+#                       mode; login still works so browsers collect sessions early). Rollout:
+#                       deploy (no-op) → push the client → staff sign in as usual → then
+#                         wrangler secret put AUTH_ENFORCED   (value: true)
+#                       Rollback = delete the secret (instant, no redeploy). Exempt while
+#                       enforcing: /auth/login|logout, /terminal/webhook (HMAC),
+#                       /gcal/callback, GET /photos/* (<img> loads; photo writes ARE gated).
 # RESTORE_TOKEN       — (optional) gates POST /state/restore and POST /state/reset
 # VAPID_PRIVATE_KEY   — Web Push signing key (JWK JSON string). Set once:
 #                         wrangler secret put VAPID_PRIVATE_KEY
