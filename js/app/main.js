@@ -122,6 +122,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.92', items: [
+    { icon: 'price_check', t: '“Already paid — record without charging” fixed', d: 'On the pay screen, the manager option to record a ticket as already paid (no card charge) now opens its confirmation properly instead of doing nothing.' },
+  ] },
   { v: 'v4.91', items: [
     { icon: 'groups', t: 'Smarter tech suggestions', d: 'When a customer has more than one service, the Turns suggestions now spread the work across different techs instead of piling it on whoever’s next: the next-up tech gets the bigger service (full set → fill → dip → manicure → pedicure → polish change → kid pedicure), and wax / add-ons go first to the techs who can do them, keeping those specialists free for wax. Tip: set each tech’s services in Settings → Staff so this knows who can do what.' },
   ] },
