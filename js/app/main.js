@@ -122,6 +122,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.89', items: [
+    { icon: 'view_column', t: 'Payroll header tidied up', d: 'On the Payroll tab the Reports/Payroll switch now sits in the center with the “clocked in now” box to its left, the pay-period arrows centered just below, and the Technicians/Front Desk switch beside them — less crowded and easier to find.' },
+  ] },
   { v: 'v4.88', items: [
     { icon: 'badge', t: 'New “Reviewer” role', d: 'A role with the same limits as Front Desk but with Reports & Payroll access — for someone who reviews the numbers without running the register. Pick it when adding/editing a front-desk user; fine-tune any role under Settings → Staff & Access → Role Permissions.' },
     { icon: 'calendar_view_day', t: 'Unassigned view spreads out', d: 'Tapping “Unassigned” on the Calendar now widens the appointment cards to fill the column, so they’re actually easier to read.' },
