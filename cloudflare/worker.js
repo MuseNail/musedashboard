@@ -354,18 +354,35 @@ export default {
       return new Response(body, { status: doRes.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
     }
 
-    // ── AI analytics (Google Gemini) ────────────────────────────────────────────
-    // POST /ai/ask { question, data } → Gemini generateContent. The API key is held
-    // server-side as a secret (GEMINI_API_KEY) so it never ships in the public PWA.
-    // Owner setup: `wrangler secret put GEMINI_API_KEY` (free-tier key from aistudio.google.com).
+    // ── AI analytics (Anthropic Claude, or Google Gemini fallback) ──────────────
+    // POST /ai/ask { question, data } → an LLM. Keys are held server-side as secrets
+    // so they never ship in the public PWA. Prefers Claude when ANTHROPIC_API_KEY is
+    // set, else falls back to Gemini.
+    //   Owner setup (Claude):  `wrangler secret put ANTHROPIC_API_KEY`  (console.anthropic.com)
+    //   Owner setup (Gemini):  `wrangler secret put GEMINI_API_KEY`     (aistudio.google.com)
     if (path === '/ai/ask' && method === 'POST') {
-      if (!env.GEMINI_API_KEY) return json({ error: 'AI not configured' }, 503);
+      if (!env.ANTHROPIC_API_KEY && !env.GEMINI_API_KEY) return json({ error: 'AI not configured' }, 503);
       let body = {}; try { body = await request.json(); } catch {}
       const question = String(body.question || '').slice(0, 2000);
       const data     = String(body.data || '').slice(0, 24000);
       if (!question) return json({ error: 'No question' }, 400);
+      const sys = `You are a concise analytics assistant for a nail salon. Answer the owner's question using ONLY the data provided. Give specific numbers, be brief, and say if the data can't answer it.`;
+      if (env.ANTHROPIC_API_KEY) {
+        const model = env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001';
+        try {
+          const aRes = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({ model, max_tokens: 1024, system: sys, messages: [{ role: 'user', content: `DATA:\n${data}\n\nQUESTION: ${question}` }] }),
+          });
+          const aJson = await aRes.json();
+          if (!aRes.ok) { console.warn('[ai]', aRes.status); return json({ error: aJson.error?.message || 'AI request failed' }, aRes.status); }
+          const answer = (aJson.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+          return json({ answer: answer || 'No answer returned.' });
+        } catch (e) { return json({ error: 'AI service unreachable' }, 502); }
+      }
       const model = env.GEMINI_MODEL || 'gemini-2.0-flash';
-      const prompt = `You are a concise analytics assistant for a nail salon. Answer the owner's question using ONLY the data below. Give specific numbers, be brief, and say if the data can't answer it.\n\nDATA:\n${data}\n\nQUESTION: ${question}`;
+      const prompt = `${sys}\n\nDATA:\n${data}\n\nQUESTION: ${question}`;
       try {
         const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${env.GEMINI_API_KEY}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },

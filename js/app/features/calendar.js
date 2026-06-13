@@ -566,11 +566,12 @@ export function calRenderGrid() {
   const railEl = document.getElementById('cal-right-rail');
   const railW = (railEl && railEl.style.display !== 'none') ? 280 : 0;
   const COL_W = Math.max(120, Math.floor((window.innerWidth - TIME_W - railW - 48) / visible.length));
-  // When few calendars are shown (e.g. the unassigned-only view), a column gets very
-  // wide. Cap each appointment bubble at ~2.5× its width when ALL calendars are in
-  // view, so a lone wide column doesn't stretch bubbles across the whole screen.
+  // When few calendars are shown a column gets very wide. Normally we cap each
+  // bubble at ~2.5× its all-calendars width so a lone wide column doesn't stretch
+  // bubbles across the screen — BUT in the explicit "Unassigned only" expand view
+  // the whole point is to spread the appointments out, so let them fill the column.
   const normalColW = Math.max(120, Math.floor((window.innerWidth - TIME_W - railW - 48) / Math.max(1, _calCalendars.length)));
-  const maxBubbleW = normalColW * 2.5;
+  const maxBubbleW = _unassignedOnly ? Infinity : normalColW * 2.5;
   const now = new Date(), isToday = now.toDateString() === _calDate.toDateString(), nowMin = now.getHours()*60 + now.getMinutes();
   // #3: grey a tech's column on their day off — see module-level calColumnOff().
 
@@ -1255,7 +1256,11 @@ function _doCalCheckin(members, apptGroupId, partySize) {
     added++; if (!firstName) firstName = entry.name;
   });
   if (added === 0) { showToast('Already checked in'); return; }
-  window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.(); window.showDashPanel?.('queue');
+  // Stay put when the check-in was initiated from the Turns tab (its upcoming-appts
+  // strip) — only jump to the Queue when checking in from elsewhere (e.g. calendar).
+  const onTurns = document.getElementById('panel-turns')?.classList.contains('active');
+  window.renderQueue?.(); window.updateStats?.(); window.renderTurns?.();
+  if (!onTurns) window.showDashPanel?.('queue');
   showToast(added > 1 ? `${added} guests added to queue from calendar ✓` : `${firstName} added to queue from calendar ✓`);
 }
 export function calQuickCheckin(calId, eventId) {

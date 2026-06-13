@@ -1823,8 +1823,11 @@ export function tcUpdate(userId, idx) {
 }
 export function tcAddPunch(userId) {
   if (!_tcCanEdit() || !_tcDraft) return;
-  const start = new Date(payrollPeriodAt(_payrollOffset).from); start.setHours(9, 0, 0, 0);
-  _tcDraft.push({ in: +start, out: null });
+  // Default a new punch to TODAY, 9:00 AM in → 5:00 PM out (a typical shift the
+  // manager can adjust), rather than the period-start date with an open clock-out.
+  const start = new Date(); start.setHours(9, 0, 0, 0);
+  const end = new Date(); end.setHours(17, 0, 0, 0);
+  _tcDraft.push({ in: +start, out: +end });
   _renderTimecard();
 }
 export function tcDeletePunch(userId, idx) {

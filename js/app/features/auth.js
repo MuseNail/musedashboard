@@ -203,43 +203,27 @@ export function submitAdminCode() {
 // ── Front desk users CRUD (synced config.fd_users) ────────────────────────────
 function setFdUsers(users) { dispatch('config.set', { key: 'fd_users', value: users }); }
 
+// Reveal PINs inline next to each staff name (in the list), not in a separate
+// section. Persists until toggled off or the page reloads.
+let _fdPinsVisible = false;
 export function togglePinViewer() {
   if (!isAdmin()) { showToast('Only an admin can view login PINs.'); return; }
-  const list  = document.getElementById('pin-viewer-list');
-  const label = document.getElementById('pin-viewer-label');
-  if (!list) return;
-  const isHidden = list.classList.contains('hidden');
-  if (isHidden) {
-    const users = [
-      { name: 'Manager (default)', pin: STAFF_PIN, role: 'manager' },
-      ...cfg().fd_users.map(u => ({ name: u.name, pin: u.pin, role: u.role })),
-    ];
-    list.innerHTML = users.map(u => `
-      <div class="flex items-center justify-between px-4 py-3 border-b border-surface-container-high last:border-0">
-        <div>
-          <span class="font-body font-semibold text-on-surface text-sm">${escHtml(u.name)}</span>
-          <span class="text-xs font-body text-on-surface-variant capitalize ml-2">${escHtml(u.role)}</span>
-        </div>
-        <span class="font-headline font-bold text-primary tracking-widest text-base">${escHtml(u.pin)}</span>
-      </div>`).join('');
-    label.textContent = 'Hide PINs';
-  } else {
-    list.innerHTML = '';
-    label.textContent = 'View Login PINs';
-  }
-  list.classList.toggle('hidden', !isHidden);
+  _fdPinsVisible = !_fdPinsVisible;
+  renderFdUsersList();
 }
 
 export function renderFdUsersList() {
   const list = document.getElementById('fdusers-list');
   if (!list) return;
   const au = getActiveUser();
+  const isAdminUser = au?.role === 'admin';
   const pinSection = document.getElementById('pin-viewer-section');
   if (pinSection) pinSection.classList.toggle('hidden', !['admin','manager'].includes(au?.role));
-  const pinList = document.getElementById('pin-viewer-list');
+  const pinList = document.getElementById('pin-viewer-list');   // legacy separate section — now unused
   const pinLabel = document.getElementById('pin-viewer-label');
   if (pinList) { pinList.classList.add('hidden'); pinList.innerHTML = ''; }
-  if (pinLabel) pinLabel.textContent = 'View Login PINs';
+  if (!isAdminUser) _fdPinsVisible = false;   // only an admin may reveal PINs
+  if (pinLabel) pinLabel.textContent = _fdPinsVisible ? 'Hide PINs' : 'View Login PINs';
 
   const fd = cfg().fd_users;
   if (fd.length === 0) {
@@ -256,7 +240,7 @@ export function renderFdUsersList() {
           ${photoHtml}
           <div>
             <div class="font-headline font-semibold text-on-surface text-base">${escHtml(u.name)}</div>
-            <div class="text-xs font-body text-on-surface-variant capitalize">${escHtml(u.role)} · PIN: ${'•'.repeat(u.pin.length)}</div>
+            <div class="text-xs font-body text-on-surface-variant capitalize">${escHtml(u.role)} · PIN: <span class="${_fdPinsVisible ? 'font-headline font-bold text-primary tracking-widest' : ''}">${_fdPinsVisible ? escHtml(u.pin) : '•'.repeat(u.pin.length)}</span></div>
           </div>
         </div>
         <div class="flex items-center gap-1">
@@ -273,7 +257,7 @@ export function renderFdUsersList() {
 
 export function selectRole(role) {
   document.getElementById('fduser-role-input').value = role;
-  ['admin','manager','frontdesk'].forEach(r => {
+  ['admin','manager','frontdesk','reviewer'].forEach(r => {
     const btn = document.getElementById(`role-btn-${r}`);
     if (!btn) return;
     if (r === role) { btn.classList.add('bg-primary','text-on-primary','border-primary'); btn.classList.remove('bg-transparent','border-outline-variant','text-on-surface'); }
