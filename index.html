@@ -637,29 +637,30 @@ tailwind.config = {
 
       <!-- ── PAYROLL PANEL ── -->
       <div class="dash-panel" id="panel-payroll">
-        <!-- One header row: [subnav + period nav + view seg] | clocked-in card | exports.
-             The period nav sits IN LINE with the always-≥2-line clocked-in card to save
-             the whole row it used to occupy. -->
-        <div class="flex items-start gap-4 mb-2 flex-wrap">
-          <div class="flex flex-col gap-2 flex-shrink-0">
-            <span class="subnav-slot" id="subnav-slot-payroll"></span>
-            <div class="flex items-center gap-2">
-              <button onclick="payrollNav(-1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
-              <span id="payroll-period-label" class="font-headline font-bold text-on-surface text-sm min-w-[150px] text-center">Pay Period</span>
-              <button onclick="payrollNav(1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
-              <button onclick="payrollToggleCompare()" id="payroll-compare-btn" title="Show/hide the prior pay period comparison columns (This vs Last)" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">compare_arrows</span> <span id="payroll-compare-label">Comparing: Last</span></button>
-            </div>
-            <!-- Technicians | Front Desk pay view -->
-            <div class="subnav-seg" style="align-self:flex-start">
-              <button id="payroll-view-tech" onclick="payrollSetView('tech')" class="subnav-btn on">Technicians</button>
-              <button id="payroll-view-fd" onclick="payrollSetView('fd')" class="subnav-btn">Front Desk</button>
-            </div>
-          </div>
-          <div id="clocked-in-now" class="hidden flex-1 min-w-[240px]"></div>
-          <div class="flex items-center gap-2 flex-wrap flex-shrink-0 ml-auto">
+        <!-- Two centered rows: clocked-in (left) · Reports|Payroll toggle (center) · exports (right);
+             then the period nav centered under the toggle with the Tech|Front Desk view to its right.
+             Equal 1fr side columns keep the center column truly centered regardless of side widths. -->
+        <div class="grid items-center gap-4 mb-2" style="grid-template-columns:1fr auto 1fr">
+          <div id="clocked-in-now" class="hidden" style="min-width:0;grid-column:1"></div>
+          <span class="subnav-slot justify-self-center" id="subnav-slot-payroll" style="grid-column:2"></span>
+          <div class="flex items-center gap-2 flex-wrap justify-self-end" style="grid-column:3">
             <button onclick="payrollExportPDF()" title="Full payroll table (landscape)" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
             <button onclick="payrollExportStaffPDF()" title="Per-tech billed total + by day — for handing to staff" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">badge</span> Staff PDF</button>
             <button onclick="payrollExportExcel()" title="Excel workbook — Totals tab + a detailed tab per staff" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> Excel</button>
+          </div>
+        </div>
+        <div class="grid items-center gap-3 mb-3" style="grid-template-columns:1fr auto 1fr">
+          <span style="grid-column:1"></span>
+          <div class="flex items-center gap-2 justify-self-center" style="grid-column:2">
+            <button onclick="payrollNav(-1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
+            <span id="payroll-period-label" class="font-headline font-bold text-on-surface text-sm min-w-[150px] text-center">Pay Period</span>
+            <button onclick="payrollNav(1)" class="w-9 h-9 rounded-lg border border-surface-container-high flex items-center justify-center hover:bg-surface-container"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
+            <button onclick="payrollToggleCompare()" id="payroll-compare-btn" title="Show/hide the prior pay period comparison columns (This vs Last)" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">compare_arrows</span> <span id="payroll-compare-label">Comparing: Last</span></button>
+          </div>
+          <!-- Technicians | Front Desk pay view — to the right of the centered period nav -->
+          <div class="subnav-seg justify-self-start" style="grid-column:3">
+            <button id="payroll-view-tech" onclick="payrollSetView('tech')" class="subnav-btn on">Technicians</button>
+            <button id="payroll-view-fd" onclick="payrollSetView('fd')" class="subnav-btn">Front Desk</button>
           </div>
         </div>
         <!-- No overflow here — only the pay TABLE inside scrolls horizontally. -->
