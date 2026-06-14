@@ -612,13 +612,24 @@ export async function cancelTerminalCheckout() {
   try { await fetch(`${SQUARE_PROXY}/v2/terminals/checkouts/${id}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }); } catch (e) {}
 }
 
-// Reprint a receipt for a PAST sale on the Square Terminal's built-in printer, using the
-// stored Square payment id (Terminal Action API, type RECEIPT). Only works for sales paid
-// through the Terminal flow (which captured a Square payment id).
+// Reprint a receipt for a PAST sale. Square uses the Terminal Action API (type RECEIPT).
+// HELCIM has NO print API — its Payment Hardware API only does purchase/refund — so a
+// receipt reprint can only be done on the terminal's own screen; for Helcim sales we show
+// the operator how to do that (and the transaction number to find it by).
 export async function reprintTerminalReceipt(recordId) {
   const rec = (getState().records || []).find(r => String(r.id) === String(recordId))
            || (getState().queue || []).find(r => String(r.id) === String(recordId));
-  const paymentId = rec?.squarePaymentIds?.[0];
+  const paymentId = rec?.squarePaymentIds?.[0];   // for Helcim sales this is the Helcim transaction id
+
+  if (helcimActive()) {
+    const body = paymentId
+      ? `The Helcim terminal prints its receipt at the time of sale, and Helcim doesn’t let the app trigger the terminal’s printer.\n\nTo reprint a copy, do it on the terminal: open the menu (≡) → Transactions, find this sale (transaction ${paymentId}), and tap Reprint.`
+      : `This sale wasn’t charged on the card terminal, so the Helcim terminal has no receipt for it. Card receipts reprint from the terminal’s own Transactions menu.`;
+    if (window.showWarnModal) window.showWarnModal('Reprint on the Helcim terminal', body, () => {}, 'Got it');
+    else showToast(paymentId ? `On the terminal: Transactions → txn ${paymentId} → Reprint.` : 'Not a card sale — nothing to reprint on the terminal.');
+    return;
+  }
+
   if (!paymentId) { showToast('No Square payment on file — receipts reprint only for Square Terminal sales.'); return; }
   const deviceId = sqConfig()?.terminalDeviceId;
   if (!deviceId) { showToast('Pair your Square Terminal in Settings → Square first.'); return; }

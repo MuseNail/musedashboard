@@ -122,6 +122,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.96', items: [
+    { icon: 'receipt_long', t: 'Receipt button works with Helcim', d: 'The transaction “Receipt” button no longer tries to use Square. Since Helcim doesn’t let apps trigger the terminal’s printer, for a Helcim card sale it now shows you how to reprint a copy on the terminal itself — open the terminal’s menu (≡) → Transactions, find the sale by its transaction number, and tap Reprint.' },
+  ] },
   { v: 'v4.95', items: [
     { icon: 'savings', t: 'Cash drawer over/short syncs to the books', d: 'When you push a day’s sales to the Back Office books app, the cash drawer’s over/short (what you counted minus what was expected) now goes too — so the books reflect the cash you actually had, not just recorded sales. In Back Office, map “Cash drawer — over/short” to a Cash over/short account.' },
   ] },
