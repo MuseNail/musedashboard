@@ -589,7 +589,22 @@ export default {
           const sj = await sr.json().catch(() => ({}));
           const list = Array.isArray(sj) ? sj : (Array.isArray(sj.customers) ? sj.customers : (Array.isArray(sj.data) ? sj.data : []));
           const match = list.find(c => String(c.cellPhone || c.cellphone || c.phone || '').replace(/\D/g, '') === digits);
-          if (match) customerCode = match.customerCode || null;
+          if (match) {
+            customerCode = match.customerCode || null;
+            // The terminal's text-receipt prefill reads cellPhone specifically. An older contact may
+            // carry the number only in `phone` (or an unset cellPhone) — backfill it so the next charge
+            // prefills the SMS field. Best-effort PUT (keep contactName so a replace-style update can't
+            // wipe the name); never blocks the charge. Verify against a live terminal.
+            const matchCell = String(match.cellPhone || '').replace(/\D/g, '');
+            if (phone && matchCell !== digits && match.id != null) {
+              try {
+                await fetch(`https://api.helcim.com/v2/customers/${encodeURIComponent(match.id)}`, {
+                  method: 'PUT', headers: { ...hh, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ contactName: match.contactName || name || phone, cellPhone: phone }),
+                });
+              } catch {}
+            }
+          }
         }
       } catch {}
       if (!customerCode) {
