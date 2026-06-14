@@ -122,6 +122,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.94', items: [
+    { icon: 'dialpad', t: 'Cleaner phone keypad', d: 'When you tap a phone field at check-in, the on-screen keypad no longer shows the “AC” clear button that was covering the number on the iPad — the full phone number stays visible as you type. Use the backspace key to fix a digit.' },
+  ] },
   { v: 'v4.93', items: [
     { icon: 'chair', t: 'Techs see the station', d: 'Each customer card in the tech app now shows which station they’re at, and the new-customer alert names the station too — so a tech knows exactly where to go.' },
     { icon: 'swap_horiz', t: 'Floor switcher stays put', d: 'The Turns / Queue / Floor Plan switcher now sits at the far left on all three tabs, so it stops jumping to a different spot when you switch between them.' },

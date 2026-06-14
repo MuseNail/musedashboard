@@ -2746,7 +2746,7 @@ tailwind.config = {
         <div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1" id="numpad-label">Cost</div>
         <div class="text-4xl font-headline font-bold text-on-surface tracking-tight" id="numpad-display">$0.00</div>
       </div>
-      <button onpointerdown="event.preventDefault();numpadClear()" title="Clear" class="flex items-center gap-1 px-5 py-3 rounded-2xl border border-surface-container-high bg-surface-container text-on-surface-variant font-headline font-bold text-lg active:scale-95 transition-all flex-shrink-0">
+      <button id="numpad-clear-btn" onpointerdown="event.preventDefault();numpadClear()" title="Clear" class="flex items-center gap-1 px-5 py-3 rounded-2xl border border-surface-container-high bg-surface-container text-on-surface-variant font-headline font-bold text-lg active:scale-95 transition-all flex-shrink-0">
         <span class="material-symbols-outlined" style="font-size:20px">backspace</span> AC
       </button>
     </div>

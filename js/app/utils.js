@@ -277,6 +277,7 @@ export function openNumpad(inputEl, label, mode) {
   // Operator rail + receipt tape only in money mode (hidden for percent/int).
   const ops = document.getElementById('numpad-ops'); if (ops) ops.style.display = _isCalc() ? 'flex' : 'none';
   const tape = document.getElementById('numpad-tape'); if (tape) tape.classList.toggle('hidden', !_isCalc());
+  const clr = document.getElementById('numpad-clear-btn'); if (clr) clr.style.display = '';   // AC is for amounts, not phone
   _numpadUpdateDisplay();
   _setNumpadChrome(false);   // amounts: dimmed modal (no autocomplete to preserve)
   const m = document.getElementById('numpad-modal');
@@ -295,6 +296,8 @@ export function openPhoneNumpad(inputEl, label) {
   document.getElementById('numpad-label').textContent = label || 'Phone Number';
   document.getElementById('numpad-dot-key').textContent  = '';
   document.getElementById('numpad-plus-key').textContent = '';
+  // No AC in phone mode — it crowded the number on the iPad; the backspace key handles edits.
+  const clr = document.getElementById('numpad-clear-btn'); if (clr) clr.style.display = 'none';
   _numpadUpdateDisplay();
   _setNumpadChrome(true);   // floating: lets the autocomplete show + be tapped
   const m = document.getElementById('numpad-modal');
