@@ -122,6 +122,11 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.93', items: [
+    { icon: 'chair', t: 'Techs see the station', d: 'Each customer card in the tech app now shows which station they’re at, and the new-customer alert names the station too — so a tech knows exactly where to go.' },
+    { icon: 'swap_horiz', t: 'Floor switcher stays put', d: 'The Turns / Queue / Floor Plan switcher now sits at the far left on all three tabs, so it stops jumping to a different spot when you switch between them.' },
+    { icon: 'swipe_vertical', t: 'Checkout scrolls on the iPad', d: 'The Confirm Payment screen now scrolls properly — you can always see the services at the top and reach the “Already paid — record without charging” button at the bottom, even on a busy ticket.' },
+  ] },
   { v: 'v4.92', items: [
     { icon: 'price_check', t: '“Already paid — record without charging” fixed', d: 'On the pay screen, the manager option to record a ticket as already paid (no card charge) now opens its confirmation properly instead of doing nothing.' },
   ] },

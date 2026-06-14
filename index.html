@@ -307,7 +307,9 @@ tailwind.config = {
       <div class="dash-panel active" id="panel-queue">
         <!-- Filter tabs + Add + History date -->
         <div class="dash-head flex gap-2 flex-wrap items-center">
-          <!-- History date picker (far left) -->
+          <!-- View switcher (Turns | Queue | Floor Plan) — far left, consistent across the three tabs -->
+          <span class="subnav-slot" id="subnav-slot-queue" style="flex:0 1 auto"></span>
+          <!-- History date picker -->
           <div class="flex items-center gap-2 mr-1">
             <button onclick="shiftQueueDate(-1)" title="Previous day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
             <button onclick="openQueueHistoryPicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
@@ -327,7 +329,6 @@ tailwind.config = {
             <span class="material-symbols-outlined" style="font-size:15px" id="done-toggle-icon">visibility_off</span>
             <span id="done-toggle-label">Hide Paid</span>
           </button>
-          <span class="subnav-slot" id="subnav-slot-queue"></span>
           <button onclick="openQuickSale()" class="ml-auto btn-secondary">
             <span class="material-symbols-outlined" style="font-size:18px">point_of_sale</span> Quick Sale
           </button>
@@ -671,7 +672,9 @@ tailwind.config = {
       <div class="dash-panel" id="panel-turns">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
-            <!-- Date picker (far left) — day history. Shows the relative word + the date. -->
+            <!-- View switcher (Turns | Queue | Floor Plan) — far left, consistent across the three tabs -->
+            <span class="subnav-slot" id="subnav-slot-turns" style="flex:0 1 auto"></span>
+            <!-- Date picker — day history. Shows the relative word + the date. -->
             <button onclick="shiftTurnsDate(-1)" title="Previous day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>
             <button onclick="openTurnsHistoryPicker(event)" class="flex items-center gap-2 px-3 py-2 rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors">
               <span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">calendar_today</span>
@@ -681,7 +684,6 @@ tailwind.config = {
             <button onclick="exportTurnsCSV()" title="Export this day as CSV" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">table_view</span> CSV</button>
             <button onclick="exportTurnsPDF()" title="Print / save this day as PDF" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> PDF</button>
           </div>
-          <span class="subnav-slot" id="subnav-slot-turns"></span>
           <div class="flex items-center gap-3">
             <!-- Add/Remove technicians button -->
             <button onclick="showTurnsTechSelector()" class="btn-secondary">
@@ -1963,9 +1965,11 @@ tailwind.config = {
       <h2 class="text-lg font-headline font-bold text-on-surface">Confirm Payment</h2>
       <button onclick="closeSquareConfirm()" class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-container text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">close</span></button>
     </div>
-    <p class="px-5 pt-3 text-xs font-body text-on-surface-variant flex-shrink-0">Review the ticket, then continue to Square to take payment.</p>
-    <div id="square-confirm-body" class="flex-1 overflow-y-auto px-5 py-3 space-y-2"></div>
-    <div id="square-gc-section" class="px-5 flex-shrink-0"></div>
+    <div class="flex-1 min-h-0 overflow-y-auto">
+      <p class="px-5 pt-3 text-xs font-body text-on-surface-variant">Review the ticket, then continue to Square to take payment.</p>
+      <div id="square-confirm-body" class="px-5 py-3 space-y-2"></div>
+      <div id="square-gc-section" class="px-5"></div>
+    </div>
     <div class="px-5 py-4 border-t border-surface-container-high flex flex-col gap-3 flex-shrink-0">
       <button id="sq-terminal-btn" onclick="proceedTerminalPayment()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3 rounded-xl font-headline font-bold transition-all flex items-center justify-center gap-1.5"><span class="material-symbols-outlined" style="font-size:18px">contactless</span> Pay on Terminal</button>
       <div class="flex gap-2">

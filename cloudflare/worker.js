@@ -852,12 +852,28 @@ export class MuseSalonDO {
 
   // On a queue.upsert, notify any tech whose techId is NEWLY assigned (present now,
   // absent before) — so a price/status edit doesn't re-ping. Best-effort, non-blocking.
-  _notifyNewAssignments(prev, entry) {
+  async _notifyNewAssignments(prev, entry) {
     try {
       if (entry.status === 'paid' || entry.status === 'done') return;
       const techSet = e => new Set(((e && e.assignments) || []).map(a => a.techId).filter(Boolean));
       const before = techSet(prev), after = techSet(entry);
-      for (const t of after) if (!before.has(t)) this.sendPushToTech(t).catch(() => {});
+      const newly = [...after].filter(t => !before.has(t));
+      if (newly.length === 0) return;
+      // Enrich the push with the customer, service(s) and STATION so the tech sees where to go.
+      // Labels come from the DO config keys; any read failure degrades to a payload-less ping.
+      let stations = [], services = [];
+      try { stations = (await this.state.storage.get('config:stations')) || []; } catch {}
+      try { services = (await this.state.storage.get('config:services')) || []; } catch {}
+      const stnLabel = id => { const d = stations.find(s => s.id === id); return d ? (d.label || d.id) : (id || ''); };
+      const svcLabel = id => { const s = services.find(x => x.id === id); return s ? s.label : 'Service'; };
+      const first = String(entry.name || 'Guest').split(' ')[0];
+      for (const t of newly) {
+        const mine = (entry.assignments || []).filter(a => a.techId === t);
+        const stn  = stnLabel((mine.find(a => a.station) || {}).station);
+        const svcs = [...new Set(mine.map(a => svcLabel(a.serviceId)))].join(', ');
+        const text = `${first}${svcs ? ' · ' + svcs : ''}${stn ? ' @ ' + stn : ''}`.slice(0, 200);
+        this.sendPushToTech(t, { title: 'New assignment', body: text, tag: 'muse-assign' }).catch(() => {});
+      }
     } catch {}
   }
 

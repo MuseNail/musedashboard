@@ -21,6 +21,8 @@ const cfg     = () => store.getState().config;
 const queue   = () => store.getState().queue;
 const records = () => store.getState().records;
 const svc     = id => (cfg().services || []).find(s => s.id === id);
+// Station label for an assignment's a.station id (mirrors queue.js stationLabel without importing it).
+const stationLbl = id => { if (!id) return ''; const d = (cfg().stations || []).find(s => s.id === id); return d ? (d.label || d.id) : String(id); };
 
 const MY_KEY = 'muse_staff_id';            // device-local: which tech is signed in on THIS device
 let myId = localStorage.getItem(MY_KEY) || null;
@@ -271,9 +273,13 @@ function lineHtml(entry, a) {
   const start    = status === 'waiting' ? btn('Start', 'staffStart', false) : '';
   const complete = (status === 'waiting' || status === 'inservice') ? btn('Complete', 'staffComplete', true) : '';
   const reopen   = status === 'complete' ? btn('Reopen', 'staffReopen', false) : '';
+  const stn = stationLbl(a.station);
   return `<div class="border-t border-surface-container-high pt-4 first:border-t-0 first:pt-0">
-    <div class="flex items-center justify-between mb-3">
-      <span class="font-headline font-bold text-xl text-on-surface">${esc(label)}</span>${statusChip(status)}
+    <div class="flex items-center justify-between mb-3 gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <span class="font-headline font-bold text-xl text-on-surface truncate">${esc(label)}</span>
+        ${stn ? `<span class="flex-shrink-0 inline-flex items-center gap-1 text-sm font-headline font-bold text-primary bg-primary/10 rounded-lg px-2 py-0.5"><span class="material-symbols-outlined" style="font-size:15px">chair</span>${esc(stn)}</span>` : ''}
+      </div>${statusChip(status)}
     </div>
     <div class="flex items-center gap-2 mb-3">
       <span class="text-on-surface-variant font-headline text-2xl">$</span>
