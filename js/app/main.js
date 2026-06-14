@@ -122,6 +122,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.95', items: [
+    { icon: 'savings', t: 'Cash drawer over/short syncs to the books', d: 'When you push a day’s sales to the Back Office books app, the cash drawer’s over/short (what you counted minus what was expected) now goes too — so the books reflect the cash you actually had, not just recorded sales. In Back Office, map “Cash drawer — over/short” to a Cash over/short account.' },
+  ] },
   { v: 'v4.94', items: [
     { icon: 'dialpad', t: 'Cleaner phone keypad', d: 'When you tap a phone field at check-in, the on-screen keypad no longer shows the “AC” clear button that was covering the number on the iPad — the full phone number stays visible as you type. Use the backspace key to fix a digit.' },
   ] },

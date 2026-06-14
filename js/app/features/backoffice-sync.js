@@ -23,6 +23,14 @@ const cfg = () => getState().config;
 const TOKEN_KEY = 'muse_bo_token';
 const cents = v => Math.round((v || 0) * 100);
 
+// Net cash-drawer over/short (dollars; + over, − short) across drawers CLOSED on
+// the given day. overShort is stored per closed drawer in cash_drawer_history.
+function drawerOverShortForDay(dateStr) {
+  return (cfg().cash_drawer_history || [])
+    .filter(d => d && d.closedAt && localDateStr(new Date(d.closedAt)) === dateStr)
+    .reduce((s, d) => s + (Number(d.overShort) || 0), 0);
+}
+
 // ── Row builders ──────────────────────────────────
 export function buildBoDayRows(dateStr) {
   const from = new Date(dateStr + 'T00:00:00');
@@ -40,6 +48,11 @@ export function buildBoDayRows(dateStr) {
   add('sales_other',   m.otherMix,  `Muse — untracked sales ${pretty}`, 'tickets with no recorded tender');
   add('gift_sold',     m.gcSold,    `Muse — gift cards sold ${pretty}`, 'charged on top of bills — money rides the day’s card/cash');
   add('gift_redeemed', m.giftMix,   `Muse — gift cards redeemed ${pretty}`);
+  // Cash drawer over/short for the day → books the cash account to what was actually
+  // counted, not just recorded sales. Net across drawers closed that day; + = over.
+  const os = drawerOverShortForDay(dateStr);
+  if (os > 0)      add('cash_over',  os,  `Muse — cash drawer over ${pretty}`,  'counted more than expected');
+  else if (os < 0) add('cash_short', -os, `Muse — cash drawer short ${pretty}`, 'counted less than expected');
   return { rows, metrics: m };
 }
 
