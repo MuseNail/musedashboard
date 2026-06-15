@@ -123,6 +123,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.98', items: [
+    { icon: 'menu_book', t: 'Help is in your account menu', d: 'Tap your name (top-right) for an App guide and a 1-page Quick reference — what each screen and button does and the front-desk flow. Open either one and tap “Print / Save as PDF” to print it or save a PDF. “What’s new” lives there too.' },
+  ] },
   { v: 'v4.97', items: [
     { icon: 'undo', t: 'Refunds go back through Helcim', d: 'The Refund button now sends the card portion back through Helcim instead of Square. When you issue a refund, tick “Also refund to the card (Helcim)” and the money returns to the customer’s card; cash/Zelle and gift-card portions are recorded/returned as before. It’s safe to retry — the same refund won’t be sent twice.' },
   ] },
