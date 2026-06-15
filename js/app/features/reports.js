@@ -10,7 +10,7 @@ import { isPaidStatus } from './status.js';
 import { squareUpsertCustomer } from './square-customers.js';
 import { avgServiceTime, fmtDur } from './servicetime.js';
 import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS, SQUARE_PROXY, HELCIM_PROXY } from '../config.js';
-import { helcimActive } from './helcim.js';
+import { helcimActive, refundOnHelcim } from './helcim.js';
 import { gcRedemptions, gcTotalUsed } from './giftcards.js';
 import { fdPaidHours, fdPunches, fdSetPunches, roundQuarterHours, fdPunchSuspect } from './timeclock.js';
 
@@ -2516,6 +2516,13 @@ let _refundTxnId = null, _refundTxnRecord = null;
 const _squareRefundable = rec => (rec?.squarePaymentIds?.length)
   ? (((rec?.tenders?.card || 0) + (rec?.tenders?.cash || 0) + (rec?.tenders?.zelle || 0)) || (rec?.totalCost || 0))
   : 0;
+// Helcim can only refund the CARD portion back to the card (cash/Zelle were never in Helcim —
+// those are returned from the drawer / by hand). The stored Helcim card txn = squarePaymentIds[0].
+const _helcimRefundable = rec => {
+  if (!rec?.squarePaymentIds?.length) return 0;
+  if (rec.tenders) return rec.tenders.card || 0;     // mixed tenders → only the card is Helcim-refundable
+  return rec.totalCost || 0;                          // older record with no tender breakdown → assume all card
+};
 export function initiateRefund(recordId) {
   if (!canDo('refund')) { showToast('Permission denied'); return; }
   const rec = records().find(r => String(r.id) === String(recordId)) || buildCombinedRecords().find(r => String(r.id) === String(recordId));
@@ -2526,13 +2533,17 @@ export function initiateRefund(recordId) {
   document.getElementById('refund-txn-original').textContent = `$${(rec.totalCost||0).toFixed(2)}`;
   document.getElementById('refund-amount').value = (rec.totalCost||0).toFixed(2);
   document.getElementById('refund-reason').value = '';
-  // Square-refund toggle: shown only when the sale has a Square payment to refund; ALWAYS reset to
-  // OFF (per-refund opt-in, owner decision) so nothing gets refunded without an explicit tap.
-  const sqAmt = _squareRefundable(rec);
+  // Card-refund toggle: shown only when the sale has a card payment to send back; ALWAYS reset to OFF
+  // (per-refund opt-in) so nothing goes back to the card without an explicit tap. Routes to the ACTIVE
+  // processor — Helcim now, or Square for legacy sales.
+  const helcim = helcimActive();
+  const cardAmt = helcim ? _helcimRefundable(rec) : _squareRefundable(rec);
   const row = document.getElementById('refund-square-row'), cb = document.getElementById('refund-to-square');
   if (cb) cb.checked = false;
-  if (row) row.classList.toggle('hidden', sqAmt <= 0);
-  if (sqAmt > 0) { const a = document.getElementById('refund-square-amt'); if (a) a.textContent = `up to $${sqAmt.toFixed(2)} in Square`; }
+  if (row) row.classList.toggle('hidden', cardAmt <= 0);
+  const procLbl = document.getElementById('refund-processor-label');
+  if (procLbl) procLbl.textContent = helcim ? 'to the card (Helcim)' : 'in Square';
+  if (cardAmt > 0) { const a = document.getElementById('refund-square-amt'); if (a) a.textContent = helcim ? `up to $${cardAmt.toFixed(2)} back to the card` : `up to $${cardAmt.toFixed(2)} in Square`; }
   // Cash-from-drawer row: shown only when a drawer is open, so a cash refund can log a Cash Out
   // and the close reconciliation isn't thrown short. Always reset OFF (per-refund opt-in).
   const coRow = document.getElementById('refund-cash-out-row'), coCb = document.getElementById('refund-cash-out');
@@ -2629,13 +2640,31 @@ export async function confirmRefund() {
   if (amount <= 0) { showToast('Refund amount must be greater than zero.'); return; }
   if (amount > (_refundTxnRecord?.totalCost || 0)) { showToast('Refund cannot exceed the original total.'); return; }
   const o = _refundTxnRecord, refundOfId = _refundTxnId, now = new Date().toISOString();
-  // Optional: push the refund through Square FIRST (opt-in toggle, default off) across the sale's
-  // card / cash / Zelle payments. If the operator asked for it but it fails, stop and surface the
-  // error — don't record an app refund that implies Square sent the money when it didn't.
-  const wantSquare = !!document.getElementById('refund-to-square')?.checked;
+  // Optional: push the refund through the active card processor FIRST (opt-in toggle, default off).
+  // If the operator asked for it but it fails, stop and surface the error — don't record an app refund
+  // that implies money went back when it didn't. squareRefundIds carries the processor's refund id(s)
+  // (Helcim or Square — the field name is kept, like squarePaymentIds, for back-compat).
+  const wantCardRefund = !!document.getElementById('refund-to-square')?.checked;
   let squareRefundIds = null;
-  let refundAmount = amount;   // may be lowered to the amount Square ACTUALLY returned on a partial failure
-  if (wantSquare && _squareRefundable(o) > 0) {
+  let refundAmount = amount;   // may be lowered to what the processor ACTUALLY returned on a partial failure
+  if (wantCardRefund && helcimActive() && _helcimRefundable(o) > 0) {
+    // ── Helcim: send the card portion back to the card. ──
+    const helcimTxn = o.squarePaymentIds?.[0];
+    const cardAmt = Math.min(amount, _helcimRefundable(o));   // Helcim returns only the card portion
+    const btn = document.querySelector('#refund-modal button[onclick="confirmRefund()"]'); if (btn) { btn.disabled = true; btn.textContent = 'Refunding to the card…'; }
+    // Idempotency key = sale + txn + cents + (# refunds already recorded for this sale). A retry after a
+    // timeout runs BEFORE the new refund record is saved, so the count is unchanged → SAME key → Helcim
+    // returns the same refund (never a 2nd charge back). A genuine later partial of the same amount runs
+    // AFTER the prior one is recorded → count differs → a fresh key → it processes normally.
+    const priorRefunds = records().filter(r => r.status === 'refund' && String(r.refundOf) === String(o.id)).length;
+    const r = await refundOnHelcim(helcimTxn, cardAmt, { idempotencyKey: `${o.id}-${helcimTxn}-${Math.round(cardAmt * 100)}-${priorRefunds}` });
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirm Refund'; }
+    if (!r.ok) { showToast('Helcim refund failed: ' + r.error + ' — nothing recorded.'); return; }
+    squareRefundIds = r.transactionId ? [String(r.transactionId)] : [];
+    showToast(cardAmt < amount
+      ? `Refunded $${cardAmt.toFixed(2)} to the card ✓ — the remaining $${(amount - cardAmt).toFixed(2)} (cash/Zelle) is recorded; return it by hand.`
+      : `Refunded $${cardAmt.toFixed(2)} to the card ✓`);
+  } else if (wantCardRefund && !helcimActive() && _squareRefundable(o) > 0) {
     const btn = document.querySelector('#refund-modal button[onclick="confirmRefund()"]'); if (btn) { btn.disabled = true; btn.textContent = 'Refunding in Square…'; }
     const r = await refundInSquare(o, amount, reason);
     if (btn) { btn.disabled = false; btn.textContent = 'Confirm Refund'; }

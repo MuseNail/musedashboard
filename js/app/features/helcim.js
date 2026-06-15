@@ -28,6 +28,24 @@ export async function helcimCustomerCode(name, phone) {
     return j.customerCode || null;
   } catch { return null; }
 }
+
+// Refund a Helcim card transaction back to the card (via the Worker → Helcim refund API).
+// amountDollars = the CARD portion to return (Helcim caps it at the original). opts.idempotencyKey
+// MUST be deterministic for this refund intent (sale + txn + cents) so a retry can't double-refund.
+// Returns { ok, transactionId, amount, error } — never throws.
+export async function refundOnHelcim(originalTransactionId, amountDollars, opts = {}) {
+  if (!originalTransactionId) return { ok: false, error: 'No Helcim transaction is on this sale.' };
+  if (!(amountDollars > 0))   return { ok: false, error: 'Refund amount must be greater than zero.' };
+  try {
+    const r = await fetch(`${HELCIM_PROXY}/refund`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ originalTransactionId, amount: Number(amountDollars), idempotencyKey: opts.idempotencyKey || '' }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error) return { ok: false, error: j.error || `Refund failed (${r.status}).` };
+    return { ok: true, transactionId: j.transactionId ? String(j.transactionId) : null, amount: j.amount };
+  } catch { return { ok: false, error: 'Could not reach the refund service.' }; }
+}
 export function setPaymentProcessor(p) {
   const v = p === 'helcim' ? 'helcim' : 'square';
   if (v === activeProcessor()) return;

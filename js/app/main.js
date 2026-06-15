@@ -122,6 +122,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v4.97', items: [
+    { icon: 'undo', t: 'Refunds go back through Helcim', d: 'The Refund button now sends the card portion back through Helcim instead of Square. When you issue a refund, tick “Also refund to the card (Helcim)” and the money returns to the customer’s card; cash/Zelle and gift-card portions are recorded/returned as before. It’s safe to retry — the same refund won’t be sent twice.' },
+  ] },
   { v: 'v4.96', items: [
     { icon: 'receipt_long', t: 'Receipt button works with Helcim', d: 'The transaction “Receipt” button no longer tries to use Square. Since Helcim doesn’t let apps trigger the terminal’s printer, for a Helcim card sale it now shows you how to reprint a copy on the terminal itself — open the terminal’s menu (≡) → Transactions, find the sale by its transaction number, and tap Reprint.' },
   ] },

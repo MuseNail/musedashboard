@@ -615,6 +615,35 @@ export default {
       }
       return json({ customerCode });
     }
+    // Refund a Helcim card sale back to the card. Verified API (HELCIM-MIGRATION.md):
+    //   POST /v2/payment/refund { originalTransactionId, amount(DOLLARS), ipAddress } + an
+    //   `idempotency-key` header (required, 25–36 chars). Partial refunds are supported.
+    // originalTransactionId = the Helcim transactionId stored on the record (squarePaymentIds[0]).
+    // The client sends a DETERMINISTIC idempotencyKey tied to (sale, txn, cents) so a retry after a
+    // timeout returns the SAME refund instead of issuing a second one — the core double-refund guard.
+    if (path === '/helcim/refund' && method === 'POST') {
+      let b = {}; try { b = await request.json(); } catch {}
+      const originalTransactionId = parseInt(b.originalTransactionId, 10);
+      const amount = Number(b.amount);                       // DOLLARS, like the purchase endpoint
+      if (!Number.isInteger(originalTransactionId) || originalTransactionId <= 0) return json({ error: 'originalTransactionId required' }, 400);
+      if (!(amount > 0)) return json({ error: 'amount (dollars) must be > 0' }, 400);
+      const ip = request.headers.get('CF-Connecting-IP') || '127.0.0.1';   // ipAddress is required by Helcim
+      const safe = String(b.idempotencyKey || (originalTransactionId + '-' + Math.round(amount * 100))).replace(/[^a-zA-Z0-9_-]/g, '');
+      const idem = ('rf-' + safe + '-0000000000000000000000000000000000').slice(0, 32);   // normalize to Helcim's 25–36 char window
+      const r = await fetch('https://api.helcim.com/v2/payment/refund', {
+        method:  'POST',
+        headers: { 'api-token': env.HELCIM_API_TOKEN, 'accept': 'application/json', 'Content-Type': 'application/json', 'idempotency-key': idem },
+        body:    JSON.stringify({ originalTransactionId, amount, ipAddress: ip }),
+      });
+      const text = await r.text();
+      let j = {}; try { j = JSON.parse(text); } catch {}
+      if (r.status >= 400) {
+        console.error('[helcim refund]', r.status, text.slice(0, 400));
+        const msg = (j.errors ? JSON.stringify(j.errors) : (j.message || j.error)) || `Helcim refund error ${r.status}`;
+        return json({ error: String(msg).slice(0, 300) }, r.status >= 500 ? 502 : 400);
+      }
+      return json({ ok: true, transactionId: j.transactionId || null, status: j.status || '', amount: (j.amount ?? amount) });
+    }
     if (path === '/terminal/webhook' && method === 'POST') {
       const raw = await request.text();
       const ok  = await verifyHelcimWebhook(request, raw, env.HELCIM_WEBHOOK_VERIFIER);
