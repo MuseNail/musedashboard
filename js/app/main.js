@@ -123,6 +123,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.02', items: [
+    { icon: 'pending', t: 'Done now, price later', d: 'A tech can be finished with a service but still working on the same customer and not ready to give a price. Tap a service’s status in Assign & Price and choose “Done — tech will price”: it shows as “Awaiting price” (purple) and the tech enters the amount from their app — they get a notification and a reminder on their phone. Payment stays locked until it’s priced, and you can always type the price yourself to fill it in.' },
+    { icon: 'lock_clock', t: 'Tech prices never get lost', d: 'If a ticket’s Assign & Price window was left open at the front desk while a tech updated a price on their app, that price could quietly get overwritten. It no longer does — the tech’s amount is kept, and the open window now updates to show it. A ticket left untouched for a few minutes also frees itself so another device can open it.' },
+  ] },
   { v: 'v5.01', items: [
     { icon: 'system_update', t: 'Update prompts you won’t miss', d: 'When a new version is published, the app now pops up an “Update available” message with an Update button — instead of only a small ↻ on the version number that was easy to overlook. Tap Update to load the newest version; your data is never affected. The same prompt is now in every app (front desk, the tech app, Reports, and Back Office).' },
   ] },
