@@ -3,6 +3,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { canDo, getActiveUser } from '../session.js';
 import { showToast, commitNumpad, ticketTotal } from '../utils.js';
+import { isAwaitingPrice } from './status.js';
 import { SQUARE_PROXY } from '../config.js';
 import { squareUpsertCustomer } from './square-customers.js';
 import { chargeOnHelcim, helcimActive, helcimCustomerCode } from './helcim.js';
@@ -164,6 +165,13 @@ export function openSquarePOS(entryId) {
   // Group check-in → the whole party is on one ticket. To pay separately, split the
   // ticket in-app first (then each member is its own non-grouped entry).
   const party = entry.groupId ? queue().filter(e => e.groupId === entry.groupId) : [entry];
+  // Checkout guard: a service marked "Done — tech will price" has no amount yet. Block payment
+  // until it's priced (the tech sets it from the staff app, or the front desk enters it in the
+  // Assign & Price modal, which clears the flag). Otherwise it would silently charge $0 for it.
+  if (party.some(e => (e.assignments || []).some(isAwaitingPrice))) {
+    showToast('A service is awaiting the tech’s price — enter it (or have the tech set it) before taking payment.');
+    return;
+  }
   // Snapshot each ticket's fees BEFORE the default fee is auto-applied, so backing out of
   // checkout (Cancel/X/backdrop, no payment) can restore them — otherwise the default service
   // fee, persisted just below, lingers on the Assign modal's Party Total (services $0 + $2 fee).

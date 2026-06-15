@@ -9,7 +9,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap, escHtml } from '../utils.js';
-import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, applyAssignmentStatus, applyEntryStatus } from './status.js';
+import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, applyAssignmentStatus, applyEntryStatus, effectiveServiceStatus } from './status.js';
 import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef, categoryMaxTechs } from './queue.js';
 import { getActiveTurnsOrder, getTechStatusColor, getTechTurns } from './turns.js';
 import { serviceTimeInfo } from './servicetime.js';
@@ -114,7 +114,7 @@ function custLines(e, stationId, fs = 1) {
     const a = assigns.find(x => x.serviceId === sid);
     const status = a ? getAssignmentStatus(e, a) : 'waiting';
     if (a && isPaidStatus(status)) return '';   // drop a paid line (whole entry leaves the floor when all paid)
-    const ls = serviceLineStyle(status);
+    const ls = serviceLineStyle(a ? effectiveServiceStatus(e, a) : status);
     const s = svc(sid), t = a && a.techId ? staffById(a.techId) : null;
     const dot = `<span style="display:inline-block;width:${dotPx}px;height:${dotPx}px;border-radius:50%;flex-shrink:0;box-sizing:border-box;${ls.dot}"></span>`;
     const main = `<div style="display:flex;align-items:center;gap:${Math.round(3 * fs)}px;font-size:${Math.round(10.5 * fs)}px;color:#374151;min-width:0">

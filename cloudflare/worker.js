@@ -925,6 +925,31 @@ export class MuseSalonDO {
     } catch {}
   }
 
+  // On a queue.upsert, notify a tech when the front desk just marked one of their services
+  // "Done — tech will price" (newly complete + awaitingPrice). Diffs prev vs new per
+  // (techId, serviceId) so a resync / unrelated edit doesn't re-ping. Best-effort, non-blocking.
+  async _notifyAwaitingPrice(prev, entry) {
+    try {
+      if (entry.status === 'paid' || entry.status === 'done') return;
+      const awaitingKeys = e => new Set(((e && e.assignments) || [])
+        .filter(a => a.techId && a.status === 'complete' && a.awaitingPrice)
+        .map(a => a.techId + ' ' + a.serviceId));
+      const before = awaitingKeys(prev), after = awaitingKeys(entry);
+      const newly = [...after].filter(k => !before.has(k));
+      if (newly.length === 0) return;
+      let services = [];
+      try { services = (await this.state.storage.get('config:services')) || []; } catch {}
+      const svcLabel = id => { const s = services.find(x => x.id === id); return s ? s.label : 'Service'; };
+      const first = String(entry.name || 'Guest').split(' ')[0];
+      const byTech = new Map();
+      for (const k of newly) { const [t, sid] = k.split(' '); if (!byTech.has(t)) byTech.set(t, []); byTech.get(t).push(svcLabel(sid)); }
+      for (const [t, svcs] of byTech) {
+        const text = `${first} · ${[...new Set(svcs)].join(', ')} — add the price`.slice(0, 200);
+        this.sendPushToTech(t, { title: 'Price needed', body: text, tag: 'muse-price' }).catch(() => {});
+      }
+    } catch {}
+  }
+
   handleSession(ws) {
     ws.accept();
     this.sockets.add(ws);
@@ -1006,6 +1031,7 @@ export class MuseSalonDO {
           if (_mergeNewerAssignments(payload.entry, prevEntry)) _deriveEntryStatus(payload.entry);   // 3c: protect a concurrent per-assignment change
           await this.state.storage.put(qKey, payload.entry);
           this._notifyNewAssignments(prevEntry, payload.entry);   // push to newly-assigned techs (best-effort)
+          this._notifyAwaitingPrice(prevEntry, payload.entry);    // push when a service is newly "awaiting price"
           break;
         }
         case 'queue.assignmentPatch': {

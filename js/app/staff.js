@@ -67,6 +67,7 @@ export function myHistory(queueArr, recordsArr, deletions, techId) {
     if (a.techId !== techId) return;
     const st = a.status || 'waiting';
     if (st !== 'complete' && !isPaidStatus(st)) return;
+    if (a.awaitingPrice && st === 'complete') return;   // not real history until it's priced
     const when = rec.checkinTime || rec.completedAt;
     lines.push({ name: rec.name || 'Guest', serviceId: a.serviceId, cost: a.cost || 0, date: localDateStr(new Date(when)), time: rec.completedAt || when, paid: isPaidStatus(st) });
   }));
@@ -88,6 +89,7 @@ const STATUS_CHIP = {
   waiting:   { bg:'#f5c870', fg:'#3a2800', label:'Waiting'    },
   inservice: { bg:'#2a7a4f', fg:'#ffffff', label:'In Service' },
   complete:  { bg:'#1a5c7a', fg:'#ffffff', label:'Done'       },
+  awaiting:  { bg:'#6b4fb0', fg:'#ffffff', label:'Needs price' },   // front desk marked done; I owe a price
   paid:      { bg:'#5b6166', fg:'#ffffff', label:'Paid'       },
 };
 function statusChip(status) {
@@ -241,8 +243,14 @@ function renderMain(meStaff) {
       <span class="material-symbols-outlined" style="font-size:20px">system_update</span> Update available (${_updateVer}) — tap to refresh
     </button>` : '';
 
+  const needsPrice = queue().reduce((n, e) => isPaidStatus(e.status) ? n : n + (e.assignments || []).filter(a => a.techId === myId && a.status === 'complete' && a.awaitingPrice).length, 0);
+  const needsPriceBanner = needsPrice ? `
+    <button onclick="staffTab('active')" class="w-full mb-3 rounded-xl py-3 px-4 text-white font-headline font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all" style="background:#6b4fb0">
+      <span class="material-symbols-outlined" style="font-size:19px">pending</span> ${needsPrice} service${needsPrice === 1 ? '' : 's'} need${needsPrice === 1 ? 's' : ''} a price
+    </button>` : '';
+
   document.getElementById('staff-list').innerHTML = `
-    ${updateBanner}${notifBanner}
+    ${updateBanner}${needsPriceBanner}${notifBanner}
     <div class="rounded-2xl bg-primary text-on-primary px-5 py-4 mb-3 flex items-end justify-between shadow-sm">
       <div><div class="text-xs font-body uppercase tracking-widest opacity-80">Today</div>
         <div class="font-headline font-extrabold leading-none" style="font-size:40px">$${st.total.toFixed(0)}</div></div>
@@ -298,28 +306,32 @@ function lineHtml(entry, a) {
     class="flex-1 py-4 rounded-xl font-headline font-bold text-lg transition-all active:scale-95 ${primary
       ? 'bg-primary hover:bg-primary-dim text-on-primary'
       : 'border-2 border-primary text-primary hover:bg-primary/10'}">${txt}</button>`;
+  const awaiting = status === 'complete' && a.awaitingPrice;   // front desk marked done; tech owes the price
+  const eff = awaiting ? 'awaiting' : status;
   const start    = status === 'waiting' ? btn('Start', 'staffStart', false) : '';
   const complete = (status === 'waiting' || status === 'inservice') ? btn('Complete', 'staffComplete', true) : '';
-  const reopen   = status === 'complete' ? btn('Reopen', 'staffReopen', false) : '';
+  const reopen   = (status === 'complete' && !awaiting) ? btn('Reopen', 'staffReopen', false) : '';
+  const savePrice = awaiting ? `<button onclick="staffSavePrice('${entry.id}','${esc(a.serviceId)}')" class="flex-1 py-4 rounded-xl font-headline font-bold text-lg text-white transition-all active:scale-95" style="background:#6b4fb0">Save price</button>` : '';
   const stn = stationLbl(a.station);
   return `<div class="border-t border-surface-container-high pt-4 first:border-t-0 first:pt-0">
     <div class="flex items-center justify-between mb-3 gap-2">
       <div class="flex items-center gap-2 min-w-0">
         <span class="font-headline font-bold text-xl text-on-surface truncate">${esc(label)}</span>
         ${stn ? `<span class="flex-shrink-0 inline-flex items-center gap-1 text-sm font-headline font-bold text-primary bg-primary/10 rounded-lg px-2 py-0.5"><span class="material-symbols-outlined" style="font-size:15px">chair</span>${esc(stn)}</span>` : ''}
-      </div>${statusChip(status)}
+      </div>${statusChip(eff)}
     </div>
+    ${awaiting ? `<div class="flex items-center gap-2 mb-3 rounded-xl px-3 py-2 text-sm font-body" style="background:rgba(107,79,176,.1);color:#534ab7"><span class="material-symbols-outlined" style="font-size:18px">info</span>Front desk marked this done — add the price.</div>` : ''}
     <div class="flex items-center gap-2 mb-3">
       <span class="text-on-surface-variant font-headline text-2xl">$</span>
       <input type="text" inputmode="decimal" value="${priceVal}" placeholder="${placeholder}"
         oninput="staffPriceInput('${entry.id}','${esc(a.serviceId)}',this.value)"
-        class="staff-price-input flex-1 min-w-0 bg-surface-container border-2 border-surface-container-high rounded-xl px-4 py-3 text-3xl font-headline text-right focus:outline-none focus:border-primary">
+        class="staff-price-input flex-1 min-w-0 bg-surface-container border-2 rounded-xl px-4 py-3 text-3xl font-headline text-right focus:outline-none focus:border-primary ${awaiting ? '' : 'border-surface-container-high'}"${awaiting ? ' style="border-color:#6b4fb0"' : ''}>
       <button onclick="staffCalc('${entry.id}','${esc(a.serviceId)}')" title="Calculator"
         class="flex-shrink-0 w-14 h-14 flex items-center justify-center rounded-xl border-2 border-primary text-primary hover:bg-primary/10 active:scale-95 transition-all">
         <span class="material-symbols-outlined" style="font-size:26px">calculate</span>
       </button>
     </div>
-    <div class="flex gap-2">${start}${reopen}${complete}</div>
+    <div class="flex gap-2">${start}${reopen}${savePrice}${complete}</div>
   </div>`;
 }
 
@@ -520,6 +532,7 @@ function updateAssignment(entryId, serviceId, newStatus, priced) {
   if (!a0) { showToast('That service is no longer assigned to you'); return; }
   const a = JSON.parse(JSON.stringify(a0));        // patch a clone of ONLY this assignment
   if (priced != null) a.cost = priced;
+  if (priced != null && priced > 0) a.awaitingPrice = false;   // entering a real price resolves "Needs price"
   applyAssignmentStatus(a, newStatus);             // banks serviceMs / starts spell + stamps a.status & a.updatedAt
   sync.dispatch('queue.assignmentPatch', { entryId: String(entryId), serviceId, techId: myId, assignment: a });
 }
@@ -548,6 +561,16 @@ window.staffComplete = (entryId, serviceId) => {
 window.staffReopen = (entryId, serviceId) => {
   updateAssignment(entryId, serviceId, 'inservice');
   showToast('Reopened');
+};
+// "Needs price": the front desk already marked this service done — the tech only owes the price.
+// Keeps the service complete, sets the cost, clears the awaiting-price flag (unblocks checkout).
+window.staffSavePrice = (entryId, serviceId) => {
+  const key = entryId + ':' + serviceId;
+  const priced = parsePrice(_priceDraft[key]);
+  if (priced == null || priced <= 0) { showToast('Enter a price first'); return; }
+  updateAssignment(entryId, serviceId, 'complete', priced);
+  delete _priceDraft[key];
+  showToast('Price sent ✓');
 };
 window.staffTab = (v) => { _view = (v === 'history' || v === 'appts') ? v : 'active'; render(); };
 

@@ -8,7 +8,7 @@ import { dispatch, DEVICE_ID } from '../sync.js';
 import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, escHtml, escAttrJs, dateBtnLabel } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { ui, canDo, getActiveUser } from '../session.js';
-import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle } from './status.js';
+import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
 import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate } from './square-customers.js';
@@ -301,7 +301,7 @@ function buildQueueRow(e) {
   // the in-service row gets the bold green bar+tint — so a mixed-status customer reads at a glance.
   const assignSummary = (e.assignments || []).filter(a => a.techId || a.cost).map(a => {
     const tech = staffById(a.techId), s = svc(a.serviceId);
-    const ls = serviceLineStyle(getAssignmentStatus(e, a));
+    const ls = serviceLineStyle(effectiveServiceStatus(e, a));
     const hot = ls.key === 'inservice';
     const sti = serviceTimeInfo(a);
     const tip = sti ? `<span class="flex-shrink-0" style="color:${sti.color};font-weight:700;margin-left:auto">${sti.text}</span>` : '';
@@ -310,7 +310,7 @@ function buildQueueRow(e) {
       <span style="display:inline-block;width:.8em;height:.8em;border-radius:50%;box-sizing:border-box;flex-shrink:0;${ls.dot}"></span>
       <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
       ${tech ? `<span class="text-on-surface-variant">→ ${escHtml(tech.name)}${a.station ? ' @' + escHtml(String(a.station)) : ''}</span>` : (a.station ? `<span class="text-on-surface-variant">@${escHtml(String(a.station))}</span>` : '')}
-      ${a.comped ? `<span class="font-semibold" style="color:#7a5a00">${escHtml(a.compReason || 'Comp')}</span>` : (a.cost ? `<span class="font-semibold text-primary">$${Number(a.cost).toFixed(2)}</span>` : '')}
+      ${a.comped ? `<span class="font-semibold" style="color:#7a5a00">${escHtml(a.compReason || 'Comp')}</span>` : (isAwaitingPrice(a) ? `<span class="font-semibold" style="color:#6b4fb0">Pending</span>` : (a.cost ? `<span class="font-semibold text-primary">$${Number(a.cost).toFixed(2)}</span>` : ''))}
       ${tip}
       <span class="text-[9px] font-bold px-1.5 rounded-full flex-shrink-0 ${tip ? '' : 'ml-auto'}" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
     </div>`;
@@ -716,6 +716,8 @@ function _applyRowToAssignment(entryId, a, row, isNew) {
   if (domComped !== snap.comped) { a.comped = domComped; changed = true; }
   if (domCompReason !== snap.compReason) { a.compReason = domCompReason; changed = true; }
   if (_costCents(domCost) !== snap.cost) { a.cost = domCost; changed = true; }
+  // Front-desk override: entering a real price (or comping) on an awaiting-price service resolves it.
+  if (a.awaitingPrice && ((a.cost || 0) > 0 || a.comped)) { a.awaitingPrice = false; changed = true; }
   if (a.techId && !prevTech) a.assignedAt = Date.now();
   if (changed) a.updatedAt = Date.now();
 }
@@ -874,10 +876,37 @@ export function cycleServiceStatus(entryId, serviceId, newStatus) {
   if (newStatus === 'inservice' && (!a || !a.techId)) { showToast('Assign a technician before marking In Service.'); return; }
   if (newStatus === 'complete' || newStatus === 'paid') {
     if (!a || !a.techId) { showToast('Assign a technician first.'); return; }
-    if ((!a.cost || a.cost <= 0) && !a.comped) { showToast('Enter a price first (or mark it Comp / No charge).'); return; }
+    if ((!a.cost || a.cost <= 0) && !a.comped) {
+      // No price yet. Completing a service is fine if the tech will price it later — offer that
+      // instead of just blocking. (Paid still needs a real price; you can't finalize a $0 sale.)
+      if (newStatus === 'complete') {
+        const who = staffById(a.techId)?.name || 'the tech';
+        showWarnModal('Mark done — tech will set the price?',
+          `${svc(serviceId)?.label || 'This service'} will show as “Awaiting price” until ${who} enters it on their app. You can also enter it here anytime. Payment stays locked until it’s priced.`,
+          () => markAwaitingPrice(entryId, serviceId), 'Done — tech will price');
+        return;
+      }
+      showToast('Enter a price first (or mark it Comp / No charge).'); return;
+    }
   }
   if (newStatus === 'paid' && _blockDirectPaid(entryId)) return;
   setAssignmentStatus(entry, serviceId, newStatus);
+  renderGroupAssignContent();
+}
+
+// "Done — tech will price": mark a service complete with NO price yet; the assigned tech enters
+// it from the staff app (or the front desk overrides by typing a price in the modal, which clears
+// the flag in _applyRowToAssignment). The flag rides on the assignment and gates checkout.
+export function markAwaitingPrice(entryId, serviceId) {
+  const entry = q().find(e => String(e.id) === String(entryId));
+  if (!entry) return;
+  const a = (entry.assignments || []).find(x => x.serviceId === serviceId);
+  if (!a || !a.techId) { showToast('Assign a technician first.'); return; }
+  a.awaitingPrice = true;
+  a.comped = false; a.compReason = '';
+  a.cost = 0;
+  setAssignmentStatus(entry, serviceId, 'complete');   // dispatches queue.upsert; applyAssignmentStatus stamps a.updatedAt
+  window.logAudit?.('Awaiting price', `${entry.name || '—'} · ${svc(serviceId)?.label || 'service'} → ${staffById(a.techId)?.name || 'tech'} to price`);
   renderGroupAssignContent();
 }
 
@@ -1048,13 +1077,14 @@ export function renderGroupAssignContent() {
     const s = svc(sid) || { id: sid, label: sid };
     const a = (entry.assignments || []).find(x => x.serviceId === sid) || {};
     const st = getAssignmentStatus(entry, a);
+    const est = isAwaitingPrice(a) ? 'awaiting' : st;
     const sug = !a.techId ? (_sugMap[sid] || null) : null;
-    const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#2a7a4f;color:#fff', complete:'background:#1a5c7a;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[st] || 'background:#f5c870;color:#3a2800';
-    const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[st] || 'Waiting';
-    const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', paid:'waiting', done:'waiting' }[st];
+    const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#2a7a4f;color:#fff', complete:'background:#1a5c7a;color:#fff', awaiting:'background:#6b4fb0;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[est] || 'background:#f5c870;color:#3a2800';
+    const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Complete', awaiting:'Awaiting price', paid:'Paid', done:'Paid' }[est] || 'Waiting';
+    const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', awaiting:'paid', paid:'waiting', done:'waiting' }[est];
     // Correct an accidental status change (e.g. marked In Service by mistake). Not offered
     // from Paid — un-doing a finalized sale goes through the whole-ticket Reopen flow.
-    const prevStatus = { inservice:'waiting', complete:'inservice' }[st];
+    const prevStatus = { inservice:'waiting', complete:'inservice', awaiting:'inservice' }[est];
     return `
       <div class="bg-surface-container-low rounded-xl p-4 border border-surface-container-high mb-3" data-service-id="${sid}">
         <div class="flex items-center justify-between mb-3">
@@ -1204,11 +1234,12 @@ function _assignSvcRowHtml(entry, sid, techOptions, stationOptions, allowRemove)
   const s = svc(sid) || { id: sid, label: sid };
   const a = (entry.assignments || []).find(x => x.serviceId === sid) || {};
   const st = getAssignmentStatus(entry, a);
+  const est = isAwaitingPrice(a) ? 'awaiting' : st;
   const sug = !a.techId ? (window.suggestTechsForEntry?.(entry)?.[sid] || null) : null;
-  const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#2a7a4f;color:#fff', complete:'background:#1a5c7a;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[st] || 'background:#f5c870;color:#3a2800';
-  const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Done', paid:'Paid', done:'Paid' }[st] || 'Waiting';
-  const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', paid:'waiting', done:'waiting' }[st];
-  const prevStatus = { inservice:'waiting', complete:'inservice' }[st];
+  const statusBtnStyle = { waiting:'background:#f5c870;color:#3a2800', inservice:'background:#2a7a4f;color:#fff', complete:'background:#1a5c7a;color:#fff', awaiting:'background:#6b4fb0;color:#fff', paid:'background:#5b6166;color:#fff', done:'background:#5b6166;color:#fff' }[est] || 'background:#f5c870;color:#3a2800';
+  const statusLabel = { waiting:'Waiting', inservice:'In Service', complete:'Done', awaiting:'Awaiting price', paid:'Paid', done:'Paid' }[est] || 'Waiting';
+  const nextStatus = { waiting:'inservice', inservice:'complete', complete:'paid', awaiting:'paid', paid:'waiting', done:'waiting' }[est];
+  const prevStatus = { inservice:'waiting', complete:'inservice', awaiting:'inservice' }[est];
   return `
     <div class="bg-surface-container-low rounded-xl p-3.5 border border-surface-container-high mb-2.5" data-service-id="${sid}">
       <div class="flex items-center justify-between mb-2.5">

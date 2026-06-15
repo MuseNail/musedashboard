@@ -14,6 +14,17 @@ export function getAssignmentStatus(entry, assignment) {
 // Finalized = money collected / archived. Accepts legacy 'done'.
 export const isPaidStatus = s => s === 'paid' || s === 'done';
 
+// "Awaiting price" is a DISPLAY sub-state of complete: the service is finished but the front
+// desk marked it "Done — tech will price," so it has no price yet (a.awaitingPrice). The
+// assignment's real status stays 'complete' (so it counts as done and leaves the in-service
+// flow); this only changes the pill/visual + gates checkout. Route every per-service
+// serviceLineStyle() call through this so all surfaces show the violet "Awaiting price" pill.
+export function isAwaitingPrice(a) { return !!(a && a.awaitingPrice && (a.status === 'complete')); }
+export function effectiveServiceStatus(entry, a) {
+  const s = getAssignmentStatus(entry, a);
+  return (s === 'complete' && a && a.awaitingPrice) ? 'awaiting' : s;
+}
+
 export function deriveEntryStatus(entry) {
   if (!entry.assignments || entry.assignments.length === 0) return entry.status || 'waiting';
   const ss = entry.assignments.map(a => getAssignmentStatus(entry, a));
@@ -65,6 +76,9 @@ export function applyAssignmentStatus(a, newStatus) {
     a.serviceMs = (a.serviceMs || 0) + (Date.now() - a.svcStartedAt);
     a.svcStartedAt = 0;
   }
+  // "Awaiting price" only means anything while a service is complete-but-unpriced — any move
+  // off complete (reopen, revert) resolves it so a stale flag can't linger.
+  if (newStatus !== 'complete') a.awaitingPrice = false;
   a.status = newStatus;
   a.updatedAt = Date.now();   // per-assignment version → drives the per-assignment merge in queue.upsert (3c)
 }
@@ -85,6 +99,7 @@ export function serviceLineStyle(status) {
   if (isPaidStatus(status))    return { key: 'paid',      dot: 'background:#8a9298', bar: '#8a9298', tint: '',                    pill: { bg: '#5b6166', fg: '#ffffff', label: 'Paid'       }, rowOpacity: 0.6 };
   if (status === 'inservice')  return { key: 'inservice', dot: 'background:#2a7a4f', bar: '#2a7a4f', tint: 'rgba(42,122,79,.08)', pill: { bg: '#2a7a4f', fg: '#ffffff', label: 'In Service' }, rowOpacity: 1 };
   if (status === 'complete')   return { key: 'complete',  dot: 'background:#1a5c7a', bar: '#1a5c7a', tint: '',                    pill: { bg: '#1a5c7a', fg: '#ffffff', label: 'Done'       }, rowOpacity: 1 };
+  if (status === 'awaiting')   return { key: 'awaiting',  dot: 'background:#6b4fb0', bar: '#6b4fb0', tint: 'rgba(107,79,176,.08)', pill: { bg: '#6b4fb0', fg: '#ffffff', label: 'Awaiting price' }, rowOpacity: 1 };
   return                              { key: 'waiting',   dot: 'background:#d4860a', bar: '#d4860a', tint: '',                    pill: { bg: '#f5c870', fg: '#3a2800', label: 'Waiting'    }, rowOpacity: 0.9 };
 }
 

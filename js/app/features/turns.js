@@ -4,7 +4,7 @@ import { dispatch } from '../sync.js';
 import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap, statusTimeHtml, escHtml, dateBtnLabel } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { canDo } from '../session.js';
-import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle } from './status.js';
+import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle, effectiveServiceStatus } from './status.js';
 import { renderQueue, showGroupAssignModal } from './queue.js';
 import { serviceTimeInfo } from './servicetime.js';
 
@@ -465,7 +465,7 @@ export function renderTurnsQueue() {
     if (assignments.length > 0) {
       serviceContent = assignments.map(a => {
         const tech = staffById(a.techId), s = svc(a.serviceId);
-        const ls = serviceLineStyle(getAssignmentStatus(e, a));
+        const ls = serviceLineStyle(effectiveServiceStatus(e, a));
         const hot = ls.key === 'inservice';
         let techHtml = '', accept = '';
         if (tech) techHtml = `<span class="text-on-surface-variant">→ ${escHtml(tech.name)}</span>`;
