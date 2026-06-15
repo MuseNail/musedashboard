@@ -121,7 +121,12 @@ export function filterCustomers(query, field) {
       return phone.includes(q) && q.length >= 3;
     }
     if (field === 'first') {
-      return c.given_name.toLowerCase().startsWith(query.toLowerCase()) || c.display.toLowerCase().startsWith(query.toLowerCase());
+      // Match on first name, last name, or the full "First Last" — phone stays the
+      // identity key; this only widens what the name box autocompletes on.
+      const ql = query.toLowerCase().trim();
+      return c.given_name.toLowerCase().startsWith(ql)
+        || (c.family_name || '').toLowerCase().startsWith(ql)
+        || c.display.toLowerCase().includes(ql);
     }
     return false;
   }).slice(0, 6);
@@ -679,7 +684,7 @@ export function upsertPartyCustomers(entries) {
 // Ensure this entry's customer exists in the app's DO directory (found by phone; created if new).
 // The DO is the source of truth. Avoids flip-flopping the name on a shared phone (upsertPartyCustomers
 // already dedups by phone). When the linked Square id becomes known, attaches it. Returns the DO id.
-export function ensureCustomerInStore(entry, squareLink) {
+export function ensureCustomerInStore(entry, squareLink, opts = {}) {
   if (!entry || !entry.name || entry.name.trim() === '-') return null;
   const pk = notePhoneKey(entry.phone);
   if (!pk) return null;   // no phone → can't key reliably (Square also skips these)
@@ -687,27 +692,58 @@ export function ensureCustomerInStore(entry, squareLink) {
   const firstName = parts[0] || '', lastName = parts.slice(1).join(' ') || '';
   const existing = (getState().customers || []).find(c => notePhoneKey(c.phone) === pk);
   if (existing) {
-    if (squareLink && existing.squareId !== squareLink) {   // only write when we actually learned something new (no name churn)
-      dispatch('customer.upsert', { customer: { ...existing, squareId: squareLink } });
+    // No name churn by default (shared phones). opts.updateName = an explicit, confirmed
+    // correction → write the new name (and email) onto the stored record.
+    const patch = {};
+    if (squareLink && existing.squareId !== squareLink) patch.squareId = squareLink;
+    if (opts.updateName) {
+      if (firstName && firstName !== existing.firstName) patch.firstName = firstName;
+      if (lastName !== (existing.lastName || '')) patch.lastName = lastName;
+      const email = (entry.email || '').trim();
+      if (email && email !== (existing.email || '')) patch.email = email;
     }
+    if (Object.keys(patch).length) dispatch('customer.upsert', { customer: { ...existing, ...patch } });
     return existing.id;
   }
   const id = 'cust-' + pk;
-  dispatch('customer.upsert', { customer: { id, firstName, lastName, phone: entry.phone, email: '', squareId: squareLink || null, createdAt: Date.now() } });
+  dispatch('customer.upsert', { customer: { id, firstName, lastName, phone: entry.phone, email: (entry.email || '').trim(), squareId: squareLink || null, createdAt: Date.now() } });
   return id;
+}
+
+// For the check-in "Update saved info?" prompt: when this entry's phone already
+// matches a saved customer whose name/email DIFFERS, return the before/after so the
+// caller can confirm before changing the directory. Returns null when there's no
+// saved match (a new customer) or nothing changed (no prompt needed).
+export function customerNeedsUpdate(entry) {
+  if (!entry || !entry.name || entry.name.trim() === '-') return null;
+  const pk = notePhoneKey(entry.phone);
+  if (!pk) return null;
+  const existing = (getState().customers || []).find(c => notePhoneKey(c.phone) === pk);
+  if (!existing) return null;
+  const parts = entry.name.trim().split(/\s+/);
+  const firstName = parts[0] || '', lastName = parts.slice(1).join(' ') || '';
+  const email = (entry.email || '').trim();
+  const nameDiff = (firstName && firstName !== existing.firstName) || lastName !== (existing.lastName || '');
+  const emailDiff = email && email !== (existing.email || '');
+  if (!nameDiff && !emailDiff) return null;
+  return {
+    existing,
+    oldName: [existing.firstName, existing.lastName].filter(Boolean).join(' ') || '—',
+    newName: [firstName, lastName].filter(Boolean).join(' '),
+  };
 }
 
 // On check-in/pay: capture the customer in the app directory (always), and — until the Helcim
 // cutover — mirror to Square so a card charge can be linked. Returns the SQUARE customer id (for
 // attaching the sale in Square), or null. The DO directory is updated regardless of Square.
-export async function squareUpsertCustomer(entry) {
+export async function squareUpsertCustomer(entry, opts = {}) {
   if (!entry.name || entry.name.trim() === '-') return null;
   const parts = entry.name.trim().split(/\s+/);
   const firstName = parts[0] || '', lastName = parts.slice(1).join(' ') || '';
   const rawPhone = (entry.phone || '').replace(/\D/g, '');
   if (!rawPhone) return null;
 
-  ensureCustomerInStore(entry);                 // app directory first — independent of Square
+  ensureCustomerInStore(entry, undefined, opts); // app directory first — independent of Square
   if (!cfg().square_config) return null;        // Square dual-write only when configured
 
   let squareId = null;
@@ -733,7 +769,7 @@ export async function squareUpsertCustomer(entry) {
       if (res.ok) squareId = (await res.json())?.customer?.id || null;
       else console.warn('[Square] Customer create failed:', res.status);
     }
-    if (squareId) ensureCustomerInStore(entry, squareId);   // attach the Square link to the DO customer
+    if (squareId) ensureCustomerInStore(entry, squareId, opts);   // attach the Square link to the DO customer
   } catch (e) { console.warn('[Square] Customer upsert failed:', e); }
   return squareId;
 }

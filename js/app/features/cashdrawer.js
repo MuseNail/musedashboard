@@ -203,6 +203,8 @@ function render() {
     const hist = (cfg().cash_drawer_history || []).slice().reverse();
     const rows = hist.map(s => {
       const os = s.overShort || 0;
+      const moves = s.movements || [];
+      const movesHtml = moves.length ? `<div class="mt-2 pt-1.5 border-t border-surface-container-high space-y-0.5">${moves.map(m => `<div class="flex items-center justify-between text-[11px] font-body"><span class="text-on-surface-variant">${m.type === 'out' ? 'Cash out' : 'Cash in'}${m.reason ? ' · ' + esc(m.reason) : ''} <span class="text-outline">${fmtTime(m.at)}${m.by?.name ? ' · ' + esc(m.by.name) : ''}</span></span><span style="color:${m.type === 'out' ? '#fa746f' : '#2a7a4f'};font-weight:700">${m.type === 'out' ? '−' : '+'}${money(m.amount)}</span></div>`).join('')}</div>` : '';
       return `<div class="rounded-xl border border-surface-container-high px-4 py-3 mb-2">
         <div class="flex items-center justify-between mb-1">
           <span class="font-headline font-semibold text-on-surface text-sm">${fmtDate(s.openedAt)} · ${fmtTime(s.openedAt)} – ${fmtTime(s.closedAt)}</span>
@@ -217,6 +219,7 @@ function render() {
           <span>Expected: <span class="text-on-surface">${money(s.expected)}</span></span>
           <span>Over/Short: <span style="color:${osColor(os)};font-weight:700">${osLabel(os)}</span></span>
         </div>
+        ${movesHtml}
         <div class="text-[11px] font-body text-outline mt-1">Closed by ${esc(s.closedBy?.name) || '—'}</div>
       </div>`;
     }).join('') || '<p class="text-sm font-body text-on-surface-variant text-center py-6 opacity-70">No closed drawers yet.</p>';

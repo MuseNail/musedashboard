@@ -11,7 +11,7 @@ import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
-import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote } from './square-customers.js';
+import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate } from './square-customers.js';
 
 const cfg   = () => getState().config;
 const q     = () => getState().queue;
@@ -640,10 +640,33 @@ export function saveEditCheckin(force) {
   if (entry.assignments) entry.assignments = entry.assignments.filter(a => svcs.includes(a.serviceId));
   applyEntryStatus(entry);
   upsert(entry);
-  if (!entry.skipSquare) squareUpsertCustomer(entry);   // propagate a name/phone fix to Square + cache
   closeEditCheckin();
   renderQueue(); window.renderTurns?.();
   showToast('Check-in updated ✓');
+  // Create/mirror the customer; if the entered name differs from a saved record on
+  // this phone, ask before changing the directory (shared-phone safe). Runs after the
+  // edit modal closes so the prompt isn't buried.
+  if (!entry.skipSquare) syncCustomersFromEntries([entry]);
+}
+
+// Sync customer edits from check-in back to the directory + Square. New or unchanged
+// customers flow through silently; an entry whose name/email DIFFERS from the saved
+// record on its phone is only written after an explicit "Update saved info?" confirm,
+// so a shared-phone record is never overwritten by accident. One combined prompt when
+// several differ (no modal stacking).
+function syncCustomersFromEntries(entries) {
+  const diffs = [];
+  entries.forEach(e => {
+    const d = customerNeedsUpdate(e);
+    if (d) diffs.push({ e, d });
+    else squareUpsertCustomer(e);   // new customer or no change → silent create/mirror
+  });
+  if (!diffs.length) return;
+  const apply = () => diffs.forEach(({ e }) => squareUpsertCustomer(e, { updateName: true }));
+  const body = diffs.length === 1
+    ? `This number is saved as “${diffs[0].d.oldName}”. Update the saved customer to “${diffs[0].d.newName}”? This changes the directory record.`
+    : `Update ${diffs.length} saved customers? ${diffs.map(({ d }) => `“${d.oldName}” → “${d.newName}”`).join('; ')}. This changes the directory records.`;
+  showWarnModal('Update saved info?', body, apply, diffs.length === 1 ? 'Update saved info' : 'Update all');
 }
 
 // ── Group Assign / Price modal ────────────────────
@@ -1489,10 +1512,10 @@ export function saveGroupAssignments(force) {
   }
   const entries = collectGroupAssignments();
   entries.forEach(e => { applyEntryStatus(e); upsert(e); });
-  // Sync customers whose name/phone were edited here back to Square. squareUpsertCustomer
-  // requires a first name + phone (no-ops without a phone), updates an existing record by
-  // phone, else creates — i.e. exactly: first+phone → sync; no phone → never sync.
-  entries.forEach(e => { if (_custEditedIds.has(String(e.id))) squareUpsertCustomer(e); });
+  // Sync customers whose name/phone were edited here. New/unchanged ones sync silently;
+  // a name/email that differs from a saved record asks "Update saved info?" first (one
+  // combined prompt) so a shared-phone record is never overwritten by accident.
+  syncCustomersFromEntries(entries.filter(e => _custEditedIds.has(String(e.id))));
   closeGroupAssignModal();
   renderQueue(); updateStats(); window.renderTurns?.();
   showToast('Assignments saved');

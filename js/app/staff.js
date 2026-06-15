@@ -107,39 +107,54 @@ function render() {
 // ── Front-desk view (read-only: this week's schedule + this period's clocked hours) ──
 function _fdWeekStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; }
 function _fdHM(ms) { try { return new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch { return ''; } }
-// Current pay period (mirrors reports.js payPeriodDates: weekly / biweekly / bimonthly).
-function _fdPayPeriod() {
+// Pay period at an offset from the current one (0 = current, −1 = previous, +1 = next).
+// Mirrors reports.js payPeriodDates: weekly / biweekly / bimonthly, so the staff app and
+// the manager's Payroll always agree.
+function _fdPayPeriodAt(offset = 0) {
   const pp = cfg().pay_period || {}, type = pp.type || 'weekly';
   const now = new Date(); now.setHours(0, 0, 0, 0);
   if (type === 'bimonthly') {
-    const y = now.getFullYear(), m = now.getMonth(), d = now.getDate();
-    return d <= 15 ? { from: new Date(y, m, 1), to: new Date(y, m, 15, 23, 59, 59, 999) } : { from: new Date(y, m, 16), to: new Date(y, m + 1, 0, 23, 59, 59, 999) };
+    // half-month periods (1–15, 16–end); step by `offset` halves
+    const idx = (now.getDate() <= 15 ? 0 : 1) + offset;
+    let m = now.getMonth() + Math.floor(idx / 2);
+    const y = now.getFullYear() + Math.floor(m / 12);
+    m = ((m % 12) + 12) % 12;
+    const h = ((idx % 2) + 2) % 2;
+    return h === 0
+      ? { from: new Date(y, m, 1), to: new Date(y, m, 15, 23, 59, 59, 999) }
+      : { from: new Date(y, m, 16), to: new Date(y, m + 1, 0, 23, 59, 59, 999) };
   }
-  // weekly / biweekly — mirror reports.js payPeriodDates EXACTLY so the staff app and the manager's
-  // Payroll always agree. UTC-midnight day count → a DST transition between the anchor and today
-  // can't shift the boundary by a day (the old (now-anchor)/86400000 floor could).
+  // weekly / biweekly — UTC-midnight day count so a DST transition can't shift the boundary.
   const len = type === 'biweekly' ? 14 : 7;
   const anchor = pp.startDate ? new Date(pp.startDate + 'T00:00:00') : new Date(2024, 0, 7);
   const utcMid = x => Date.UTC(x.getFullYear(), x.getMonth(), x.getDate());
   const daysSince = Math.round((utcMid(now) - utcMid(anchor)) / 86400000);
   const mod = ((daysSince % len) + len) % len;
-  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mod);
+  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate() - mod + len * offset);
   const to = new Date(from.getFullYear(), from.getMonth(), from.getDate() + (len - 1), 23, 59, 59, 999);
   return { from, to };
 }
+
+// FD view navigation state: which schedule week and pay period are shown (0 = current).
+let _fdUser = null, _fdSchedOffset = 0, _fdPeriodOffset = 0;
+window.fdNavSched = (dir) => { _fdSchedOffset += dir; if (_fdUser) renderFdView(_fdUser); };
+window.fdNavPeriod = (dir) => { _fdPeriodOffset += dir; if (_fdUser) renderFdView(_fdUser); };
 function renderFdView(fdUser) {
+  _fdUser = fdUser;
   document.getElementById('staff-login').classList.add('hidden');
   document.getElementById('staff-main').classList.remove('hidden');
   document.getElementById('staff-tech-name').textContent = fdUser.name;
   const dot = document.getElementById('staff-conn'); if (dot) dot.style.background = store.getState().connected ? '#2a7a4f' : '#e8730a';
-  const ws = _fdWeekStart(new Date()), dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], today = todayStr();
+  const schedBase = new Date(); schedBase.setDate(schedBase.getDate() + _fdSchedOffset * 7);
+  const ws = _fdWeekStart(schedBase), dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], today = todayStr();
+  const we = new Date(ws); we.setDate(we.getDate() + 6);
   const sched = dayNames.map((dn, i) => {
     const d = new Date(ws); d.setDate(d.getDate() + i);
     const key = localDateStr(d), sh = getFdShift(key, fdUser.id), isToday = key === today;
     const val = sh === 'off' ? '<span style="color:#a05000">Off</span>' : (sh && sh.s) ? esc(fdShiftLabel(sh)) : '<span class="text-on-surface-variant">—</span>';
     return `<div class="flex items-center justify-between px-4 py-3 ${isToday ? 'bg-primary/10' : ''} border-b border-surface-container-high last:border-0"><span class="font-body text-lg ${isToday ? 'font-bold text-primary' : 'text-on-surface'}">${dn} ${d.getDate()}</span><span class="font-headline font-bold text-lg">${val}</span></div>`;
   }).join('');
-  const per = _fdPayPeriod();
+  const per = _fdPayPeriodAt(_fdPeriodOffset);
   const { hours, openShift, flagged } = fdPaidHours(fdUser.id, +per.from, +per.to);
   const punches = fdPunches(fdUser.id).filter(p => p.in >= +per.from && p.in <= +per.to).sort((a, b) => b.in - a.in);
   const punchHtml = punches.length ? punches.map(p => {
@@ -148,16 +163,29 @@ function renderFdView(fdUser) {
     return `<div class="flex items-center justify-between px-4 py-2.5 border-b border-surface-container-high last:border-0${suspect ? ' bg-error/5' : ''}"><span class="font-body text-on-surface">${new Date(p.in).toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' })}</span><span class="font-body text-on-surface-variant text-sm">${_fdHM(p.in)} – ${p.out ? _fdHM(p.out) : '…'}</span><span class="font-headline font-bold">${dur}</span></div>`;
   }).join('') : '<div class="px-4 py-5 text-center font-body text-on-surface-variant">No clock punches this period.</div>';
   const fmtD = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const schedLabel = _fdSchedOffset === 0 ? 'This week' : `${fmtD(ws)} – ${fmtD(we)}`;
+  const periodLabel = _fdPeriodOffset === 0 ? 'Current pay period'
+    : _fdPeriodOffset < 0 ? `${-_fdPeriodOffset} period${_fdPeriodOffset < -1 ? 's' : ''} ago`
+    : `${_fdPeriodOffset} period${_fdPeriodOffset > 1 ? 's' : ''} ahead`;
+  const navBtn = (fn, dir, glyph) => `<button onclick="${fn}(${dir})" class="w-9 h-9 rounded-lg border border-surface-container-high text-on-surface flex items-center justify-center active:scale-95">${glyph}</button>`;
   document.getElementById('staff-list').innerHTML = `
+    <div class="flex items-center justify-between mb-2">
+      ${navBtn('fdNavPeriod', -1, '◀')}
+      <span class="text-xs font-headline font-bold uppercase tracking-widest text-on-surface-variant">${periodLabel}</span>
+      ${navBtn('fdNavPeriod', 1, '▶')}
+    </div>
     <div class="rounded-2xl bg-primary text-on-primary px-5 py-4 mb-4 shadow-sm">
-      <div class="text-xs font-body uppercase tracking-widest opacity-80">Hours this pay period · ${fmtD(per.from)}–${fmtD(per.to)}</div>
+      <div class="text-xs font-body uppercase tracking-widest opacity-80">Hours · ${fmtD(per.from)}–${fmtD(per.to)}</div>
       <div class="font-headline font-extrabold leading-none mt-1" style="font-size:40px">${hours.toFixed(2)}<span class="text-2xl"> h</span></div>
       ${fdUser.hourlyRate ? `<div class="text-sm font-body opacity-90 mt-0.5">≈ $${(hours * fdUser.hourlyRate).toFixed(2)} at $${fdUser.hourlyRate.toFixed(2)}/hr</div>` : ''}
       ${openShift ? '<div class="text-sm font-body opacity-90 mt-0.5">⏱ currently clocked in</div>' : ''}
       ${flagged ? `<div class="text-sm font-body mt-1 px-2 py-1 rounded-lg" style="background:rgba(0,0,0,.18)">⚠ ${flagged} punch${flagged > 1 ? 'es' : ''} need a manager to fix (not counted)</div>` : ''}
     </div>
     <div class="mb-4">
-      <div class="text-sm font-headline font-bold uppercase tracking-widest text-on-surface-variant mb-2 px-1">My schedule · this week</div>
+      <div class="flex items-center justify-between mb-2 px-1">
+        <div class="text-sm font-headline font-bold uppercase tracking-widest text-on-surface-variant">My schedule · ${schedLabel}</div>
+        <div class="flex gap-1.5">${navBtn('fdNavSched', -1, '◀')}${navBtn('fdNavSched', 1, '▶')}</div>
+      </div>
       <div class="bg-surface-container-lowest rounded-2xl border border-surface-container-high overflow-hidden">${sched}</div>
     </div>
     <div>
