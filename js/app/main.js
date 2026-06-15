@@ -431,6 +431,7 @@ function onStateChange(state, changed) {
   }
   const desk = document.getElementById('screen-desk');
   if (!desk || !desk.classList.contains('active')) return;
+  queue.refreshOpenAssignFields?.();   // reflect a tech's synced price into an open Assign & Price modal
   const active = document.querySelector('.dash-panel.active'); if (!active) return;
   switch (active.id) {
     case 'panel-turns':        turns.renderTurns(); break;

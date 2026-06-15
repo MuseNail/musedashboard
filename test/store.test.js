@@ -49,6 +49,35 @@ test('queue.upsert guard: an older entry cannot overwrite a newer one', () => {
   assert.equal(getState().queue.find(x => x.id === 'q1').totalCost, 82);
 });
 
+// §14 per-assignment field-merge: a forgotten front-desk modal re-saves the WHOLE entry with a
+// service's cost reverted to its stale form value. The per-assignment merge must keep a stored
+// assignment whose own updatedAt is numeric when the incoming one is older OR unstamped — so a
+// tech's concurrent price change (queue.assignmentPatch, which stamps assignment.updatedAt) is not
+// silently clobbered. A genuine FD re-price carries a strictly-newer stamp and still wins.
+test('queue.upsert per-assignment merge: a stale/unstamped whole-entry save cannot revert a tech price', () => {
+  const tech = { serviceId: 's1', techId: 't1', status: 'inservice', cost: 55, updatedAt: 200 };
+  hydrate({ state: { queue: [{ id: 'q1', updatedAt: 100, assignments: [tech] }] }, seq: 1 });
+  // FD whole-entry save: fresh ENTRY updatedAt (passes the entry guard) but the assignment carries
+  // the OLD cost and NO per-assignment stamp → tech's $55 must survive.
+  applyChange('queue.upsert', { entry: { id: 'q1', updatedAt: 300, assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 40 }] } });
+  assert.equal(getState().queue.find(x => x.id === 'q1').assignments[0].cost, 55);
+  // FD save carrying an OLDER per-assignment stamp → still keep the tech's $55.
+  applyChange('queue.upsert', { entry: { id: 'q1', updatedAt: 400, assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 41, updatedAt: 150 }] } });
+  assert.equal(getState().queue.find(x => x.id === 'q1').assignments[0].cost, 55);
+  // Genuine FD re-price → strictly-newer per-assignment stamp → FD wins (last real edit wins).
+  applyChange('queue.upsert', { entry: { id: 'q1', updatedAt: 500, assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 60, updatedAt: 250 }] } });
+  assert.equal(getState().queue.find(x => x.id === 'q1').assignments[0].cost, 60);
+});
+
+test('queue.upsert per-assignment merge: both-unstamped applies (legacy); numeric tie applies incoming', () => {
+  hydrate({ state: { queue: [{ id: 'q2', updatedAt: 100, assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 30 }] }] }, seq: 1 });
+  applyChange('queue.upsert', { entry: { id: 'q2', updatedAt: 200, assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 35 }] } });
+  assert.equal(getState().queue.find(x => x.id === 'q2').assignments[0].cost, 35);   // both unstamped → incoming
+  hydrate({ state: { queue: [{ id: 'q3', updatedAt: 100, assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 30, updatedAt: 200 }] }] }, seq: 1 });
+  applyChange('queue.upsert', { entry: { id: 'q3', updatedAt: 300, assignments: [{ serviceId: 's1', techId: 't1', status: 'inservice', cost: 36, updatedAt: 200 }] } });
+  assert.equal(getState().queue.find(x => x.id === 'q3').assignments[0].cost, 36);   // numeric tie → incoming
+});
+
 test('legacy data without timestamps still applies (guard never blocks untimestamped writes)', () => {
   hydrate({ state: { records: [{ id: 'old', totalCost: 10 }] }, seq: 1 });
   applyChange('record.save', { record: { id: 'old', totalCost: 12 } });   // no updatedAt either side

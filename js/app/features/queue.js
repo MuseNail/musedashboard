@@ -675,6 +675,79 @@ let activeGroupTab = 0;
 let _assignOpenedAt = {};           // entryId → updatedAt at open (stale-write guard)
 const _custEditedIds = new Set();   // entries whose name/phone were edited here → sync to Square on Save
 
+// Per-assignment open-time field snapshot: entryId → serviceId → {techId,station,cost(cents),comped,compReason}.
+// Captured from the STORE on every modal render so a save writes ONLY the fields the front desk
+// actually changed — leaving an untouched field alone lets a tech's concurrent per-assignment patch
+// (staff app) survive the whole-entry queue.upsert (see store.js mergeNewerAssignments). Reset on close.
+let _assignFieldSnapshot = {};
+const _costCents = v => Math.round((parseFloat(v) || 0) * 100);
+function _snapshotAssignFields() {
+  _assignFieldSnapshot = {};
+  groupAssignEntries.forEach(id => {
+    const e = q().find(x => String(x.id) === id); if (!e) return;
+    const m = {};
+    (e.assignments || []).forEach(a => { m[a.serviceId] = { techId: a.techId || '', station: a.station || '', cost: _costCents(a.cost), comped: !!a.comped, compReason: a.compReason || '' }; });
+    _assignFieldSnapshot[String(id)] = m;
+  });
+}
+// Write a DOM row's per-assignment fields onto `a`, but ONLY those the front desk actually changed
+// vs the open-time snapshot — so an untouched field keeps a tech's concurrent change. Stamps
+// a.updatedAt only when the FD changed something (so the §14 merge in store.js/worker.js orders it
+// correctly: a genuine FD edit is strictly newer and wins; an untouched field carries no fresh
+// stamp and the tech's assignment is preserved). A brand-new assignment (no snapshot) is written
+// in full, as the original save did.
+function _applyRowToAssignment(entryId, a, row, isNew) {
+  const snap = isNew ? null : (_assignFieldSnapshot[String(entryId)] || {})[a.serviceId];
+  const prevTech = a.techId;
+  const domTech = row.querySelector('.assign-tech')?.value || '';
+  const domStation = row.querySelector('.assign-station')?.value || '';
+  const domComped = !!row.querySelector('.assign-comp')?.checked;
+  const domCompReason = domComped ? (row.querySelector('.assign-comp-reason')?.value || 'Comp') : '';
+  const domCost = domComped ? 0 : (parseFloat(row.querySelector('.assign-cost')?.value) || 0);
+  if (!snap) {   // new (or un-snapshotted) row → write everything, as the original save did
+    a.techId = domTech; a.station = domStation; a.comped = domComped; a.compReason = domCompReason; a.cost = domCost;
+    if (a.techId && !prevTech) a.assignedAt = Date.now();
+    a.updatedAt = Date.now();
+    return;
+  }
+  let changed = false;
+  if (domTech !== snap.techId) { a.techId = domTech; changed = true; }
+  if (domStation !== snap.station) { a.station = domStation; changed = true; }
+  if (domComped !== snap.comped) { a.comped = domComped; changed = true; }
+  if (domCompReason !== snap.compReason) { a.compReason = domCompReason; changed = true; }
+  if (_costCents(domCost) !== snap.cost) { a.cost = domCost; changed = true; }
+  if (a.techId && !prevTech) a.assignedAt = Date.now();
+  if (changed) a.updatedAt = Date.now();
+}
+
+// Guardrail: when a tech's per-assignment change syncs in while the Assign & Price modal is open,
+// reflect a changed cost in the field — so the front desk SEES the tech's price instead of the
+// stale open-time value (and won't overwrite it on save). Only touches a cost field that the FD
+// isn't focused in AND still equals its snapshot (FD hasn't typed there); advances the snapshot so
+// the changed-field-only save doesn't mistake the refreshed value for an FD edit. Called from the
+// store subscription (main.js onStateChange) on every sync.
+export function refreshOpenAssignFields() {
+  const m = document.getElementById('group-assign-modal');
+  if (!m || m.classList.contains('hidden') || !groupAssignEntries.length) return;
+  groupAssignEntries.forEach(id => {
+    const e = q().find(x => String(x.id) === id); if (!e) return;
+    const snapEntry = _assignFieldSnapshot[String(id)] || {};
+    (e.assignments || []).forEach(a => {
+      const snap = snapEntry[a.serviceId]; if (!snap) return;
+      const row = document.querySelector(`#group-assign-content [data-assign-entry="${id}"] [data-service-id="${a.serviceId}"]`)
+               || document.querySelector(`#group-assign-content [data-service-id="${a.serviceId}"]`);
+      const costEl = row && row.querySelector('.assign-cost');
+      if (!costEl || costEl === document.activeElement) return;   // never clobber a field the FD is editing
+      const storeCents = _costCents(a.cost);
+      if (storeCents !== snap.cost && _costCents(costEl.value) === snap.cost && !a.comped) {
+        costEl.value = (a.cost != null && a.cost !== 0) ? a.cost : '';
+        snap.cost = storeCents;       // advance the baseline so a later save won't read this as an FD change
+        updateGroupTotal();
+      }
+    });
+  });
+}
+
 // Stale-write guard: which entries in `capturedMap` (id → updatedAt captured when a modal
 // opened) has ANOTHER device changed since? Saving those now would silently overwrite the
 // other device's change — so we warn first. This device's own intra-modal writes are
@@ -712,6 +785,28 @@ function _startLockHb(key) {
   }, LOCK_HB);
 }
 
+// Idle nudge: if a ticket's Assign & Price modal is left open with NO interaction for ASSIGN_IDLE_MS
+// (timer resets on any tap/type/focus, so active pricing never triggers it), free the lock so other
+// devices can use the ticket and offer a "Keep editing" to resume. A forgotten-open modal no longer
+// holds the ticket hostage; the changed-field-only save keeps a resume safe.
+const ASSIGN_IDLE_MS = 180000;   // 3 minutes of no interaction
+let _assignIdleTimer = null, _assignIdleBound = false;
+function _stopAssignIdle() { if (_assignIdleTimer) { clearTimeout(_assignIdleTimer); _assignIdleTimer = null; } }
+function _resetAssignIdle() { if (!_lockKey) return; _stopAssignIdle(); _assignIdleTimer = setTimeout(_assignIdleFired, ASSIGN_IDLE_MS); }
+function _assignIdleFired() {
+  const key = _lockKey; if (!key) return;
+  _releaseLock(key); _stopLockHb();   // free the ticket immediately — don't wait for a response
+  window.showWarnModal?.('Still editing this ticket?',
+    'This ticket was left open, so it’s been unlocked for other devices. Tap “Keep editing” to keep working here.',
+    () => { if (_lockKey === key) { _acquireLock(key); _startLockHb(key); _resetAssignIdle(); } }, 'Keep editing');
+}
+function _bindAssignIdle() {
+  if (_assignIdleBound) return;
+  const m = document.getElementById('group-assign-modal'); if (!m) return;
+  ['pointerdown', 'keydown', 'input', 'focusin'].forEach(ev => m.addEventListener(ev, _resetAssignIdle, true));
+  _assignIdleBound = true;
+}
+
 export function showGroupAssignModal(entryId) {
   const entry = q().find(e => String(e.id) === String(entryId));
   if (!entry) return;
@@ -720,6 +815,7 @@ export function showGroupAssignModal(entryId) {
   const held = _lockHeldByOther(key);
   if (held) { window.showWarnModal?.('Ticket open on another device', `This ticket is being edited on ${held.name ? held.name + "'s device" : 'another device'}. Close it there first, then open it here.`, () => {}, 'OK'); return; }
   _lockKey = key; _acquireLock(key); _startLockHb(key);
+  _bindAssignIdle(); _resetAssignIdle();
   groupAssignEntries = entry.groupId ? q().filter(e => e.groupId === entry.groupId).map(e => String(e.id)) : [String(entry.id)];
   const clicked = groupAssignEntries.indexOf(String(entryId));
   activeGroupTab = clicked >= 0 ? clicked : 0;
@@ -843,15 +939,9 @@ export function saveCurrentGroupTabInputs() {
   rows.forEach(row => {
     const sid = row.dataset.serviceId;
     let a = entry.assignments.find(x => x.serviceId === sid);
+    const isNew = !a;
     if (!a) { a = { serviceId: sid, status: 'waiting' }; entry.assignments.push(a); }
-    const prevTech = a.techId;
-    a.techId  = row.querySelector('.assign-tech')?.value || '';
-    a.station = row.querySelector('.assign-station')?.value || '';
-    const comped = !!row.querySelector('.assign-comp')?.checked;   // free ON PURPOSE (Comp / Fix), distinct from unpriced
-    a.comped = comped;
-    a.compReason = comped ? (row.querySelector('.assign-comp-reason')?.value || 'Comp') : '';
-    a.cost    = comped ? 0 : (parseFloat(row.querySelector('.assign-cost')?.value) || 0);
-    if (a.techId && !prevTech) a.assignedAt = Date.now();
+    _applyRowToAssignment(entry.id, a, row, isNew);   // write only fields the FD changed; stamp updatedAt
   });
   entry.services = entry.assignments.map(a => a.serviceId);
 
@@ -919,6 +1009,7 @@ export function saveCurrentGroupTabInputs() {
 const ASSIGN_ONELIST = true;
 
 export function renderGroupAssignContent() {
+  _snapshotAssignFields();   // baseline for the changed-field-only save (re-taken on every render)
   if (ASSIGN_ONELIST) return _renderAssignOneList();
   const entry = q().find(e => String(e.id) === groupAssignEntries[activeGroupTab]);
   if (!entry) return;
@@ -1345,15 +1436,9 @@ function _saveAssignOneList() {
     sec.querySelectorAll('[data-service-id]').forEach(row => {
       const sid = row.dataset.serviceId;
       let a = entry.assignments.find(x => x.serviceId === sid);
+      const isNew = !a;
       if (!a) { a = { serviceId: sid, status: 'waiting' }; entry.assignments.push(a); }
-      const prevTech = a.techId;
-      a.techId  = row.querySelector('.assign-tech')?.value || '';
-      a.station = row.querySelector('.assign-station')?.value || '';
-      const comped = !!row.querySelector('.assign-comp')?.checked;
-      a.comped = comped;
-      a.compReason = comped ? (row.querySelector('.assign-comp-reason')?.value || 'Comp') : '';
-      a.cost    = comped ? 0 : (parseFloat(row.querySelector('.assign-cost')?.value) || 0);
-      if (a.techId && !prevTech) a.assignedAt = Date.now();
+      _applyRowToAssignment(entry.id, a, row, isNew);
     });
     entry.services = entry.assignments.map(a => a.serviceId);
   });
@@ -1490,7 +1575,8 @@ export function closeGroupAssignModal() {
     groupAssignEntries.forEach(id => { const e = q().find(x => String(x.id) === id); if (e) upsert(e); });
   }
   const m = document.getElementById('group-assign-modal'); m.classList.add('hidden'); m.style.display = '';
-  groupAssignEntries = []; _custEditedIds.clear();
+  groupAssignEntries = []; _custEditedIds.clear(); _assignFieldSnapshot = {};
+  _stopAssignIdle();
   if (_lockKey) { _releaseLock(_lockKey); _stopLockHb(); _lockKey = null; }   // free the ticket for the next device (prices already saved above)
 }
 

@@ -100,15 +100,19 @@ function deriveEntryStatusFields(entry) {
 }
 // Per-assignment field-merge for a whole-entry write: keep a STORED assignment whose own
 // updatedAt is NEWER than the incoming one, so a front-desk whole-entry save can't revert a
-// tech's concurrent per-assignment change (and vice-versa). Backward-compatible — only merges
-// when both sides carry assignment.updatedAt; otherwise the incoming assignment is used as-is.
+// tech's concurrent per-assignment change (and vice-versa). Keep the stored one when it is
+// stamped AND the incoming one is EITHER older OR unstamped — a forgotten front-desk modal
+// re-saves the whole entry with the assignment's cost reverted to its stale form value, so an
+// unstamped incoming assignment must never beat a stamped stored one. Both-unstamped → incoming
+// (legacy back-compat). Per-assignment updatedAt is owned by applyAssignmentStatus (status.js)
+// and the modal's changed-field save; dispatch('queue.upsert') stamps only the entry level.
 // Returns true if any stored assignment was preserved.
 function mergeNewerAssignments(incoming, stored) {
   if (!stored || !Array.isArray(incoming.assignments) || !Array.isArray(stored.assignments)) return false;
   let merged = false;
   incoming.assignments = incoming.assignments.map(ia => {
     const sa = stored.assignments.find(x => x.serviceId === ia.serviceId && x.techId === ia.techId);
-    if (sa && typeof sa.updatedAt === 'number' && typeof ia.updatedAt === 'number' && sa.updatedAt > ia.updatedAt) { merged = true; return sa; }
+    if (sa && typeof sa.updatedAt === 'number' && (typeof ia.updatedAt !== 'number' || sa.updatedAt > ia.updatedAt)) { merged = true; return sa; }
     return ia;
   });
   return merged;

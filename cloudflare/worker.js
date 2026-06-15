@@ -98,13 +98,17 @@ function _deriveEntryStatus(entry) {
 }
 // Per-assignment field-merge for a whole-entry write: keep a STORED assignment whose own updatedAt
 // is NEWER than the incoming one (so a whole-entry save can't revert a concurrent per-assignment
-// change). Backward-compatible: only when both carry assignment.updatedAt. Returns true if it merged.
+// change). Keep the stored one when it is stamped AND the incoming one is EITHER older OR unstamped:
+// a forgotten front-desk modal re-saves the whole entry with the assignment's cost reverted to its
+// stale form value and (before the field-diff fix) no fresh per-assignment updatedAt, so an
+// unstamped incoming assignment must never beat a stamped stored one. Both-unstamped → incoming
+// (legacy back-compat). Returns true if it merged.
 function _mergeNewerAssignments(incoming, stored) {
   if (!stored || !Array.isArray(incoming.assignments) || !Array.isArray(stored.assignments)) return false;
   let merged = false;
   incoming.assignments = incoming.assignments.map(ia => {
     const sa = stored.assignments.find(x => x.serviceId === ia.serviceId && x.techId === ia.techId);
-    if (sa && typeof sa.updatedAt === 'number' && typeof ia.updatedAt === 'number' && sa.updatedAt > ia.updatedAt) { merged = true; return sa; }
+    if (sa && typeof sa.updatedAt === 'number' && (typeof ia.updatedAt !== 'number' || sa.updatedAt > ia.updatedAt)) { merged = true; return sa; }
     return ia;
   });
   return merged;
