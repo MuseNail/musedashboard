@@ -11,7 +11,8 @@ import './apptoken.js';   // §13 backend auth — installs the bearer-token fet
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
-import { showToast, localDateStr, todayStr } from './utils.js';
+import { showToast, localDateStr, todayStr, showUpdatePopup } from './utils.js';
+import { APP_VERSION } from './config.js';
 import { setActiveUser, getActiveUser, canDo } from './session.js';
 import { isPaidStatus } from './features/status.js';
 import {
@@ -213,11 +214,29 @@ window.rappLogout = (rerender = true) => {
   if (rerender) render();
 };
 
+// ── App-update prompt ─────────────────────────────
+// Poll version.json (no-store → bypasses the SW); when a newer version is published,
+// pop a prominent prompt once per version (boot + each tab-resume) so it isn't missed.
+let _updateVer = null;
+async function checkReportsVersion() {
+  try {
+    const res = await fetch('/musedashboard/version.json?_=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.version && data.version !== APP_VERSION && _updateVer !== data.version) {
+      _updateVer = data.version;
+      showUpdatePopup(data.version);
+    }
+  } catch (e) {}
+}
+
 // ── Boot ──────────────────────────────────────────
 function boot() {
   sync.start();
   store.subscribe(() => render());
   render();   // instant render from cached state; subscribe re-renders on hydrate
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').catch(() => {});
+  checkReportsVersion();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkReportsVersion(); });
 }
 if (typeof document !== 'undefined' && document.getElementById && document.getElementById('rapp-login')) boot();

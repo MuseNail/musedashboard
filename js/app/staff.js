@@ -11,7 +11,7 @@ import './apptoken.js';   // §13 backend auth — installs the bearer-token fet
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
-import { showToast, localDateStr, todayStr } from './utils.js';
+import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp } from './utils.js';
 import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, GCAL_PROXY, APP_VERSION } from './config.js';
 import { getFdShift, fdShiftLabel } from './features/fd-schedule.js';
@@ -756,17 +756,14 @@ async function checkStaffVersion() {
     const res = await fetch('/musedashboard/version.json?_=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
     const data = await res.json();
-    if (data.version && data.version !== APP_VERSION && _updateVer !== data.version) { _updateVer = data.version; render(); }
+    if (data.version && data.version !== APP_VERSION && _updateVer !== data.version) {
+      _updateVer = data.version;
+      render();                       // keep the in-list banner
+      showUpdatePopup(data.version);  // …plus a prominent prompt so it isn't missed
+    }
   } catch (e) {}
 }
-window.staffUpdateNow = async () => {
-  showToast('Updating…');
-  try {
-    if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.unregister())); }
-    if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); }
-  } catch (e) {}
-  location.reload();
-};
+window.staffUpdateNow = () => { showToast('Updating…'); hardReloadApp(); };
 
 // ── Boot ──────────────────────────────────────────
 function boot() {

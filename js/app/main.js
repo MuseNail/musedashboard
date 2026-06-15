@@ -123,6 +123,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.01', items: [
+    { icon: 'system_update', t: 'Update prompts you won’t miss', d: 'When a new version is published, the app now pops up an “Update available” message with an Update button — instead of only a small ↻ on the version number that was easy to overlook. Tap Update to load the newest version; your data is never affected. The same prompt is now in every app (front desk, the tech app, Reports, and Back Office).' },
+  ] },
   { v: 'v4.98', items: [
     { icon: 'menu_book', t: 'Help is in your account menu', d: 'Tap your name (top-right) for an App guide and a 1-page Quick reference — what each screen and button does and the front-desk flow. Open either one and tap “Print / Save as PDF” to print it or save a PDF. “What’s new” lives there too.' },
   ] },
@@ -444,6 +447,7 @@ function onStateChange(state, changed) {
 // The version badge is always a hard-reload button: on an installed iPad app a plain
 // reload can keep serving the cached version, so tapping it unregisters the service
 // worker + clears the cache and reloads to force the newest version. Data is untouched.
+let _autoPromptedVersion = null;   // newest version we've already auto-popped this session
 async function checkAppVersion() {
   const badge = document.getElementById('app-version-badge');
   if (!badge) return;
@@ -462,27 +466,12 @@ async function checkAppVersion() {
       badge.textContent = data.version + ' ↻';
       badge.title = `Update ${data.version} available — tap to reload`;
       badge.classList.add('update-pulse');   // E2: make the update glyph discoverable
-      badge.onclick = promptHardReload;
+      badge.onclick = () => utils.showUpdatePopup(data.version);
+      // The badge alone kept getting missed — pop a prominent prompt once per new version
+      // (on boot and on every tab-resume until they update).
+      if (_autoPromptedVersion !== data.version) { _autoPromptedVersion = data.version; utils.showUpdatePopup(data.version); }
     }
   } catch (e) {}
-}
-function promptHardReload() {
-  const msg = 'This clears the app cache and reloads to get the newest version. It does NOT delete any data — your queue, customers, records, and settings are safe.';
-  if (window.showWarnModal) window.showWarnModal('Reload to latest version?', msg, hardReload);
-  else if (confirm('Reload to the latest version? No data is deleted.')) hardReload();
-}
-async function hardReload() {
-  try {
-    if ('serviceWorker' in navigator) {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.unregister()));
-    }
-    if (window.caches) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-    }
-  } catch (e) {}
-  location.reload();
 }
 
 function registerServiceWorker() {

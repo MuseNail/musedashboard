@@ -679,3 +679,40 @@ export function xlsxBlob(sheets) {
   eocd.setUint32(12, cdSize, true); eocd.setUint32(16, offset, true);
   return new Blob([...parts, ...central, new Uint8Array(eocd.buffer)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
+
+// ── App-update popup (shared by the dashboard, Staff, and Reports apps) ──────────
+// A deliberately prominent modal so a published update is never missed (the small
+// version badge alone was getting overlooked). "Update now" clears the SW + caches
+// and reloads to the freshest files — no app data is touched (state lives in the DO).
+export async function hardReloadApp() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if (window.caches) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch (e) {}
+  location.reload();
+}
+
+export function showUpdatePopup(version) {
+  if (document.getElementById('app-update-popup')) return;   // already showing
+  const overlay = document.createElement('div');
+  overlay.id = 'app-update-popup';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483600;display:flex;align-items:center;justify-content:center;background:rgba(20,22,30,.55);padding:20px';
+  const card = document.createElement('div');
+  card.style.cssText = 'background:#fff;border-radius:18px;max-width:360px;width:100%;padding:26px 24px;box-shadow:0 18px 50px rgba(0,0,0,.32);text-align:center;font-family:system-ui,-apple-system,sans-serif';
+  card.innerHTML =
+    '<div style="font-size:42px;line-height:1;margin-bottom:10px">🔄</div>' +
+    '<div style="font-size:19px;font-weight:800;color:#1a1d27;margin-bottom:6px">Update available</div>' +
+    '<div style="font-size:14px;color:#5b606e;line-height:1.5;margin-bottom:20px">Version ' + version + ' is ready. Tap Update to get the latest version.<br><b>Your data is safe</b> — nothing is deleted.</div>' +
+    '<button id="app-update-now" style="display:block;width:100%;padding:14px;border:0;border-radius:12px;background:#2a7a4f;color:#fff;font-size:16px;font-weight:800;cursor:pointer;margin-bottom:9px">Update now</button>' +
+    '<button id="app-update-later" style="display:block;width:100%;padding:11px;border:0;border-radius:12px;background:transparent;color:#7a7f8c;font-size:14px;font-weight:600;cursor:pointer">Later</button>';
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  card.querySelector('#app-update-now').addEventListener('click', (e) => { e.target.textContent = 'Updating…'; hardReloadApp(); });
+  card.querySelector('#app-update-later').addEventListener('click', () => overlay.remove());
+}
