@@ -796,6 +796,7 @@ function boot() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').then(() => registerPush()).catch(() => {});
   checkStaffVersion();   // on cold start
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkStaffVersion(); });   // re-check each time they reopen the app
+  setInterval(() => { if (!document.hidden) checkStaffVersion(); }, 20 * 60 * 1000);   // and poll so an always-open app self-updates
 }
 // Only boot inside the real page (the login shell exists); skipped when imported
 // by the Node test runner (the global shim's getElementById returns null).

@@ -123,6 +123,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.03', items: [
+    { icon: 'update', t: 'Apps update themselves', d: 'A device left open all day (like the front-desk iPad) now checks for new versions on its own every so often, so the “Update available” prompt shows up without anyone needing to close and reopen the app first.' },
+  ] },
   { v: 'v5.02', items: [
     { icon: 'pending', t: 'Done now, price later', d: 'A tech can be finished with a service but still working on the same customer and not ready to give a price. Tap a service’s status in Assign & Price and choose “Done — tech will price”: it shows as “Awaiting price” (purple) and the tech enters the amount from their app — they get a notification and a reminder on their phone. Payment stays locked until it’s priced, and you can always type the price yourself to fill it in.' },
     { icon: 'lock_clock', t: 'Tech prices never get lost', d: 'If a ticket’s Assign & Price window was left open at the front desk while a tech updated a price on their app, that price could quietly get overwritten. It no longer does — the tech’s amount is kept, and the open window now updates to show it. A ticket left untouched for a few minutes also frees itself so another device can open it.' },
@@ -650,6 +653,10 @@ function boot() {
   armMidnightRollover();
   utils.initAmountFieldCalc();   // desktop: evaluate "40+5" typed into an amount field on blur
   checkAppVersion();
+  // Also poll periodically so an always-open front-desk iPad (which never fires a fresh
+  // launch/visibilitychange) still notices a new deploy and prompts on its own. Skipped while
+  // hidden — visibilitychange already covers the return-to-app case.
+  setInterval(() => { if (!document.hidden) checkAppVersion(); }, 20 * 60 * 1000);
   registerServiceWorker();
 }
 

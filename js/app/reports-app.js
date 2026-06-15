@@ -238,5 +238,6 @@ function boot() {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').catch(() => {});
   checkReportsVersion();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkReportsVersion(); });
+  setInterval(() => { if (!document.hidden) checkReportsVersion(); }, 20 * 60 * 1000);   // poll so an always-open app self-updates
 }
 if (typeof document !== 'undefined' && document.getElementById && document.getElementById('rapp-login')) boot();
