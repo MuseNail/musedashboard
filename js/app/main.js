@@ -123,6 +123,13 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.04', items: [
+    { icon: 'price_change', t: 'Customer Price Menu in the app', d: 'Tap your name (top-right) → “Price Menu” to pull up the full customer price list on the iPad, or tap “Print / Save as PDF” to print a fresh elegant copy. It includes the new Gel Manicure and notes the $2 cash discount.' },
+    { icon: 'schedule', t: 'The queue shows who has waited too long', d: 'Each waiting guest now has a wait timer that turns amber after about 15 minutes and red after 25, so it’s obvious at a glance who needs attention. You can also tap anywhere on a guest’s card to open Assign & Price, and the filter tabs (Waiting, In Service, Done, Paid) show live counts.' },
+    { icon: 'swap_vert', t: 'Turns board — who’s next, at a glance', d: 'The available technician due for the next walk-in is now flagged “Next up.” Turn counts are a little bigger, the boxes line up evenly, and the colors are clearer: green now always means “in service,” with Available, Working now, On break and Off easy to tell apart.' },
+    { icon: 'grid_view', t: 'Clearer floor plan', d: 'On the floor plan, each technician’s photo or initial shows their status as a clean colored outline, and the next tech up for a walk-in gets a “Next” arrow.' },
+    { icon: 'search', t: 'Search your Settings', d: 'Settings now has a search box at the top — type “turn,” “pay period,” “stations,” etc. to jump straight to any setting instead of hunting through the categories. Every setting also has an icon now.' },
+  ] },
   { v: 'v5.03', items: [
     { icon: 'update', t: 'Apps update themselves', d: 'A device left open all day (like the front-desk iPad) now checks for new versions on its own every so often, so the “Update available” prompt shows up without anyone needing to close and reopen the app first.' },
   ] },
