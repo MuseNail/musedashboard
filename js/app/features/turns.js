@@ -338,6 +338,16 @@ export function renderTurnsTechGrid() {
   const _nowMs = Date.now(), _upcoming = turnsUpcomingAppts();
   const nextApptFor = id => _upcoming.filter(a => a.techStaffId === id).sort((a,b) => a.startMs - b.startMs)[0] || null;
 
+  // Who gets the next walk-in: the AVAILABLE tech with the fewest turns; a tie goes to whoever
+  // is higher in the turn order (scan top-down, replace only on strictly fewer turns). Flagged
+  // in place — the row order itself never changes.
+  let nextUpId = null, _nextUpTurns = Infinity;
+  for (const sid of order) {
+    if (getTechStatusColor(sid).label !== 'Available') continue;
+    const tt = getTechTurns(sid).total;
+    if (tt < _nextUpTurns) { _nextUpTurns = tt; nextUpId = sid; }
+  }
+
   const rows = order.map(staffId => {
     const st = staffById(staffId);
     if (!st) return '';
@@ -348,17 +358,27 @@ export function renderTurnsTechGrid() {
     const billed = allAssign.reduce((sum, it) => { const ast = getAssignmentStatus(it.entry, it.assignment); return sum + ((ast === 'complete' || isPaidStatus(ast)) ? (it.assignment.cost || 0) : 0); }, 0);
     if (allAssign.some(a => getAssignmentStatus(a.entry, a.assignment) === 'inservice')) activeCount++;
     const sc = getTechStatusColor(staffId);
+    // Availability chip for the rotation column. GREEN is reserved for IN-SERVICE only (so it
+    // never collides with an in-service turn slot): an available tech reads as a teal OUTLINE
+    // chip, a busy tech as a green "Working now" chip. getTechStatusColor itself is left
+    // unchanged so the floor plan / history keep their existing colors + labels.
+    const avPres = sc.label === 'Off'        ? { ring: '#b0b6ba', chip: 'background:#eceef0;color:#7a858a', dot: '#b0b6ba', label: 'Off' }
+                 : sc.label === 'On Break'   ? { ring: '#e0a83a', chip: 'background:#faedcf;color:#9a6b00', dot: '#e0a83a', label: 'On break' }
+                 : sc.label === 'In Service' ? { ring: '#2a7a4f', chip: 'background:#e9f4ee;color:#1b5e3b', dot: '#2a7a4f', label: 'Working now' }
+                 :                             { ring: '#1a5252', chip: 'background:#fff;border:1px solid #b9c8c2;color:#1a5252', dot: '#1a5252', label: 'Available' };
     const photo = st.photo
-      ? `<img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border-2 flex-shrink-0" style="border-color:${sc.bg}">`
-      : `<div class="w-10 h-10 rounded-full flex items-center justify-center border-2 flex-shrink-0 text-sm font-headline font-bold" style="background:${sc.bg}20;border-color:${sc.bg};color:${sc.bg}">${st.name.charAt(0).toUpperCase()}</div>`;
+      ? `<img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border-2 flex-shrink-0" style="border-color:${avPres.ring}">`
+      : `<div class="w-10 h-10 rounded-full flex items-center justify-center border-2 flex-shrink-0 text-sm font-headline font-bold" style="background:${avPres.ring}20;border-color:${avPres.ring};color:${avPres.ring}">${st.name.charAt(0).toUpperCase()}</div>`;
     const isHalf = !Number.isInteger(turns.total) && turns.total > 0;
     const turnDisplay = turns.total > 0
-      ? `<span class="text-sm font-headline font-bold ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:' + sc.bg}">${turns.total}t</span>`
-      : `<span class="text-sm font-headline text-outline-variant">0t</span>`;
+      ? `<span class="text-base font-headline font-bold ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:#1a5252'}">${turns.total}t</span>`
+      : `<span class="text-base font-headline text-outline-variant">0t</span>`;
+    const isNextUp = staffId === nextUpId;
+    const nextUpBadge = isNextUp ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 inline-flex items-center gap-0.5" style="background:#1a5252;color:#fff"><span class="material-symbols-outlined" style="font-size:10px">arrow_upward</span>Next up</span>` : '';
     const techCol = `<div class="flex items-center gap-2 w-[155px] flex-shrink-0 pr-2">
       <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
-      <div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate leading-tight">${st.name}</div>
-      <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none" style="background:${sc.bg};color:${sc.text}">${sc.label}</span>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
+      <div class="min-w-0"><div class="flex items-center gap-1 leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate">${st.name}</span>${nextUpBadge}</div>
+      <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1" style="${avPres.chip}"><span style="width:6px;height:6px;border-radius:50%;background:${avPres.dot};display:inline-block"></span>${avPres.label}</span>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
       <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
 
     const MIN_SLOTS = 5;
@@ -390,8 +410,10 @@ export function renderTurnsTechGrid() {
         const turnLabelNum = Number.isInteger(turnCounter) ? turnCounter : turnCounter.toFixed(1);
         const turnLabel = tt === 'bonus' ? 'Bonus' : (cost === 0 ? '?' : '' + turnLabelNum);
         const ss = getAssignmentStatus(e, a);
-        let bg, fg;
-        if (isPaidStatus(ss)) { bg='#dde2e5'; fg='#555'; } else if (ss === 'complete') { bg='#d3e4ef'; fg='#14425e'; } else if (ss === 'inservice') { bg='#d8ecdf'; fg='#1b4d33'; } else { bg='#ffe9c4'; fg='#5c4010'; }
+        // Canonical status tints + a left status bar, so a turn slot matches its dot on the
+        // queue and the Waiting/Active side panel (one palette across the whole app).
+        let bg, fg, bar;
+        if (isPaidStatus(ss)) { bg='#eceef0'; fg='#42484c'; bar='#5b6166'; } else if (ss === 'complete') { bg='#e3eef3'; fg='#14425e'; bar='#1a5c7a'; } else if (ss === 'inservice') { bg='#e9f4ee'; fg='#1b5e3b'; bar='#2a7a4f'; } else { bg='#faedcf'; fg='#5c4010'; bar='#f5c870'; }
         const outline = e.groupId ? `;outline:2px solid ${e.groupColor||'#e8a230'};outline-offset:-1px` : '';
         const s = svc(a.serviceId);
         const svcLabel = s ? s.label : (e.services.map(sid => svc(sid)?.label || '?').join(', '));
@@ -401,7 +423,7 @@ export function renderTurnsTechGrid() {
         const splitColor = splitTags.get(String(e.id));
         const splitTag = splitColor ? `<span title="Same customer — multiple services" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;background:${splitColor};color:#fff;flex-shrink:0;margin-right:2px"><span class="material-symbols-outlined" style="font-size:11px;font-variation-settings:'FILL' 1">link</span></span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
-          <button onclick="showGroupAssignModal('${e.id}')" class="w-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px${outline}">
+          <button onclick="showGroupAssignModal('${e.id}')" class="w-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px;border-left:3px solid ${bar};border-top-left-radius:0;border-bottom-left-radius:0${outline}">
             <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${tt === 'half' ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px' : 'opacity:0.75'}">${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
             ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
@@ -417,7 +439,8 @@ export function renderTurnsTechGrid() {
     if (nextAppt) { const mins = Math.round((nextAppt.startMs - _nowMs) / 60000); if (mins <= 30) slotArr.splice(filled.length, 0, turnsDueNoteCard(nextAppt, mins)); }
     const slotHtml = slotArr.join('');
 
-    return `<div class="flex items-center border-b border-surface-container-high py-2 gap-2">${techCol}
+    const rowAccent = isNextUp ? 'border-left:3px solid #1a5252;background:#eef5f5;border-radius:0 8px 8px 0;' : '';
+    return `<div class="flex items-center border-b border-surface-container-high py-2 gap-2" style="${rowAccent}">${techCol}
       <div class="turns-slot-row flex gap-1.5 overflow-x-auto pb-0.5" style="min-width:0;flex:1;scrollbar-width:thin">${slotHtml}</div></div>`;
   }).filter(Boolean).join('');
 
