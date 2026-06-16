@@ -890,8 +890,20 @@ tailwind.config = {
           <button id="settings-back-btn" onclick="settingsBack()" class="hidden w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors flex-shrink-0"><span class="material-symbols-outlined">arrow_back</span></button>
           <div>
             <h2 id="settings-nav-title" class="text-xl font-headline font-bold text-on-surface">Settings</h2>
+            <p id="settings-nav-desc" class="text-xs font-body text-on-surface-variant mt-0.5"></p>
           </div>
         </div>
+
+        <!-- Settings search (root only) — filters the whole tree, jumps to any leaf -->
+        <div id="settings-search-wrap" class="mb-4">
+          <div class="flex items-center gap-2 bg-surface-container-lowest border border-surface-container-high rounded-xl px-4 py-2.5 focus-within:border-primary transition-colors">
+            <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">search</span>
+            <input id="settings-search" type="text" oninput="filterSettings(this.value)" placeholder="Search settings…" class="flex-1 bg-transparent outline-none text-sm font-body text-on-surface">
+            <button onclick="clearSettingsSearch()" id="settings-search-clear" class="hidden text-on-surface-variant hover:text-on-surface flex items-center"><span class="material-symbols-outlined" style="font-size:18px">close</span></button>
+          </div>
+        </div>
+        <!-- Settings search results -->
+        <div id="settings-results" class="hidden"></div>
 
         <!-- Drill-down: category cards (root) -->
         <div id="settings-root" class="grid grid-cols-1 sm:grid-cols-2 gap-3">

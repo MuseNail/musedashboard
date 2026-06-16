@@ -2,7 +2,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { getAppToken, getSessionUser } from '../apptoken.js';
-import { showToast, setSwitchVisual } from '../utils.js';
+import { showToast, setSwitchVisual, escHtml } from '../utils.js';
 import { canDo, getActiveUser, ui } from '../session.js';
 import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION } from '../config.js';
 import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
@@ -240,40 +240,40 @@ export function setNumpadWholeDollars(val) {
 // by renderSettingsPanel(); nav just toggles which section wrapper is visible.
 const SETTINGS_NAV = [
   { id:'catalog', title:'Services, Items & Fees', desc:'What you sell', items:[
-    { label:'Services', sub:'Add, edit, delete & visibility', content:'services-merged-section', render:'renderServicesMerged', perm:'manageServices' },
-    { label:'Retail Items', sub:'Add-on items', content:'items-section', perm:'manageServices' },
-    { label:'Fees', sub:'Flat or percentage fees', content:'fees-section', perm:'manageServices' },
+    { label:'Services', sub:'Add, edit, delete & visibility', content:'services-merged-section', render:'renderServicesMerged', perm:'manageServices', icon:'design_services' },
+    { label:'Retail Items', sub:'Add-on items', content:'items-section', perm:'manageServices', icon:'inventory_2' },
+    { label:'Fees', sub:'Flat or percentage fees', content:'fees-section', perm:'manageServices', icon:'percent' },
   ]},
   { id:'staff', title:'Staff & Access', desc:'People & permissions', items:[
-    { label:'Technicians', sub:'Staff, photos, schedule & active toggle', content:'staff-merged-section', render:'renderStaffMerged', perm:'manageStaff' },
-    { label:'Front Desk Users', sub:'Dashboard PIN login accounts', content:'fdusers-merged-section', render:'renderFdUsersList', adminOnly:true },
-    { label:'Role Permissions', sub:'What each role can do', content:'settings-perms-section', render:'renderRolePermissions', adminOnly:true },
+    { label:'Technicians', sub:'Staff, photos, schedule & active toggle', content:'staff-merged-section', render:'renderStaffMerged', perm:'manageStaff', icon:'group' },
+    { label:'Front Desk Users', sub:'Dashboard PIN login accounts', content:'fdusers-merged-section', render:'renderFdUsersList', adminOnly:true, icon:'badge' },
+    { label:'Role Permissions', sub:'What each role can do', content:'settings-perms-section', render:'renderRolePermissions', adminOnly:true, icon:'lock' },
   ]},
   { id:'workflow', title:'Workflow', desc:'How the floor runs', items:[
-    { label:'Turn Thresholds', sub:'Full / half / bonus cutoffs', content:'turns-thresh-section' },
-    { label:'Stations', sub:'Add, rename & delete pedicure / manicure seats', content:'settings-stations-section', render:'renderStationsSettings' },
-    { label:'Pay Period', sub:'Weekly / bi-weekly / bi-monthly for the quick button', content:'settings-payperiod-section', render:'renderPayPeriodSettings', adminOnly:true },
-    { label:'Commission & Refunds', sub:'Whether refunds reduce tech commission', content:'settings-commission-section', render:'renderCommissionSettings', adminOnly:true },
-    { label:'Numpad Entry', sub:'Cents or whole dollars', content:'settings-numpad-section', render:'renderNumpadSettings' },
-    { label:'Turns Board Display', sub:'Text size — set per device', content:'settings-turnsdisplay-section', render:'renderTurnsDisplaySettings' },
-    { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section' },
+    { label:'Turn Thresholds', sub:'Full / half / bonus cutoffs', content:'turns-thresh-section', icon:'swap_vert' },
+    { label:'Stations', sub:'Add, rename & delete pedicure / manicure seats', content:'settings-stations-section', render:'renderStationsSettings', icon:'event_seat' },
+    { label:'Pay Period', sub:'Weekly / bi-weekly / bi-monthly for the quick button', content:'settings-payperiod-section', render:'renderPayPeriodSettings', adminOnly:true, icon:'event_repeat' },
+    { label:'Commission & Refunds', sub:'Whether refunds reduce tech commission', content:'settings-commission-section', render:'renderCommissionSettings', adminOnly:true, icon:'paid' },
+    { label:'Numpad Entry', sub:'Cents or whole dollars', content:'settings-numpad-section', render:'renderNumpadSettings', icon:'dialpad' },
+    { label:'Turns Board Display', sub:'Text size — set per device', content:'settings-turnsdisplay-section', render:'renderTurnsDisplaySettings', icon:'format_size' },
+    { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section', icon:'schedule' },
   ]},
   { id:'integrations', title:'Integrations', desc:'Payments & Google', items:[
-    { label:'Payment Processing', sub:'Card processor, terminal & Square', content:'helcim-section', render:'renderHelcimSettings' },
-    { label:'Square', sub:'Location, connection & sync', content:'square-section', hidden:true },   // reached from the Payment Processing panel
-    { label:'Google Calendar', sub:'Connect for appointments', content:'gcal-section', render:'renderGcalSettings' },
-    { label:'Text Messaging', sub:'SMS confirmations & replies (httpSMS)', content:'sms-section', render:'renderSmsSettings', adminOnly:true },
-    { label:'Back Office sync', sub:'Push daily sales & payroll to the books app', content:'bosync-section', render:'renderBoSyncSettings', adminOnly:true },
-    { label:'Customer Directory', sub:'Browse synced customers', action:'showCustomerDir' },
+    { label:'Payment Processing', sub:'Card processor, terminal & Square', content:'helcim-section', render:'renderHelcimSettings', icon:'credit_card' },
+    { label:'Square', sub:'Location, connection & sync', content:'square-section', hidden:true, icon:'storefront' },   // reached from the Payment Processing panel
+    { label:'Google Calendar', sub:'Connect for appointments', content:'gcal-section', render:'renderGcalSettings', icon:'calendar_month' },
+    { label:'Text Messaging', sub:'SMS confirmations & replies (httpSMS)', content:'sms-section', render:'renderSmsSettings', adminOnly:true, icon:'sms' },
+    { label:'Back Office sync', sub:'Push daily sales & payroll to the books app', content:'bosync-section', render:'renderBoSyncSettings', adminOnly:true, icon:'sync' },
+    { label:'Customer Directory', sub:'Browse synced customers', action:'showCustomerDir', icon:'contacts' },
   ]},
   { id:'business', title:'Business', desc:'Branding', items:[
-    { label:'Business Logo', sub:'Header & report logo', content:'logo-section' },
+    { label:'Business Logo', sub:'Header & report logo', content:'logo-section', icon:'image' },
   ]},
   { id:'data', title:'Data & System', desc:'Backup, logs & info', items:[
-    { label:'Backup & Restore', sub:'Export / import data', content:'backup-section' },
-    { label:'Activity Log', sub:'All users, all devices', content:'settings-audit-section', render:'renderActivityLog' },
-    { label:'Data Recovery', sub:'Find & restore lost check-ins', content:'settings-recovery-section', render:'renderRecoveryReport', adminOnly:true },
-    { label:'App Info', sub:'Version & connection status', content:'appinfo-section', render:'renderAppInfo' },
+    { label:'Backup & Restore', sub:'Export / import data', content:'backup-section', icon:'backup' },
+    { label:'Activity Log', sub:'All users, all devices', content:'settings-audit-section', render:'renderActivityLog', icon:'history' },
+    { label:'Data Recovery', sub:'Find & restore lost check-ins', content:'settings-recovery-section', render:'renderRecoveryReport', adminOnly:true, icon:'restore_page' },
+    { label:'App Info', sub:'Version & connection status', content:'appinfo-section', render:'renderAppInfo', icon:'info' },
   ]},
 ];
 let _settingsView = 'root', _settingsCat = null;
@@ -291,13 +291,51 @@ function _setSettingsHeader(title, desc, showBack) {
   const d = document.getElementById('settings-nav-desc'); if (d) d.textContent = desc || '';
   const b = document.getElementById('settings-back-btn'); if (b) b.classList.toggle('hidden', !showBack);
 }
+// One iconned row, shared by the category drill-down list and the search results.
+// `subText` overrides the default sub line (search shows "Category · sub").
+function _settingsItemRow(it, subText) {
+  return `<button onclick="${it.action ? it.action + '()' : `settingsOpenLeaf('${it.content}')`}" class="w-full flex items-center gap-4 px-5 py-4 bg-surface-container-lowest rounded-xl border border-surface-container-high mb-2 hover:bg-surface-container hover:border-primary/40 transition-colors text-left">
+    <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined text-primary">${it.icon || 'settings'}</span></div>
+    <div class="min-w-0 flex-1"><div class="font-headline font-bold text-on-surface">${escHtml(it.label)}</div><div class="text-xs font-body text-on-surface-variant mt-0.5">${escHtml(subText != null ? subText : (it.sub || ''))}</div></div>
+    <span class="material-symbols-outlined text-on-surface-variant flex-shrink-0">${it.action ? 'open_in_new' : 'chevron_right'}</span>
+  </button>`;
+}
+
 export function settingsNavRoot() {
   _settingsView = 'root'; _settingsCat = null;
   _hideAllSettingsSections();
   document.getElementById('settings-category')?.classList.add('hidden');
+  const sInput = document.getElementById('settings-search'); if (sInput) sInput.value = '';
+  document.getElementById('settings-search-clear')?.classList.add('hidden');
+  document.getElementById('settings-results')?.classList.add('hidden');
+  document.getElementById('settings-search-wrap')?.classList.remove('hidden');
   document.getElementById('settings-root')?.classList.remove('hidden');
   _setSettingsHeader('Settings', 'Configure app behavior and customer options', false);
 }
+
+// Live filter across the whole settings tree → jump straight to any leaf.
+export function filterSettings(q) {
+  const query = (q || '').trim().toLowerCase();
+  document.getElementById('settings-search-clear')?.classList.toggle('hidden', !query);
+  const results = document.getElementById('settings-results');
+  const root = document.getElementById('settings-root');
+  if (!query) { if (results) { results.classList.add('hidden'); results.innerHTML = ''; } root?.classList.remove('hidden'); return; }
+  _settingsCat = null;   // searching resets category context so Back returns to the root
+  const isAdmin = getActiveUser()?.role === 'admin';
+  const matches = [];
+  SETTINGS_NAV.forEach(g => g.items.forEach(it => {
+    if (it.hidden || (it.adminOnly && !isAdmin) || (it.perm && !canDo(it.perm))) return;
+    if ((it.label + ' ' + (it.sub || '') + ' ' + g.title).toLowerCase().includes(query)) matches.push({ ...it, cat: g.title });
+  }));
+  root?.classList.add('hidden');
+  document.getElementById('settings-category')?.classList.add('hidden');
+  if (!results) return;
+  results.innerHTML = matches.length === 0
+    ? `<p class="text-sm font-body text-on-surface-variant px-1 py-3">No settings match “${escHtml(query)}”.</p>`
+    : matches.map(it => _settingsItemRow(it, it.cat + (it.sub ? ' · ' + it.sub : ''))).join('');
+  results.classList.remove('hidden');
+}
+export function clearSettingsSearch() { const i = document.getElementById('settings-search'); if (i) { i.value = ''; filterSettings(''); i.focus(); } }
 export function settingsOpenCategory(catId) {
   const g = SETTINGS_NAV.find(x => x.id === catId); if (!g) return;
   _settingsView = 'cat'; _settingsCat = catId;
@@ -306,11 +344,7 @@ export function settingsOpenCategory(catId) {
   const isAdmin = getActiveUser()?.role === 'admin';
   const list = document.getElementById('settings-category');
   const items = g.items.filter(it => !it.hidden && (!it.adminOnly || isAdmin) && (!it.perm || canDo(it.perm)));
-  list.innerHTML = items.length === 0 ? '<p class="text-sm font-body text-on-surface-variant px-1 py-3">Your role doesn’t have access to these settings.</p>' : items.map(it => `
-    <button onclick="${it.action ? it.action + '()' : `settingsOpenLeaf('${it.content}')`}" class="w-full flex items-center justify-between px-5 py-4 bg-surface-container-lowest rounded-xl border border-surface-container-high mb-2 hover:bg-surface-container transition-colors text-left">
-      <div><div class="font-headline font-bold text-on-surface">${it.label}</div><div class="text-xs font-body text-on-surface-variant mt-0.5">${it.sub || ''}</div></div>
-      <span class="material-symbols-outlined text-on-surface-variant">${it.action ? 'open_in_new' : 'chevron_right'}</span>
-    </button>`).join('');
+  list.innerHTML = items.length === 0 ? '<p class="text-sm font-body text-on-surface-variant px-1 py-3">Your role doesn’t have access to these settings.</p>' : items.map(it => _settingsItemRow(it)).join('');
   list.classList.remove('hidden');
   _setSettingsHeader(g.title, g.desc, true);
 }
