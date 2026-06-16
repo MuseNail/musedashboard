@@ -395,7 +395,7 @@ export function renderTurnsTechGrid() {
         turnCounter += 1;
         const ts = new Date(item.skip.at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
         const tl = Number.isInteger(turnCounter) ? turnCounter : turnCounter.toFixed(1);
-        return `<div class="flex-shrink-0 w-[150px] px-1"><div class="w-full rounded-xl px-2 py-1.5 text-left text-xs font-body relative" style="background:#e6e6e6;color:#777;min-height:66px;border:1px dashed #b5b5b5">
+        return `<div class="flex-shrink-0 w-[150px] px-1"><div class="w-full h-full rounded-xl px-2 py-1.5 text-left text-xs font-body relative" style="background:#e6e6e6;color:#777;min-height:66px;border:1px dashed #b5b5b5">
           <button onclick="event.stopPropagation();removeTurnSkip('${item.skip.id}')" title="Remove skipped turn" style="position:absolute;top:2px;right:3px;color:#999;line-height:1" class="hover:opacity-70"><span class="material-symbols-outlined" style="font-size:15px">close</span></button>
           <div class="flex items-center gap-1 pr-4"><span class="material-symbols-outlined" style="font-size:14px">skip_next</span><span class="font-semibold text-[11px]">Skipped</span><span class="text-[11px] font-headline font-bold ml-auto" style="opacity:.75">${tl}</span></div>
           <div class="text-[10px] opacity-90 leading-tight mt-1">Turn passed · no customer</div>
@@ -421,7 +421,7 @@ export function renderTurnsTechGrid() {
         const splitColor = splitTags.get(String(e.id));
         const splitTag = splitColor ? `<span title="Same customer — multiple services" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;background:${splitColor};color:#fff;flex-shrink:0;margin-right:2px"><span class="material-symbols-outlined" style="font-size:11px;font-variation-settings:'FILL' 1">link</span></span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
-          <button onclick="showGroupAssignModal('${e.id}')" class="w-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px${outline}">
+          <button onclick="showGroupAssignModal('${e.id}')" class="w-full h-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px${outline}">
             <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${tt === 'half' ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px' : 'opacity:0.75'}">${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
             ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
@@ -429,7 +429,7 @@ export function renderTurnsTechGrid() {
           </button></div>`;
       }
       return `<div class="flex-shrink-0 w-[150px] px-1 turns-drop-zone" data-tech-id="${staffId}" data-slot="${slotIdx}">
-        <div class="turns-empty-slot w-full rounded-xl border-2 border-dashed border-outline-variant/40 flex items-center justify-center text-outline-variant cursor-pointer hover:border-primary hover:bg-primary/5 hover:text-primary transition-all" style="min-height:66px" onclick="openTurnsAssign('${staffId}',${slotIdx})"><span class="material-symbols-outlined" style="font-size:20px">add</span></div></div>`;
+        <div class="turns-empty-slot w-full h-full rounded-xl border-2 border-dashed border-outline-variant/40 flex items-center justify-center text-outline-variant cursor-pointer hover:border-primary hover:bg-primary/5 hover:text-primary transition-all" style="min-height:66px" onclick="openTurnsAssign('${staffId}',${slotIdx})"><span class="material-symbols-outlined" style="font-size:20px">add</span></div></div>`;
     });
     // 30-min note: drop an amber "next appt" card into this tech's next-turn position
     // (right after their filled slots) when their soonest upcoming appt is ≤30 min out.
