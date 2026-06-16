@@ -331,11 +331,11 @@ tailwind.config = {
             </button>
             <button onclick="shiftQueueDate(1)" title="Next day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_right</span></button>
           </div>
-          <button onclick="filterQueue('all')" id="tab-all" class="tab-btn fchip-on px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">All</button>
-          <button onclick="filterQueue('waiting')" id="tab-waiting" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Waiting</button>
-          <button onclick="filterQueue('inservice')" id="tab-inservice" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">In Service</button>
-          <button onclick="filterQueue('complete')" id="tab-complete" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Done</button>
-          <button onclick="filterQueue('paid')" id="tab-paid" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Paid</button>
+          <button onclick="filterQueue('all')" id="tab-all" class="tab-btn fchip-on px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">All <span id="tab-count-all" class="text-[11px] font-bold opacity-60 ml-0.5"></span></button>
+          <button onclick="filterQueue('waiting')" id="tab-waiting" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Waiting <span id="tab-count-waiting" class="text-[11px] font-bold opacity-60 ml-0.5"></span></button>
+          <button onclick="filterQueue('inservice')" id="tab-inservice" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">In Service <span id="tab-count-inservice" class="text-[11px] font-bold opacity-60 ml-0.5"></span></button>
+          <button onclick="filterQueue('complete')" id="tab-complete" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Done <span id="tab-count-complete" class="text-[11px] font-bold opacity-60 ml-0.5"></span></button>
+          <button onclick="filterQueue('paid')" id="tab-paid" class="tab-btn px-4 py-2 rounded-full text-sm font-body font-semibold transition-all">Paid <span id="tab-count-paid" class="text-[11px] font-bold opacity-60 ml-0.5"></span></button>
           <!-- Done toggle -->
           <button onclick="toggleDoneVisibility()" id="done-toggle-btn"
             class="chip">

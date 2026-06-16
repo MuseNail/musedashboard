@@ -277,8 +277,6 @@ function buildQueueRow(e) {
   const t = new Date(e.checkinTime);
   const timeStr = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const serviceLabels = e.services.map(sid => svc(sid)?.label || sid).join(', ') || '—';
-  const badgeClass = { waiting: 'badge-waiting', inservice: 'badge-inservice', complete: 'badge-complete', paid: 'badge-done', done: 'badge-done' }[e.status] || 'badge-waiting';
-  const badgeLabel = { waiting: 'Waiting', inservice: 'In Service', complete: 'Complete', paid: 'Paid', done: 'Paid' }[e.status] || e.status;
   const apptBadge = e.isAppointment ? `<span class="badge-appointment text-[10px] px-1.5 py-0.5 rounded-full font-body font-semibold">Appt</span>` : '';
   // R5: returning-customer badge (visit #, lifetime spend, usual tech) derived from transaction
   // records via reports.js (called on window to avoid a circular import). Only shown from the
@@ -319,43 +317,67 @@ function buildQueueRow(e) {
   const cardBg = isPaidStatus(e.status)
     ? 'bg-surface-container-high border-surface-container-highest opacity-70'
     : `bg-surface-container-lowest ${e.isAppointment ? 'border-primary/40' : 'border-surface-container-high'}`;
-  const groupBorder = e.groupId ? `border-left:5px solid ${e.groupColor};` : '';
+  // One status cue per card: a colored left edge. For a party the group color wins (group
+  // identity matters more than the status, which the per-service pills already carry).
+  const statusEdgeColor = { waiting: '#f5c870', inservice: '#2a7a4f', complete: '#1a5c7a', paid: '#5b6166', done: '#5b6166' }[e.status] || '#c2cacd';
+  const leftEdge = e.groupId ? `border-left:5px solid ${e.groupColor};` : `border-left:4px solid ${statusEdgeColor};`;
   const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:5px;background:${e.groupColor};color:#fff;font-size:10px;font-weight:800;flex-shrink:0;margin-right:1px">${_partyLetters.get(e.groupId) || '•'}</span>` : '';
   const groupTag = e.groupLabel ? `<span class="text-[10px] font-body italic" style="color:${e.groupColor}">${e.groupLabel}</span>` : '';
-  const btnCls = `flex items-center justify-center min-w-[44px] self-stretch rounded-xl transition-all active:scale-95 border-0 cursor-pointer px-3`;
+  // Wait timer = the front desk's #1 triage signal. For a WAITING guest it's a pill that
+  // escalates amber (≥15m) → red (≥25m); pill color only, no card outline. The number stays
+  // live because updateElapsedTimes rewrites the inner data-checkin-ts span's text (the icon
+  // is a sibling, so it survives). In-service shows a muted "Xm in service"; others a plain time.
+  const waitMins = Math.floor((Date.now() - t.getTime()) / 60000);
+  let timeEl;
+  if (e.status === 'waiting') {
+    const esc = waitMins >= 25 ? 'background:#f7d4d4;color:#a32d2d' : waitMins >= 15 ? 'background:#faedcf;color:#9a6b00' : 'background:var(--surface-container);color:var(--on-surface-variant)';
+    timeEl = `<span class="ml-auto inline-flex items-center gap-1" style="font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;${esc}"><span class="material-symbols-outlined" style="font-size:13px">schedule</span><span data-checkin-ts="${t.getTime()}">${formatElapsed(e.checkinTime)}</span></span>`;
+  } else if (e.status === 'inservice') {
+    timeEl = `<span class="ml-auto inline-flex items-center gap-1 text-on-surface-variant" style="font-size:11px"><span class="material-symbols-outlined" style="font-size:13px">schedule</span><span data-checkin-ts="${t.getTime()}">${formatElapsed(e.checkinTime)}</span> in service</span>`;
+  } else {
+    timeEl = `<span class="text-[10px] font-body text-outline ml-auto" data-checkin-ts="${t.getTime()}">${formatElapsed(e.checkinTime)}</span>`;
+  }
+  // Soft-outline action buttons, all one size. Neutral tools + Remove use theme tokens so
+  // they adapt to dark mode; the advance actions keep a soft tint of their meaning color.
+  const btnCls = `flex items-center justify-center self-stretch rounded-xl transition-all active:scale-95 cursor-pointer`;
+  const sTool = 'width:44px;background:var(--surface);border:1px solid var(--surface-container-high);color:var(--on-surface-variant)';
+  const sRemove = 'width:44px;background:var(--surface);border:1px solid #e7a3a3;color:#a32d2d';
+  const sStart = 'width:44px;background:#e1f3f2;border:1px solid #6fb8b6;color:#0f3d3d';
+  const sBackWait = 'width:44px;background:#faedcf;border:1px solid #e0c074;color:#9a6b00';
+  const sComplete = 'width:44px;background:#dfeaf1;border:1px solid #6f9fbb;color:#14506e';
+  const sBackSvc = 'width:44px;background:#e0eeec;border:1px solid #8fbdb8;color:#134a45';
+  const sPay = 'width:44px;background:#e3f0e8;border:1px solid #7bb394;color:#1b5e3b';
   const id = e.id;
   const hasSquare = !!cfg().square_config;
   return `
-    <div class="queue-row ${cardBg} rounded-xl py-1.5 px-3 border flex items-stretch gap-1.5" data-id="${id}" style="${groupBorder}">
-      <div class="flex-grow min-w-0 py-1">
+    <div class="queue-row ${cardBg} rounded-xl py-1.5 px-3 border flex items-stretch gap-1.5" data-id="${id}" style="${leftEdge}">
+      <div class="flex-grow min-w-0 py-1 cursor-pointer" onclick="showGroupAssignModal('${id}')" title="Assign & Price">
         <div class="flex items-center gap-1 flex-wrap leading-tight">
           ${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span>${visitBadge}${groupTag ? ' ' + groupTag : ''}
-          <span class="text-[10px] px-1.5 py-0.5 rounded-full font-body font-semibold ${badgeClass}">${badgeLabel}</span>
           ${apptBadge}${totalDisplay}
-          <span class="text-[10px] font-body text-outline ml-auto" data-checkin-ts="${t.getTime()}">${formatElapsed(e.checkinTime)}</span>
+          ${timeEl}
         </div>
-        <div class="text-[11px] font-body text-on-surface-variant truncate">${serviceLabels}</div>
+        ${assignSummary ? '' : `<div class="text-[11px] font-body text-on-surface-variant truncate">${serviceLabels}</div>`}
         ${assignSummary ? `<div class="text-[11px] font-body mt-0.5 space-y-0.5">${assignSummary}</div>` : ''}
         ${visitSub}
         <div class="text-[10px] font-body text-outline">${timeStr}${e.phone ? ' · ' + e.phone : ''}</div>
       </div>
       <div class="flex items-stretch gap-1 flex-shrink-0">
-        <button onclick="showGroupAssignModal('${id}')" title="Assign & Price" class="${btnCls} bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:19px">assignment_ind</span></button>
-        <button onclick="showEditCheckin('${id}')" title="Edit check-in info" class="${btnCls} bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:19px">edit_note</span></button>
+        <button onclick="showEditCheckin('${id}')" title="Edit check-in info" class="${btnCls}" style="${sTool}"><span class="material-symbols-outlined" style="font-size:19px">edit_note</span></button>
         ${e.groupId
-          ? `<button onclick="showSplitMergeModal('${id}')" title="Split/Merge" class="${btnCls} bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:19px">call_split</span></button>`
-          : `<button onclick="showMergeSelectModal('${id}')" title="Merge" class="${btnCls} bg-surface-container hover:bg-surface-container-high text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:19px">merge</span></button>`}
-        ${e.status === 'waiting' ? `<button onclick="tryAdvanceStatus('${id}','inservice')" title="In Service" class="${btnCls}" style="background:#8fd4d3;color:#0a2e2e;"><span class="material-symbols-outlined" style="font-size:19px">play_circle</span></button>` : ''}
+          ? `<button onclick="showSplitMergeModal('${id}')" title="Split/Merge" class="${btnCls}" style="${sTool}"><span class="material-symbols-outlined" style="font-size:19px">call_split</span></button>`
+          : `<button onclick="showMergeSelectModal('${id}')" title="Merge" class="${btnCls}" style="${sTool}"><span class="material-symbols-outlined" style="font-size:19px">merge</span></button>`}
+        ${e.status === 'waiting' ? `<button onclick="tryAdvanceStatus('${id}','inservice')" title="In Service" class="${btnCls}" style="${sStart}"><span class="material-symbols-outlined" style="font-size:19px">play_circle</span></button>` : ''}
         ${e.status === 'inservice' ? `
-          <button onclick="updateStatus('${id}','waiting')" title="Back to Waiting" class="${btnCls}" style="background:#f5c870;color:#3a2800;"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
-          <button onclick="tryAdvanceStatus('${id}','complete')" title="Complete" class="${btnCls}" style="background:#1a5c7a;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">task_alt</span></button>` : ''}
+          <button onclick="updateStatus('${id}','waiting')" title="Back to Waiting" class="${btnCls}" style="${sBackWait}"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
+          <button onclick="tryAdvanceStatus('${id}','complete')" title="Complete" class="${btnCls}" style="${sComplete}"><span class="material-symbols-outlined" style="font-size:19px">task_alt</span></button>` : ''}
         ${e.status === 'complete' ? `
-          <button onclick="updateStatus('${id}','inservice')" title="Back to In Service" class="${btnCls}" style="background:#cfe0e0;color:#1a5252;"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
+          <button onclick="updateStatus('${id}','inservice')" title="Back to In Service" class="${btnCls}" style="${sBackSvc}"><span class="material-symbols-outlined" style="font-size:19px">arrow_back</span></button>
           ${ticketTotal(e) > 0
-            ? `<button onclick="openSquarePOS('${id}')" title="Take payment" class="${btnCls}" style="background:#1b5e3b;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">point_of_sale</span></button>`
-            : `<button onclick="tryAdvanceStatus('${id}','paid')" title="Mark Paid (no charge)" class="${btnCls}" style="background:#2a7a4f;color:#fff;"><span class="material-symbols-outlined" style="font-size:19px">paid</span></button>`}` : ''}
-        ${isPaidStatus(e.status) ? `<button onclick="confirmReopen('${id}')" title="Reopen" class="${btnCls} bg-surface-container hover:bg-secondary-container text-outline-variant"><span class="material-symbols-outlined" style="font-size:19px">undo</span></button>` : ''}
-        <button onclick="removeFromQueue('${id}')" title="Remove" class="${btnCls} bg-surface-container hover:bg-error/20 text-outline hover:text-error"><span class="material-symbols-outlined" style="font-size:17px">close</span></button>
+            ? `<button onclick="openSquarePOS('${id}')" title="Take payment" class="${btnCls}" style="${sPay}"><span class="material-symbols-outlined" style="font-size:19px">point_of_sale</span></button>`
+            : `<button onclick="tryAdvanceStatus('${id}','paid')" title="Mark Paid (no charge)" class="${btnCls}" style="${sPay}"><span class="material-symbols-outlined" style="font-size:19px">paid</span></button>`}` : ''}
+        ${isPaidStatus(e.status) ? `<button onclick="confirmReopen('${id}')" title="Reopen" class="${btnCls}" style="${sTool}"><span class="material-symbols-outlined" style="font-size:19px">undo</span></button>` : ''}
+        <button onclick="removeFromQueue('${id}')" title="Remove" class="${btnCls}" style="${sRemove}"><span class="material-symbols-outlined" style="font-size:17px">close</span></button>
       </div>
     </div>`;
 }
@@ -392,11 +414,24 @@ export function filterQueue(filter) {
 }
 
 export function updateStats() {
+  const all = q();
+  const counts = {
+    all: all.length,
+    waiting: all.filter(e => e.status === 'waiting').length,
+    inservice: all.filter(e => e.status === 'inservice').length,
+    complete: all.filter(e => e.status === 'complete').length,
+    paid: all.filter(e => isPaidStatus(e.status)).length,
+  };
   const w = document.getElementById('stat-waiting'), s = document.getElementById('stat-inservice'), cmp = document.getElementById('stat-complete'), d = document.getElementById('stat-done');
-  if (w) w.textContent = q().filter(e => e.status === 'waiting').length;
-  if (s) s.textContent = q().filter(e => e.status === 'inservice').length;
-  if (cmp) cmp.textContent = q().filter(e => e.status === 'complete').length;
-  if (d) d.textContent = q().filter(e => isPaidStatus(e.status)).length;
+  if (w) w.textContent = counts.waiting;
+  if (s) s.textContent = counts.inservice;
+  if (cmp) cmp.textContent = counts.complete;
+  if (d) d.textContent = counts.paid;
+  // Live counts on the filter chips (All / Waiting / In Service / Done / Paid).
+  for (const k of ['all', 'waiting', 'inservice', 'complete', 'paid']) {
+    const el = document.getElementById('tab-count-' + k);
+    if (el) el.textContent = counts[k];
+  }
 }
 
 export function validateAssignments(entry) {
