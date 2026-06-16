@@ -410,10 +410,8 @@ export function renderTurnsTechGrid() {
         const turnLabelNum = Number.isInteger(turnCounter) ? turnCounter : turnCounter.toFixed(1);
         const turnLabel = tt === 'bonus' ? 'Bonus' : (cost === 0 ? '?' : '' + turnLabelNum);
         const ss = getAssignmentStatus(e, a);
-        // Canonical status tints + a left status bar, so a turn slot matches its dot on the
-        // queue and the Waiting/Active side panel (one palette across the whole app).
-        let bg, fg, bar;
-        if (isPaidStatus(ss)) { bg='#eceef0'; fg='#42484c'; bar='#5b6166'; } else if (ss === 'complete') { bg='#e3eef3'; fg='#14425e'; bar='#1a5c7a'; } else if (ss === 'inservice') { bg='#e9f4ee'; fg='#1b5e3b'; bar='#2a7a4f'; } else { bg='#faedcf'; fg='#5c4010'; bar='#f5c870'; }
+        let bg, fg;
+        if (isPaidStatus(ss)) { bg='#dde2e5'; fg='#555'; } else if (ss === 'complete') { bg='#d3e4ef'; fg='#14425e'; } else if (ss === 'inservice') { bg='#d8ecdf'; fg='#1b4d33'; } else { bg='#ffe9c4'; fg='#5c4010'; }
         const outline = e.groupId ? `;outline:2px solid ${e.groupColor||'#e8a230'};outline-offset:-1px` : '';
         const s = svc(a.serviceId);
         const svcLabel = s ? s.label : (e.services.map(sid => svc(sid)?.label || '?').join(', '));
@@ -423,7 +421,7 @@ export function renderTurnsTechGrid() {
         const splitColor = splitTags.get(String(e.id));
         const splitTag = splitColor ? `<span title="Same customer — multiple services" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;background:${splitColor};color:#fff;flex-shrink:0;margin-right:2px"><span class="material-symbols-outlined" style="font-size:11px;font-variation-settings:'FILL' 1">link</span></span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
-          <button onclick="showGroupAssignModal('${e.id}')" class="w-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px;border-left:3px solid ${bar};border-top-left-radius:0;border-bottom-left-radius:0${outline}">
+          <button onclick="showGroupAssignModal('${e.id}')" class="w-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px${outline}">
             <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${tt === 'half' ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px' : 'opacity:0.75'}">${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
             ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
