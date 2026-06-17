@@ -206,7 +206,7 @@ function acceptBtnHtml(entryId, serviceId, techName) {
 }
 
 // ── Render ────────────────────────────────────────
-export function renderTurns() { _applyTurnsTextSize(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); if (!turnsViewingHistory) window.autoNoShowStaleAppts?.(); }
+export function renderTurns() { _applyTurnsTextSize(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
 
 // ── Per-device Turns text size (C8) ───────────────
 // Device-local (like muse_cal_hours) — the front-desk monitor can run Large while the
@@ -305,7 +305,6 @@ function startTurnsApptRefresh() {
     if (!p || !p.classList.contains('active')) return;
     if (_turnsApptShow && !turnsViewingHistory) renderTurnsApptStrip();
     renderTurnsTechGrid();   // refresh the 30-min in-grid notes + countdowns
-    if (!turnsViewingHistory) window.autoNoShowStaleAppts?.();   // auto no-show 60+ min late
   }, 60000);
 }
 

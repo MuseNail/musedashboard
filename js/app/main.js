@@ -123,6 +123,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.05', items: [
+    { icon: 'event_available', t: 'Past days no longer show false “No Show”', d: 'Earlier appointments were getting marked “No Show” automatically when a guest was checked in without being linked to their booking — so previous days filled up with no-shows that never happened. The app no longer auto-marks no-shows; only the “Mark No Show” button does. Past days now show calmly instead of all in red. To clean up the ones already marked, go to Settings → Data Recovery → “Calendar — past no-shows,” pick a start date, and tap “Clear past no-shows.”' },
+  ] },
   { v: 'v5.04', items: [
     { icon: 'price_change', t: 'Customer Price Menu in the app', d: 'Tap your name (top-right) → “Price Menu” to pull up the full customer price list on the iPad, or tap “Print / Save as PDF” to print a fresh elegant copy. It includes the new Gel Manicure and notes the $2 cash discount.' },
     { icon: 'schedule', t: 'The queue shows who has waited too long', d: 'Each waiting guest now has a wait timer that turns amber after about 15 minutes and red after 25, so it’s obvious at a glance who needs attention. You can also tap anywhere on a guest’s card to open Assign & Price, and the filter tabs (Waiting, In Service, Done, Paid) show live counts.' },

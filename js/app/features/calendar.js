@@ -210,6 +210,11 @@ export function apptsForReminders() {
   return out;
 }
 
+// An appointment this many minutes past its start that was never checked in is
+// treated as a de-facto no-show and DROPPED from the Turns strip / next-up — computed
+// live each render, NEVER written to Google. (We used to PATCH museNoShow onto these,
+// which permanently mis-flagged served-but-unlinked customers as No Show on past days.)
+const STALE_APPT_DROP_MIN = 60;
 // For the Turns sheet: today's UPCOMING timed appointments, one entry per
 // (booking × assigned tech). Excludes anything not still upcoming — passed start
 // time, no-show, or already in the queue (checked in / in service / complete / paid).
@@ -229,10 +234,11 @@ export function apptsForTurns() {
     const pev = primary.ev, ppriv = pev.extendedProperties?.private || {};
     const startMs = new Date(pev.start.dateTime).getTime();
     // Keep LATE appointments (start time already passed) — a running-late customer still hasn't
-    // arrived, so the front desk needs to see them. They drop off only when checked in or no-show
-    // (handled below). `late`/`minsLate` let the Turns UI flag them.
+    // arrived, so the front desk needs to see them, WITH a "late" flag. They drop off only when
+    // checked in, manually marked no-show, or very-late (see below). `late`/`minsLate` flag them.
     const late = startMs < now, minsLate = late ? Math.round((now - startMs) / 60000) : 0;
-    if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;   // no-show
+    if (items.some(it => (it.ev.extendedProperties?.private || {}).museNoShow === '1')) return;   // manual no-show
+    if (minsLate > STALE_APPT_DROP_MIN) return;   // very late & never checked in → drop (computed live, never written)
     let qm = null;                                                               // already in the queue → checked in
     items.forEach(({ ev }) => { if (qm) return; qm = queue().find(x => x.calEventId && String(x.calEventId) === String(ev.id)) || _phoneQueueMatch(_apptPhone(ev).replace(/\D/g, ''), startMs); });
     if (qm) return;
@@ -339,7 +345,7 @@ export function renderTodaysAppointments() {
   listEl.innerHTML = shown.map(r => {
     const timeStr = r.startDt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});
     const qs = r.qm?.status;
-    const stat = r.noShow ? ['#dc2626','No Show'] : qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af','Unconfirmed']);
+    const stat = r.noShow ? ['#dc2626','No Show'] : qs==='inservice' ? ['#16a34a','In Service'] : qs==='complete' ? ['#0284c7','Complete'] : (qs==='paid'||qs==='done') ? ['#9ca3af','Paid'] : qs==='waiting' ? ['#2563eb','Checked In'] : r.confirmed ? ['#16a34a','Confirmed'] : (isToday && r.startDt < new Date() ? ['#ea580c','Not in'] : ['#9ca3af', isToday ? 'Unconfirmed' : '']);
     const svcLines = [];
     r.persons.forEach((lines, pnm) => { const fn = (pnm.split(' ')[0]||pnm).trim(); lines.forEach(l => { const s = cfg().services.find(x=>x.id===l.svcId); const tech = l.calId ? (calDisplayName(l.calId)||'') : 'Unassigned'; svcLines.push(`${escHtml(s?.label||l.svcId||'service')} · ${escHtml(fn)}${tech?` · <span style="opacity:0.8">${escHtml(tech)}</span>`:''}`); }); });
     const svcHtml = svcLines.slice(0,8).map(t => `<div style="font-size:10px;color:var(--on-surface-variant, #41484d);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t}</div>`).join('');
@@ -667,8 +673,8 @@ export function calRenderGrid() {
       else if (qs==='complete') { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; }
       else if (qs==='inservice') { bg='#dcfce7'; border='#16a34a'; tc='#14532d'; }
       else if (qs==='waiting') { bg='#dbeafe'; border='#2563eb'; tc='#1e3a8a'; }
-      else if (isPast && isAppt) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; }
-      else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt → tinted by this tech's color
+      else if (isPast && isAppt && isToday) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; }   // TODAY only: passed start, not checked in → "running late" amber
+      else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt (or any past-day appt — no live-queue status) → tinted by this tech's color
       if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }   // no-show overrides all
 
       const phoneLine = [timeStr, primaryPhone].filter(Boolean).join('  ·  ');
@@ -1163,43 +1169,52 @@ export async function calMarkNoShow(calId, eventId) {
   } catch (err) { _calWriteError(err, 'Update'); }
 }
 
-// ── Auto no-show ──────────────────────────────────────────────────────────────
-// An appointment more than AUTO_NOSHOW_MIN minutes past its start that was never
-// checked in is a de-facto no-show; mark it automatically (same museNoShow flag as
-// the manual button) so it drops off the Turns "Next up" strip and shows as No Show
-// on the calendar. Quiet variant of calMarkNoShow — no "Saving…" toast and no
-// customer-account popup. Candidates come straight from apptsForTurns(), which
-// already excludes checked-in / already-no-show / future bookings, so we just take
-// the very-late ones (one PATCH per booking, deduped by primary event id).
-// Idempotent and race-safe: the per-session attempted set + the running guard stop
-// re-marking and recursion, and the museNoShow flag makes cross-device writes harmless.
-const AUTO_NOSHOW_MIN = 60;
-const _autoNoShowAttempted = new Set();   // primary eventIds attempted this session
-let _autoNoShowRunning = false;
-export async function autoNoShowStaleAppts() {
-  if (_autoNoShowRunning) return;
-  if (!localStorage.getItem('gcal_token') && !cfg().gcal_token) return;   // calendar not connected
-  if (typeof gapi === 'undefined' || !gapi.client?.calendar) return;
-  const stale = new Map();   // primary eventId -> { calId, eventId }
-  apptsForTurns().forEach(a => {
-    if (a.minsLate > AUTO_NOSHOW_MIN && a.eventId && !_autoNoShowAttempted.has(a.eventId)) stale.set(a.eventId, { calId: a.calId, eventId: a.eventId });
-  });
-  if (!stale.size) return;
-  _autoNoShowRunning = true;
-  let marked = 0;
-  try {
-    await ensureFreshToken();
-    for (const { calId, eventId } of stale.values()) {
-      _autoNoShowAttempted.add(eventId);   // before the await: never retry a failing event in a tight loop
-      const refs = _eventGroupRefs(calId, eventId);
-      await Promise.all(refs.map(async r => { const p = await gapi.client.calendar.events.patch({ calendarId: r.calId, eventId: r.eventId, resource: { extendedProperties: { private: { museNoShow: '1' } } } }); _gcalNoteWritten(r.calId, p.result); }));
-      marked++;
-    }
-    await calLoadAndRender(true);
-    window.renderTurns?.();
-    if (marked) showToast(`${marked} appointment${marked > 1 ? 's' : ''} auto-marked No Show (60+ min late)`);
-  } catch (err) { /* silent — a later tick retries the events still unattempted */ }
-  finally { _autoNoShowRunning = false; }
+// ── (removed) Auto no-show ──────────────────────────────────────────────────────
+// We used to auto-PATCH museNoShow='1' onto any appointment 60+ min past its start
+// that wasn't matched to the live queue. That permanently mis-flagged served-but-
+// unlinked customers (kiosk / walk-in / name-only check-ins never set calEventId) as
+// No Show — filling past days with false no-shows. The "drop very-late appts off the
+// Turns strip" intent now lives in apptsForTurns() (STALE_APPT_DROP_MIN), computed
+// live and never written. No-shows are now ONLY set by the manual button (calMarkNoShow).
+
+// ── One-time cleanup: clear past No-Show flags ──────────────────────────────────
+// Operator-triggered (Settings → Data Recovery). Clears the museNoShow flag from every
+// appointment between `sinceDateStr` (YYYY-MM-DD) and the START OF TODAY — past days
+// only, so today's real no-shows are untouched. Auto- and manually-set flags are
+// identical (no marker), so this also clears any genuine past no-shows; that's
+// operationally harmless (history) and was confirmed by the owner.
+export async function clearPastNoShowFlags(sinceDateStr) {
+  if ((!localStorage.getItem('gcal_token') && !cfg().gcal_token) || typeof gapi === 'undefined' || !gapi.client?.calendar) { showToast('Connect Google Calendar on this device first'); return; }
+  const since = new Date((sinceDateStr || '') + 'T00:00:00');
+  if (isNaN(since)) { showToast('Pick a valid start date'); return; }
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  if (since >= todayStart) { showToast('Start date must be before today'); return; }
+  showToast('Scanning calendar…');
+  try { await ensureFreshToken(); } catch { showToast('Calendar auth failed — reconnect and retry'); return; }
+  const hits = [];   // { calId, eventId }
+  for (const cal of _calCalendars) {
+    let pageToken;
+    do {
+      let r;
+      try { r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: since.toISOString(), timeMax: todayStart.toISOString(), singleEvents: true, maxResults: 250, pageToken }); }
+      catch { break; }
+      (r.result.items || []).forEach(ev => { if ((ev.extendedProperties?.private || {}).museNoShow === '1') hits.push({ calId: cal.id, eventId: ev.id }); });
+      pageToken = r.result.nextPageToken;
+    } while (pageToken);
+  }
+  if (!hits.length) { showToast('No past no-show flags found in that range'); return; }
+  window.showWarnModal?.('Clear past No-Show flags?',
+    `${hits.length} past appointment${hits.length > 1 ? 's' : ''} flagged No Show between ${since.toLocaleDateString()} and today will be cleared. This also clears any you marked by hand in that range (history only — today is untouched). Proceed?`,
+    async () => {
+      let cleared = 0;
+      for (const h of hits) {
+        try { const p = await gapi.client.calendar.events.patch({ calendarId: h.calId, eventId: h.eventId, resource: { extendedProperties: { private: { museNoShow: null } } } }); _gcalNoteWritten(h.calId, p.result); cleared++; }
+        catch { /* skip one, keep going */ }
+      }
+      await calLoadAndRender(true);
+      showToast(`Cleared ${cleared} past no-show flag${cleared !== 1 ? 's' : ''} ✓`);
+    },
+    'Clear flags');
 }
 
 // Build a queue entry from one calendar event (returns null if that person is

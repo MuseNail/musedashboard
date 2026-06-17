@@ -151,7 +151,15 @@ export function renderRecoveryReport() {
       <div class="text-sm font-body text-on-surface whitespace-pre-wrap">${_esc(o.text)}</div>
     </div>`).join('') : none('No orphaned notes — every note maps to a current customer.');
 
+  // E — calendar: clear past auto-written No-Show flags
+  const _since90 = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+  const noShowBody = `<div class="flex flex-wrap gap-2 items-center">
+      <input type="date" id="noshow-clear-since" value="${_since90}" class="px-3 py-2 rounded-lg border border-surface-container-high bg-surface text-sm font-body text-on-surface">
+      <button onclick="window.clearPastNoShowFlags(document.getElementById('noshow-clear-since').value)" class="px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm flex items-center gap-2"><span class="material-symbols-outlined" style="font-size:16px">event_busy</span> Clear past no-shows</button>
+    </div>`;
+
   el.innerHTML =
+    section('Calendar — past no-shows', 'Clears the No-Show flag from appointments before today (today is left alone). Use this once to undo the old auto-no-show that wrongly flagged served customers. Needs Google Calendar connected on this device.', noShowBody) +
     section('Customer notes', 'Notes are keyed by phone so a Square ID change can\'t orphan them. Run this once to migrate legacy notes — it\'s safe to re-run. Any note with no matching customer is listed below.', notesBtn + orphanHtml) +
     section('Waiting to sync', 'Writes from this device not yet confirmed by the server. These send automatically on reconnect.', pendingHtml) +
     section('Failed writes', 'Writes the server rejected. Restore re-adds the customer/transaction to the queue.', failedHtml) +
