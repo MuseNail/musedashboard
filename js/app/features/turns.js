@@ -219,12 +219,34 @@ export function setTurnsLarge(on) {
   showToast(on ? 'Turns board: large text (this device) ✓' : 'Turns board: standard text (this device) ✓');
 }
 export function renderTurnsDisplaySettings() {
-  const host = document.getElementById('turns-display-buttons'); if (!host) return;
+  const host = document.getElementById('turns-display-buttons');
   const on  = 'flex-1 px-4 py-3 rounded-xl border font-body font-bold text-sm bg-primary text-on-primary border-primary';
   const off = 'flex-1 px-4 py-3 rounded-xl border font-body font-semibold text-sm bg-surface-container-lowest text-on-surface border-surface-container-high hover:bg-surface-container';
-  host.innerHTML = `
+  if (host) host.innerHTML = `
     <button onclick="setTurnsLarge(false)" class="${turnsLarge() ? off : on}">Standard</button>
     <button onclick="setTurnsLarge(true)" class="${turnsLarge() ? on : off}">Large<span class="block text-[10px] font-normal opacity-80">easier to read from a distance</span></button>`;
+  renderTurnsSepSettings();
+}
+
+// ── Per-device Turns row separator (divider vs recessed lane) ──────────────────
+// Device-local (like the text size) — how the tech box is set apart from the turn
+// bubbles so they don't read as one merged block. 'divider' = a thin rule; 'lane' =
+// the bubbles sit in a tinted recessed track. Applied in renderTurnsTechGrid.
+const turnsSep = () => localStorage.getItem('muse_turns_sep') === 'lane' ? 'lane' : 'divider';
+export function setTurnsSep(mode) {
+  localStorage.setItem('muse_turns_sep', mode === 'lane' ? 'lane' : 'divider');
+  if (!turnsViewingHistory) renderTurnsTechGrid();
+  renderTurnsSepSettings();
+  showToast(mode === 'lane' ? 'Turns board: recessed lane (this device) ✓' : 'Turns board: divider line (this device) ✓');
+}
+function renderTurnsSepSettings() {
+  const host = document.getElementById('turns-sep-buttons'); if (!host) return;
+  const on  = 'flex-1 px-4 py-3 rounded-xl border font-body font-bold text-sm bg-primary text-on-primary border-primary';
+  const off = 'flex-1 px-4 py-3 rounded-xl border font-body font-semibold text-sm bg-surface-container-lowest text-on-surface border-surface-container-high hover:bg-surface-container';
+  const sep = turnsSep();
+  host.innerHTML = `
+    <button onclick="setTurnsSep('divider')" class="${sep === 'divider' ? on : off}">Divider line<span class="block text-[10px] font-normal opacity-80">a thin rule between</span></button>
+    <button onclick="setTurnsSep('lane')" class="${sep === 'lane' ? on : off}">Recessed lane<span class="block text-[10px] font-normal opacity-80">bubbles in a tinted track</span></button>`;
 }
 
 // ── Upcoming appointments (Google Calendar) on the Turns sheet ────────────────
@@ -326,6 +348,7 @@ export function renderTurnsTechGrid() {
     const assigned = (e.assignments || []).filter(a => a.techId).length;
     if (assigned >= 2) { splitTags.set(String(e.id), GROUP_COLORS[_splitN % GROUP_COLORS.length]); _splitN++; }
   });
+  const sep = turnsSep();
   let activeCount = 0;
   if (order.length === 0) {
     grid.innerHTML = '<div class="text-sm font-body text-on-surface-variant py-8 text-center opacity-60"><span class="material-symbols-outlined text-4xl block mb-2">swap_vert</span>No technicians added today.<br>Click <strong>Technicians</strong> to set up the turn order.</div>';
@@ -437,8 +460,12 @@ export function renderTurnsTechGrid() {
     const slotHtml = slotArr.join('');
 
     const rowAccent = isNextUp ? 'border-left:3px solid #1a5252;background:#eef5f5;border-radius:0 8px 8px 0;' : '';
-    return `<div class="flex items-center border-b border-surface-container-high py-2 gap-2" style="${rowAccent}">${techCol}
-      <div class="turns-slot-row flex gap-1.5 overflow-x-auto pb-0.5" style="min-width:0;flex:1;scrollbar-width:thin">${slotHtml}</div></div>`;
+    const slotRow = `<div class="turns-slot-row flex gap-1.5 overflow-x-auto pb-0.5" style="min-width:0;flex:1;scrollbar-width:thin">${slotHtml}</div>`;
+    // Per-device separation between the tech box and the turn bubbles (see turnsSep()).
+    const rightSide = sep === 'lane'
+      ? `<div class="flex min-w-0" style="flex:1;background:#eef1f2;border:0.5px solid #e0e5e7;border-radius:12px;padding:4px 2px 4px 6px">${slotRow}</div>`
+      : `<div class="self-stretch flex-shrink-0" style="width:1px;background:#d3dbdc;margin:6px 0"></div>${slotRow}`;
+    return `<div class="flex items-center border-b border-surface-container-high py-2 gap-2" style="${rowAccent}">${techCol}${rightSide}</div>`;
   }).filter(Boolean).join('');
 
   grid.innerHTML = rows || '<div class="text-sm text-on-surface-variant py-4 text-center">No active technicians.</div>';

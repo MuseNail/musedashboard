@@ -123,6 +123,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.06', items: [
+    { icon: 'view_week', t: 'Turns board — clearer split between tech and turns', d: 'On the Turns board the turn bubbles used to butt right up against each technician’s box. You can now add a little separation: go to Settings → Workflow → Turns Board Display and pick “Divider line” (a thin rule) or “Recessed lane” (the bubbles sit in a soft tinted track). It’s set per device, so each iPad or computer remembers its own choice.' },
+  ] },
   { v: 'v5.05', items: [
     { icon: 'event_available', t: 'Past days no longer show false “No Show”', d: 'Earlier appointments were getting marked “No Show” automatically when a guest was checked in without being linked to their booking — so previous days filled up with no-shows that never happened. The app no longer auto-marks no-shows; only the “Mark No Show” button does. Past days now show calmly instead of all in red. To clean up the ones already marked, go to Settings → Data Recovery → “Calendar — past no-shows,” pick a start date, and tap “Clear past no-shows.”' },
   ] },
