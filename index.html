@@ -710,6 +710,10 @@ tailwind.config = {
             <button onclick="toggleTurnsApptStrip()" id="turns-appts-toggle" title="Show/hide upcoming appointments" class="btn-secondary">
               <span class="material-symbols-outlined" style="font-size:16px">event_upcoming</span> Appointments
             </button>
+            <!-- Show/hide each tech's "$ billed" total (per device) -->
+            <button onclick="toggleTurnsTotals()" id="turns-totals-toggle" title="Show/hide each tech's billed total" class="btn-secondary">
+              <span class="material-symbols-outlined" style="font-size:16px">attach_money</span> Totals
+            </button>
             <!-- Sync Appts hidden — Square Appointments integration pending -->
             <button onclick="showManualAdd()" class="btn-primary">
               <span class="material-symbols-outlined" style="font-size:16px">person_add</span> New Entry

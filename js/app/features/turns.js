@@ -206,7 +206,31 @@ function acceptBtnHtml(entryId, serviceId, techName) {
 }
 
 // ── Render ────────────────────────────────────────
-export function renderTurns() { _applyTurnsTextSize(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
+export function renderTurns() { _applyTurnsTextSize(); _applyTurnsTotals(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
+
+// ── Per-device "$ billed" totals show/hide (Turns toolbar) ────────────────────
+// Device-local (like the text size) — hide each tech's billed dollar total on a
+// shared screen so staff don't compare earnings. Applied as a panel class; the
+// CSS hides .turns-billed. Turn counts stay visible.
+let _turnsTotalsShow = localStorage.getItem('muse_turns_totals') !== '0';
+function _applyTurnsTotals() {
+  document.getElementById('panel-turns')?.classList.toggle('turns-hide-totals', !_turnsTotalsShow);
+  const btn = document.getElementById('turns-totals-toggle');
+  if (btn) {
+    btn.classList.toggle('bg-primary', _turnsTotalsShow);
+    btn.classList.toggle('text-on-primary', _turnsTotalsShow);
+    btn.classList.toggle('border-primary', _turnsTotalsShow);
+    btn.classList.toggle('text-on-surface-variant', !_turnsTotalsShow);
+    btn.classList.toggle('border-surface-container-high', !_turnsTotalsShow);
+    btn.title = _turnsTotalsShow ? 'Tech billed totals shown — tap to hide' : 'Tech billed totals hidden — tap to show';
+  }
+}
+export function toggleTurnsTotals() {
+  _turnsTotalsShow = !_turnsTotalsShow;
+  localStorage.setItem('muse_turns_totals', _turnsTotalsShow ? '1' : '0');
+  _applyTurnsTotals();
+  showToast(_turnsTotalsShow ? 'Tech totals shown (this device) ✓' : 'Tech totals hidden (this device) ✓');
+}
 
 // ── Per-device Turns text size (C8) ───────────────
 // Device-local (like muse_cal_hours) — the front-desk monitor can run Large while the
@@ -401,7 +425,7 @@ export function renderTurnsTechGrid() {
       <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
       <div class="min-w-0"><div class="flex items-center gap-1 leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate">${st.name}</span>${nextUpBadge}</div>
       <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1" style="${avPres.chip}"><span style="width:6px;height:6px;border-radius:50%;background:${avPres.dot};display:inline-block"></span>${avPres.label}</span>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
-      <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
+      <div class="turns-billed text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
 
     const MIN_SLOTS = 5;
     // Merge real assignments with any manual "skipped turns" for this tech, ordered by time.
@@ -873,7 +897,7 @@ function renderTurnsHistoryView() {
     const techCol = `<div class="flex items-center gap-2 w-[155px] flex-shrink-0 pr-2">${photo}
       <div class="min-w-0"><div class="font-headline font-semibold text-on-surface text-sm truncate leading-tight">${name}</div>
       <div class="flex items-center gap-1.5 mt-0.5">${turnDisplay}${bonus > 0 ? `<span class="text-[10px] text-secondary">+${bonus}b</span>` : ''}</div>
-      <div class="text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
+      <div class="turns-billed text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
 
     let turnCounter = 0;
     const slotHtml = items.map(({ entry: e, assignment: a }) => {

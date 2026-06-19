@@ -127,6 +127,10 @@
   #panel-turns.turns-large .turns-filled-slot,
   #panel-turns.turns-large .turns-drop-zone { width: 172px !important; }
 
+  /* Turns board "$ billed" totals — per-device show/hide (Totals button in the Turns
+     toolbar). Turn counts stay visible; only each tech's billed dollar line hides. */
+  #panel-turns.turns-hide-totals .turns-billed { display: none !important; }
+
   /* Queue filter chips (D13): filters are OUTLINED buttons — visually distinct from the
      color-FILLED status pills they used to mimic. Active = teal outline + light teal wash. */
   .tab-btn { border:1.5px solid #b9c2c7; background:transparent; color:#4a5055; }

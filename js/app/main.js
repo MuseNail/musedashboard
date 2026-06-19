@@ -123,6 +123,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.07', items: [
+    { icon: 'attach_money', t: 'Hide tech dollar totals on the Turns board', d: 'The Turns board has a new “Totals” button in the toolbar. Tap it to hide the “$ billed” line under each technician — handy on a shared screen so staff aren’t comparing earnings. Turn counts stay visible. It’s set per device, so each iPad or computer remembers its own choice.' },
+  ] },
   { v: 'v5.06', items: [
     { icon: 'view_week', t: 'Turns board — clearer split between tech and turns', d: 'On the Turns board the turn bubbles used to butt right up against each technician’s box. You can now add a little separation: go to Settings → Workflow → Turns Board Display and pick “Divider line” (a thin rule) or “Recessed lane” (the bubbles sit in a soft tinted track). It’s set per device, so each iPad or computer remembers its own choice.' },
   ] },
