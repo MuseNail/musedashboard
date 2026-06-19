@@ -42,6 +42,18 @@ The 2026-06 P0 ("Paid" policy + safe reversal) is largely shipped: tickets with 
 - **P3 integer-cents money model** — only if penny-drift becomes a real problem (design TurnDesk on cents instead).
 - **SMS texting** (see #5.1) — parked until the owner picks a gateway direction.
 
+## 8 — Receipt printing from the app (hardware ORDERED 2026-06-19)
+The owner wants to print **receipts + custom layouts** (custom receipts, thank-you notes, and **tech-ticket totals from Reports**) on receipt-roll paper. Hardware decided & bought; app-side work not started.
+- **Printer:** Rongta **RP327** (80mm / 72mm print width, 203 dpi, 250 mm/s, auto-cutter, USB+Serial+Ethernet, cash-drawer RJ11 kick, ESC/POS). ~$80. Amazon B0B76L4BP7.
+- **Host:** the front desk's **always-on Windows PC** (the owner's primary device is now desktop + iPad, both always on/connected). Print happens from the **desktop browser via the Windows driver** — so **AirPrint is NOT needed** and no WebPRNT/ePOS integration is required.
+- **Why this path:** a Windows desktop drives any thermal printer through its OS driver, so the app just renders an 80mm HTML view and prints it with `window.print()` — prints anything we can render (B/W, 80mm roll). This is the cheap, no-SDK route.
+- **Prep checklist (next session):**
+  1. **Driver:** install the Rongta RP327 Windows driver (rongtatech.com → driver-download) or its generic ESC/POS driver; add the printer (USB simplest, or Ethernet on the LAN); set default paper = 80mm × continuous, tune print density.
+  2. **Confirm** a Windows test print + a Chrome/Edge web-page print land correctly at 80mm.
+  3. **App side (Claude builds):** add an **80mm print view + `@media print`/`@page { size: 80mm auto; margin:0 }` stylesheet** to `css/styles.css`, and a small print helper that renders the chosen content into a print container and calls `window.print()`. First targets: (a) **tech-ticket totals from Reports**, (b) a **customer receipt** (reuse `ticketTotal`), (c) a **thank-you note**. Add a "Print" button where each lives.
+  4. **Optional silent one-tap:** Chrome/Edge `--kiosk-printing` flag with the RP327 set default (skips the dialog), or **QZ Tray** for raw ESC/POS + the **cash-drawer kick** (the app already has a cash-drawer feature to tie into).
+- **Constraints to remember:** black-and-white thermal only; 80mm continuous roll (receipt strip, not letter); print is desktop-driven (the iPad doesn't need to print directly — if it ever should, route through the desktop or revisit an AirPrint printer). Full handoff in memory `[[receipt-printer]]`.
+
 ---
 
 ## Standing rules (every session)
