@@ -224,6 +224,8 @@ function _applyTurnsTotals() {
     btn.classList.toggle('border-surface-container-high', !_turnsTotalsShow);
     btn.title = _turnsTotalsShow ? 'Tech billed totals shown — tap to hide' : 'Tech billed totals hidden — tap to show';
   }
+  const ic = document.getElementById('turns-totals-icon');
+  if (ic) ic.textContent = _turnsTotalsShow ? 'visibility' : 'visibility_off';
 }
 export function toggleTurnsTotals() {
   _turnsTotalsShow = !_turnsTotalsShow;
@@ -424,7 +426,7 @@ export function renderTurnsTechGrid() {
     const techCol = `<div class="flex items-center gap-2 w-[155px] flex-shrink-0 pr-2">
       <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
       <div class="min-w-0"><div class="flex items-center gap-1 leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate">${st.name}</span>${nextUpBadge}</div>
-      <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1" style="${avPres.chip}"><span style="width:6px;height:6px;border-radius:50%;background:${avPres.dot};display:inline-block"></span>${avPres.label}</span>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
+      <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1" style="${avPres.chip}"><span style="width:6px;height:6px;border-radius:50%;background:${avPres.dot};display:inline-block"></span>${avPres.label}</span>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
       <div class="turns-billed text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
 
     const MIN_SLOTS = 5;

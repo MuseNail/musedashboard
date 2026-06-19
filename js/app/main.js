@@ -123,6 +123,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.08', items: [
+    { icon: 'visibility', t: 'Turns board polish', d: 'The “Totals” button now shows an eye icon that closes when totals are hidden. Also fixed a half-turn count (like 4.5t) that could overlap the divider between a tech and their turns on some screens — it now tucks neatly under the status instead.' },
+  ] },
   { v: 'v5.07', items: [
     { icon: 'attach_money', t: 'Hide tech dollar totals on the Turns board', d: 'The Turns board has a new “Totals” button in the toolbar. Tap it to hide the “$ billed” line under each technician — handy on a shared screen so staff aren’t comparing earnings. Turn counts stay visible. It’s set per device, so each iPad or computer remembers its own choice.' },
   ] },
