@@ -40,9 +40,10 @@ import * as quicksale from './features/quicksale.js';
 import * as search from './features/search.js';
 import * as boSync from './features/backoffice-sync.js';
 import * as guide from './features/guide.js';
+import * as receipt from './features/receipt.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -123,6 +124,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.09', items: [
+    { icon: 'print', t: 'Print receipts on a receipt-roll printer', d: 'You can now print on an 80mm thermal receipt printer. In Sales → a transaction, tap “Print” for a customer receipt (shop info, services, items, totals, tip, how they paid, and a thank-you). In Payroll → “Print staff receipts” there’s a new “80mm roll” button to print each tech’s billing on the roll to hand out. The old “Receipt” button still reprints the card slip on the Helcim terminal.' },
+    { icon: 'qr_code_2', t: 'Review QR on receipts you can re-point any time', d: 'Customer receipts can show a “Leave us a review” QR code. It’s permanent — you never reprint it — but you decide where it sends people. Go to Settings → Business → Receipt & Reviews and paste your Google review link (or any link); change it whenever you want and even already-printed receipts follow the new link. The QR only prints once you’ve set a link.' },
+  ] },
   { v: 'v5.08', items: [
     { icon: 'visibility', t: 'Turns board polish', d: 'The “Totals” button now shows an eye icon that closes when totals are hidden. Also fixed a half-turn count (like 4.5t) that could overlap the divider between a tech and their turns on some screens — it now tucks neatly under the status instead.' },
   ] },

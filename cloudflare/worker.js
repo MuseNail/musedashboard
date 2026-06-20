@@ -224,6 +224,7 @@ async function appAuthOk(request, url, env, salonId) {
   const path = url.pathname;
   if (path === '/auth/login' || path === '/auth/logout') return true;          // the way IN
   if (path === '/terminal/webhook') return true;                // Helcim → HMAC-verified instead
+  if (path === '/r')                return true;                // public review-QR redirect (customers scan it)
   if (path === '/gcal/callback')    return true;                // Google redirect → state-nonce checked
   if (path.startsWith('/photos/') && request.method.toUpperCase() === 'GET') return true; // <img> src loads
   const h = request.headers.get('Authorization') || '';
@@ -278,6 +279,22 @@ export default {
     // "true" (exemptions documented on appAuthOk). Sits before all routing so a new
     // route added later is gated by default.
     if (!(await appAuthOk(request, url, env, salonId))) return json({ error: 'unauthorized' }, 401);
+
+    // ── Review-QR redirect (public) ───────────────────────────────────────────
+    // The printed receipt QR encodes …/r forever; this looks up the current
+    // destination (config.review_url, editable in Settings) and 302-redirects.
+    // Re-routable any time without reprinting — even already-printed receipts follow.
+    if (path === '/r') {
+      let dest = '';
+      try {
+        const stub = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
+        const res  = await stub.fetch(new Request('https://do/review-target'));
+        if (res.ok) dest = (await res.json()).url || '';
+      } catch {}
+      if (!dest) return new Response('This review link isn’t set up yet.', { status: 404, headers: { 'Content-Type': 'text/plain' } });
+      if (!/^https?:\/\//i.test(dest)) dest = 'https://' + dest;   // tolerate a bare host pasted in Settings
+      return Response.redirect(dest, 302);
+    }
 
     // ── PIN sign-in (§13 sessions) — forwarded to the DO, which owns the PINs ──
     // Only login/logout are public; /auth/check is internal (the gate calls the
@@ -770,6 +787,15 @@ export class MuseSalonDO {
     if (url.pathname === '/auth/login'  && request.method === 'POST') return this.authLogin(request);
     if (url.pathname === '/auth/logout' && request.method === 'POST') return this.authLogout(request);
     if (url.pathname === '/auth/check'  && request.method === 'POST') return this.authCheck(request);
+
+    // Current destination for the public review-QR redirect (the Worker's /r route
+    // calls this). Single config key, written by Settings via the normal config.set op.
+    if (url.pathname === '/review-target') {
+      const v = await this.state.storage.get('config:review_url');
+      return new Response(JSON.stringify({ url: typeof v === 'string' ? v : '' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     // HTTP fallback API (used by the client when the WebSocket is unavailable)
     if (url.pathname === '/state/snapshot') {

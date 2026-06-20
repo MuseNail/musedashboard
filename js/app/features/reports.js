@@ -13,6 +13,7 @@ import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS, SQUARE_PROXY, HELCIM_P
 import { helcimActive, refundOnHelcim } from './helcim.js';
 import { gcRedemptions, gcTotalUsed } from './giftcards.js';
 import { fdPaidHours, fdPunches, fdSetPunches, roundQuarterHours, fdPunchSuspect } from './timeclock.js';
+import { printTechReceipts80 } from './receipt.js';
 
 const cfg = () => getState().config;
 const records = () => getState().records;
@@ -2045,9 +2046,10 @@ export function payrollExportStaffPDF() {
       <span id="staffpdf-count" class="ml-auto text-xs font-normal text-on-surface-variant"></span>
     </div>
     <div class="rounded-xl border border-surface-container-high overflow-y-auto" style="max-height:50vh">${boxes}</div>
-    <div class="flex justify-end gap-2 mt-4">
+    <div class="flex items-center gap-2 mt-4">
       <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 rounded-xl border border-surface-container-high text-on-surface-variant font-body font-semibold text-sm">Cancel</button>
-      <button id="staffpdf-go" onclick="staffPdfPrint()" class="px-5 py-2 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm">Print</button>
+      <button id="staffpdf-go80" onclick="staffPdfPrint80()" title="Print on the 80mm receipt roll" class="ml-auto flex items-center gap-1 px-4 py-2 rounded-xl border border-primary text-primary font-headline font-bold text-sm hover:bg-primary/5"><span class="material-symbols-outlined" style="font-size:16px">print</span> 80mm roll</button>
+      <button id="staffpdf-go" onclick="staffPdfPrint()" class="px-5 py-2 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm">Letter sheet</button>
     </div>
   </div>`;
   document.body.appendChild(m);
@@ -2062,8 +2064,9 @@ export function staffPdfCount() {
   const sel = document.querySelectorAll('#_staffpdf-modal .staffpdf-cb:checked');
   const lbl = document.getElementById('staffpdf-count');
   if (lbl) lbl.textContent = `${sel.length} of ${all.length} selected`;
-  const go = document.getElementById('staffpdf-go');
-  if (go) { go.textContent = sel.length ? `Print ${sel.length} receipt${sel.length > 1 ? 's' : ''}` : 'Print'; go.disabled = !sel.length; go.style.opacity = sel.length ? '' : '0.5'; }
+  [document.getElementById('staffpdf-go'), document.getElementById('staffpdf-go80')].forEach(go => {
+    if (go) { go.disabled = !sel.length; go.style.opacity = sel.length ? '' : '0.5'; }
+  });
 }
 export function staffPdfPrint() {
   const ids = new Set([...document.querySelectorAll('#_staffpdf-modal .staffpdf-cb:checked')].map(cb => cb.value));
@@ -2116,6 +2119,29 @@ function _staffReceiptsPdf(idSet) {
   </style></head><body>${sheets}</body></html>`;
   const u = URL.createObjectURL(new Blob([html], { type: 'text/html' })); const w = window.open(u, '_blank'); if (w) setTimeout(() => w.print(), 600); URL.revokeObjectURL(u);
   showToast('Staff receipts opened — two rows per sheet (cut to hand out)');
+}
+// 80mm receipt-roll version of the staff billing slips — one strip per tech,
+// auto-cut, for the front-desk thermal printer.
+export function staffPdfPrint80() {
+  const ids = new Set([...document.querySelectorAll('#_staffpdf-modal .staffpdf-cb:checked')].map(cb => cb.value));
+  if (!ids.size) { showToast('Select at least one staff member.'); return; }
+  document.getElementById('_staffpdf-modal')?.remove();
+  const { cur, T, curDays } = payrollComputedRows();
+  const techs = T.filter(x => (x.c.billed || x.c.refund) && ids.has(x.tech.id));
+  if (!techs.length) { showToast('No billing for the selected staff.'); return; }
+  const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const period = `${fmt(cur.from)} – ${fmt(cur.to)}`;
+  const rows = techs.map(x => ({
+    name: x.tech.name,
+    period,
+    days: curDays.map(day => [
+      new Date(day + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }),
+      (x.c.daily[day] || { billed: 0 }).billed,
+    ]),
+    total: x.c.billed,
+    refund: x.c.refund || 0,
+  }));
+  printTechReceipts80(rows);
 }
 
 // ── Transactions list ─────────────────────────────
@@ -2211,7 +2237,8 @@ export function renderTransactions() {
         <div class="text-[11px] font-body text-outline mt-1">${dateStr} · ${timeStr}${r.phone?' · '+r.phone:''}</div>${_paidByHtml(r)}${r.tip ? `<div class="text-[11px] font-body text-primary font-semibold mt-0.5">Tip $${r.tip.toFixed(2)}</div>` : ''}</div>
         <div class="ml-4 flex-shrink-0 flex items-center gap-2">
           <div class="flex items-center gap-1">
-            ${!isRefund?`<button onclick="event.stopPropagation();reprintTerminalReceipt('${r.id}')" title="Reprint receipt" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"><span class="material-symbols-outlined" style="font-size:14px">receipt_long</span> Receipt</button>`:''}
+            ${!isRefund?`<button onclick="event.stopPropagation();printCustomerReceipt('${r.id}')" title="Print receipt on the roll" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"><span class="material-symbols-outlined" style="font-size:14px">print</span> Print</button>`:''}
+            ${!isRefund?`<button onclick="event.stopPropagation();reprintTerminalReceipt('${r.id}')" title="Reprint the card receipt on the terminal" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-primary/10"><span class="material-symbols-outlined" style="font-size:14px">receipt_long</span> Receipt</button>`:''}
             ${!isRefund&&canDo('refund')?`<button onclick="event.stopPropagation();initiateRefund('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-secondary transition-colors px-2 py-1 rounded-lg hover:bg-secondary/10"><span class="material-symbols-outlined" style="font-size:14px">undo</span> Refund</button>`:''}
             ${canDo('deleteTransaction')?`<button onclick="event.stopPropagation();initiateDeleteTransaction('${r.id}')" class="flex items-center gap-1 text-[11px] font-body text-outline hover:text-error transition-colors px-2 py-1 rounded-lg hover:bg-error/10"><span class="material-symbols-outlined" style="font-size:14px">delete</span> Delete</button>`:''}
           </div>

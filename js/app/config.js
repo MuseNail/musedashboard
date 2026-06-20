@@ -1,5 +1,5 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
-export const APP_VERSION = 'v5.08';
+export const APP_VERSION = 'v5.09';
 export const APP_NAME    = 'musedashboard';
 export const STAFF_PIN   = '1234'; // fallback when no front desk users are configured
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
@@ -13,6 +13,10 @@ export const AI_PROXY     = ORIGIN + '/ai';
 export const PUSH_PROXY   = ORIGIN + '/push';
 export const SMS_PROXY    = ORIGIN + '/sms';
 export const GCAL_PROXY   = ORIGIN + '/gcal';
+// Fixed URL the printed receipt QR encodes forever. The Worker's /r route
+// redirects it to config.review_url (editable in Settings), so the QR never
+// has to be reprinted to point somewhere new.
+export const REVIEW_REDIRECT = ORIGIN + '/r';
 // Web Push VAPID public key (non-secret; the matching private key is the Worker's
 // VAPID_PRIVATE_KEY secret). Used by the Muse Staff app to subscribe for assignment
 // notifications. base64url-encoded uncompressed P-256 point.
