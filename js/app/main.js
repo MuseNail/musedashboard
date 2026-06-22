@@ -124,6 +124,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.13', items: [
+    { icon: 'toggle_on', t: 'Fix: service toggles & buttons tap reliably again', d: 'A recent fix that stopped popups closing while you select text was too aggressive — it could swallow taps on buttons with small parts inside, like the Check-in / Dashboard toggles in Settings → Services (they’d “bounce” and not switch). Taps now register normally; only an actual drag still counts as “clicking outside”.' },
+  ] },
   { v: 'v5.12', items: [
     { icon: 'sell', t: 'Fix: “Awaiting price” no longer looks Done on the Turns board', d: 'A service the front desk marked “Done — tech will price” was showing the blue “Done” color on the Turns board even though it still needs a price. It now shows a violet “Awaiting price” color (added to the legend), so it’s clear which finished services still need pricing.' },
   ] },
