@@ -8,6 +8,7 @@
 // Access: front-desk PIN, allowed only when the account's role has the
 // viewReports permission (admins always pass) — same canDo() the dashboard uses.
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
+import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';

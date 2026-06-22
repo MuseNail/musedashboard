@@ -8,6 +8,7 @@
 // separation only — the open transport still sends full state; true per-tech
 // isolation is the server-auth item, intentionally out of scope here.)
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
+import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';

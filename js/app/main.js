@@ -4,6 +4,7 @@
 // store to re-render on remote changes, and runs startup.
 
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
+import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
 import * as store from './store.js';
 import * as sync from './sync.js';
 import * as session from './session.js';
@@ -123,6 +124,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.11', items: [
+    { icon: 'highlight_alt', t: 'Fix: selecting text in a popup no longer closes it', d: 'When you dragged to select text in a field (like a name) and let go over the dimmed area, the popup would close. Now popups only close on a real click outside — dragging to select text keeps them open. Applies everywhere across the app.' },
+  ] },
   { v: 'v5.10', items: [
     { icon: 'event', t: 'Appointment marker on the Turns board', d: 'Customers who came from a booked appointment now show a small lavender “Appt” tag on their turn card (on the time/status line), so you can tell appointments from walk-ins at a glance — the same info the Queue already shows.' },
   ] },
