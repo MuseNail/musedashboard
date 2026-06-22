@@ -123,6 +123,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.10', items: [
+    { icon: 'event', t: 'Appointment marker on the Turns board', d: 'Customers who came from a booked appointment now show a small lavender “Appt” tag on their turn card (on the time/status line), so you can tell appointments from walk-ins at a glance — the same info the Queue already shows.' },
+  ] },
   { v: 'v5.09', items: [
     { icon: 'design_services', t: 'Fix: unselecting a technician’s services', d: 'In Staff → edit a technician, tapping a service to turn it off now visibly clears it (it had stayed highlighted even though it was actually being removed). Selecting and unselecting services now shows the right on/off state every time.' },
   ] },
