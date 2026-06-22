@@ -17,6 +17,7 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { getActiveUser } from '../session.js';
 import { showToast } from '../utils.js';
+import { PUSH_PROXY } from '../config.js';
 
 const cfg = () => getState().config;
 const CHAT_CAP = 300;
@@ -144,7 +145,19 @@ export function sendChatMessage() {
   dispatch('config.set', { key: 'chat_log', value: [...allMsgs(), msg].slice(-CHAT_CAP) });
   _draft = ''; _pendMentions = []; _atOpen = false; _lastNotifiedTs = msg.ts;
   markSeen(ch); render(); updateChatBadge();
-  // Phase 3 (Worker): fan out web-push to `to` / `mentions` here.
+  pushNotify(to ? [to] : mentions, to ? myName() : myName() + ' · Team', text);
+}
+// Ping the @mentioned people / DM recipient's phone via the existing Worker push
+// fan-out (/push/notify accepts person ids; recipients subscribe by pid in the
+// staff app). Best-effort, never on every message — only on a tag/DM.
+function pushNotify(pids, title, text) {
+  const me = myPid();
+  const targets = [...new Set((pids || []).filter(p => p && p !== me))];
+  if (!targets.length) return;
+  fetch(PUSH_PROXY + '/notify', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ techIds: targets, title: String(title).slice(0, 80), body: String(text).slice(0, 200), tag: 'muse-chat' }),
+  }).catch(() => {});
 }
 export function chatInputKey(ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); sendChatMessage(); } }
 

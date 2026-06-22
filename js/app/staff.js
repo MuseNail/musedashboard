@@ -153,6 +153,15 @@ function _fdPayPeriodAt(offset = 0) {
 }
 
 // FD view navigation state: which schedule week and pay period are shown (0 = current).
+// "Turn on alerts" prompt — shown in both the tech and front-desk views so either
+// can grant notification permission (needed for assignment AND chat pushes).
+function notifBannerHtml() {
+  return (pushSupported() && Notification.permission !== 'granted') ? `
+    <button onclick="enableStaffPush()" class="w-full mb-3 rounded-xl border-2 border-primary text-primary py-3 font-headline font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors">
+      <span class="material-symbols-outlined" style="font-size:18px">notifications_active</span> Turn on alerts — messages &amp; assignments
+    </button>` : '';
+}
+
 let _fdUser = null, _fdSchedOffset = 0, _fdPeriodOffset = 0;
 window.fdNavSched = (dir) => { _fdSchedOffset += dir; if (_fdUser) renderFdView(_fdUser); };
 window.fdNavPeriod = (dir) => { _fdPeriodOffset += dir; if (_fdUser) renderFdView(_fdUser); };
@@ -186,6 +195,7 @@ function renderFdView(fdUser) {
     : `${_fdPeriodOffset} period${_fdPeriodOffset > 1 ? 's' : ''} ahead`;
   const navBtn = (fn, dir, glyph) => `<button onclick="${fn}(${dir})" class="w-9 h-9 rounded-lg border border-surface-container-high text-on-surface flex items-center justify-center active:scale-95">${glyph}</button>`;
   document.getElementById('staff-list').innerHTML = `
+    ${notifBannerHtml()}
     <div class="flex items-center justify-between mb-2">
       ${navBtn('fdNavPeriod', -1, '◀')}
       <span class="text-xs font-headline font-bold uppercase tracking-widest text-on-surface-variant">${periodLabel}</span>
@@ -248,10 +258,7 @@ function renderMain(meStaff) {
   const tab = (id, label) => `<button onclick="staffTab('${id}')"
     class="flex-1 py-3 rounded-xl font-headline font-bold text-base transition-all ${_view === id ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}">${label}</button>`;
 
-  const notifBanner = (pushSupported() && Notification.permission !== 'granted') ? `
-    <button onclick="enableStaffPush()" class="w-full mb-3 rounded-xl border-2 border-primary text-primary py-3 font-headline font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors">
-      <span class="material-symbols-outlined" style="font-size:18px">notifications_active</span> Turn on alerts — assignments &amp; new appointments
-    </button>` : '';
+  const notifBanner = notifBannerHtml();
 
   const updateBanner = _updateVer ? `
     <button onclick="staffUpdateNow()" class="w-full mb-3 rounded-xl bg-secondary-container text-on-secondary-container py-3.5 font-headline font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm">
@@ -692,7 +699,7 @@ window.staffPinSubmit = async () => {
       _appts = null; _apptsAt = 0; _apptsErr = '';
       sync.resync();                                   // reconnect with the session → snapshot arrives
       render();
-      if (myId) registerPush();
+      registerPush();   // tech OR front-desk → subscribe for assignment + chat pushes
       return;
     }
     renderLogin(res.error === 'slow_down' || res.retryInSec ? `Too many tries — wait ${res.retryInSec || 5}s`
@@ -712,6 +719,7 @@ window.staffPinSubmit = async () => {
   if (fd) {
     myFdId = fd.id; myId = null; localStorage.setItem(MY_FD_KEY, myFdId); localStorage.removeItem(MY_KEY);
     if (input) input.value = ''; render();
+    registerPush();   // subscribe this device for the fd user's chat pushes (no-op if alerts off)
     serverLogin({ pin, userId: fd.id, device: 'staff-app' }).then(r => { if (r.ok) sync.resync(); });   // §13 session mint/refresh
     return;
   }
@@ -754,33 +762,44 @@ window.enableStaffPush = async () => {
     render();
   } catch { showToast('Could not enable notifications'); }
 };
-// Subscribe this device (if needed) and register the subscription under the current tech.
-// No-ops unless permission is already granted + a tech is signed in.
+// Push ids this device should be reachable at: a tech gets the legacy raw techId
+// (assignment alerts) AND the 'tech:<id>' person pid (chat); a front-desk user gets
+// the 'fd:<id>' pid (chat). One browser subscription, registered under each id.
+function myPushIds() {
+  if (myId)   return [myId, 'tech:' + myId];
+  if (myFdId) return ['fd:' + myFdId];
+  return [];
+}
+const _pushUnsub = async (sub, id) => { try { await fetch(PUSH_PROXY + '/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: id, endpoint: sub.endpoint }) }); } catch {} };
+// Subscribe this device under the signed-in person's ids. No-ops unless permission is
+// granted + someone is signed in. Drops any previously-tagged ids no longer in use.
 async function registerPush() {
-  if (!pushSupported() || Notification.permission !== 'granted' || !myId) return;
+  if (!pushSupported() || Notification.permission !== 'granted') return;
+  const ids = myPushIds(); if (!ids.length) return;
   try {
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToBytes(VAPID_PUBLIC_KEY) });
-    const prevTech = localStorage.getItem('muse_push_techid');
-    if (prevTech && prevTech !== myId) {   // device switched techs → drop the old link
-      try { await fetch(PUSH_PROXY + '/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: prevTech, endpoint: sub.endpoint }) }); } catch {}
-    }
-    await fetch(PUSH_PROXY + '/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: myId, subscription: sub.toJSON() }) });
-    localStorage.setItem('muse_push_techid', myId);
+    let prev = []; try { prev = JSON.parse(localStorage.getItem('muse_push_ids') || 'null') || []; } catch {}
+    const legacy = localStorage.getItem('muse_push_techid'); if (legacy) prev.push(legacy);   // migrate the old single-id key
+    for (const p of prev) if (!ids.includes(p)) await _pushUnsub(sub, p);   // device switched person → drop stale links
+    await Promise.all(ids.map(id => fetch(PUSH_PROXY + '/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: id, subscription: sub.toJSON() }) })));
+    localStorage.setItem('muse_push_ids', JSON.stringify(ids));
+    localStorage.removeItem('muse_push_techid');
   } catch {}
 }
-// On logout, drop the server-side link between this device and the signed-out tech so the
-// device stops receiving that tech's assignment alerts. The browser push subscription itself
-// is left intact (the next tech to sign in re-tags it via registerPush — no re-prompt).
+// On logout, drop the server-side links for this device's tagged ids so it stops
+// receiving that person's alerts. The browser push subscription itself is left intact
+// (the next sign-in re-tags it via registerPush — no re-prompt).
 async function unregisterPush() {
-  const techId = localStorage.getItem('muse_push_techid');
-  if (!techId || !pushSupported()) return;
+  let ids = []; try { ids = JSON.parse(localStorage.getItem('muse_push_ids') || 'null') || []; } catch {}
+  const legacy = localStorage.getItem('muse_push_techid'); if (legacy) ids.push(legacy);
+  if (!ids.length || !pushSupported()) return;
   try {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
-    if (sub) await fetch(PUSH_PROXY + '/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId, endpoint: sub.endpoint }) });
-    localStorage.removeItem('muse_push_techid');
+    if (sub) await Promise.all(ids.map(id => _pushUnsub(sub, id)));
+    localStorage.removeItem('muse_push_ids'); localStorage.removeItem('muse_push_techid');
   } catch {}
 }
 
