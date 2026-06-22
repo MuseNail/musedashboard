@@ -457,9 +457,11 @@ export function renderTurnsTechGrid() {
         if (tt === 'full') turnCounter += 1; else if (tt === 'half') turnCounter += 0.5;
         const turnLabelNum = Number.isInteger(turnCounter) ? turnCounter : turnCounter.toFixed(1);
         const turnLabel = tt === 'bonus' ? 'Bonus' : (cost === 0 ? '?' : '' + turnLabelNum);
-        const ss = getAssignmentStatus(e, a);
+        // Use the awaiting-price-aware status so a "Done — tech will price" service reads
+        // as violet "Awaiting price", not the blue "Done" fill (its raw status is 'complete').
+        const ss = effectiveServiceStatus(e, a);
         let bg, fg;
-        if (isPaidStatus(ss)) { bg='#dde2e5'; fg='#555'; } else if (ss === 'complete') { bg='#d3e4ef'; fg='#14425e'; } else if (ss === 'inservice') { bg='#d8ecdf'; fg='#1b4d33'; } else { bg='#ffe9c4'; fg='#5c4010'; }
+        if (isPaidStatus(ss)) { bg='#dde2e5'; fg='#555'; } else if (ss === 'awaiting') { bg='#e7e0f5'; fg='#3f2d6b'; } else if (ss === 'complete') { bg='#d3e4ef'; fg='#14425e'; } else if (ss === 'inservice') { bg='#d8ecdf'; fg='#1b4d33'; } else { bg='#ffe9c4'; fg='#5c4010'; }
         const outline = e.groupId ? `;outline:2px solid ${e.groupColor||'#e8a230'};outline-offset:-1px` : '';
         const s = svc(a.serviceId);
         const svcLabel = s ? s.label : (e.services.map(sid => svc(sid)?.label || '?').join(', '));
