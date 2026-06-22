@@ -111,6 +111,13 @@ tailwind.config = {
     <div class="bg-on-surface text-surface px-5 py-3 rounded-xl text-sm font-body font-medium shadow-2xl fade-up" id="toast-text"></div>
   </div>
 
+  <!-- ── Staff chat (Team + DMs) ─────────────────── -->
+  <button id="chat-fab" class="chat-fab" style="display:none" onclick="toggleChat()" title="Chat">
+    <span class="material-symbols-outlined" style="font-size:26px">chat</span>
+    <span id="chat-badge" class="chat-badge hidden">0</span>
+  </button>
+  <div id="chat-panel" class="chat-panel hidden"></div>
+
   <script type="module" src="js/app/staff.js"></script>
 </body>
 </html>

@@ -264,9 +264,12 @@ export function onChatSync() {
   if (!_chatInit) { _chatInit = true; _lastNotifiedTs = newest ? newest.ts : Date.now(); }
   else if (newest && newest.ts > _lastNotifiedTs) {
     _lastNotifiedTs = newest.ts;
-    const onDashboard = document.getElementById('screen-desk')?.classList.contains('active');
+    // Dashboard: only on the desk screen (never the customer kiosk). Staff/reports
+    // apps have no #screen-desk, so allow the toast there.
+    const deskEl = document.getElementById('screen-desk');
+    const onSurface = deskEl ? deskEl.classList.contains('active') : true;
     const toMe = chOf(newest).startsWith('dm:') ? dmInvolves(chOf(newest), me) : true;
-    if (newest.uid !== me && !_open && onDashboard && toMe) {
+    if (me && newest.uid !== me && !_open && onSurface && toMe) {
       const who = firstName(newest.uid) || newest.name;
       const tag = chOf(newest).startsWith('dm:') ? '💬 ' : '';
       showToast(`${tag}${who}: ${newest.text.slice(0, 40)}`);

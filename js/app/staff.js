@@ -16,6 +16,8 @@ import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp } fro
 import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, GCAL_PROXY, APP_VERSION } from './config.js';
 import { getFdShift, fdShiftLabel } from './features/fd-schedule.js';
+import * as chat from './features/chat.js';
+Object.assign(window, chat);   // chat panel uses inline onclick= handlers
 import { fdPaidHours, fdPunches, roundQuarterHours, fdPunchSuspect } from './features/timeclock.js';
 
 const cfg     = () => store.getState().config;
@@ -98,8 +100,20 @@ function statusChip(status) {
   return `<span class="text-[11px] font-body font-bold px-2 py-0.5 rounded-full" style="background:${c.bg};color:${c.fg}">${c.label}</span>`;
 }
 
+// Keep the chat's "me" identity + the FAB in sync with who's signed in here.
+function syncChat() {
+  if (myId) chat.setChatIdentity('tech:' + myId, me()?.name || 'Tech');
+  else if (myFdId) chat.setChatIdentity('fd:' + myFdId, meFd()?.name || 'Front desk');
+  else chat.setChatIdentity(null);
+  const loggedIn = !!(myId || myFdId);
+  const fab = document.getElementById('chat-fab'); if (fab) fab.style.display = loggedIn ? 'flex' : 'none';
+  if (!loggedIn) chat.closeChat();
+  chat.updateChatBadge();
+}
+
 // ── Render ────────────────────────────────────────
 function render() {
+  syncChat();
   const fd = meFd();
   if (fd) return renderFdView(fd);
   const meStaff = me();
@@ -792,8 +806,9 @@ window.staffUpdateNow = () => { showToast('Updating…'); hardReloadApp(); };
 // ── Boot ──────────────────────────────────────────
 function boot() {
   sync.start();
-  store.subscribe(() => { if (priceInputFocused()) return; render(); });
+  store.subscribe(() => { chat.onChatSync(); if (priceInputFocused()) return; render(); });
   render();   // instant render from cached state; subscribe re-renders on hydrate
+  chat.onChatSync();   // baseline the chat unread badge from cache on load
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').then(() => registerPush()).catch(() => {});
   checkStaffVersion();   // on cold start
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkStaffVersion(); });   // re-check each time they reopen the app
