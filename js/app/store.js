@@ -228,6 +228,17 @@ export function applyChange(op, payload, seq) {
       break;
     }
     case 'audit.log':       if (payload && payload.event) { state.audit.unshift(payload.event); if (state.audit.length > 500) state.audit.length = 500; } break;
+    case 'chat.append': {
+      // Append a single staff-chat message (mirrors the DO's atomic append). Idempotent by
+      // id so the optimistic local apply + a broadcast echo / outbox replay never double-add.
+      const m = payload && payload.message;
+      if (!m || !m.id) break;
+      const log = Array.isArray(state.config.chat_log) ? state.config.chat_log : (state.config.chat_log = []);
+      if (log.some(x => x && x.id === m.id)) break;
+      log.push(m);
+      if (log.length > 300) log.splice(0, log.length - 300);
+      break;
+    }
     default: console.warn('[store] unknown op', op); return;
   }
   if (typeof seq === 'number' && seq > state.seq) state.seq = seq;

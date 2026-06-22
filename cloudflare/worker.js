@@ -1130,6 +1130,22 @@ export class MuseSalonDO {
           }
           break;
         }
+        case 'chat.append': {
+          // Server-side APPEND for staff chat — the DO serializes its writes, so two
+          // people sending at the same instant each append to the current stored array
+          // (no last-write-wins clobber, unlike a whole-array config.set). Idempotent by
+          // message id (replay/echo-safe); capped by count. Day-freshness is a client
+          // display filter (local 4 AM), so no timezone math here.
+          const m = payload && payload.message;
+          if (!m || !m.id) break;
+          const stored = await this.state.storage.get('config:chat_log');
+          const arr = Array.isArray(stored) ? stored : [];
+          if (arr.some(x => x && x.id === m.id)) break;   // already have it
+          arr.push(m);
+          if (arr.length > 300) arr.splice(0, arr.length - 300);
+          await this.state.storage.put('config:chat_log', arr);
+          break;
+        }
         default:
           console.warn('[mutate] unknown op:', op);
           return { error: 'unknown op: ' + op };

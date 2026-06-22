@@ -1,18 +1,18 @@
 // ── Staff chat ──────────────────────────────────────────────────────────────
 // A small messaging surface for staff: a "Team" group channel + private 1:1 DMs,
-// with @mentions. Messages ride the existing config sync — they live in
-// config.chat_log (capped) and broadcast to every device via dispatch('config.set'),
-// so the dashboard works with NO Worker change. Unread (per conversation) and the
-// last-seen markers are device-local (localStorage), not synced.
+// with @mentions. Messages live in config.chat_log and sync to every device.
+// Sending uses the 'chat.append' op: the DO appends the single message to its own
+// stored array (serialized, idempotent by id) so two people sending at once can't
+// clobber each other — unlike a whole-array config.set. Unread (per conversation)
+// and last-seen markers are device-local (localStorage), not synced.
 //
 // Identity: a "person id" (pid) is namespaced — 'fd:<id>' (front-desk user) or
 // 'tech:<id>' (technician) — so DMs/mentions can target either kind across the
-// dashboard and (later) the staff app. On the dashboard "me" is the signed-in
-// front-desk user. The staff app sets its own identity via setChatIdentity().
+// dashboard and the staff app. On the dashboard "me" is the signed-in front-desk
+// user; the staff app sets its own identity via setChatIdentity().
 //
-// Phase 3 (Worker) will route sending through a server append (removing the
-// last-write-wins clobber risk) and fan out web-push to the @mentioned / DM'd
-// person. Until then there is no push; in-app unread + toasts cover it.
+// Push: on an @mention or DM, pushNotify() pings the recipient's phone via the
+// Worker's /push/notify fan-out (recipients subscribe by pid in the staff app).
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { getActiveUser } from '../session.js';
@@ -142,7 +142,7 @@ export function sendChatMessage() {
   const msg = { id: 'm' + Date.now() + Math.random().toString(36).slice(2, 6), uid: me, name: myName(), text: text.slice(0, 1000), ts: Date.now(), ch };
   if (to) msg.to = to;
   if (mentions.length) msg.mentions = mentions;
-  dispatch('config.set', { key: 'chat_log', value: [...allMsgs(), msg].slice(-CHAT_CAP) });
+  dispatch('chat.append', { message: msg });   // DO-side atomic append — no whole-array clobber
   _draft = ''; _pendMentions = []; _atOpen = false; _lastNotifiedTs = msg.ts;
   markSeen(ch); render(); updateChatBadge();
   pushNotify(to ? [to] : mentions, to ? myName() : myName() + ' · Team', text);
