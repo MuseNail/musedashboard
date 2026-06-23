@@ -124,6 +124,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.20', items: [
+    { icon: 'vertical_align_bottom', t: 'Chat: auto-scroll fixed + no more iPhone zoom', d: 'Opening a chat now scrolls straight to the newest message, and on iPhone the chat no longer zooms in when you open it.' },
+  ] },
   { v: 'v5.19', items: [
     { icon: 'chat', t: 'Chat polish: live updates, auto-scroll, no double pings', d: 'The chat now updates in real time — a new message shows up without closing and reopening the window — and it scrolls straight to the latest message. Also fixed chat push notifications arriving twice on the same phone.' },
   ] },

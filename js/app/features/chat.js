@@ -275,7 +275,7 @@ function render() {
   const input = document.getElementById('chat-input');
   if (input && _view !== 'list' && _view !== 'new') {
     input.value = _draft;
-    const box = p.querySelector('.chat-msgs');
+    const box = p.querySelector('.chat-body');   // the scroll container (overflow-y:auto), NOT .chat-msgs
     const toBottom = () => { if (box) box.scrollTop = box.scrollHeight; };
     toBottom();                       // sync
     requestAnimationFrame(toBottom);  // after layout/paint (heights settled)
