@@ -349,6 +349,11 @@
      the whole overlay — and the panel inside it — scale/bounce on every tap (the same
      bug the numpad had). Kill the transform on the overlay; buttons inside still scale. */
   .fixed.inset-0:active { transform: none !important; }
+  /* …and NOT a large clickable list card with controls inside. Service/item/fee rows are
+     `onclick` cards (tap = edit) wrapping nested toggles + delete; the press-scale above
+     propagated up from a tapped toggle, scaling the whole card → a "bounce." Kill the
+     press-transform inside these lists (the toggle's knob slide still gives feedback). */
+  #services-merged-list :active, #settings-items-list :active, #settings-fees-list :active { transform: none !important; }
   /* Number inputs are type-only (e.g. the payroll Check field) — no up/down spinners. */
   input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
   input[type=number] { -moz-appearance: textfield; appearance: textfield; }
@@ -374,10 +379,10 @@
   /* Slick pill switch — shared by services / active-staff / role-permission
      toggles (identical markup: a track div + an absolutely-positioned knob div).
      On-state keeps its bg-primary class → we layer a gradient + inset shadow;
-     the knob gets a lift + a springy slide. */
+     the knob gets a lift + a smooth (non-overshooting) slide. */
   .mswitch { box-shadow: inset 0 1px 3px rgba(0,0,0,.18); }
   .mswitch.bg-primary { background-image: linear-gradient(180deg, #237370, var(--primary)); }
-  .mswitch > div { box-shadow: 0 2px 5px rgba(0,0,0,.28); transition: left .22s cubic-bezier(.4,1.3,.5,1) !important; }
+  .mswitch > div { box-shadow: 0 2px 5px rgba(0,0,0,.28); transition: left .18s cubic-bezier(.4,0,.2,1) !important; }
 
   /* Unified drag drop-marker — a glowing teal insert-line, used everywhere a
      reorder happens (turns slots, tech order, calendar selector, floor plan). */
