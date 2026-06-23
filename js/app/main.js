@@ -124,6 +124,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.19', items: [
+    { icon: 'chat', t: 'Chat polish: live updates, auto-scroll, no double pings', d: 'The chat now updates in real time — a new message shows up without closing and reopening the window — and it scrolls straight to the latest message. Also fixed chat push notifications arriving twice on the same phone.' },
+  ] },
   { v: 'v5.18', items: [
     { icon: 'notifications_off', t: 'Fix: chat button no longer shows a phantom “0”', d: 'On the staff app the chat button was always showing a red badge (even with no messages) and the count didn’t clear after reading — a styling bug kept it stuck on. It now shows only a real unread count and disappears once you’ve read your messages.' },
   ] },
@@ -480,6 +483,7 @@ function updateSyncIndicator(state) {
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
   if (changed === 'connection') return;
+  if (changed === 'chat.append') chat.onChatSync();   // a new chat message — refresh the open panel + badge (its own op, not 'config')
   if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync(); timeclock.renderClockButton(); helcim.syncProcessorClass();

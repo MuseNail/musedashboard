@@ -161,20 +161,13 @@ export function sendChatMessage() {
   else { targets = mentions; title = myName() + ' · Team'; }
   pushNotify(targets, title, text);
 }
-// Ping recipients' phones via the existing Worker push fan-out (/push/notify accepts
-// person ids; recipients subscribe by pid in the staff app). For a tech target we ALSO
-// notify the raw techId — that's the subscription the proven assignment alerts already
-// use, so techs get chat pushes immediately without waiting to re-subscribe under the
-// newer 'tech:<id>' pid. Best-effort.
+// Ping recipients' phones via the Worker push fan-out (/push/notify accepts person ids;
+// the staff app subscribes each person under their pid — tech:<id> / fd:<id>). Target the
+// pid only: a tech's device is registered under BOTH tech:<id> and the raw techId, so also
+// sending to the raw id delivered the SAME push twice (the "coming in twice" bug). Best-effort.
 function pushNotify(pids, title, text) {
   const me = myPid();
-  const targets = [];
-  (pids || []).forEach(p => {
-    if (!p || p === me) return;
-    targets.push(p);
-    if (p.startsWith('tech:')) targets.push(p.slice(5));   // raw techId fallback (assignment-alert subscription)
-  });
-  const uniq = [...new Set(targets)];
+  const uniq = [...new Set((pids || []).filter(p => p && p !== me))];
   if (!uniq.length) return;
   fetch(PUSH_PROXY + '/notify', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -282,8 +275,12 @@ function render() {
   const input = document.getElementById('chat-input');
   if (input && _view !== 'list' && _view !== 'new') {
     input.value = _draft;
-    setTimeout(() => { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }, 30);
-    const box = p.querySelector('.chat-msgs'); if (box) box.scrollTop = box.scrollHeight;
+    const box = p.querySelector('.chat-msgs');
+    const toBottom = () => { if (box) box.scrollTop = box.scrollHeight; };
+    toBottom();                       // sync
+    requestAnimationFrame(toBottom);  // after layout/paint (heights settled)
+    // focus without yanking the view, then pin to the latest message once more
+    setTimeout(() => { try { input.focus({ preventScroll: true }); input.setSelectionRange(input.value.length, input.value.length); } catch (e) {} toBottom(); }, 30);
   }
 }
 // Back-compat alias (older callers / store subscription used renderChat()).
