@@ -633,3 +633,7 @@
   .chat-fab .chat-badge { position:absolute; top:-2px; right:-2px; min-width:20px; height:20px; border-radius:999px;
     background:#d11a2a; color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center;
     justify-content:center; padding:0 5px; border:2px solid #fff; }
+  /* The .chat-fab .chat-badge rule above (2 classes) outranks Tailwind's .hidden (1 class),
+     so the badge stayed visible (showing a stale "0") even when hidden. Higher-specificity
+     hide rule wins. */
+  .chat-fab .chat-badge.hidden { display:none; }

@@ -293,7 +293,7 @@ export function updateChatBadge() {
   const badge = document.getElementById('chat-badge'); if (!badge) return;
   const n = totalUnread();
   if (n > 0 && !_open) { badge.textContent = n > 9 ? '9+' : String(n); badge.classList.remove('hidden'); }
-  else badge.classList.add('hidden');
+  else { badge.textContent = ''; badge.classList.add('hidden'); }
 }
 
 // Called from the store subscription when config (incl. chat_log) syncs in.

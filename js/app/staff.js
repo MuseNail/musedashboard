@@ -777,7 +777,7 @@ window.enableStaffPush = async () => {
   try { perm = await Notification.requestPermission(); }
   catch (e) { showToast('Couldn’t ask for permission — reopen the app and try again'); return; }
   if (perm !== 'granted') { showToast(perm === 'denied' ? 'You tapped Don’t Allow — enable it in Settings to get alerts' : 'Notifications not turned on'); return; }
-  try { await registerPush(); showToast('Notifications on ✓'); render(); }
+  try { const ok = await registerPush(); showToast(ok ? 'Notifications on ✓' : 'Allowed — but couldn’t reach the server to finish. Check the connection and try again.'); if (ok) render(); }
   catch (e) { showToast('Allowed, but couldn’t finish setup — try once more'); }
 };
 // Push ids this device should be reachable at: a tech gets the legacy raw techId
@@ -792,8 +792,8 @@ const _pushUnsub = async (sub, id) => { try { await fetch(PUSH_PROXY + '/unsubsc
 // Subscribe this device under the signed-in person's ids. No-ops unless permission is
 // granted + someone is signed in. Drops any previously-tagged ids no longer in use.
 async function registerPush() {
-  if (!pushSupported() || Notification.permission !== 'granted') return;
-  const ids = myPushIds(); if (!ids.length) return;
+  if (!pushSupported() || Notification.permission !== 'granted') return false;
+  const ids = myPushIds(); if (!ids.length) return false;
   try {
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
@@ -801,10 +801,13 @@ async function registerPush() {
     let prev = []; try { prev = JSON.parse(localStorage.getItem('muse_push_ids') || 'null') || []; } catch {}
     const legacy = localStorage.getItem('muse_push_techid'); if (legacy) prev.push(legacy);   // migrate the old single-id key
     for (const p of prev) if (!ids.includes(p)) await _pushUnsub(sub, p);   // device switched person → drop stale links
-    await Promise.all(ids.map(id => fetch(PUSH_PROXY + '/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: id, subscription: sub.toJSON() }) })));
+    // Register the browser subscription under each id; report whether the SERVER accepted it
+    // (a silent failure here is exactly why "push doesn't work" was hard to see).
+    const oks = await Promise.all(ids.map(id => fetch(PUSH_PROXY + '/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: id, subscription: sub.toJSON() }) }).then(r => r.ok).catch(() => false)));
     localStorage.setItem('muse_push_ids', JSON.stringify(ids));
     localStorage.removeItem('muse_push_techid');
-  } catch {}
+    return oks.some(Boolean);
+  } catch { return false; }
 }
 // On logout, drop the server-side links for this device's tagged ids so it stops
 // receiving that person's alerts. The browser push subscription itself is left intact

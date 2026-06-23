@@ -124,6 +124,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.18', items: [
+    { icon: 'notifications_off', t: 'Fix: chat button no longer shows a phantom “0”', d: 'On the staff app the chat button was always showing a red badge (even with no messages) and the count didn’t clear after reading — a styling bug kept it stuck on. It now shows only a real unread count and disappears once you’ve read your messages.' },
+  ] },
   { v: 'v5.17', items: [
     { icon: 'mark_chat_read', t: 'Chat fixes: unread badge & turning on notifications', d: 'Opening the chat now clears the group unread badge (it would get stuck before), and a stale count clears when you reopen the app. Turning on notifications now tells you exactly what to do if it doesn’t work — most often it’s that notifications were blocked and need to be re-enabled in your phone’s Settings for the Muse Staff app.' },
   ] },
