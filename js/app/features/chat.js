@@ -43,10 +43,15 @@ const personName = pid => chatPeople().find(p => p.pid === pid)?.name || 'Someon
 const firstName  = pid => personName(pid).split(' ')[0];
 
 // ── Channels / messages ───────────────────────────────────────────────────────
+const TEAM = 'team';        // everyone (front desk + techs)
+const FD_TEAM = 'team-fd';  // dedicated front-desk-only group; every message pings all FD members
 const dmKey = (a, b) => 'dm:' + [a, b].sort().join('~');
 const dmParts = ch => ch.slice(3).split('~');
 const dmInvolves = (ch, pid) => ch.startsWith('dm:') && dmParts(ch).includes(pid);
 const dmOther = (ch, me) => { const p = dmParts(ch); return p[0] === me ? p[1] : p[0]; };
+const isGroupCh = ch => ch === TEAM || ch === FD_TEAM;
+const amFd = () => myPid().startsWith('fd:');                       // front-desk identity → sees the Front Desk channel
+const fdMemberPids = () => (cfg().fd_users || []).map(u => 'fd:' + u.id);
 
 // Auto-clear daily at the 4 AM salon-day start (mirrors the rest of the app).
 const DAY_START_HOUR = 4;
@@ -79,7 +84,7 @@ function markSeen(ch) { try { const m = seenMap(); m[ch] = Date.now(); localStor
 function unreadFor(ch) { const s = seenMap()[ch] || 0, me = myPid(); return msgsFor(ch).filter(m => m.ts > s && m.uid !== me).length; }
 function totalUnread() {
   const me = myPid();
-  let n = unreadFor('team');
+  let n = unreadFor(TEAM) + (amFd() ? unreadFor(FD_TEAM) : 0);
   dmConversations().forEach(c => { n += unreadFor(dmKey(me, c.pid)); });
   return n;
 }
@@ -117,7 +122,7 @@ export function chatNewMessage() { _view = 'new'; _atOpen = false; render(); }
 export function chatToggleMentions() { _atOpen = !_atOpen; render(); }
 export function chatDraft(v) { _draft = v; }
 
-const channelOfView = () => _view.startsWith('dm:') ? dmKey(myPid(), _view.slice(3)) : (_view === 'team' ? 'team' : null);
+const channelOfView = () => _view.startsWith('dm:') ? dmKey(myPid(), _view.slice(3)) : (isGroupCh(_view) ? _view : null);
 
 export function chatOpen(view) {
   _view = view; _atOpen = false; _draft = ''; _pendMentions = [];
@@ -136,8 +141,9 @@ export function sendChatMessage() {
   const input = document.getElementById('chat-input'); if (!input) return;
   const text = (input.value || '').trim(); if (!text) return;
   const me = myPid(); if (!me) { showToast('Sign in to chat.'); return; }
-  let ch = 'team', to = '', mentions = [];
+  let ch = TEAM, to = '', mentions = [];
   if (_view.startsWith('dm:')) { to = _view.slice(3); ch = dmKey(me, to); }
+  else if (_view === FD_TEAM) { ch = FD_TEAM; }
   else { mentions = _pendMentions.filter(pid => text.includes('@' + firstName(pid))); }
   const msg = { id: 'm' + Date.now() + Math.random().toString(36).slice(2, 6), uid: me, name: myName(), text: text.slice(0, 1000), ts: Date.now(), ch };
   if (to) msg.to = to;
@@ -145,18 +151,31 @@ export function sendChatMessage() {
   dispatch('chat.append', { message: msg });   // DO-side atomic append — no whole-array clobber
   _draft = ''; _pendMentions = []; _atOpen = false; _lastNotifiedTs = msg.ts;
   markSeen(ch); render(); updateChatBadge();
-  pushNotify(to ? [to] : mentions, to ? myName() : myName() + ' · Team', text);
+  // Push: DM → the recipient; Front Desk channel → every FD member; Team → @mentioned only.
+  let targets, title;
+  if (to) { targets = [to]; title = myName(); }
+  else if (ch === FD_TEAM) { targets = fdMemberPids(); title = myName() + ' · Front Desk'; }
+  else { targets = mentions; title = myName() + ' · Team'; }
+  pushNotify(targets, title, text);
 }
-// Ping the @mentioned people / DM recipient's phone via the existing Worker push
-// fan-out (/push/notify accepts person ids; recipients subscribe by pid in the
-// staff app). Best-effort, never on every message — only on a tag/DM.
+// Ping recipients' phones via the existing Worker push fan-out (/push/notify accepts
+// person ids; recipients subscribe by pid in the staff app). For a tech target we ALSO
+// notify the raw techId — that's the subscription the proven assignment alerts already
+// use, so techs get chat pushes immediately without waiting to re-subscribe under the
+// newer 'tech:<id>' pid. Best-effort.
 function pushNotify(pids, title, text) {
   const me = myPid();
-  const targets = [...new Set((pids || []).filter(p => p && p !== me))];
-  if (!targets.length) return;
+  const targets = [];
+  (pids || []).forEach(p => {
+    if (!p || p === me) return;
+    targets.push(p);
+    if (p.startsWith('tech:')) targets.push(p.slice(5));   // raw techId fallback (assignment-alert subscription)
+  });
+  const uniq = [...new Set(targets)];
+  if (!uniq.length) return;
   fetch(PUSH_PROXY + '/notify', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ techIds: targets, title: String(title).slice(0, 80), body: String(text).slice(0, 200), tag: 'muse-chat' }),
+    body: JSON.stringify({ techIds: uniq, title: String(title).slice(0, 80), body: String(text).slice(0, 200), tag: 'muse-chat' }),
   }).catch(() => {});
 }
 export function chatInputKey(ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); sendChatMessage(); } }
@@ -193,12 +212,17 @@ function header(title, icon, withBack) {
 }
 function listView() {
   const me = myPid();
-  const teamU = unreadFor('team');
-  const teamRow = `<div class="chat-conv" onclick="chatOpen('team')">
-    <div class="chat-av" style="background:#1a5252"><span class="material-symbols-outlined" style="font-size:20px">groups</span></div>
-    <div class="chat-cmid"><div class="chat-cname">Team</div><div class="chat-cprev">${teamMsgs().length ? _esc((teamMsgs().slice(-1)[0].uid === me ? 'You: ' : (firstName(teamMsgs().slice(-1)[0].uid) + ': ')) + teamMsgs().slice(-1)[0].text) : 'No messages yet'}</div></div>
-    ${teamU ? `<span class="chat-unread">${teamU > 9 ? '9+' : teamU}</span>` : ''}
-  </div>`;
+  const groupRow = (ch, name, bg, icon) => {
+    const u = unreadFor(ch), msgs = msgsFor(ch), last = msgs[msgs.length - 1];
+    const prev = last ? _esc((last.uid === me ? 'You: ' : (firstName(last.uid) + ': ')) + last.text) : 'No messages yet';
+    return `<div class="chat-conv" onclick="chatOpen('${ch}')">
+      <div class="chat-av" style="background:${bg}"><span class="material-symbols-outlined" style="font-size:20px">${icon}</span></div>
+      <div class="chat-cmid"><div class="chat-cname">${name}</div><div class="chat-cprev">${prev}</div></div>
+      ${u ? `<span class="chat-unread">${u > 9 ? '9+' : u}</span>` : ''}
+    </div>`;
+  };
+  const teamRow = groupRow(TEAM, 'Team', '#1a5252', 'groups')
+    + (amFd() ? groupRow(FD_TEAM, 'Front Desk', '#7a4ea0', 'support_agent') : '');
   const dms = dmConversations().map(c => {
     const u = unreadFor(dmKey(me, c.pid));
     return `<div class="chat-conv" onclick="chatOpen('dm:${c.pid}')">
@@ -225,25 +249,25 @@ function newView() {
   return header('New message', 'edit_square', true) + `<div class="chat-body"><div class="chat-seclbl">Pick someone</div>${rows}</div>`;
 }
 function threadView() {
-  const me = myPid(), isTeam = _view === 'team';
-  const other = isTeam ? null : _view.slice(3);
+  const me = myPid(), isGroup = isGroupCh(_view), isFdTeam = _view === FD_TEAM;
+  const other = isGroup ? null : _view.slice(3);
   const ch = channelOfView();
   const list = msgsFor(ch);
   const body = list.length ? list.map(m => {
     const mine = m.uid === me;
     return `<div class="chat-msg ${mine ? 'me' : ''}">
-      <div class="chat-meta">${isTeam ? (mine ? 'You' : _esc(firstName(m.uid) || m.name)) + ' · ' : ''}${timeStr(m.ts)}</div>
+      <div class="chat-meta">${isGroup ? (mine ? 'You' : _esc(firstName(m.uid) || m.name)) + ' · ' : ''}${timeStr(m.ts)}</div>
       <div class="chat-bub ${mine ? 'mine' : 'other'}">${withMentions(m.text)}</div>
     </div>`;
-  }).join('') : `<div class="chat-empty">${isTeam ? 'No messages yet — say hello.' : 'No messages yet. Say hi to ' + _esc(firstName(other)) + '.'}</div>`;
-  const atPop = (_atOpen && isTeam) ? `<div class="chat-atpop">${chatPeople().filter(p => p.pid !== me).map(p =>
+  }).join('') : `<div class="chat-empty">${isGroup ? 'No messages yet— say hello.' : 'No messages yet. Say hi to ' + _esc(firstName(other)) + '.'}</div>`;
+  const atPop = (_atOpen && isGroup) ? `<div class="chat-atpop">${chatPeople().filter(p => p.pid !== me).map(p =>
     `<div class="chat-atrow" onclick="chatPickMention('${p.pid}')"><div class="chat-av sm" style="background:${avColor(p.pid)}">${initial(p.name)}</div>${_esc(p.name)}<span class="chat-role">${p.kind === 'tech' ? 'Tech' : 'Front desk'}</span></div>`).join('')}</div>` : '';
-  const dmHint = isTeam ? '' : `<div class="chat-dmhint">Private message to ${_esc(personName(other))}${' '}· will ping their phone</div>`;
-  const ph = isTeam ? 'Message the team…' : 'Message ' + _esc(firstName(other)) + '…';
-  return header(isTeam ? 'Team' : personName(other), isTeam ? 'groups' : 'person', true)
+  const dmHint = isFdTeam ? '<div class="chat-dmhint">Front-desk team &middot; every message pings the front desk</div>' : isGroup ? '' : `<div class="chat-dmhint">Private message to ${_esc(personName(other))}${' '}· will ping their phone</div>`;
+  const ph = isFdTeam ? 'Message the front desk' : isGroup ?'Message the team…' : 'Message ' + _esc(firstName(other)) + '…';
+  return header(isFdTeam ? 'Front Desk' : isGroup ? 'Team' : personName(other), isFdTeam ? 'support_agent' : isGroup ? 'groups' : 'person', true)
     + `<div class="chat-body"><div class="chat-msgs">${dmHint}${body}</div></div>`
     + `<div class="chat-composer">${atPop}
-        ${isTeam ? `<button onclick="chatToggleMentions()" class="chat-cbtn at" title="Mention someone"><span class="material-symbols-outlined" style="font-size:19px">alternate_email</span></button>` : ''}
+        ${isGroup ? `<button onclick="chatToggleMentions()" class="chat-cbtn at" title="Mention someone"><span class="material-symbols-outlined" style="font-size:19px">alternate_email</span></button>` : ''}
         <input id="chat-input" class="chat-input" maxlength="1000" autocomplete="off" placeholder="${ph}" oninput="chatDraft(this.value)" onkeydown="chatInputKey(event)">
         <button onclick="sendChatMessage()" class="chat-cbtn send" title="Send"><span class="material-symbols-outlined" style="font-size:18px">send</span></button>
       </div>`;
@@ -281,7 +305,8 @@ export function onChatSync() {
     // apps have no #screen-desk, so allow the toast there.
     const deskEl = document.getElementById('screen-desk');
     const onSurface = deskEl ? deskEl.classList.contains('active') : true;
-    const toMe = chOf(newest).startsWith('dm:') ? dmInvolves(chOf(newest), me) : true;
+    const nch = chOf(newest);
+    const toMe = nch.startsWith('dm:') ? dmInvolves(nch, me) : (nch === FD_TEAM ? amFd() : true);
     if (me && newest.uid !== me && !_open && onSurface && toMe) {
       const who = firstName(newest.uid) || newest.name;
       const tag = chOf(newest).startsWith('dm:') ? '💬 ' : '';
