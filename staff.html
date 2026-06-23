@@ -111,6 +111,17 @@ tailwind.config = {
     <div class="bg-on-surface text-surface px-5 py-3 rounded-xl text-sm font-body font-medium shadow-2xl fade-up" id="toast-text"></div>
   </div>
 
+  <!-- ── Allow-notifications prompt (auto-shown once when signed in w/o permission) ── -->
+  <div id="staff-notif-modal" class="hidden fixed inset-0 z-[95] items-center justify-center bg-black/50 p-5" style="display:none" onclick="if(event.target===this)staffNotifDismiss()">
+    <div class="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-xs p-6 text-center fade-up">
+      <div class="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3"><span class="material-symbols-outlined text-primary" style="font-size:30px">notifications_active</span></div>
+      <div class="font-headline font-bold text-lg text-on-surface mb-1">Turn on notifications</div>
+      <div class="text-sm font-body text-on-surface-variant mb-5">Get pinged on your phone when you're assigned a customer or someone messages you in chat.</div>
+      <button onclick="staffNotifAllow()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3.5 rounded-xl font-headline font-bold active:scale-95 transition-all mb-2">Allow notifications</button>
+      <button onclick="staffNotifDismiss()" class="w-full text-on-surface-variant font-body font-semibold py-2">Not now</button>
+    </div>
+  </div>
+
   <!-- ── Staff chat (Team + DMs) ─────────────────── -->
   <button id="chat-fab" class="chat-fab" style="display:none" onclick="toggleChat()" title="Chat">
     <span class="material-symbols-outlined" style="font-size:26px">chat</span>

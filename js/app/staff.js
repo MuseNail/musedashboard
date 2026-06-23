@@ -115,11 +115,28 @@ function syncChat() {
 function render() {
   syncChat();
   const fd = meFd();
-  if (fd) return renderFdView(fd);
+  if (fd) { renderFdView(fd); maybeNotifPrompt(); return; }
   const meStaff = me();
   if (!meStaff) return renderLogin();
   renderMain(meStaff);
+  maybeNotifPrompt();
 }
+
+// Proactive "Allow notifications" pop-up — auto-shown once per session when someone's
+// signed in on this device but hasn't granted permission yet, so chat/assignment pings
+// actually reach their phone. Only when it can do something: permission still 'default'
+// (never 'denied' — can't re-prompt), and not an iOS browser tab (must be installed).
+function _notifEl() { return document.getElementById('staff-notif-modal'); }
+function maybeNotifPrompt() {
+  if (!(myId || myFdId) || !pushSupported()) return;
+  if (Notification.permission !== 'default') return;
+  if (isIOS() && !isStandalone()) return;
+  try { if (sessionStorage.getItem('muse_notif_dismissed')) return; } catch {}
+  const m = _notifEl(); if (!m || m.style.display === 'flex') return;
+  m.classList.remove('hidden'); m.style.display = 'flex';
+}
+window.staffNotifAllow = async () => { const m = _notifEl(); if (m) { m.classList.add('hidden'); m.style.display = ''; } await window.enableStaffPush(); render(); };
+window.staffNotifDismiss = () => { const m = _notifEl(); if (m) { m.classList.add('hidden'); m.style.display = ''; } try { sessionStorage.setItem('muse_notif_dismissed', '1'); } catch {} };
 
 // ── Front-desk view (read-only: this week's schedule + this period's clocked hours) ──
 function _fdWeekStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; }
