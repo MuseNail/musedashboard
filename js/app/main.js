@@ -124,6 +124,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.17', items: [
+    { icon: 'mark_chat_read', t: 'Chat fixes: unread badge & turning on notifications', d: 'Opening the chat now clears the group unread badge (it would get stuck before), and a stale count clears when you reopen the app. Turning on notifications now tells you exactly what to do if it doesn’t work — most often it’s that notifications were blocked and need to be re-enabled in your phone’s Settings for the Muse Staff app.' },
+  ] },
   { v: 'v5.16', items: [
     { icon: 'support_agent', t: 'Front Desk team chat', d: 'Chat now has a dedicated “Front Desk” channel that only front-desk staff see. Every message there pings all front-desk members’ phones — so it works as a real team-alert channel. The all-staff “Team” chat and direct messages are unchanged.' },
     { icon: 'notifications_active', t: 'Chat notifications reach phones reliably', d: 'Fixed chat push so a tagged or direct message reaches a technician’s phone right away (it now uses the same notification channel as assignment alerts). Reminder: each person needs the Muse Staff app installed on their phone with notifications turned on — on iPhone it must be added to the Home Screen first.' },

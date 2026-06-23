@@ -135,7 +135,7 @@ function maybeNotifPrompt() {
   const m = _notifEl(); if (!m || m.style.display === 'flex') return;
   m.classList.remove('hidden'); m.style.display = 'flex';
 }
-window.staffNotifAllow = async () => { const m = _notifEl(); if (m) { m.classList.add('hidden'); m.style.display = ''; } await window.enableStaffPush(); render(); };
+window.staffNotifAllow = () => { window.enableStaffPush(); const m = _notifEl(); if (m) { m.classList.add('hidden'); m.style.display = ''; } };   // call requestPermission first (within the tap), then hide
 window.staffNotifDismiss = () => { const m = _notifEl(); if (m) { m.classList.add('hidden'); m.style.display = ''; } try { sessionStorage.setItem('muse_notif_dismissed', '1'); } catch {} };
 
 // ── Front-desk view (read-only: this week's schedule + this period's clocked hours) ──
@@ -769,15 +769,16 @@ function urlB64ToBytes(b64) {
   return arr;
 }
 window.enableStaffPush = async () => {
-  if (!pushSupported()) { showToast("Notifications aren't supported on this device"); return; }
-  if (isIOS() && !isStandalone()) { showToast('On iPhone/iPad: Add Muse Staff to your Home Screen first, then turn on alerts.'); return; }
-  try {
-    const perm = await Notification.requestPermission();
-    if (perm !== 'granted') { showToast('Notifications not enabled'); return; }
-    await registerPush();
-    showToast('Assignment alerts on ✓');
-    render();
-  } catch { showToast('Could not enable notifications'); }
+  if (!pushSupported()) { showToast("This device/browser can't do notifications"); return; }
+  if (isIOS() && !isStandalone()) { showToast('iPhone: tap Share → “Add to Home Screen”, open that app, then turn on alerts'); return; }
+  // Already blocked → the OS won't re-prompt; the only fix is the phone/browser settings.
+  if (Notification.permission === 'denied') { showToast('Notifications are blocked for this app — turn them on in your phone’s Settings, then try again'); return; }
+  let perm;
+  try { perm = await Notification.requestPermission(); }
+  catch (e) { showToast('Couldn’t ask for permission — reopen the app and try again'); return; }
+  if (perm !== 'granted') { showToast(perm === 'denied' ? 'You tapped Don’t Allow — enable it in Settings to get alerts' : 'Notifications not turned on'); return; }
+  try { await registerPush(); showToast('Notifications on ✓'); render(); }
+  catch (e) { showToast('Allowed, but couldn’t finish setup — try once more'); }
 };
 // Push ids this device should be reachable at: a tech gets the legacy raw techId
 // (assignment alerts) AND the 'tech:<id>' person pid (chat); a front-desk user gets
@@ -847,7 +848,7 @@ function boot() {
   chat.onChatSync();   // baseline the chat unread badge from cache on load
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').then(() => registerPush()).catch(() => {});
   checkStaffVersion();   // on cold start
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkStaffVersion(); });   // re-check each time they reopen the app
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkStaffVersion(); chat.updateChatBadge(); } });   // re-check + recompute the chat badge (clears a stale count) on reopen
   setInterval(() => { if (!document.hidden) checkStaffVersion(); }, 20 * 60 * 1000);   // and poll so an always-open app self-updates
 }
 // Only boot inside the real page (the login shell exists); skipped when imported

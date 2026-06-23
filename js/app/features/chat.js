@@ -109,6 +109,9 @@ let _lastNotifiedTs = 0, _chatInit = false;
 export function toggleChat() { _open ? closeChat() : openChat(); }
 export function openChat() {
   _open = true; _view = 'list'; _atOpen = false; _draft = '';
+  // Opening the chat counts as seeing the group channels (their previews show in the
+  // list) — clears the lingering group-badge. DMs keep their unread dot until opened.
+  markSeen(TEAM); if (amFd()) markSeen(FD_TEAM);
   const p = document.getElementById('chat-panel'); if (p) { p.classList.remove('hidden'); p.style.display = 'flex'; }
   render(); updateChatBadge();
 }
