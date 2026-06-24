@@ -124,6 +124,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.21', items: [
+    { icon: 'keyboard', t: 'Chat: keyboard no longer closes while typing', d: 'On the staff app, typing a message no longer gets interrupted — incoming messages now update the conversation without closing your keyboard or losing what you’ve typed.' },
+  ] },
   { v: 'v5.20', items: [
     { icon: 'vertical_align_bottom', t: 'Chat: auto-scroll fixed + no more iPhone zoom', d: 'Opening a chat now scrolls straight to the newest message, and on iPhone the chat no longer zooms in when you open it.' },
   ] },

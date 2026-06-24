@@ -244,6 +244,31 @@ function newView() {
     </div>`).join('') || `<div class="chat-empty">No one to message yet.</div>`;
   return header('New message', 'edit_square', true) + `<div class="chat-body"><div class="chat-seclbl">Pick someone</div>${rows}</div>`;
 }
+// Just the contents of .chat-msgs (hint + message bubbles) for the current thread —
+// so onChatSync can refresh the message list WITHOUT rebuilding the composer/input
+// (rebuilding the input drops focus and closes the phone keyboard mid-typing).
+function threadBodyHtml() {
+  const me = myPid(), isGroup = isGroupCh(_view), isFdTeam = _view === FD_TEAM;
+  const other = isGroup ? null : _view.slice(3);
+  const list = msgsFor(channelOfView());
+  const body = list.length ? list.map(m => {
+    const mine = m.uid === me;
+    return `<div class="chat-msg ${mine ? 'me' : ''}"><div class="chat-meta">${isGroup ? (mine ? 'You' : _esc(firstName(m.uid) || m.name)) + ' · ' : ''}${timeStr(m.ts)}</div><div class="chat-bub ${mine ? 'mine' : 'other'}">${withMentions(m.text)}</div></div>`;
+  }).join('') : `<div class="chat-empty">${isGroup ? 'No messages yet — say hello.' : 'No messages yet. Say hi to ' + _esc(firstName(other)) + '.'}</div>`;
+  const hint = isFdTeam ? '<div class="chat-dmhint">Front-desk team · every message pings the front desk</div>'
+             : isGroup  ? '' : `<div class="chat-dmhint">Private message to ${_esc(personName(other))} · will ping their phone</div>`;
+  return hint + body;
+}
+// Refresh ONLY the open thread's messages (preserves the composer/input + keyboard).
+// Returns false if there's no open thread to refresh (caller falls back to full render).
+function refreshThreadMessages() {
+  const p = document.getElementById('chat-panel'); if (!p) return false;
+  if (_view === 'list' || _view === 'new') return false;
+  const box = p.querySelector('.chat-msgs'); if (!box) return false;
+  box.innerHTML = threadBodyHtml();
+  const sc = p.querySelector('.chat-body'); if (sc) { const toB = () => { sc.scrollTop = sc.scrollHeight; }; toB(); requestAnimationFrame(toB); }
+  return true;
+}
 function threadView() {
   const me = myPid(), isGroup = isGroupCh(_view), isFdTeam = _view === FD_TEAM;
   const other = isGroup ? null : _view.slice(3);
@@ -261,7 +286,7 @@ function threadView() {
   const dmHint = isFdTeam ? '<div class="chat-dmhint">Front-desk team &middot; every message pings the front desk</div>' : isGroup ? '' : `<div class="chat-dmhint">Private message to ${_esc(personName(other))}${' '}· will ping their phone</div>`;
   const ph = isFdTeam ? 'Message the front desk' : isGroup ?'Message the team…' : 'Message ' + _esc(firstName(other)) + '…';
   return header(isFdTeam ? 'Front Desk' : isGroup ? 'Team' : personName(other), isFdTeam ? 'support_agent' : isGroup ? 'groups' : 'person', true)
-    + `<div class="chat-body"><div class="chat-msgs">${dmHint}${body}</div></div>`
+    + `<div class="chat-body"><div class="chat-msgs">${threadBodyHtml()}</div></div>`
     + `<div class="chat-composer">${atPop}
         ${isGroup ? `<button onclick="chatToggleMentions()" class="chat-cbtn at" title="Mention someone"><span class="material-symbols-outlined" style="font-size:19px">alternate_email</span></button>` : ''}
         <input id="chat-input" class="chat-input" maxlength="1000" autocomplete="off" placeholder="${ph}" oninput="chatDraft(this.value)" onkeydown="chatInputKey(event)">
@@ -315,7 +340,9 @@ export function onChatSync() {
   }
   if (_open) {
     const ch = channelOfView(); if (ch) markSeen(ch);
-    render();
+    // Incremental message refresh keeps the composer/input alive (phone keyboard stays
+    // open while typing); fall back to a full render for the list/new views.
+    if (!refreshThreadMessages()) render();
   }
   updateChatBadge();
 }
