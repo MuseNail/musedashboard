@@ -15,6 +15,7 @@ const GCAL_PROXY = 'https://musedashboard.musenailandspa.workers.dev/gcal';
 
 const cfg = () => getState().config;
 const queue = () => getState().queue;
+const records = () => getState().records;
 
 // Escapers for untrusted Google/Square data interpolated into innerHTML. _escHtml
 // for HTML-text/attribute context; _escAttrJs for a value placed inside a single-
@@ -579,6 +580,7 @@ export function calRenderGrid() {
   const normalColW = Math.max(120, Math.floor((window.innerWidth - TIME_W - railW - 48) / Math.max(1, _calCalendars.length)));
   const maxBubbleW = _unassignedOnly ? Infinity : normalColW * 2.5;
   const now = new Date(), isToday = now.toDateString() === _calDate.toDateString(), nowMin = now.getHours()*60 + now.getMinutes();
+  const isPastDay = !isToday && _calDate < now;   // a fully-elapsed previous day → past appts resolve to Completed/No-Show from records
   // #3: grey a tech's column on their day off — see module-level calColumnOff().
 
   let hdr = `<div id="cal-header-row" style="display:flex;flex-shrink:0;position:sticky;top:0;z-index:4;border-bottom:2px solid var(--outline-variant, #7a858a);background:var(--surface-container-lowest, #f5f7f8)"><div style="width:${TIME_W}px;flex-shrink:0;height:${HEADER_H}px;position:sticky;left:0;z-index:5;background:var(--surface-container-lowest, #f5f7f8);border-right:2px solid var(--outline-variant, #7a858a)"></div>`;
@@ -667,21 +669,29 @@ export function calRenderGrid() {
       });
       const dotColors = [...new Set(svcRows.map(r => (SVC_GROUPS.find(x => x.ids.some(id => (r.svcId||'').toLowerCase().includes(id)))||{}).color || '#455a64'))].slice(0,6);
       const chips = dotColors.map(c => `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:2px;flex-shrink:0"></span>`).join('');
-      let bg, border, tc = '#1a1a1a';   // status is conveyed by the bubble's color
+      let bg, border, tc = '#1a1a1a', pastStatus = '';   // status is conveyed by the bubble's color
       if (!isAppt) { bg='#eceff1'; border='#78909c'; tc='#37474f'; }
       else if (qs==='paid' || qs==='done') { bg='#f3f4f6'; border='#9ca3af'; tc='#6b7280'; }
       else if (qs==='complete') { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; }
       else if (qs==='inservice') { bg='#dcfce7'; border='#16a34a'; tc='#14532d'; }
       else if (qs==='waiting') { bg='#dbeafe'; border='#2563eb'; tc='#1e3a8a'; }
       else if (isPast && isAppt && isToday) { bg='#fff7ed'; border='#ea580c'; tc='#7c2d12'; }   // TODAY only: passed start, not checked in → "running late" amber
-      else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt (or any past-day appt — no live-queue status) → tinted by this tech's color
-      if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }   // no-show overrides all
+      else { bg=cal.color+'1f'; border=cal.color; tc='#1a1a1a'; }   // upcoming appt → tinted by this tech's color
+      // Past day: resolve the appointment against the records — Completed (showed up) or
+      // No Show (had a phone/link to check, no record). Unknowable (no phone) stays plain.
+      if (isPastDay && isAppt && !noShow) {
+        const rawP = (evs.map(e => _apptPhone(e)).find(Boolean) || '').replace(/\D/g, '');
+        const rec = _pastRecordMatch(_bookingEventIds(first), rawP, startDt.getTime());
+        if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; pastStatus='Completed'; }
+        else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; pastStatus='No Show'; }
+      }
+      if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }   // manual no-show overrides all
 
       const phoneLine = [timeStr, primaryPhone].filter(Boolean).join('  ·  ');
       const svcHtml = svcRows.map(r => `<div style="font-size:10px;color:${tc};opacity:0.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35">${escHtml(r.label)}${r.fn&&r.label?' — ':''}${escHtml(r.fn)}</div>`).join('');
       const linkIcon = linked ? `<span title="${_e('Same appointment — also on ' + linkedCals.map(calName).join(', '))}" class="material-symbols-outlined" style="font-size:12px;color:${border};flex-shrink:0;transform:rotate(-45deg)">link</span>` : '';
       // Once the appointment is checked in, show its queue status as a badge on the bubble.
-      const qLabel = noShow ? 'No Show' : { waiting:'Checked In', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[qs] || '';
+      const qLabel = noShow ? 'No Show' : pastStatus || { waiting:'Checked In', inservice:'In Service', complete:'Complete', paid:'Paid', done:'Paid' }[qs] || '';
       const qBadge = qLabel ? `<span style="flex-shrink:0;font-size:7.5px;font-weight:800;color:#fff;background:${border};border-radius:999px;padding:1px 5px;white-space:nowrap">${qLabel}</span>` : '';
       body += `<div onclick="calEventClick(event,'${_e(cal.id)}','${_e(primaryEv.id)}','${_e(primaryName)}','${_e(notes)}',${isAppt})" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,26)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:3px 6px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
         + `<div style="display:flex;align-items:center;gap:2px;overflow:hidden;line-height:1.25">${linkIcon}${chips}${confirmed?'<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0">✓</span>':''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}</span>${qBadge}</div>`
@@ -782,6 +792,7 @@ function calRenderWeekGrid() {
 
   days.forEach((d, di) => {
     const isToday = dayKeys[di] === todayKey, isLast = di === 6, isFirst = di === 0;
+    const isPastDay = dayKeys[di] < todayKey;   // previous day → resolve past appts to Completed/No-Show
     body += `<div style="width:${COL_W}px;flex-shrink:0;position:relative;${isToday ? 'background:rgba(26,82,82,0.04);' : ''}${isFirst ? 'border-left:2px solid rgba(0,0,0,0.12);' : ''}${isLast ? '' : 'border-right:2px solid rgba(0,0,0,0.12);'}min-height:${SLOTS*SLOT_H}px"><div style="position:relative;height:${SLOTS*SLOT_H}px">`;
     for (let s = 0; s < SLOTS; s++) { const isHour = s % (60/SLOT_MINS) === 0; body += `<div style="position:absolute;left:0;right:0;top:${s*SLOT_H}px;height:${SLOT_H}px;border-top:${isHour?'1.5px solid rgba(0,0,0,0.12)':'1px solid rgba(0,0,0,0.05)'};cursor:pointer" onclick="calWeekOpenDay('${dayKeys[di]}')"></div>`; }
     if (isToday) { const lineTop = ((nowMin - START_HOUR*60)/SLOT_MINS)*SLOT_H; if (lineTop >= 0 && lineTop <= SLOTS*SLOT_H) body += `<div class="cal-now-line" data-date="${dayKeys[di]}" data-start="${START_HOUR}" data-slotmins="${SLOT_MINS}" data-sloth="${SLOT_H}" data-slots="${SLOTS}" style="position:absolute;left:0;right:0;top:${lineTop}px;height:0;border-top:2px dashed #e53935;z-index:5;pointer-events:none"><div style="position:absolute;left:-3px;top:-5px;width:10px;height:10px;border-radius:50%;background:#e53935"></div></div>`; }
@@ -813,7 +824,14 @@ function calRenderWeekGrid() {
       const gap = laneCount > 1 ? 3 : 0;
       const laneW = (COL_W - 8 - gap * (laneCount - 1)) / laneCount;
       const bLeft = 4 + lane * (laneW + gap);
-      const bg = noShow ? '#fee2e2' : color + '1f', border = noShow ? '#dc2626' : color, tc = noShow ? '#991b1b' : '#1a1a1a';
+      let bg = color + '1f', border = color, tc = '#1a1a1a';
+      if (isPastDay && isAppt && !noShow) {
+        const rawP = (evs.map(e => _apptPhone(e)).find(Boolean) || '').replace(/\D/g, '');
+        const rec = _pastRecordMatch(_bookingEventIds(first), rawP, startDt.getTime());
+        if (rec) { bg='#e0f2fe'; border='#0284c7'; tc='#0c4a6e'; }
+        else if (rawP) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }
+      }
+      if (noShow) { bg='#fee2e2'; border='#dc2626'; tc='#991b1b'; }
       body += `<div onclick="event.stopPropagation();calEventClick(event,'${_e(calId)}','${_e((ownEv || first).id)}','${_e(primaryName)}','${_e(notes)}',${isAppt})" style="position:absolute;left:${bLeft}px;width:${laneW}px;top:${top}px;height:${Math.max(ht,24)}px;background:${bg};border-left:3px solid ${border};border-radius:6px;padding:2px 5px;cursor:pointer;overflow:hidden;z-index:1;box-shadow:0 1px 3px rgba(0,0,0,0.12)">`
         + `<div style="display:flex;align-items:center;gap:3px;overflow:hidden;line-height:1.25">${confirmed ? '<span title="Confirmed" style="color:#16a34a;font-weight:800;flex-shrink:0;font-size:10px">✓</span>' : ''}<span style="font-size:11px;font-family:var(--font-body);font-weight:700;color:${tc};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">${escHtml(primaryName)}${guests ? ` +${guests}` : ''}</span></div>`
         + (ht > 30 ? `<div style="font-size:10px;color:${tc};opacity:0.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(timeStr)}${cal && calId !== uCal ? ' · ' + escHtml(calDisplayName(cal)) : ''}</div>` : '')
@@ -1078,6 +1096,26 @@ function _phoneQueueMatch(rawPhone, apptStartMs) {
     // checked first at every call site and always wins, so a real check-in is unaffected.
     if (['complete', 'paid', 'done'].includes(x.status)) return false;
     const t = x.checkinTime ? new Date(x.checkinTime).getTime() : NaN;
+    return isFinite(t) && t >= apptStartMs - before && t <= apptStartMs + after;
+  }) || null;
+}
+
+// Did a PAST-day appointment actually result in a visit? The live queue only holds
+// today, so for previous days we look in the records (transaction history): a paid
+// record linked to one of the booking's calendar event ids (strong), else matched by
+// phone within a window around the appointment time. Returns the record or null.
+// A null with a phone present = no-show; a null with NO phone = unknowable (caller
+// leaves it neutral rather than falsely flagging a served name-only booking).
+function _pastRecordMatch(eventIds, rawPhone, apptStartMs) {
+  const recs = records();
+  const linked = recs.find(r => r.calEventId && eventIds.has(String(r.calEventId)));
+  if (linked) return linked;
+  if (!rawPhone || !isFinite(apptStartMs)) return null;
+  const before = 2 * 3600 * 1000, after = 6 * 3600 * 1000;   // up to 2h early … 6h late
+  return recs.find(r => {
+    if ((r.phone || '').replace(/\D/g, '') !== rawPhone) return false;
+    const t = r.checkinTime ? new Date(r.checkinTime).getTime()
+            : r.completedAt ? new Date(r.completedAt).getTime() : NaN;
     return isFinite(t) && t >= apptStartMs - before && t <= apptStartMs + after;
   }) || null;
 }

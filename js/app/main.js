@@ -125,6 +125,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.25', items: [
+    { icon: 'event_available', t: 'Calendar: past days show who came in vs no-showed', d: 'On previous days, appointments no longer all look the same. Each one is checked against your sales records: if that customer was rung up that day it shows blue “Completed”; if they had a phone/check-in on file but no record, it shows red “No Show.” Bookings with no way to match (no phone, never checked in) stay neutral so a walk-in is never wrongly flagged. Today is unchanged — it still shows live status.' },
+  ] },
   { v: 'v5.24', items: [
     { icon: 'visibility_off', t: 'Receipts: no last name or phone', d: 'Printed customer receipts now show only the customer’s first name — never their last name or phone number — for privacy.' },
     { icon: 'tune', t: 'Toggle the charge breakdown on receipts', d: 'New setting in Settings → Business → Receipt & Reviews: “Show charge breakdown on receipts.” Leave it on to print every service/item line, or turn it off to print just the total.' },
