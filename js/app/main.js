@@ -4,6 +4,7 @@
 // store to re-render on remote changes, and runs startup.
 
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
+import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
 import * as store from './store.js';
 import * as sync from './sync.js';
 import * as session from './session.js';
@@ -124,9 +125,50 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
-  { v: 'v5.09', items: [
+  { v: 'v5.22', items: [
     { icon: 'print', t: 'Print receipts on a receipt-roll printer', d: 'You can now print on an 80mm thermal receipt printer. In Sales → a transaction, tap “Print” for a customer receipt (shop info, services, items, totals, tip, how they paid, and a thank-you). In Payroll → “Print staff receipts” there’s a new “80mm roll” button to print each tech’s billing on the roll to hand out. The old “Receipt” button still reprints the card slip on the Helcim terminal.' },
     { icon: 'qr_code_2', t: 'Review QR on receipts you can re-point any time', d: 'Customer receipts can show a “Leave us a review” QR code. It’s permanent — you never reprint it — but you decide where it sends people. Go to Settings → Business → Receipt & Reviews and paste your Google review link (or any link); change it whenever you want and even already-printed receipts follow the new link. The QR only prints once you’ve set a link.' },
+  ] },
+  { v: 'v5.21', items: [
+    { icon: 'keyboard', t: 'Chat: keyboard no longer closes while typing', d: 'On the staff app, typing a message no longer gets interrupted — incoming messages now update the conversation without closing your keyboard or losing what you’ve typed.' },
+  ] },
+  { v: 'v5.20', items: [
+    { icon: 'vertical_align_bottom', t: 'Chat: auto-scroll fixed + no more iPhone zoom', d: 'Opening a chat now scrolls straight to the newest message, and on iPhone the chat no longer zooms in when you open it.' },
+  ] },
+  { v: 'v5.19', items: [
+    { icon: 'chat', t: 'Chat polish: live updates, auto-scroll, no double pings', d: 'The chat now updates in real time — a new message shows up without closing and reopening the window — and it scrolls straight to the latest message. Also fixed chat push notifications arriving twice on the same phone.' },
+  ] },
+  { v: 'v5.18', items: [
+    { icon: 'notifications_off', t: 'Fix: chat button no longer shows a phantom “0”', d: 'On the staff app the chat button was always showing a red badge (even with no messages) and the count didn’t clear after reading — a styling bug kept it stuck on. It now shows only a real unread count and disappears once you’ve read your messages.' },
+  ] },
+  { v: 'v5.17', items: [
+    { icon: 'mark_chat_read', t: 'Chat fixes: unread badge & turning on notifications', d: 'Opening the chat now clears the group unread badge (it would get stuck before), and a stale count clears when you reopen the app. Turning on notifications now tells you exactly what to do if it doesn’t work — most often it’s that notifications were blocked and need to be re-enabled in your phone’s Settings for the Muse Staff app.' },
+  ] },
+  { v: 'v5.16', items: [
+    { icon: 'support_agent', t: 'Front Desk team chat', d: 'Chat now has a dedicated “Front Desk” channel that only front-desk staff see. Every message there pings all front-desk members’ phones — so it works as a real team-alert channel. The all-staff “Team” chat and direct messages are unchanged.' },
+    { icon: 'notifications_active', t: 'Chat notifications reach phones reliably', d: 'Fixed chat push so a tagged or direct message reaches a technician’s phone right away (it now uses the same notification channel as assignment alerts). Reminder: each person needs the Muse Staff app installed on their phone with notifications turned on — on iPhone it must be added to the Home Screen first.' },
+  ] },
+  { v: 'v5.15', items: [
+    { icon: 'forum', t: 'Staff chat — now with direct messages & @mentions', d: 'The chat is redesigned: a “Team” group plus private 1:1 messages to any staff member, each conversation with its own unread count. Type @ to tag someone in the Team chat. Bigger window with a maximize button, and the chat button is easier to tap.' },
+    { icon: 'smartphone', t: 'Chat on the staff app + phone notifications', d: 'Technicians and front desk can open the same chat from the staff app (the chat button, bottom-right). When you’re @mentioned or sent a direct message, your phone gets a notification — so you don’t have to be watching the screen. The staff app now asks to turn on notifications.' },
+  ] },
+  { v: 'v5.14', items: [
+    { icon: 'animation', t: 'Fix: the “bounce” when toggling a service', d: 'In Settings → Services, tapping a Check-in/Dashboard toggle made the whole row jump, and the switch knob over-sprang. The row no longer animates when you tap a control inside it, and the toggle slides smoothly — no more bounce.' },
+  ] },
+  { v: 'v5.13', items: [
+    { icon: 'toggle_on', t: 'Fix: service toggles & buttons tap reliably again', d: 'A recent fix that stopped popups closing while you select text was too aggressive — it could swallow taps on buttons with small parts inside, like the Check-in / Dashboard toggles in Settings → Services (they’d “bounce” and not switch). Taps now register normally; only an actual drag still counts as “clicking outside”.' },
+  ] },
+  { v: 'v5.12', items: [
+    { icon: 'sell', t: 'Fix: “Awaiting price” no longer looks Done on the Turns board', d: 'A service the front desk marked “Done — tech will price” was showing the blue “Done” color on the Turns board even though it still needs a price. It now shows a violet “Awaiting price” color (added to the legend), so it’s clear which finished services still need pricing.' },
+  ] },
+  { v: 'v5.11', items: [
+    { icon: 'highlight_alt', t: 'Fix: selecting text in a popup no longer closes it', d: 'When you dragged to select text in a field (like a name) and let go over the dimmed area, the popup would close. Now popups only close on a real click outside — dragging to select text keeps them open. Applies everywhere across the app.' },
+  ] },
+  { v: 'v5.10', items: [
+    { icon: 'event', t: 'Appointment marker on the Turns board', d: 'Customers who came from a booked appointment now show a small lavender “Appt” tag on their turn card (on the time/status line), so you can tell appointments from walk-ins at a glance — the same info the Queue already shows.' },
+  ] },
+  { v: 'v5.09', items: [
+    { icon: 'design_services', t: 'Fix: unselecting a technician’s services', d: 'In Staff → edit a technician, tapping a service to turn it off now visibly clears it (it had stayed highlighted even though it was actually being removed). Selecting and unselecting services now shows the right on/off state every time.' },
   ] },
   { v: 'v5.08', items: [
     { icon: 'visibility', t: 'Turns board polish', d: 'The “Totals” button now shows an eye icon that closes when totals are hidden. Also fixed a half-turn count (like 4.5t) that could overlap the divider between a tech and their turns on some screens — it now tucks neatly under the status instead.' },
@@ -452,6 +494,7 @@ function updateSyncIndicator(state) {
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
   if (changed === 'connection') return;
+  if (changed === 'chat.append') chat.onChatSync();   // a new chat message — refresh the open panel + badge (its own op, not 'config')
   if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync(); timeclock.renderClockButton(); helcim.syncProcessorClass();

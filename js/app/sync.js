@@ -190,7 +190,7 @@ function reapplyOutbox() { for (const msg of _outbox) { try { applyChange(msg.op
 
 // ── Public: dispatch a mutation (optimistic local apply + queued send) ──────────
 // op: 'config.set' | 'queue.upsert' | 'queue.assignmentPatch' | 'queue.remove' | 'record.save'
-//   | 'record.delete' | 'giftcard.save' | 'giftcard.delete' | 'audit.log'
+//   | 'record.delete' | 'giftcard.save' | 'giftcard.delete' | 'audit.log' | 'chat.append'
 //   | 'customer.upsert' | 'customer.delete' | 'customer.bulkUpsert' | 'customer.bulkDelete'
 export function dispatch(op, payload) {
   const mutationId = DEVICE_ID + '-' + Date.now() + '-' + (++_mutCounter);

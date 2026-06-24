@@ -8,6 +8,7 @@
 // separation only — the open transport still sends full state; true per-tech
 // isolation is the server-auth item, intentionally out of scope here.)
 import './apptoken.js';   // §13 backend auth — installs the bearer-token fetch wrapper; keep FIRST
+import './modal-guard.js';   // global backdrop-close guard (drag-select in a field no longer closes popups)
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
@@ -15,6 +16,8 @@ import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp } fro
 import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, GCAL_PROXY, APP_VERSION } from './config.js';
 import { getFdShift, fdShiftLabel } from './features/fd-schedule.js';
+import * as chat from './features/chat.js';
+Object.assign(window, chat);   // chat panel uses inline onclick= handlers
 import { fdPaidHours, fdPunches, roundQuarterHours, fdPunchSuspect } from './features/timeclock.js';
 
 const cfg     = () => store.getState().config;
@@ -97,14 +100,43 @@ function statusChip(status) {
   return `<span class="text-[11px] font-body font-bold px-2 py-0.5 rounded-full" style="background:${c.bg};color:${c.fg}">${c.label}</span>`;
 }
 
+// Keep the chat's "me" identity + the FAB in sync with who's signed in here.
+function syncChat() {
+  if (myId) chat.setChatIdentity('tech:' + myId, me()?.name || 'Tech');
+  else if (myFdId) chat.setChatIdentity('fd:' + myFdId, meFd()?.name || 'Front desk');
+  else chat.setChatIdentity(null);
+  const loggedIn = !!(myId || myFdId);
+  const fab = document.getElementById('chat-fab'); if (fab) fab.style.display = loggedIn ? 'flex' : 'none';
+  if (!loggedIn) chat.closeChat();
+  chat.updateChatBadge();
+}
+
 // ── Render ────────────────────────────────────────
 function render() {
+  syncChat();
   const fd = meFd();
-  if (fd) return renderFdView(fd);
+  if (fd) { renderFdView(fd); maybeNotifPrompt(); return; }
   const meStaff = me();
   if (!meStaff) return renderLogin();
   renderMain(meStaff);
+  maybeNotifPrompt();
 }
+
+// Proactive "Allow notifications" pop-up — auto-shown once per session when someone's
+// signed in on this device but hasn't granted permission yet, so chat/assignment pings
+// actually reach their phone. Only when it can do something: permission still 'default'
+// (never 'denied' — can't re-prompt), and not an iOS browser tab (must be installed).
+function _notifEl() { return document.getElementById('staff-notif-modal'); }
+function maybeNotifPrompt() {
+  if (!(myId || myFdId) || !pushSupported()) return;
+  if (Notification.permission !== 'default') return;
+  if (isIOS() && !isStandalone()) return;
+  try { if (sessionStorage.getItem('muse_notif_dismissed')) return; } catch {}
+  const m = _notifEl(); if (!m || m.style.display === 'flex') return;
+  m.classList.remove('hidden'); m.style.display = 'flex';
+}
+window.staffNotifAllow = () => { window.enableStaffPush(); const m = _notifEl(); if (m) { m.classList.add('hidden'); m.style.display = ''; } };   // call requestPermission first (within the tap), then hide
+window.staffNotifDismiss = () => { const m = _notifEl(); if (m) { m.classList.add('hidden'); m.style.display = ''; } try { sessionStorage.setItem('muse_notif_dismissed', '1'); } catch {} };
 
 // ── Front-desk view (read-only: this week's schedule + this period's clocked hours) ──
 function _fdWeekStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - x.getDay()); return x; }
@@ -138,6 +170,15 @@ function _fdPayPeriodAt(offset = 0) {
 }
 
 // FD view navigation state: which schedule week and pay period are shown (0 = current).
+// "Turn on alerts" prompt — shown in both the tech and front-desk views so either
+// can grant notification permission (needed for assignment AND chat pushes).
+function notifBannerHtml() {
+  return (pushSupported() && Notification.permission !== 'granted') ? `
+    <button onclick="enableStaffPush()" class="w-full mb-3 rounded-xl border-2 border-primary text-primary py-3 font-headline font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors">
+      <span class="material-symbols-outlined" style="font-size:18px">notifications_active</span> Turn on alerts — messages &amp; assignments
+    </button>` : '';
+}
+
 let _fdUser = null, _fdSchedOffset = 0, _fdPeriodOffset = 0;
 window.fdNavSched = (dir) => { _fdSchedOffset += dir; if (_fdUser) renderFdView(_fdUser); };
 window.fdNavPeriod = (dir) => { _fdPeriodOffset += dir; if (_fdUser) renderFdView(_fdUser); };
@@ -171,6 +212,7 @@ function renderFdView(fdUser) {
     : `${_fdPeriodOffset} period${_fdPeriodOffset > 1 ? 's' : ''} ahead`;
   const navBtn = (fn, dir, glyph) => `<button onclick="${fn}(${dir})" class="w-9 h-9 rounded-lg border border-surface-container-high text-on-surface flex items-center justify-center active:scale-95">${glyph}</button>`;
   document.getElementById('staff-list').innerHTML = `
+    ${notifBannerHtml()}
     <div class="flex items-center justify-between mb-2">
       ${navBtn('fdNavPeriod', -1, '◀')}
       <span class="text-xs font-headline font-bold uppercase tracking-widest text-on-surface-variant">${periodLabel}</span>
@@ -233,10 +275,7 @@ function renderMain(meStaff) {
   const tab = (id, label) => `<button onclick="staffTab('${id}')"
     class="flex-1 py-3 rounded-xl font-headline font-bold text-base transition-all ${_view === id ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}">${label}</button>`;
 
-  const notifBanner = (pushSupported() && Notification.permission !== 'granted') ? `
-    <button onclick="enableStaffPush()" class="w-full mb-3 rounded-xl border-2 border-primary text-primary py-3 font-headline font-bold text-sm flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors">
-      <span class="material-symbols-outlined" style="font-size:18px">notifications_active</span> Turn on alerts — assignments &amp; new appointments
-    </button>` : '';
+  const notifBanner = notifBannerHtml();
 
   const updateBanner = _updateVer ? `
     <button onclick="staffUpdateNow()" class="w-full mb-3 rounded-xl bg-secondary-container text-on-secondary-container py-3.5 font-headline font-bold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-sm">
@@ -677,7 +716,7 @@ window.staffPinSubmit = async () => {
       _appts = null; _apptsAt = 0; _apptsErr = '';
       sync.resync();                                   // reconnect with the session → snapshot arrives
       render();
-      if (myId) registerPush();
+      registerPush();   // tech OR front-desk → subscribe for assignment + chat pushes
       return;
     }
     renderLogin(res.error === 'slow_down' || res.retryInSec ? `Too many tries — wait ${res.retryInSec || 5}s`
@@ -697,6 +736,7 @@ window.staffPinSubmit = async () => {
   if (fd) {
     myFdId = fd.id; myId = null; localStorage.setItem(MY_FD_KEY, myFdId); localStorage.removeItem(MY_KEY);
     if (input) input.value = ''; render();
+    registerPush();   // subscribe this device for the fd user's chat pushes (no-op if alerts off)
     serverLogin({ pin, userId: fd.id, device: 'staff-app' }).then(r => { if (r.ok) sync.resync(); });   // §13 session mint/refresh
     return;
   }
@@ -729,43 +769,58 @@ function urlB64ToBytes(b64) {
   return arr;
 }
 window.enableStaffPush = async () => {
-  if (!pushSupported()) { showToast("Notifications aren't supported on this device"); return; }
-  if (isIOS() && !isStandalone()) { showToast('On iPhone/iPad: Add Muse Staff to your Home Screen first, then turn on alerts.'); return; }
-  try {
-    const perm = await Notification.requestPermission();
-    if (perm !== 'granted') { showToast('Notifications not enabled'); return; }
-    await registerPush();
-    showToast('Assignment alerts on ✓');
-    render();
-  } catch { showToast('Could not enable notifications'); }
+  if (!pushSupported()) { showToast("This device/browser can't do notifications"); return; }
+  if (isIOS() && !isStandalone()) { showToast('iPhone: tap Share → “Add to Home Screen”, open that app, then turn on alerts'); return; }
+  // Already blocked → the OS won't re-prompt; the only fix is the phone/browser settings.
+  if (Notification.permission === 'denied') { showToast('Notifications are blocked for this app — turn them on in your phone’s Settings, then try again'); return; }
+  let perm;
+  try { perm = await Notification.requestPermission(); }
+  catch (e) { showToast('Couldn’t ask for permission — reopen the app and try again'); return; }
+  if (perm !== 'granted') { showToast(perm === 'denied' ? 'You tapped Don’t Allow — enable it in Settings to get alerts' : 'Notifications not turned on'); return; }
+  try { const ok = await registerPush(); showToast(ok ? 'Notifications on ✓' : 'Allowed — but couldn’t reach the server to finish. Check the connection and try again.'); if (ok) render(); }
+  catch (e) { showToast('Allowed, but couldn’t finish setup — try once more'); }
 };
-// Subscribe this device (if needed) and register the subscription under the current tech.
-// No-ops unless permission is already granted + a tech is signed in.
+// Push ids this device should be reachable at: a tech gets the legacy raw techId
+// (assignment alerts) AND the 'tech:<id>' person pid (chat); a front-desk user gets
+// the 'fd:<id>' pid (chat). One browser subscription, registered under each id.
+function myPushIds() {
+  if (myId)   return [myId, 'tech:' + myId];
+  if (myFdId) return ['fd:' + myFdId];
+  return [];
+}
+const _pushUnsub = async (sub, id) => { try { await fetch(PUSH_PROXY + '/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: id, endpoint: sub.endpoint }) }); } catch {} };
+// Subscribe this device under the signed-in person's ids. No-ops unless permission is
+// granted + someone is signed in. Drops any previously-tagged ids no longer in use.
 async function registerPush() {
-  if (!pushSupported() || Notification.permission !== 'granted' || !myId) return;
+  if (!pushSupported() || Notification.permission !== 'granted') return false;
+  const ids = myPushIds(); if (!ids.length) return false;
   try {
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToBytes(VAPID_PUBLIC_KEY) });
-    const prevTech = localStorage.getItem('muse_push_techid');
-    if (prevTech && prevTech !== myId) {   // device switched techs → drop the old link
-      try { await fetch(PUSH_PROXY + '/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: prevTech, endpoint: sub.endpoint }) }); } catch {}
-    }
-    await fetch(PUSH_PROXY + '/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: myId, subscription: sub.toJSON() }) });
-    localStorage.setItem('muse_push_techid', myId);
-  } catch {}
+    let prev = []; try { prev = JSON.parse(localStorage.getItem('muse_push_ids') || 'null') || []; } catch {}
+    const legacy = localStorage.getItem('muse_push_techid'); if (legacy) prev.push(legacy);   // migrate the old single-id key
+    for (const p of prev) if (!ids.includes(p)) await _pushUnsub(sub, p);   // device switched person → drop stale links
+    // Register the browser subscription under each id; report whether the SERVER accepted it
+    // (a silent failure here is exactly why "push doesn't work" was hard to see).
+    const oks = await Promise.all(ids.map(id => fetch(PUSH_PROXY + '/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId: id, subscription: sub.toJSON() }) }).then(r => r.ok).catch(() => false)));
+    localStorage.setItem('muse_push_ids', JSON.stringify(ids));
+    localStorage.removeItem('muse_push_techid');
+    return oks.some(Boolean);
+  } catch { return false; }
 }
-// On logout, drop the server-side link between this device and the signed-out tech so the
-// device stops receiving that tech's assignment alerts. The browser push subscription itself
-// is left intact (the next tech to sign in re-tags it via registerPush — no re-prompt).
+// On logout, drop the server-side links for this device's tagged ids so it stops
+// receiving that person's alerts. The browser push subscription itself is left intact
+// (the next sign-in re-tags it via registerPush — no re-prompt).
 async function unregisterPush() {
-  const techId = localStorage.getItem('muse_push_techid');
-  if (!techId || !pushSupported()) return;
+  let ids = []; try { ids = JSON.parse(localStorage.getItem('muse_push_ids') || 'null') || []; } catch {}
+  const legacy = localStorage.getItem('muse_push_techid'); if (legacy) ids.push(legacy);
+  if (!ids.length || !pushSupported()) return;
   try {
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
-    if (sub) await fetch(PUSH_PROXY + '/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ techId, endpoint: sub.endpoint }) });
-    localStorage.removeItem('muse_push_techid');
+    if (sub) await Promise.all(ids.map(id => _pushUnsub(sub, id)));
+    localStorage.removeItem('muse_push_ids'); localStorage.removeItem('muse_push_techid');
   } catch {}
 }
 
@@ -791,11 +846,12 @@ window.staffUpdateNow = () => { showToast('Updating…'); hardReloadApp(); };
 // ── Boot ──────────────────────────────────────────
 function boot() {
   sync.start();
-  store.subscribe(() => { if (priceInputFocused()) return; render(); });
+  store.subscribe(() => { chat.onChatSync(); if (priceInputFocused()) return; render(); });
   render();   // instant render from cached state; subscribe re-renders on hydrate
+  chat.onChatSync();   // baseline the chat unread badge from cache on load
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').then(() => registerPush()).catch(() => {});
   checkStaffVersion();   // on cold start
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkStaffVersion(); });   // re-check each time they reopen the app
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkStaffVersion(); chat.updateChatBadge(); } });   // re-check + recompute the chat badge (clears a stale count) on reopen
   setInterval(() => { if (!document.hidden) checkStaffVersion(); }, 20 * 60 * 1000);   // and poll so an always-open app self-updates
 }
 // Only boot inside the real page (the login shell exists); skipped when imported

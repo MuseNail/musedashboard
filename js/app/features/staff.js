@@ -89,7 +89,7 @@ export function renderStaffServicesPicker(selectedServices) {
   picker.innerHTML = cfg().services.map(s => {
     const sel = selectedServices && selectedServices.includes(s.id);
     return `<button type="button" onclick="this.classList.toggle('selected')" data-service="${s.id}"
-      class="service-btn flex flex-col items-center justify-center py-2 rounded-lg border transition-all text-xs ${sel ? 'bg-primary text-on-primary border-primary selected' : 'bg-surface-container text-on-surface-variant border-outline-variant/30'}">
+      class="service-btn flex flex-col items-center justify-center py-2 rounded-lg border transition-all text-xs bg-surface-container text-on-surface-variant border-outline-variant/30${sel ? ' selected' : ''}">
       <span class="font-headline font-bold">${s.abbr}</span>
       <span class="text-[9px] font-body mt-0.5 uppercase tracking-tighter">${s.label}</span>
     </button>`;

@@ -457,9 +457,11 @@ export function renderTurnsTechGrid() {
         if (tt === 'full') turnCounter += 1; else if (tt === 'half') turnCounter += 0.5;
         const turnLabelNum = Number.isInteger(turnCounter) ? turnCounter : turnCounter.toFixed(1);
         const turnLabel = tt === 'bonus' ? 'Bonus' : (cost === 0 ? '?' : '' + turnLabelNum);
-        const ss = getAssignmentStatus(e, a);
+        // Use the awaiting-price-aware status so a "Done — tech will price" service reads
+        // as violet "Awaiting price", not the blue "Done" fill (its raw status is 'complete').
+        const ss = effectiveServiceStatus(e, a);
         let bg, fg;
-        if (isPaidStatus(ss)) { bg='#dde2e5'; fg='#555'; } else if (ss === 'complete') { bg='#d3e4ef'; fg='#14425e'; } else if (ss === 'inservice') { bg='#d8ecdf'; fg='#1b4d33'; } else { bg='#ffe9c4'; fg='#5c4010'; }
+        if (isPaidStatus(ss)) { bg='#dde2e5'; fg='#555'; } else if (ss === 'awaiting') { bg='#e7e0f5'; fg='#3f2d6b'; } else if (ss === 'complete') { bg='#d3e4ef'; fg='#14425e'; } else if (ss === 'inservice') { bg='#d8ecdf'; fg='#1b4d33'; } else { bg='#ffe9c4'; fg='#5c4010'; }
         const outline = e.groupId ? `;outline:2px solid ${e.groupColor||'#e8a230'};outline-offset:-1px` : '';
         const s = svc(a.serviceId);
         const svcLabel = s ? s.label : (e.services.map(sid => svc(sid)?.label || '?').join(', '));
@@ -468,12 +470,15 @@ export function renderTurnsTechGrid() {
         const groupDot = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0;margin-right:2px">${partyLetters.get(e.groupId)||'•'}</span>` : '';
         const splitColor = splitTags.get(String(e.id));
         const splitTag = splitColor ? `<span title="Same customer — multiple services" style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:5px;background:${splitColor};color:#fff;flex-shrink:0;margin-right:2px"><span class="material-symbols-outlined" style="font-size:11px;font-variation-settings:'FILL' 1">link</span></span>` : '';
+        // Appointment marker (lavender, matching the upcoming-appts strip), shown on the
+        // time/status row so it never adds a line or crowds the name/chip row on a busy card.
+        const apptPill = e.isAppointment ? `<span title="Booked appointment" style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;background:#ede7f6;color:#42306b;font-size:8px;font-weight:700;line-height:1;padding:2px 5px;border-radius:999px"><span class="material-symbols-outlined" style="font-size:9px;font-variation-settings:'FILL' 1">event</span>Appt</span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
           <button onclick="showGroupAssignModal('${e.id}')" class="w-full h-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px${outline}">
             <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${tt === 'half' ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px' : 'opacity:0.75'}">${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
             ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
-            <div class="text-[9px] opacity-60">${timeStr} · ${statusTimeHtml(entryStatusSince(e), isPaidStatus(ss))}</div>
+            <div class="flex items-center gap-1"><span class="text-[9px] opacity-60" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${timeStr} · ${statusTimeHtml(entryStatusSince(e), isPaidStatus(ss))}</span>${apptPill}</div>
           </button></div>`;
       }
       return `<div class="flex-shrink-0 w-[150px] px-1 turns-drop-zone" data-tech-id="${staffId}" data-slot="${slotIdx}">
