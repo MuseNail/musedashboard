@@ -37,18 +37,18 @@ const RECEIPT_CSS = `
   *{box-sizing:border-box}
   html,body{margin:0;padding:0}
   body{width:72mm;margin:0 auto;padding:3mm 2mm 5mm;
-    font-family:'Courier New',ui-monospace,monospace;font-size:12px;line-height:1.42;color:#000}
+    font-family:'Courier New',ui-monospace,monospace;font-size:13px;line-height:1.4;color:#000;font-weight:700}
   .ctr{text-align:center}
   .logo-img{max-width:40mm;max-height:18mm;object-fit:contain;display:block;margin:0 auto 2px}
-  .name{font-family:Arial,Helvetica,sans-serif;font-weight:800;font-size:15px;letter-spacing:.4px;margin:1px 0}
-  .meta{font-size:10px}
-  .dash{border-top:1px dashed #000;margin:6px 0}
+  .name{font-family:Arial,Helvetica,sans-serif;font-weight:900;font-size:16px;letter-spacing:.4px;margin:1px 0}
+  .meta{font-size:12px}
+  .dash{border-top:1px solid #000;margin:6px 0}
   .dot{border-top:1px dotted #000;margin:5px 0}
   .row{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
   .row .r{font-variant-numeric:tabular-nums;white-space:nowrap}
-  .sub{color:#000;font-size:11px;padding-left:6px}
-  .big{font-weight:700;font-size:14px}
-  .foot{text-align:center;margin-top:8px;font-size:11px;line-height:1.5}
+  .sub{color:#000;font-size:12px;padding-left:6px}
+  .big{font-weight:900;font-size:15px}
+  .foot{text-align:center;margin-top:8px;font-size:12px;line-height:1.5}
   .qr{width:30mm;height:30mm;margin:6px auto 0;display:block}`;
 
 // Open the print document. New tab + a short delay so styles/images settle

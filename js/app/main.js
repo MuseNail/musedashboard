@@ -125,6 +125,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.23', items: [
+    { icon: 'format_size', t: 'Receipts print larger & darker', d: 'The detail lines on printed receipts (services, technician names, payment breakdown, footer) were too faint and small on the thermal printer. Receipt text is now bigger and bolder — both the customer receipt and the staff “80mm roll” — so everything is easy to read.' },
+  ] },
   { v: 'v5.22', items: [
     { icon: 'print', t: 'Print receipts on a receipt-roll printer', d: 'You can now print on an 80mm thermal receipt printer. In Sales → a transaction, tap “Print” for a customer receipt (shop info, services, items, totals, tip, how they paid, and a thank-you). In Payroll → “Print staff receipts” there’s a new “80mm roll” button to print each tech’s billing on the roll to hand out. The old “Receipt” button still reprints the card slip on the Helcim terminal.' },
     { icon: 'qr_code_2', t: 'Review QR on receipts you can re-point any time', d: 'Customer receipts can show a “Leave us a review” QR code. It’s permanent — you never reprint it — but you decide where it sends people. Go to Settings → Business → Receipt & Reviews and paste your Google review link (or any link); change it whenever you want and even already-printed receipts follow the new link. The QR only prints once you’ve set a link.' },
