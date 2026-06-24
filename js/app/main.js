@@ -125,6 +125,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.24', items: [
+    { icon: 'visibility_off', t: 'Receipts: no last name or phone', d: 'Printed customer receipts now show only the customer’s first name — never their last name or phone number — for privacy.' },
+    { icon: 'tune', t: 'Toggle the charge breakdown on receipts', d: 'New setting in Settings → Business → Receipt & Reviews: “Show charge breakdown on receipts.” Leave it on to print every service/item line, or turn it off to print just the total.' },
+  ] },
   { v: 'v5.23', items: [
     { icon: 'format_size', t: 'Receipts print larger & darker', d: 'The detail lines on printed receipts (services, technician names, payment breakdown, footer) were too faint and small on the thermal printer. Receipt text is now bigger and bolder — both the customer receipt and the staff “80mm roll” — so everything is easy to read.' },
   ] },

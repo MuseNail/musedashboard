@@ -85,6 +85,11 @@ export function printCustomerReceipt(recordId) {
   const when = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
              + ' · ' + dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  // Privacy: receipts show the first name only — never the last name or phone.
+  const firstName = (r.name || 'Guest').trim().split(/\s+/)[0] || 'Guest';
+  // Charge breakdown (per-line services/items/fees) is owner-toggleable in Settings.
+  const showBreakdown = cfg().receipt_breakdown !== false;
+
   // Line items — services (→ tech), items × qty, fees (skip $0).
   let body = '';
   (r.assignments || []).filter(a => a.cost || a.comped).forEach(a => {
@@ -140,15 +145,14 @@ export function printCustomerReceipt(recordId) {
     ${shopHeader()}
     <div class="dash"></div>
     <div class="row"><span>${escHtml(when)}</span><span class="r">${ticketNo}</span></div>
-    <div class="row"><span>${escHtml(r.name || 'Guest')}</span><span class="r">${escHtml(r.phone || '')}</span></div>
+    <div class="row"><span>${escHtml(firstName)}</span><span class="r"></span></div>
     <div class="dash"></div>
-    ${body || row('—', '')}
-    <div class="dash"></div>
+    ${showBreakdown ? `${body || row('—', '')}<div class="dash"></div>` : ''}
     ${totals}
     ${pay ? `<div class="dot"></div>${pay}` : ''}
     <div class="dash"></div>
     <div class="foot">${SHOP.thanks}${qr}</div>
-  `, 'Receipt — ' + (r.name || 'Guest'));
+  `, 'Receipt — ' + firstName);
 }
 
 // Print one 80mm strip per tech (billed-by-day + total) for a pay period —
@@ -198,7 +202,20 @@ export function renderReceiptSettings() {
     <div class="flex items-center gap-3">
       <a href="${escHtml(REVIEW_REDIRECT)}" target="_blank" rel="noopener" class="text-xs font-body text-primary font-semibold ${url ? '' : 'opacity-40 pointer-events-none'}">Test the QR link ↗</a>
       <span class="text-xs font-body text-on-surface-variant">${url ? 'QR will print on receipts.' : 'No link set — QR is hidden on receipts.'}</span>
+    </div>
+    <div class="mt-4 pt-4 border-t border-surface-container-high">
+      <label class="flex items-center gap-3 cursor-pointer">
+        <input type="checkbox" id="receipt-breakdown" onchange="setReceiptBreakdown(this.checked)" ${cfg().receipt_breakdown !== false ? 'checked' : ''} class="w-5 h-5 accent-primary flex-shrink-0">
+        <span>
+          <span class="text-sm font-body font-semibold text-on-surface block">Show charge breakdown on receipts</span>
+          <span class="text-xs font-body text-on-surface-variant">When off, customer receipts print the total only — no per-service / item lines.</span>
+        </span>
+      </label>
     </div>`;
+}
+export function setReceiptBreakdown(on) {
+  dispatch('config.set', { key: 'receipt_breakdown', value: !!on });
+  showToast(on ? 'Charge breakdown will print' : 'Receipts will show total only');
 }
 export function saveReceiptSettings() {
   const v = (document.getElementById('review-url')?.value || '').trim();
