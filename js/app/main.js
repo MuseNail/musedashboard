@@ -125,6 +125,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.26', items: [
+    { icon: 'auto_awesome', t: 'Bonus services stand out on the Turns board', d: 'A “Bonus” service now gets its own muted teal badge — the same kind of highlight a half-turn gets — so bonus work is easy to spot at a glance instead of blending in.' },
+    { icon: 'mood', t: 'Emojis in chat', d: 'The staff chat composer now has an emoji button — tap the smiley to drop an emoji into your message. Works in the Team chat, Front Desk chat, and direct messages.' },
+  ] },
   { v: 'v5.25', items: [
     { icon: 'event_available', t: 'Calendar: past days show who came in vs no-showed', d: 'On previous days, appointments no longer all look the same. Each one is checked against your sales records: if that customer was rung up that day it shows blue “Completed”; if they had a phone/check-in on file but no record, it shows red “No Show.” Bookings with no way to match (no phone, never checked in) stay neutral so a walk-in is never wrongly flagged. Today is unchanged — it still shows live status.' },
   ] },

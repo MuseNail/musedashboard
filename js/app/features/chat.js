@@ -104,7 +104,10 @@ function dmConversations() {
 
 // ── Panel state ───────────────────────────────────────────────────────────────
 let _open = false, _view = 'list', _maxed = false, _atOpen = false, _draft = '', _pendMentions = [];
-let _lastNotifiedTs = 0, _chatInit = false;
+let _lastNotifiedTs = 0, _chatInit = false, _emojiOpen = false;
+
+// Common emojis for the composer picker — curated (no external library / build step).
+const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','🥰','😎','🤩','🥳','😅','😴','🤔','😬','😭','😡','👍','👎','🙏','👏','🙌','💪','👋','🙋','💅','💆','💋','💯','🔥','⭐','✨','🎉','❤️','💕','✅','❌','⏰','📅','☕'];
 
 export function toggleChat() { _open ? closeChat() : openChat(); }
 export function openChat() {
@@ -119,16 +122,28 @@ export function closeChat() {
   _open = false; _atOpen = false;
   const p = document.getElementById('chat-panel'); if (p) { p.classList.add('hidden'); p.style.display = ''; }
 }
-export function chatBack() { _view = 'list'; _atOpen = false; _draft = ''; render(); }
+export function chatBack() { _view = 'list'; _atOpen = false; _emojiOpen = false; _draft = ''; render(); }
 export function chatToggleMax() { _maxed = !_maxed; render(); }
-export function chatNewMessage() { _view = 'new'; _atOpen = false; render(); }
-export function chatToggleMentions() { _atOpen = !_atOpen; render(); }
+export function chatNewMessage() { _view = 'new'; _atOpen = false; _emojiOpen = false; render(); }
+export function chatToggleMentions() { _atOpen = !_atOpen; if (_atOpen) _emojiOpen = false; render(); }
+export function chatToggleEmoji() { _emojiOpen = !_emojiOpen; if (_emojiOpen) _atOpen = false; render(); }
+// Insert an emoji at the cursor WITHOUT re-rendering, so the picker stays open and the
+// phone keyboard never closes (the same constraint that drove the incremental sync).
+export function chatInsertEmoji(em) {
+  const input = document.getElementById('chat-input'); if (!input) return;
+  if ((input.value || '').length + em.length > 1000) return;
+  const s = input.selectionStart ?? input.value.length, e = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, s) + em + input.value.slice(e);
+  _draft = input.value;
+  const pos = s + em.length;
+  try { input.focus({ preventScroll: true }); input.setSelectionRange(pos, pos); } catch (_) {}
+}
 export function chatDraft(v) { _draft = v; }
 
 const channelOfView = () => _view.startsWith('dm:') ? dmKey(myPid(), _view.slice(3)) : (isGroupCh(_view) ? _view : null);
 
 export function chatOpen(view) {
-  _view = view; _atOpen = false; _draft = ''; _pendMentions = [];
+  _view = view; _atOpen = false; _emojiOpen = false; _draft = ''; _pendMentions = [];
   const ch = channelOfView(); if (ch) markSeen(ch);
   render(); updateChatBadge();
 }
@@ -152,7 +167,7 @@ export function sendChatMessage() {
   if (to) msg.to = to;
   if (mentions.length) msg.mentions = mentions;
   dispatch('chat.append', { message: msg });   // DO-side atomic append — no whole-array clobber
-  _draft = ''; _pendMentions = []; _atOpen = false; _lastNotifiedTs = msg.ts;
+  _draft = ''; _pendMentions = []; _atOpen = false; _emojiOpen = false; _lastNotifiedTs = msg.ts;
   markSeen(ch); render(); updateChatBadge();
   // Push: DM → the recipient; Front Desk channel → every FD member; Team → @mentioned only.
   let targets, title;
@@ -283,12 +298,14 @@ function threadView() {
   }).join('') : `<div class="chat-empty">${isGroup ? 'No messages yet— say hello.' : 'No messages yet. Say hi to ' + _esc(firstName(other)) + '.'}</div>`;
   const atPop = (_atOpen && isGroup) ? `<div class="chat-atpop">${chatPeople().filter(p => p.pid !== me).map(p =>
     `<div class="chat-atrow" onclick="chatPickMention('${p.pid}')"><div class="chat-av sm" style="background:${avColor(p.pid)}">${initial(p.name)}</div>${_esc(p.name)}<span class="chat-role">${p.kind === 'tech' ? 'Tech' : 'Front desk'}</span></div>`).join('')}</div>` : '';
+  const emojiPop = _emojiOpen ? `<div class="chat-emojipop">${CHAT_EMOJIS.map(e => `<button type="button" class="chat-emoji" onclick="chatInsertEmoji('${e}')">${e}</button>`).join('')}</div>` : '';
   const dmHint = isFdTeam ? '<div class="chat-dmhint">Front-desk team &middot; every message pings the front desk</div>' : isGroup ? '' : `<div class="chat-dmhint">Private message to ${_esc(personName(other))}${' '}· will ping their phone</div>`;
   const ph = isFdTeam ? 'Message the front desk' : isGroup ?'Message the team…' : 'Message ' + _esc(firstName(other)) + '…';
   return header(isFdTeam ? 'Front Desk' : isGroup ? 'Team' : personName(other), isFdTeam ? 'support_agent' : isGroup ? 'groups' : 'person', true)
     + `<div class="chat-body"><div class="chat-msgs">${threadBodyHtml()}</div></div>`
-    + `<div class="chat-composer">${atPop}
+    + `<div class="chat-composer">${atPop}${emojiPop}
         ${isGroup ? `<button onclick="chatToggleMentions()" class="chat-cbtn at" title="Mention someone"><span class="material-symbols-outlined" style="font-size:19px">alternate_email</span></button>` : ''}
+        <button onclick="chatToggleEmoji()" class="chat-cbtn at" title="Emoji"><span class="material-symbols-outlined" style="font-size:20px">mood</span></button>
         <input id="chat-input" class="chat-input" maxlength="1000" autocomplete="off" placeholder="${ph}" oninput="chatDraft(this.value)" onkeydown="chatInputKey(event)">
         <button onclick="sendChatMessage()" class="chat-cbtn send" title="Send"><span class="material-symbols-outlined" style="font-size:18px">send</span></button>
       </div>`;

@@ -628,6 +628,12 @@
   .chat-atrow { display:flex; align-items:center; gap:9px; padding:8px 11px; cursor:pointer; font-size:13px;
     color:var(--on-surface,#16201f); }
   .chat-atrow:hover { background:#eef4f4; }
+  .chat-emojipop { position:absolute; left:10px; right:10px; bottom:56px; background:#fff;
+    border:1px solid var(--outline-variant,#c2cacd); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.18);
+    padding:8px; display:flex; flex-wrap:wrap; gap:2px; max-height:200px; overflow-y:auto; }
+  .chat-emoji { width:38px; height:38px; border:none; background:none; cursor:pointer; font-size:21px;
+    line-height:1; border-radius:8px; display:flex; align-items:center; justify-content:center; }
+  .chat-emoji:hover { background:#eef4f4; }
   /* Staff-app chat FAB */
   .chat-fab { position:fixed; right:16px; bottom:16px; z-index:70; width:56px; height:56px; border-radius:50%;
     background:var(--primary,#1a5252); color:#fff; display:flex; align-items:center; justify-content:center;
