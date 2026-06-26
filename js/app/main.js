@@ -125,6 +125,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.27', items: [
+    { icon: 'desktop_windows', t: 'Desktop notifications for new chat messages', d: 'The front-desk computer can now pop a desktop notification when a new chat message comes in — so you see it even when you’re in another window. Open Chat and tap “Turn on desktop notifications,” then allow it in the browser. It won’t show while the customer check-in screen is up.' },
+  ] },
   { v: 'v5.26', items: [
     { icon: 'auto_awesome', t: 'Bonus services stand out on the Turns board', d: 'A “Bonus” service now gets its own muted teal badge — the same kind of highlight a half-turn gets — so bonus work is easy to spot at a glance instead of blending in.' },
     { icon: 'mood', t: 'Emojis in chat', d: 'The staff chat composer now has an emoji button — tap the smiley to drop an emoji into your message. Works in the Team chat, Front Desk chat, and direct messages.' },
@@ -718,6 +721,7 @@ function boot() {
   photos.setLogo();
   queue.renderQueue();
   auth.updateLoggedInDisplay();
+  chat.initChatDeskNotify();   // dashboard opts into desktop notifications for new chat messages
   chat.onChatSync();   // baseline the chat unread badge from cache on load
   apptReminders.startApptReminders();   // appointment reminder banners (30s timer)
   updateSyncIndicator(store.getState());

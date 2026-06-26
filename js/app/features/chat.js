@@ -104,7 +104,7 @@ function dmConversations() {
 
 // ── Panel state ───────────────────────────────────────────────────────────────
 let _open = false, _view = 'list', _maxed = false, _atOpen = false, _draft = '', _pendMentions = [];
-let _lastNotifiedTs = 0, _chatInit = false, _emojiOpen = false;
+let _lastNotifiedTs = 0, _chatInit = false, _emojiOpen = false, _deskNotify = false;
 
 // Common emojis for the composer picker — curated (no external library / build step).
 const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','🥰','😎','🤩','🥳','😅','😴','🤔','😬','😭','😡','👍','👎','🙏','👏','🙌','💪','👋','🙋','💅','💆','💋','💯','🔥','⭐','✨','🎉','❤️','💕','✅','❌','⏰','📅','☕'];
@@ -139,6 +139,35 @@ export function chatInsertEmoji(em) {
   try { input.focus({ preventScroll: true }); input.setSelectionRange(pos, pos); } catch (_) {}
 }
 export function chatDraft(v) { _draft = v; }
+
+// ── Desktop notifications (front-desk dashboard) ──────────────────────────────
+// The dashboard opts in (main.js) so new chat messages can pop a Windows/desktop
+// notification. The staff app does NOT opt in — it already gets Web Push, so we'd
+// otherwise double-notify. Fires a system Notification while the page is alive (no
+// service-worker push needed); the always-on front-desk PC keeps the app running.
+export function initChatDeskNotify() { _deskNotify = true; }
+const deskNotifySupported = () => _deskNotify && typeof Notification !== 'undefined';
+export async function enableDeskChatNotify() {
+  if (typeof Notification === 'undefined') { showToast('This browser doesn’t support notifications'); return; }
+  if (Notification.permission === 'denied') { showToast('Notifications are blocked — turn them on in the browser’s site settings (lock icon → Notifications → Allow), then try again'); return; }
+  let perm = Notification.permission;
+  if (perm !== 'granted') { try { perm = await Notification.requestPermission(); } catch (e) {} }
+  showToast(perm === 'granted' ? 'Desktop notifications on ✓' : 'Notifications not turned on');
+  if (perm === 'granted') render();
+}
+function _fireDeskNotification(who, msg, nch) {
+  try {
+    const n = new Notification(who, {
+      body: (msg.text || '').slice(0, 140), tag: 'muse-chat', renotify: true,
+      icon: '/musedashboard/icons/icon-192.png',
+    });
+    n.onclick = () => {
+      try { window.focus(); } catch (e) {}
+      openChat(); chatOpen(nch.startsWith('dm:') ? 'dm:' + msg.uid : nch);
+      try { n.close(); } catch (e) {}
+    };
+  } catch (e) {}
+}
 
 const channelOfView = () => _view.startsWith('dm:') ? dmKey(myPid(), _view.slice(3)) : (isGroupCh(_view) ? _view : null);
 
@@ -242,8 +271,11 @@ function listView() {
       <div class="chat-cright"><span class="chat-ctime">${timeStr(c.lastTs)}</span>${u ? `<span class="chat-unread">${u > 9 ? '9+' : u}</span>` : ''}</div>
     </div>`;
   }).join('');
+  const notifBar = (deskNotifySupported() && Notification.permission !== 'granted')
+    ? `<div class="chat-notifbar" onclick="enableDeskChatNotify()"><span class="material-symbols-outlined" style="font-size:18px">notifications_active</span><span>Turn on desktop notifications for new messages</span></div>` : '';
   return header('Chat', 'forum', false)
     + `<div class="chat-body">
+        ${notifBar}
         <div class="chat-seclbl">Group</div>${teamRow}
         ${dms ? `<div class="chat-seclbl">Direct messages</div>${dms}` : ''}
       </div>
@@ -349,10 +381,17 @@ export function onChatSync() {
     const onSurface = deskEl ? deskEl.classList.contains('active') : true;
     const nch = chOf(newest);
     const toMe = nch.startsWith('dm:') ? dmInvolves(nch, me) : (nch === FD_TEAM ? amFd() : true);
-    if (me && newest.uid !== me && !_open && onSurface && toMe) {
+    if (me && newest.uid !== me && toMe) {
       const who = firstName(newest.uid) || newest.name;
-      const tag = chOf(newest).startsWith('dm:') ? '💬 ' : '';
-      showToast(`${tag}${who}: ${newest.text.slice(0, 40)}`);
+      const tag = nch.startsWith('dm:') ? '💬 ' : '';
+      if (!_open && onSurface) showToast(`${tag}${who}: ${newest.text.slice(0, 40)}`);
+      // Desktop system notification (dashboard opt-in). Fire when the app is backgrounded
+      // (they're in another window) or on the desk screen with chat closed — never while the
+      // customer kiosk is foregrounded, so chat never flashes in front of a customer.
+      if (deskNotifySupported() && Notification.permission === 'granted'
+          && (document.hidden || (!_open && onSurface))) {
+        _fireDeskNotification(who, newest, nch);
+      }
     }
   }
   if (_open) {

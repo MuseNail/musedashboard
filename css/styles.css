@@ -634,6 +634,10 @@
   .chat-emoji { width:38px; height:38px; border:none; background:none; cursor:pointer; font-size:21px;
     line-height:1; border-radius:8px; display:flex; align-items:center; justify-content:center; }
   .chat-emoji:hover { background:#eef4f4; }
+  .chat-notifbar { display:flex; align-items:center; gap:8px; margin:8px; padding:9px 12px; cursor:pointer;
+    background:var(--surface-container,#eef2f2); color:var(--primary,#1a5252); border:1px solid var(--primary,#1a5252);
+    border-radius:10px; font-size:13px; font-weight:600; }
+  .chat-notifbar:hover { background:#e3edec; }
   /* Staff-app chat FAB */
   .chat-fab { position:fixed; right:16px; bottom:16px; z-index:70; width:56px; height:56px; border-radius:50%;
     background:var(--primary,#1a5252); color:#fff; display:flex; align-items:center; justify-content:center;
