@@ -386,8 +386,8 @@ tailwind.config = {
           <p class="text-xs font-body text-on-surface-variant mt-1.5" id="report-range-label">Showing: Today</p>
         </div>
 
-        <!-- Summary cards -->
-        <div class="grid grid-cols-3 gap-3 mb-3">
+        <!-- Headline strip — the daily-glance numbers (money · guests · card · cash) -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center" title="All money collected: Total Billed + gift card sales − redemptions + tips">
             <div class="text-2xl font-headline font-extrabold text-primary" id="rpt-gross-income">$0.00</div>
             <span class="rpt-delta" id="rpt-gross-income-delta"></span>
@@ -398,25 +398,41 @@ tailwind.config = {
             <span class="rpt-delta" id="rpt-total-guests-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Guests Served</div>
           </div>
+          <div onclick="drillDownPay('card')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Card charges including tips — matches your Square deposit. Tap for the tickets behind it.">
+            <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-pay-card">$0.00</div>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-card"></div>
+            <span class="rpt-delta" id="rpt-pay-card-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Card (incl. tips)</div>
+            <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
+          </div>
+          <div onclick="drillDownPay('cash')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Cash collected (drawer). Tap for the tickets behind it.">
+            <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-pay-cash">$0.00</div>
+            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-cash"></div>
+            <span class="rpt-delta" id="rpt-pay-cash-delta"></span>
+            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Cash</div>
+            <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
+          </div>
+        </div>
+
+        <!-- Secondary metrics (smaller) -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
-            <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-avg-ticket">$0.00</div>
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-avg-ticket">$0.00</div>
             <span class="rpt-delta" id="rpt-avg-ticket-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Avg Ticket</div>
           </div>
-        </div>
-        <div class="grid grid-cols-3 gap-3 mb-5">
           <div class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center">
-            <div class="text-2xl font-headline font-extrabold text-on-surface" id="rpt-svc-total">$0.00</div>
+            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-svc-total">$0.00</div>
             <span class="rpt-delta" id="rpt-svc-total-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Services</div>
           </div>
           <div class="rounded-xl p-4 border text-center" style="background:rgba(26,82,82,0.08);border-color:rgba(26,82,82,0.3)">
-            <div class="text-2xl font-headline font-extrabold" style="color:#1a5252" id="rpt-shop-keeps">$0.00</div>
+            <div class="text-lg font-headline font-extrabold" style="color:#1a5252" id="rpt-shop-keeps">$0.00</div>
             <span class="rpt-delta" id="rpt-shop-keeps-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Shop Keeps</div>
           </div>
           <div class="rounded-xl p-4 border text-center" style="background:rgba(255,224,178,0.3);border-color:rgba(212,134,10,0.4)">
-            <div class="text-2xl font-headline font-extrabold" style="color:#a05000" id="rpt-total-commission">$0.00</div>
+            <div class="text-lg font-headline font-extrabold" style="color:#a05000" id="rpt-total-commission">$0.00</div>
             <span class="rpt-delta" id="rpt-total-commission-delta"></span>
             <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Commission Owed</div>
           </div>
@@ -465,23 +481,9 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Payment mix — how the money was actually collected -->
-        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Payment Mix</h3>
-        <div class="grid grid-cols-2 gap-3 mb-5">
-          <div onclick="drillDownPay('card')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Card charges including tips — matches your Square deposit. Tap for the tickets behind it.">
-            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-card">$0.00</div>
-            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-card"></div>
-            <span class="rpt-delta" id="rpt-pay-card-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Card (incl. tips)</div>
-            <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
-          </div>
-          <div onclick="drillDownPay('cash')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Cash collected (drawer). Tap for the tickets behind it.">
-            <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-cash">$0.00</div>
-            <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-cash"></div>
-            <span class="rpt-delta" id="rpt-pay-cash-delta"></span>
-            <div class="text-[11px] font-body uppercase tracking-widest text-on-surface-variant mt-1">Cash</div>
-            <div class="text-[9px] font-body text-primary/70 mt-0.5">tap for details</div>
-          </div>
+        <!-- Other payment methods (card & cash are shown in the headline strip above) -->
+        <h3 class="text-sm font-headline font-bold text-on-surface uppercase tracking-widest mb-3">Other Payments</h3>
+        <div class="grid grid-cols-3 gap-3 mb-5">
           <div onclick="drillDownPay('zelle')" class="bg-surface-container-lowest rounded-xl p-4 border border-surface-container-high text-center cursor-pointer hover:bg-surface-container transition-colors" title="Paid via Zelle. Tap for the tickets behind it.">
             <div class="text-lg font-headline font-extrabold text-on-surface" id="rpt-pay-zelle">$0.00</div>
             <div class="text-[10px] font-body font-semibold text-on-surface-variant" id="rpt-paycnt-zelle"></div>
