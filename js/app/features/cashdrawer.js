@@ -308,40 +308,46 @@ const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g,
 function buildShiftHtml(s) {
   const logo = cfg().logo || '';
   const os = s.overShort || 0;
-  const denomRows = (counts, label) => DENOMS.map(d => { const q = counts?.[d] || 0; return `<tr><td>$${d}</td><td style="text-align:right">${q}</td><td style="text-align:right">${money(d * q)}</td></tr>`; }).join('')
-    + `<tr class="tot"><td colspan="2">${label} total</td><td style="text-align:right">${money(countTotal(counts))}</td></tr>`;
-  const moves = (s.movements || []).map(m => `<tr><td>${esc((m.by?.name) || '')}</td><td>${m.type === 'out' ? 'Cash out' : 'Cash in'}</td><td>${esc(m.reason || '')}</td><td style="text-align:right">${m.type === 'out' ? '−' : '+'}${money(m.amount)}</td></tr>`).join('')
-    || '<tr><td colspan="4" style="text-align:center;color:#999">No cash in/out</td></tr>';
+  const denomRows = (counts, label) => DENOMS.map(d => { const q = counts?.[d] || 0; return q ? `<tr><td>$${d} &times; ${q}</td><td style="text-align:right">${money(d * q)}</td></tr>` : ''; }).join('')
+    + `<tr class="tot"><td>${label} total</td><td style="text-align:right">${money(countTotal(counts))}</td></tr>`;
+  const moves = (s.movements || []).map(m => `<tr><td>${m.type === 'out' ? 'OUT' : 'IN'} &middot; ${esc(m.reason || (m.type === 'out' ? 'Cash out' : 'Cash in'))}${m.by?.name ? ' (' + esc(m.by.name) + ')' : ''}</td><td style="text-align:right">${m.type === 'out' ? '&minus;' : '+'}${money(m.amount)}</td></tr>`).join('')
+    || '<tr><td colspan="2" style="text-align:center">No cash in/out</td></tr>';
+  // 80mm thermal receipt-roll format — same Courier 13px bold as the customer receipt so it
+  // prints large + crisp on the RP327 (the old letter-size layout scaled down to unreadable).
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Cash Drawer — ${fmtDate(s.openedAt)}</title><style>
-    body{font-family:Arial,sans-serif;font-size:12px;color:#222;margin:24px}.h{display:flex;align-items:center;gap:14px;margin-bottom:10px}.logo{max-width:140px;max-height:52px;object-fit:contain;border-radius:8px}
-    h1{color:#1a5252;font-size:18px;margin:0 0 2px}.sub{color:#666;margin:0;font-size:12px}
-    h2{color:#1a5252;font-size:13px;margin:18px 0 6px;border-bottom:2px solid #1a5252;padding-bottom:3px}
-    table{width:100%;border-collapse:collapse;margin-bottom:6px}th{background:#1a5252;color:#fff;padding:5px 8px;text-align:left;font-size:11px}td{padding:4px 8px;border-bottom:1px solid #e8e8e8}
-    tr.tot td{font-weight:700;background:#f2f6f6;border-top:2px solid #1a5252}
-    .recon td{font-size:13px}.recon .big td{font-size:15px;font-weight:800}
-    .os{font-weight:800;color:${osColor(os)}}
-    .two{display:flex;gap:24px}.two>div{flex:1}
-    .footer{margin-top:22px;font-size:10px;color:#999;text-align:center}
+    @page{size:80mm auto;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0}
+    body{width:72mm;margin:0 auto;padding:3mm 2mm 5mm;font-family:'Courier New',ui-monospace,monospace;font-size:13px;line-height:1.35;color:#000;font-weight:700}
+    .h{text-align:center;margin-bottom:5px}.logo{max-width:40mm;max-height:16mm;object-fit:contain;display:block;margin:0 auto 3px}
+    h1{font-family:Arial,Helvetica,sans-serif;font-weight:900;font-size:15px;margin:0 0 2px}
+    .sub{font-size:11px;margin:0;line-height:1.35}
+    h2{font-size:13px;margin:9px 0 3px;border-bottom:1px solid #000;padding-bottom:2px;text-transform:uppercase}
+    table{width:100%;border-collapse:collapse;margin-bottom:3px}
+    td{padding:1px 2px;font-size:13px;vertical-align:top}
+    tr.tot td{font-weight:900;border-top:1px solid #000}
+    .recon .big td{font-size:14px;font-weight:900;border-top:1px solid #000}
+    .footer{margin-top:9px;font-size:10px;text-align:center;line-height:1.4}
   </style></head><body>
-    <div class="h">${logo ? `<img src="${logo}" class="logo" onerror="this.style.display='none'">` : ''}<div><h1>Muse Nails &amp; Spa — Cash Drawer</h1>
-      <p class="sub">${fmtDate(s.openedAt)} · ${fmtTime(s.openedAt)} – ${fmtTime(s.closedAt)} · Opened by ${esc(s.openedBy?.name) || '—'}, closed by ${esc(s.closedBy?.name) || '—'}</p></div></div>
-    <div class="two">
-      <div><h2>Opening count</h2><table><thead><tr><th>Bill</th><th style="text-align:right">Qty</th><th style="text-align:right">Total</th></tr></thead><tbody>${denomRows(s.openCounts, 'Opening')}</tbody></table></div>
-      <div><h2>Closing count</h2><table><thead><tr><th>Bill</th><th style="text-align:right">Qty</th><th style="text-align:right">Total</th></tr></thead><tbody>${denomRows(s.closeCounts, 'Closing')}</tbody></table></div>
+    <div class="h">${logo ? `<img src="${logo}" class="logo" onerror="this.style.display='none'">` : ''}
+      <h1>Muse Nails &amp; Spa</h1>
+      <div class="sub">CASH DRAWER REPORT</div>
+      <div class="sub">${fmtDate(s.openedAt)}</div>
+      <div class="sub">${fmtTime(s.openedAt)} &ndash; ${fmtTime(s.closedAt)}</div>
+      <div class="sub">Open: ${esc(s.openedBy?.name) || '—'} &middot; Close: ${esc(s.closedBy?.name) || '—'}</div>
     </div>
-    <h2>Cash in / out</h2>
-    <table><thead><tr><th>By</th><th>Type</th><th>Reason</th><th style="text-align:right">Amount</th></tr></thead><tbody>${moves}</tbody></table>
+    <h2>Opening count</h2><table><tbody>${denomRows(s.openCounts, 'Opening')}</tbody></table>
+    <h2>Closing count</h2><table><tbody>${denomRows(s.closeCounts, 'Closing')}</tbody></table>
+    <h2>Cash in / out</h2><table><tbody>${moves}</tbody></table>
     <h2>Reconciliation</h2>
     <table class="recon"><tbody>
       <tr><td>Opening cash</td><td style="text-align:right">${money(s.openTotal)}</td></tr>
       <tr><td>+ Cash sales</td><td style="text-align:right">${money(s.cashSales)}</td></tr>
       <tr><td>+ Cash in</td><td style="text-align:right">${money(s.cashIn)}</td></tr>
-      <tr><td>− Cash out</td><td style="text-align:right">${money(s.cashOut)}</td></tr>
-      ${s.tipsOut ? `<tr><td style="color:#666">&nbsp;&nbsp;↳ of which tip payouts</td><td style="text-align:right;color:#666">${money(s.tipsOut)}</td></tr>` : ''}
-      <tr class="big"><td>Expected in drawer</td><td style="text-align:right">${money(s.expected)}</td></tr>
-      <tr class="big"><td>Counted in drawer</td><td style="text-align:right">${money(s.closeTotal)}</td></tr>
-      <tr class="big"><td>Over / Short</td><td style="text-align:right" class="os">${osLabel(os)}</td></tr>
+      <tr><td>&minus; Cash out</td><td style="text-align:right">${money(s.cashOut)}</td></tr>
+      ${s.tipsOut ? `<tr><td>&nbsp;&nbsp;&#8627; tip payouts</td><td style="text-align:right">${money(s.tipsOut)}</td></tr>` : ''}
+      <tr class="big"><td>Expected</td><td style="text-align:right">${money(s.expected)}</td></tr>
+      <tr class="big"><td>Counted</td><td style="text-align:right">${money(s.closeTotal)}</td></tr>
+      <tr class="big"><td>Over / Short</td><td style="text-align:right">${osLabel(os)}</td></tr>
     </tbody></table>
-    <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa · Counts are bills-only; coins/cents appear in Over/Short.</div>
+    <div class="footer">Generated ${new Date().toLocaleString()}<br>Counts are bills-only; coins/cents in Over/Short.</div>
   </body></html>`;
 }

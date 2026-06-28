@@ -125,6 +125,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.30', items: [
+    { icon: 'print', t: 'Cash drawer report prints clearly on the receipt printer', d: 'The printable cash drawer report now uses the same large, bold receipt-roll format as customer receipts, so it comes out crisp and readable on the 80mm receipt printer instead of tiny.' },
+  ] },
   { v: 'v5.29', items: [
     { icon: 'receipt_long', t: 'Customer receipts now show the total only', d: 'Customer receipts no longer print the per-service / item breakdown by default — they show the grand total and how the customer paid (card, cash, tip). If you ever want the itemized lines back, turn on “Show charge breakdown on receipts” in Settings → Business → Receipt & Reviews.' },
     { icon: 'insights', t: 'Sales report is cleaner and easier to scan', d: 'The Sales report now puts the numbers you check most — money collected, guests, and card vs cash — right at the top, with the rest grouped tighter underneath. Each box shows its up/down change right next to the amount, and tips, retail, fees and gift cards sit in a compact grid.' },
