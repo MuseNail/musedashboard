@@ -330,7 +330,7 @@ function buildShiftHtml(s, countsOnly) {
     <h2>Opening count</h2><table><tbody>${denomRows(s.openCounts, 'Opening')}</tbody></table>
     <h2>Closing count</h2><table><tbody>${denomRows(s.closeCounts, 'Closing')}</tbody></table>
     ${inOutRecon}
-    <div class="footer">Generated ${new Date().toLocaleString()}<br>Counts are bills-only; coins/cents in Over/Short.</div>
+    ${countsOnly ? '' : `<div class="footer">Generated ${new Date().toLocaleString()}<br>Counts are bills-only; coins/cents in Over/Short.</div>`}
   </body></html>`;
 }
 
