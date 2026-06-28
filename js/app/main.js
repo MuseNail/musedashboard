@@ -127,6 +127,7 @@ function goTo(screenId, param) {
 const WHATS_NEW = [
   { v: 'v5.29', items: [
     { icon: 'receipt_long', t: 'Customer receipts now show the total only', d: 'Customer receipts no longer print the per-service / item breakdown by default — they show the grand total and how the customer paid (card, cash, tip). If you ever want the itemized lines back, turn on “Show charge breakdown on receipts” in Settings → Business → Receipt & Reviews.' },
+    { icon: 'insights', t: 'Sales report is cleaner and easier to scan', d: 'The Sales report now puts the numbers you check most — money collected, guests, and card vs cash — right at the top, with the rest grouped tighter underneath. Each box shows its up/down change right next to the amount, and tips, retail, fees and gift cards sit in a compact grid.' },
   ] },
   { v: 'v5.28', items: [
     { icon: 'density_medium', t: 'Turns board fits more techs on busy days', d: 'The technician rows on the Turns board are now more compact, so more of your team fits on one screen when it’s busy. Each tech’s turn count sits right next to their name, and the cards size themselves to how many techs are working — roomier with a few, tighter with many. The technician who’s up next now shows a single “Next up” tag in place of the “Available” tag.' },
