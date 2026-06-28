@@ -270,7 +270,7 @@
 
   /* Queue action buttons — large touch targets */
   .q-action-btn { display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:50%; border:none; cursor:pointer; transition:background 0.15s; flex-shrink:0; }
-  .q-action-btn:active { transform:scale(0.92); }
+  .q-action-btn:active { filter:brightness(0.92); }
 
   /* Dashboard panels */
   .dash-panel { display:none; }
@@ -339,40 +339,29 @@
      softer depth, and a compact-density pass so long lists scroll less.
      ══════════════════════════════════════════════════════════════════ */
 
-  /* Tactile press feedback on interactive controls */
+  /* Press feedback on interactive controls — FLAT press (v5.35): shadow +
+     background only, NO scale. The old global `:active { scale(.975) }` shrank
+     every button on press and eased it back over .08s — that eased return was a
+     "bounce" felt app-wide, and it forced a string of patch rules (overlays,
+     list cards, numpad) whose only job was to undo the scale where it propagated
+     up onclick parents. Dropping the scale kills the bounce everywhere and lets
+     all of those patches go with it. Primary buttons keep a shadow dip (below). */
   button, [onclick], [role="button"], .dash-tab {
-    transition: transform .08s ease, box-shadow .15s ease, background-color .15s ease, color .15s ease;
+    transition: box-shadow .15s ease, background-color .15s ease, color .15s ease;
   }
-  button:active, [onclick]:active, [role="button"]:active { transform: scale(0.975); }
-  /* …but NEVER a full-screen pop-up overlay. Every modal/menu backdrop carries an
-     onclick (tap-outside-to-close), so :active propagating up from a tapped button made
-     the whole overlay — and the panel inside it — scale/bounce on every tap (the same
-     bug the numpad had). Kill the transform on the overlay; buttons inside still scale. */
-  .fixed.inset-0:active { transform: none !important; }
-  /* …and NOT a large clickable list card with controls inside. Service/item/fee rows are
-     `onclick` cards (tap = edit) wrapping nested toggles + delete; the press-scale above
-     propagated up from a tapped toggle, scaling the whole card → a "bounce." Kill the
-     press-transform inside these lists (the toggle's knob slide still gives feedback). */
-  #services-merged-list :active, #settings-items-list :active, #settings-fees-list :active { transform: none !important; }
   /* Number inputs are type-only (e.g. the payroll Check field) — no up/down spinners. */
   input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; appearance: none; margin: 0; }
   input[type=number] { -moz-appearance: textfield; appearance: textfield; }
-  /* …but NOT the numpad keys. The cosmetic button transition above animated a
-     background/transform flash on every tap → "flicker + jump" on iPad during rapid
-     amount entry. Kill ALL motion on the keys: no transition, no transform, no shadow
-     change — just an instant (un-animated) :active background for crisp feedback.
-     touch-action:none + the onpointerdown handlers register taps on touch-down. */
-  .numpad-key { transition: none !important; transform: none !important; box-shadow: none !important; touch-action: none !important; }
-  .numpad-key:active, .numpad-key:hover, .numpad-key:focus { transform: none !important; box-shadow: none !important; }
+  /* Numpad keys still want INSTANT, un-animated feedback during rapid amount
+     entry — kill the transition flash and any shadow change so the :active
+     background snaps. touch-action:none + onpointerdown register taps on
+     touch-down. */
+  .numpad-key { transition: none !important; box-shadow: none !important; touch-action: none !important; }
+  .numpad-key:active, .numpad-key:hover, .numpad-key:focus { box-shadow: none !important; }
   /* The whole numpad never scrolls — stops a stray touch from rubber-banding the page
      behind the bottom sheet. Taps/clicks still work. */
   #numpad-modal { touch-action: none; overscroll-behavior: contain; }
   #numpad-modal, #numpad-modal * { transition: none !important; }
-  /* THE jump fix: the backdrop (#numpad-modal, onclick=closeNumpad) and panel
-     (onclick=stopPropagation) both match the cosmetic `[onclick]:active{scale(.975)}`,
-     and :active propagates up from the pressed key — so the whole numpad scaled/snapped
-     on every tap. Kill any transform on the numpad and its descendants while active. */
-  #numpad-modal, #numpad-modal *, #numpad-modal:active, #numpad-modal *:active { transform: none !important; }
   /* Keep the amount on one line so a wide number can't reflow the panel. */
   #numpad-display { white-space: nowrap; overflow: hidden; }
 
@@ -621,7 +610,7 @@
     justify-content:center; cursor:pointer; flex-shrink:0; }
   .chat-cbtn.at { background:var(--surface-container,#eef2f2); color:var(--primary,#1a5252); }
   .chat-cbtn.send { background:var(--primary,#1a5252); color:#fff; }
-  .chat-cbtn.send:active { transform:scale(.95); }
+  .chat-cbtn.send:active { filter:brightness(.9); }
   .chat-atpop { position:absolute; left:10px; right:58px; bottom:56px; background:#fff;
     border:1px solid var(--outline-variant,#c2cacd); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,.18);
     overflow:hidden; max-height:240px; overflow-y:auto; }
