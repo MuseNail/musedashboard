@@ -174,7 +174,8 @@ window.rappTab = v => { _view = ['payroll', 'drawer'].includes(v) ? v : 'reports
 // Read-only cash drawer + history (with print). Print fns must be on window for the inline onclicks.
 window.cdPrintShift = cdPrintShift;
 window.cdPrintCounts = cdPrintCounts;
-function renderDrawerHtml() { return `<div class="mb-1">${drawerReportHtml()}</div>`; }
+// Reports app drawer view: show per-bill counts, and hide cash-outs.
+function renderDrawerHtml() { return `<div class="mb-1">${drawerReportHtml({ showBillCounts: true, hideCashOut: true })}</div>`; }
 window.rappRange = k => { _range = k; render(); };
 window.rappPayNav = d => { _payOffset += d; render(); };
 window.rappPinSubmit = async () => {

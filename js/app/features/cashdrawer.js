@@ -29,6 +29,8 @@ let _countDraft = {};        // { [denom]: qty } for the open/close count sheet
 const _emptyCounts = () => DENOMS.reduce((o, d) => (o[d] = 0, o), {});
 export function countTotal(c) { return DENOMS.reduce((s, d) => s + d * Math.max(0, parseInt(c?.[d], 10) || 0), 0); }
 const money = n => '$' + (Number(n) || 0).toFixed(2);
+// Per-denomination bill count, e.g. "2×$100 · 8×$20 · 15×$1".
+const billCountInline = c => DENOMS.filter(d => (c?.[d] || 0) > 0).map(d => `${c[d]}&times;$${d}`).join('  ·  ') || '—';
 const me = () => { const u = getActiveUser(); return { id: u?.id || '', name: u?.name || 'Unknown' }; };
 const fmtTime = iso => { const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
 const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
@@ -337,12 +339,17 @@ function buildShiftHtml(s, countsOnly) {
 // ── Read-only drawer + history (shared: dashboard Reports tab + phone Reports app) ──────
 // View + print only — no open/close/cash-in-out controls. Each closed shift offers both a
 // full-report print and a counts-only print.
-export function drawerHistoryRowsHtml() {
+export function drawerHistoryRowsHtml(opts = {}) {
+  const { showBillCounts, hideCashOut } = opts;
   const hist = (cfg().cash_drawer_history || []).slice().reverse();
   return hist.map(s => {
     const os = s.overShort || 0;
-    const moves = s.movements || [];
+    const moves = (s.movements || []).filter(m => !(hideCashOut && m.type === 'out'));
     const movesHtml = moves.length ? `<div class="mt-2 pt-1.5 border-t border-surface-container-high space-y-0.5">${moves.map(m => `<div class="flex items-center justify-between text-[11px] font-body"><span class="text-on-surface-variant">${m.type === 'out' ? 'Cash out' : 'Cash in'}${m.reason ? ' · ' + esc(m.reason) : ''} <span class="text-outline">${fmtTime(m.at)}${m.by?.name ? ' · ' + esc(m.by.name) : ''}</span></span><span style="color:${m.type === 'out' ? '#fa746f' : '#2a7a4f'};font-weight:700">${m.type === 'out' ? '−' : '+'}${money(m.amount)}</span></div>`).join('')}</div>` : '';
+    const billsHtml = showBillCounts ? `<div class="mt-2 pt-1.5 border-t border-surface-container-high text-[11px] font-body leading-snug">
+        <div class="text-on-surface-variant">Opening bills: <span class="text-on-surface">${billCountInline(s.openCounts)}</span></div>
+        <div class="text-on-surface-variant">Closing bills: <span class="text-on-surface">${billCountInline(s.closeCounts)}</span></div>
+      </div>` : '';
     return `<div class="rounded-xl border border-surface-container-high px-4 py-3 mb-2">
       <div class="flex items-center justify-between mb-1">
         <span class="font-headline font-semibold text-on-surface text-sm">${fmtDate(s.openedAt)} · ${fmtTime(s.openedAt)} – ${fmtTime(s.closedAt)}</span>
@@ -354,19 +361,20 @@ export function drawerHistoryRowsHtml() {
       <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs font-body text-on-surface-variant">
         <span>Opening: <span class="text-on-surface">${money(s.openTotal)}</span></span>
         <span>Cash sales: <span class="text-on-surface">${money(s.cashSales)}</span></span>
-        <span>Cash in/out: <span class="text-on-surface">${money(s.cashIn)} / ${money(s.cashOut)}</span></span>
-        ${s.tipsOut ? `<span>Tips paid: <span class="text-on-surface">${money(s.tipsOut)}</span></span>` : ''}
+        ${hideCashOut ? `<span>Cash in: <span class="text-on-surface">${money(s.cashIn)}</span></span>` : `<span>Cash in/out: <span class="text-on-surface">${money(s.cashIn)} / ${money(s.cashOut)}</span></span>`}
+        ${(s.tipsOut && !hideCashOut) ? `<span>Tips paid: <span class="text-on-surface">${money(s.tipsOut)}</span></span>` : ''}
         <span>Counted: <span class="text-on-surface">${money(s.closeTotal)}</span></span>
         <span>Expected: <span class="text-on-surface">${money(s.expected)}</span></span>
         <span>Over/Short: <span style="color:${osColor(os)};font-weight:700">${osLabel(os)}</span></span>
       </div>
+      ${billsHtml}
       ${movesHtml}
       <div class="text-[11px] font-body text-outline mt-1">Closed by ${esc(s.closedBy?.name) || '—'}</div>
     </div>`;
   }).join('') || '<p class="text-sm font-body text-on-surface-variant text-center py-6 opacity-70">No closed drawers yet.</p>';
 }
 // Current open drawer (read-only) + the history list.
-export function drawerReportHtml() {
+export function drawerReportHtml(opts = {}) {
   const d = currentDrawer();
   let cur;
   if (d) {
@@ -378,9 +386,10 @@ export function drawerReportHtml() {
         <span>Opening: <span class="text-on-surface">${money(d.openTotal)}</span></span>
         <span>Cash sales: <span class="text-on-surface">${money(sales)}</span></span>
         <span class="col-span-2">Expected in drawer now: <span class="text-on-surface font-semibold">${money(expected)}</span></span>
-      </div></div>`;
+      </div>
+      ${opts.showBillCounts ? `<div class="mt-2 pt-1.5 border-t border-surface-container-high text-[11px] font-body text-on-surface-variant">Opening bills: <span class="text-on-surface">${billCountInline(d.openCounts)}</span></div>` : ''}</div>`;
   } else {
     cur = `<div class="rounded-xl border border-surface-container-high px-4 py-3 mb-3 text-sm font-body text-on-surface-variant text-center">No drawer open right now.</div>`;
   }
-  return cur + drawerHistoryRowsHtml();
+  return cur + drawerHistoryRowsHtml(opts);
 }

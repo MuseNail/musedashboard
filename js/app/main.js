@@ -125,6 +125,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.33', items: [
+    { icon: 'point_of_sale', t: 'Phone Reports app: drawer shows bill counts, hides cash-outs', d: 'In the phone Reports app, the Drawer view now lists the opening and closing bill counts for each drawer, and no longer shows cash-out entries. The main dashboard drawer view is unchanged.' },
+  ] },
   { v: 'v5.31', items: [
     { icon: 'point_of_sale', t: 'Cash drawer in Reports, plus a counts-only print', d: 'You can now see the current cash drawer and past drawer history right in the Reports tab — and in the phone Reports app — with print buttons. Each closed drawer can print the full report, or just the opening and closing bill counts (no cash in/out or reconciliation).' },
   ] },
