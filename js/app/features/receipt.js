@@ -87,8 +87,9 @@ export function printCustomerReceipt(recordId) {
 
   // Privacy: receipts show the first name only — never the last name or phone.
   const firstName = (r.name || 'Guest').trim().split(/\s+/)[0] || 'Guest';
-  // Charge breakdown (per-line services/items/fees) is owner-toggleable in Settings.
-  const showBreakdown = cfg().receipt_breakdown !== false;
+  // Charge breakdown (per-line services/items/fees) is OFF by default — receipts show
+  // the total + how they paid only. Owner can opt back in via Settings → Receipt & Reviews.
+  const showBreakdown = cfg().receipt_breakdown === true;
 
   // Line items — services (→ tech), items × qty, fees (skip $0).
   let body = '';
@@ -205,7 +206,7 @@ export function renderReceiptSettings() {
     </div>
     <div class="mt-4 pt-4 border-t border-surface-container-high">
       <label class="flex items-center gap-3 cursor-pointer">
-        <input type="checkbox" id="receipt-breakdown" onchange="setReceiptBreakdown(this.checked)" ${cfg().receipt_breakdown !== false ? 'checked' : ''} class="w-5 h-5 accent-primary flex-shrink-0">
+        <input type="checkbox" id="receipt-breakdown" onchange="setReceiptBreakdown(this.checked)" ${cfg().receipt_breakdown === true ? 'checked' : ''} class="w-5 h-5 accent-primary flex-shrink-0">
         <span>
           <span class="text-sm font-body font-semibold text-on-surface block">Show charge breakdown on receipts</span>
           <span class="text-xs font-body text-on-surface-variant">When off, customer receipts print the total only — no per-service / item lines.</span>
