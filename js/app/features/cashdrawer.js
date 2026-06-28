@@ -30,7 +30,16 @@ const _emptyCounts = () => DENOMS.reduce((o, d) => (o[d] = 0, o), {});
 export function countTotal(c) { return DENOMS.reduce((s, d) => s + d * Math.max(0, parseInt(c?.[d], 10) || 0), 0); }
 const money = n => '$' + (Number(n) || 0).toFixed(2);
 // Per-denomination bill count, e.g. "2×$100 · 8×$20 · 15×$1".
-const billCountInline = c => DENOMS.filter(d => (c?.[d] || 0) > 0).map(d => `${c[d]}&times;$${d}`).join('  ·  ') || '—';
+// Vertical bill-count table (large, phone-friendly): one row per denomination + a total row.
+const billCountTable = (counts, label) => {
+  const rows = DENOMS.filter(d => (counts?.[d] || 0) > 0)
+    .map(d => `<tr><td class="py-1 text-on-surface">$${d}</td><td class="py-1 text-center text-on-surface-variant">&times; ${counts[d]}</td><td class="py-1 text-right text-on-surface font-semibold">${money(d * counts[d])}</td></tr>`).join('')
+    || '<tr><td colspan="3" class="py-1 text-on-surface-variant text-center">No bills counted</td></tr>';
+  return `<div class="mt-2">
+    <div class="text-xs font-body font-bold text-on-surface-variant uppercase tracking-wide mb-1">${label} bills</div>
+    <table class="w-full text-base font-body"><tbody>${rows}<tr class="border-t-2 border-surface-container-high"><td class="pt-1 font-bold text-on-surface" colspan="2">${label} total</td><td class="pt-1 text-right font-extrabold text-primary">${money(countTotal(counts))}</td></tr></tbody></table>
+  </div>`;
+};
 const me = () => { const u = getActiveUser(); return { id: u?.id || '', name: u?.name || 'Unknown' }; };
 const fmtTime = iso => { const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); };
 const fmtDate = iso => { const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
@@ -346,10 +355,7 @@ export function drawerHistoryRowsHtml(opts = {}) {
     const os = s.overShort || 0;
     const moves = (s.movements || []).filter(m => !(hideCashOut && m.type === 'out'));
     const movesHtml = moves.length ? `<div class="mt-2 pt-1.5 border-t border-surface-container-high space-y-0.5">${moves.map(m => `<div class="flex items-center justify-between text-[11px] font-body"><span class="text-on-surface-variant">${m.type === 'out' ? 'Cash out' : 'Cash in'}${m.reason ? ' · ' + esc(m.reason) : ''} <span class="text-outline">${fmtTime(m.at)}${m.by?.name ? ' · ' + esc(m.by.name) : ''}</span></span><span style="color:${m.type === 'out' ? '#fa746f' : '#2a7a4f'};font-weight:700">${m.type === 'out' ? '−' : '+'}${money(m.amount)}</span></div>`).join('')}</div>` : '';
-    const billsHtml = showBillCounts ? `<div class="mt-2 pt-1.5 border-t border-surface-container-high text-[11px] font-body leading-snug">
-        <div class="text-on-surface-variant">Opening bills: <span class="text-on-surface">${billCountInline(s.openCounts)}</span></div>
-        <div class="text-on-surface-variant">Closing bills: <span class="text-on-surface">${billCountInline(s.closeCounts)}</span></div>
-      </div>` : '';
+    const billsHtml = showBillCounts ? `<div class="mt-2 pt-1.5 border-t border-surface-container-high">${billCountTable(s.openCounts, 'Opening')}${billCountTable(s.closeCounts, 'Closing')}</div>` : '';
     return `<div class="rounded-xl border border-surface-container-high px-4 py-3 mb-2">
       <div class="flex items-center justify-between mb-1">
         <span class="font-headline font-semibold text-on-surface text-sm">${fmtDate(s.openedAt)} · ${fmtTime(s.openedAt)} – ${fmtTime(s.closedAt)}</span>
@@ -387,7 +393,7 @@ export function drawerReportHtml(opts = {}) {
         <span>Cash sales: <span class="text-on-surface">${money(sales)}</span></span>
         <span class="col-span-2">Expected in drawer now: <span class="text-on-surface font-semibold">${money(expected)}</span></span>
       </div>
-      ${opts.showBillCounts ? `<div class="mt-2 pt-1.5 border-t border-surface-container-high text-[11px] font-body text-on-surface-variant">Opening bills: <span class="text-on-surface">${billCountInline(d.openCounts)}</span></div>` : ''}</div>`;
+      ${opts.showBillCounts ? `<div class="mt-2 pt-1.5 border-t border-surface-container-high">${billCountTable(d.openCounts, 'Opening')}</div>` : ''}</div>`;
   } else {
     cur = `<div class="rounded-xl border border-surface-container-high px-4 py-3 mb-3 text-sm font-body text-on-surface-variant text-center">No drawer open right now.</div>`;
   }
