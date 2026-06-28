@@ -20,6 +20,7 @@ import {
   buildCombinedRecords, computeMetrics, paymentMix,
   payrollComputedRows, payrollFdRows, payrollPeriodAt,
 } from './features/reports.js';
+import { drawerReportHtml, cdPrintShift, cdPrintCounts } from './features/cashdrawer.js';
 
 const cfg = () => store.getState().config;
 
@@ -74,8 +75,10 @@ function render() {
   const dot = document.getElementById('rapp-conn'); if (dot) dot.style.background = store.getState().connected ? '#2a7a4f' : '#e8730a';
   const seg = `<div class="flex justify-center mb-3"><div class="subnav-seg">
     <button onclick="rappTab('reports')" class="subnav-btn${_view === 'reports' ? ' on' : ''}">Reports</button>
-    <button onclick="rappTab('payroll')" class="subnav-btn${_view === 'payroll' ? ' on' : ''}">Payroll</button></div></div>`;
-  document.getElementById('rapp-body').innerHTML = seg + (_view === 'payroll' ? renderPayrollHtml() : renderReportsHtml());
+    <button onclick="rappTab('payroll')" class="subnav-btn${_view === 'payroll' ? ' on' : ''}">Payroll</button>
+    <button onclick="rappTab('drawer')" class="subnav-btn${_view === 'drawer' ? ' on' : ''}">Drawer</button></div></div>`;
+  const bodyHtml = _view === 'payroll' ? renderPayrollHtml() : _view === 'drawer' ? renderDrawerHtml() : renderReportsHtml();
+  document.getElementById('rapp-body').innerHTML = seg + bodyHtml;
 }
 function renderLogin(errMsg) {
   document.getElementById('rapp-login').classList.remove('hidden');
@@ -167,7 +170,11 @@ function renderPayrollHtml() {
 }
 
 // ── Actions (read-only navigation) ────────────────
-window.rappTab = v => { _view = v === 'payroll' ? 'payroll' : 'reports'; render(); };
+window.rappTab = v => { _view = ['payroll', 'drawer'].includes(v) ? v : 'reports'; render(); };
+// Read-only cash drawer + history (with print). Print fns must be on window for the inline onclicks.
+window.cdPrintShift = cdPrintShift;
+window.cdPrintCounts = cdPrintCounts;
+function renderDrawerHtml() { return `<div class="mb-1">${drawerReportHtml()}</div>`; }
 window.rappRange = k => { _range = k; render(); };
 window.rappPayNav = d => { _payOffset += d; render(); };
 window.rappPinSubmit = async () => {

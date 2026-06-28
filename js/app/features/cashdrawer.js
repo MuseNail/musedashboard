@@ -200,30 +200,7 @@ function render() {
 
   if (view === 'history') {
     setTitle('Drawer History');
-    const hist = (cfg().cash_drawer_history || []).slice().reverse();
-    const rows = hist.map(s => {
-      const os = s.overShort || 0;
-      const moves = s.movements || [];
-      const movesHtml = moves.length ? `<div class="mt-2 pt-1.5 border-t border-surface-container-high space-y-0.5">${moves.map(m => `<div class="flex items-center justify-between text-[11px] font-body"><span class="text-on-surface-variant">${m.type === 'out' ? 'Cash out' : 'Cash in'}${m.reason ? ' · ' + esc(m.reason) : ''} <span class="text-outline">${fmtTime(m.at)}${m.by?.name ? ' · ' + esc(m.by.name) : ''}</span></span><span style="color:${m.type === 'out' ? '#fa746f' : '#2a7a4f'};font-weight:700">${m.type === 'out' ? '−' : '+'}${money(m.amount)}</span></div>`).join('')}</div>` : '';
-      return `<div class="rounded-xl border border-surface-container-high px-4 py-3 mb-2">
-        <div class="flex items-center justify-between mb-1">
-          <span class="font-headline font-semibold text-on-surface text-sm">${fmtDate(s.openedAt)} · ${fmtTime(s.openedAt)} – ${fmtTime(s.closedAt)}</span>
-          <button onclick="cdPrintShift('${s.id}')" title="Print drawer report" class="text-primary hover:text-primary-dim flex items-center"><span class="material-symbols-outlined" style="font-size:18px">print</span></button>
-        </div>
-        <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs font-body text-on-surface-variant">
-          <span>Opening: <span class="text-on-surface">${money(s.openTotal)}</span></span>
-          <span>Cash sales: <span class="text-on-surface">${money(s.cashSales)}</span></span>
-          <span>Cash in/out: <span class="text-on-surface">${money(s.cashIn)} / ${money(s.cashOut)}</span></span>
-          ${s.tipsOut ? `<span>Tips paid: <span class="text-on-surface">${money(s.tipsOut)}</span></span>` : ''}
-          <span>Counted: <span class="text-on-surface">${money(s.closeTotal)}</span></span>
-          <span>Expected: <span class="text-on-surface">${money(s.expected)}</span></span>
-          <span>Over/Short: <span style="color:${osColor(os)};font-weight:700">${osLabel(os)}</span></span>
-        </div>
-        ${movesHtml}
-        <div class="text-[11px] font-body text-outline mt-1">Closed by ${esc(s.closedBy?.name) || '—'}</div>
-      </div>`;
-    }).join('') || '<p class="text-sm font-body text-on-surface-variant text-center py-6 opacity-70">No closed drawers yet.</p>';
-    body.innerHTML = `<div class="max-h-[60vh] overflow-y-auto -mx-1 px-1">${rows}</div>
+    body.innerHTML = `<div class="max-h-[60vh] overflow-y-auto -mx-1 px-1">${drawerHistoryRowsHtml()}</div>
       <button onclick="cdBackFromHistory()" class="w-full mt-3 py-3 rounded-xl border border-surface-container-high text-on-surface font-headline font-semibold hover:bg-surface-container transition-colors">Back</button>`;
     return;
   }
@@ -295,23 +272,39 @@ export function cdConfirmClose() {
 }
 
 // ── Printable drawer report (Print → Save as PDF) ──
-export function cdPrintShift(shiftId) {
+export function cdPrintShift(shiftId, countsOnly) {
   const s = (cfg().cash_drawer_history || []).find(x => String(x.id) === String(shiftId));
   if (!s) { showToast('Drawer not found.'); return; }
-  const url = URL.createObjectURL(new Blob([buildShiftHtml(s)], { type: 'text/html' }));
+  const url = URL.createObjectURL(new Blob([buildShiftHtml(s, countsOnly)], { type: 'text/html' }));
   const win = window.open(url, '_blank');
   if (win) setTimeout(() => win.print(), 600);
   URL.revokeObjectURL(url);
   showToast('Report opened — use Print → Save as PDF');
 }
+// Counts-only variant: opening + closing denomination counts, no cash in/out or reconciliation.
+export function cdPrintCounts(shiftId) { cdPrintShift(shiftId, true); }
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-function buildShiftHtml(s) {
+function buildShiftHtml(s, countsOnly) {
   const logo = cfg().logo || '';
   const os = s.overShort || 0;
   const denomRows = (counts, label) => DENOMS.map(d => { const q = counts?.[d] || 0; return q ? `<tr><td>$${d} &times; ${q}</td><td style="text-align:right">${money(d * q)}</td></tr>` : ''; }).join('')
     + `<tr class="tot"><td>${label} total</td><td style="text-align:right">${money(countTotal(counts))}</td></tr>`;
   const moves = (s.movements || []).map(m => `<tr><td>${m.type === 'out' ? 'OUT' : 'IN'} &middot; ${esc(m.reason || (m.type === 'out' ? 'Cash out' : 'Cash in'))}${m.by?.name ? ' (' + esc(m.by.name) + ')' : ''}</td><td style="text-align:right">${m.type === 'out' ? '&minus;' : '+'}${money(m.amount)}</td></tr>`).join('')
     || '<tr><td colspan="2" style="text-align:center">No cash in/out</td></tr>';
+  // Cash in/out + reconciliation — omitted on the counts-only print.
+  const inOutRecon = countsOnly ? '' : `
+    <h2>Cash in / out</h2><table><tbody>${moves}</tbody></table>
+    <h2>Reconciliation</h2>
+    <table class="recon"><tbody>
+      <tr><td>Opening cash</td><td style="text-align:right">${money(s.openTotal)}</td></tr>
+      <tr><td>+ Cash sales</td><td style="text-align:right">${money(s.cashSales)}</td></tr>
+      <tr><td>+ Cash in</td><td style="text-align:right">${money(s.cashIn)}</td></tr>
+      <tr><td>&minus; Cash out</td><td style="text-align:right">${money(s.cashOut)}</td></tr>
+      ${s.tipsOut ? `<tr><td>&nbsp;&nbsp;&#8627; tip payouts</td><td style="text-align:right">${money(s.tipsOut)}</td></tr>` : ''}
+      <tr class="big"><td>Expected</td><td style="text-align:right">${money(s.expected)}</td></tr>
+      <tr class="big"><td>Counted</td><td style="text-align:right">${money(s.closeTotal)}</td></tr>
+      <tr class="big"><td>Over / Short</td><td style="text-align:right">${osLabel(os)}</td></tr>
+    </tbody></table>`;
   // 80mm thermal receipt-roll format — same Courier 13px bold as the customer receipt so it
   // prints large + crisp on the RP327 (the old letter-size layout scaled down to unreadable).
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Muse Cash Drawer — ${fmtDate(s.openedAt)}</title><style>
@@ -329,25 +322,65 @@ function buildShiftHtml(s) {
   </style></head><body>
     <div class="h">${logo ? `<img src="${logo}" class="logo" onerror="this.style.display='none'">` : ''}
       <h1>Muse Nails &amp; Spa</h1>
-      <div class="sub">CASH DRAWER REPORT</div>
+      <div class="sub">${countsOnly ? 'CASH COUNT' : 'CASH DRAWER REPORT'}</div>
       <div class="sub">${fmtDate(s.openedAt)}</div>
       <div class="sub">${fmtTime(s.openedAt)} &ndash; ${fmtTime(s.closedAt)}</div>
       <div class="sub">Open: ${esc(s.openedBy?.name) || '—'} &middot; Close: ${esc(s.closedBy?.name) || '—'}</div>
     </div>
     <h2>Opening count</h2><table><tbody>${denomRows(s.openCounts, 'Opening')}</tbody></table>
     <h2>Closing count</h2><table><tbody>${denomRows(s.closeCounts, 'Closing')}</tbody></table>
-    <h2>Cash in / out</h2><table><tbody>${moves}</tbody></table>
-    <h2>Reconciliation</h2>
-    <table class="recon"><tbody>
-      <tr><td>Opening cash</td><td style="text-align:right">${money(s.openTotal)}</td></tr>
-      <tr><td>+ Cash sales</td><td style="text-align:right">${money(s.cashSales)}</td></tr>
-      <tr><td>+ Cash in</td><td style="text-align:right">${money(s.cashIn)}</td></tr>
-      <tr><td>&minus; Cash out</td><td style="text-align:right">${money(s.cashOut)}</td></tr>
-      ${s.tipsOut ? `<tr><td>&nbsp;&nbsp;&#8627; tip payouts</td><td style="text-align:right">${money(s.tipsOut)}</td></tr>` : ''}
-      <tr class="big"><td>Expected</td><td style="text-align:right">${money(s.expected)}</td></tr>
-      <tr class="big"><td>Counted</td><td style="text-align:right">${money(s.closeTotal)}</td></tr>
-      <tr class="big"><td>Over / Short</td><td style="text-align:right">${osLabel(os)}</td></tr>
-    </tbody></table>
+    ${inOutRecon}
     <div class="footer">Generated ${new Date().toLocaleString()}<br>Counts are bills-only; coins/cents in Over/Short.</div>
   </body></html>`;
+}
+
+// ── Read-only drawer + history (shared: dashboard Reports tab + phone Reports app) ──────
+// View + print only — no open/close/cash-in-out controls. Each closed shift offers both a
+// full-report print and a counts-only print.
+export function drawerHistoryRowsHtml() {
+  const hist = (cfg().cash_drawer_history || []).slice().reverse();
+  return hist.map(s => {
+    const os = s.overShort || 0;
+    const moves = s.movements || [];
+    const movesHtml = moves.length ? `<div class="mt-2 pt-1.5 border-t border-surface-container-high space-y-0.5">${moves.map(m => `<div class="flex items-center justify-between text-[11px] font-body"><span class="text-on-surface-variant">${m.type === 'out' ? 'Cash out' : 'Cash in'}${m.reason ? ' · ' + esc(m.reason) : ''} <span class="text-outline">${fmtTime(m.at)}${m.by?.name ? ' · ' + esc(m.by.name) : ''}</span></span><span style="color:${m.type === 'out' ? '#fa746f' : '#2a7a4f'};font-weight:700">${m.type === 'out' ? '−' : '+'}${money(m.amount)}</span></div>`).join('')}</div>` : '';
+    return `<div class="rounded-xl border border-surface-container-high px-4 py-3 mb-2">
+      <div class="flex items-center justify-between mb-1">
+        <span class="font-headline font-semibold text-on-surface text-sm">${fmtDate(s.openedAt)} · ${fmtTime(s.openedAt)} – ${fmtTime(s.closedAt)}</span>
+        <span class="flex items-center gap-1.5 flex-shrink-0">
+          <button onclick="cdPrintCounts('${s.id}')" title="Print opening + closing counts only" class="text-on-surface-variant hover:text-primary flex items-center"><span class="material-symbols-outlined" style="font-size:18px">format_list_numbered</span></button>
+          <button onclick="cdPrintShift('${s.id}')" title="Print full drawer report" class="text-primary hover:text-primary-dim flex items-center"><span class="material-symbols-outlined" style="font-size:18px">print</span></button>
+        </span>
+      </div>
+      <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs font-body text-on-surface-variant">
+        <span>Opening: <span class="text-on-surface">${money(s.openTotal)}</span></span>
+        <span>Cash sales: <span class="text-on-surface">${money(s.cashSales)}</span></span>
+        <span>Cash in/out: <span class="text-on-surface">${money(s.cashIn)} / ${money(s.cashOut)}</span></span>
+        ${s.tipsOut ? `<span>Tips paid: <span class="text-on-surface">${money(s.tipsOut)}</span></span>` : ''}
+        <span>Counted: <span class="text-on-surface">${money(s.closeTotal)}</span></span>
+        <span>Expected: <span class="text-on-surface">${money(s.expected)}</span></span>
+        <span>Over/Short: <span style="color:${osColor(os)};font-weight:700">${osLabel(os)}</span></span>
+      </div>
+      ${movesHtml}
+      <div class="text-[11px] font-body text-outline mt-1">Closed by ${esc(s.closedBy?.name) || '—'}</div>
+    </div>`;
+  }).join('') || '<p class="text-sm font-body text-on-surface-variant text-center py-6 opacity-70">No closed drawers yet.</p>';
+}
+// Current open drawer (read-only) + the history list.
+export function drawerReportHtml() {
+  const d = currentDrawer();
+  let cur;
+  if (d) {
+    const sales = shiftCashSales(getState().records, d);
+    const expected = drawerExpected(getState().records, d);
+    cur = `<div class="rounded-xl border px-4 py-3 mb-3" style="border-color:rgba(26,82,82,.3);background:rgba(26,82,82,.05)">
+      <div class="flex items-center justify-between mb-1"><span class="font-headline font-semibold text-primary text-sm">Drawer open</span><span class="text-[11px] font-body text-on-surface-variant">since ${fmtTime(d.openedAt)} · ${esc(d.openedBy?.name) || '—'}</span></div>
+      <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs font-body text-on-surface-variant">
+        <span>Opening: <span class="text-on-surface">${money(d.openTotal)}</span></span>
+        <span>Cash sales: <span class="text-on-surface">${money(sales)}</span></span>
+        <span class="col-span-2">Expected in drawer now: <span class="text-on-surface font-semibold">${money(expected)}</span></span>
+      </div></div>`;
+  } else {
+    cur = `<div class="rounded-xl border border-surface-container-high px-4 py-3 mb-3 text-sm font-body text-on-surface-variant text-center">No drawer open right now.</div>`;
+  }
+  return cur + drawerHistoryRowsHtml();
 }
