@@ -334,13 +334,13 @@ export function renderTurnsApptStrip() {
     </div></div>`;
   }).join('');
 }
-function turnsDueNoteCard(a, mins) {
+function turnsDueNoteCard(a, mins, slotH) {
   const time = new Date(a.startMs).toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
   const late = mins < 0;
   const bg = late ? '#ffd9d9' : '#fff7e6', border = late ? '#dc2626' : '#f5a623', icon = late ? '#b91c1c' : '#c77700';
   const label = late ? 'Late appt' : 'Next appt', when = late ? `${-mins}m late` : `in ${mins}m`;
   const nameC = late ? '#7a1a1a' : '#5a3a00', whenC = late ? '#b91c1c' : '#8a5a00', svcC = late ? '#8a3030' : '#7a5a10';
-  return `<div class="flex-shrink-0 w-[150px] px-1"><div class="w-full rounded-xl px-2 py-1.5 text-left text-xs font-body" style="background:${bg};border:2px solid ${border};min-height:66px">
+  return `<div class="flex-shrink-0 w-[150px] px-1"><div class="w-full rounded-xl px-2 py-1.5 text-left text-xs font-body" style="background:${bg};border:2px solid ${border};min-height:${slotH || 66}px">
     <div class="flex items-center justify-between gap-0.5" style="margin-bottom:2px"><div class="flex items-center gap-1 min-w-0"><span class="material-symbols-outlined" style="font-size:13px;color:${icon}">notifications_active</span><span class="text-[9px] font-bold uppercase tracking-wide" style="color:${icon}">${label}</span></div><span class="font-bold text-[11px]" style="color:${whenC}">${when}</span></div>
     <div class="font-semibold text-[11px] truncate" style="color:${nameC}">${_tEsc(time)} · ${_tEsc(a.name)}</div>
     <div class="text-[10px] leading-tight truncate" style="color:${svcC}">${_tEsc(a.svc)}</div>
@@ -396,6 +396,10 @@ export function renderTurnsTechGrid() {
     if (tt < _nextUpTurns) { _nextUpTurns = tt; nextUpId = sid; }
   }
 
+  // Dynamic turn-card height: roomier when few techs, denser when many fit on screen
+  // (≤5 → 76px, 6–7 → 66px, 8+ → 56px) so a busy day shows more techs without scrolling.
+  const slotH = order.length <= 5 ? 76 : order.length <= 7 ? 66 : 56;
+
   const rows = order.map(staffId => {
     const st = staffById(staffId);
     if (!st) return '';
@@ -406,28 +410,32 @@ export function renderTurnsTechGrid() {
     const billed = allAssign.reduce((sum, it) => { const ast = getAssignmentStatus(it.entry, it.assignment); return sum + ((ast === 'complete' || isPaidStatus(ast)) ? (it.assignment.cost || 0) : 0); }, 0);
     if (allAssign.some(a => getAssignmentStatus(a.entry, a.assignment) === 'inservice')) activeCount++;
     const sc = getTechStatusColor(staffId);
+    const isNextUp = staffId === nextUpId;
     // Availability chip for the rotation column. GREEN is reserved for IN-SERVICE only (so it
     // never collides with an in-service turn slot): an available tech reads as a teal OUTLINE
-    // chip, a busy tech as a green "Working now" chip. getTechStatusColor itself is left
-    // unchanged so the floor plan / history keep their existing colors + labels.
-    const avPres = sc.label === 'Off'        ? { ring: '#b0b6ba', chip: 'background:#eceef0;color:#7a858a', dot: '#b0b6ba', label: 'Off' }
-                 : sc.label === 'On Break'   ? { ring: '#e0a83a', chip: 'background:#faedcf;color:#9a6b00', dot: '#e0a83a', label: 'On break' }
-                 : sc.label === 'In Service' ? { ring: '#2a7a4f', chip: 'background:#e9f4ee;color:#1b5e3b', dot: '#2a7a4f', label: 'Working now' }
-                 :                             { ring: '#1a5252', chip: 'background:#fff;border:1px solid #b9c8c2;color:#1a5252', dot: '#1a5252', label: 'Available' };
+    // chip, a busy tech as a green "Working now" chip, and the AVAILABLE tech due for the next
+    // walk-in gets a single filled teal "Next up" chip — replacing the plain Available pill, no
+    // separate badge. getTechStatusColor itself is left unchanged so the floor plan / history
+    // keep their existing colors + labels.
+    const _dot = c => `<span style="width:6px;height:6px;border-radius:50%;background:${c};display:inline-block"></span>`;
+    const avPres = sc.label === 'Off'        ? { ring: '#b0b6ba', chip: 'background:#eceef0;color:#7a858a', lead: _dot('#b0b6ba'), label: 'Off' }
+                 : sc.label === 'On Break'   ? { ring: '#e0a83a', chip: 'background:#faedcf;color:#9a6b00', lead: _dot('#e0a83a'), label: 'On break' }
+                 : sc.label === 'In Service' ? { ring: '#2a7a4f', chip: 'background:#e9f4ee;color:#1b5e3b', lead: _dot('#2a7a4f'), label: 'Working now' }
+                 : isNextUp                  ? { ring: '#1a5252', chip: 'background:#1a5252;color:#fff', lead: `<span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>`, label: 'Next up' }
+                 :                             { ring: '#1a5252', chip: 'background:#fff;border:1px solid #b9c8c2;color:#1a5252', lead: _dot('#1a5252'), label: 'Available' };
     const photo = st.photo
       ? `<img src="${st.photo}" class="w-10 h-10 rounded-full object-cover border-2 flex-shrink-0" style="border-color:${avPres.ring}">`
       : `<div class="w-10 h-10 rounded-full flex items-center justify-center border-2 flex-shrink-0 text-sm font-headline font-bold" style="background:${avPres.ring}20;border-color:${avPres.ring};color:${avPres.ring}">${st.name.charAt(0).toUpperCase()}</div>`;
     const isHalf = !Number.isInteger(turns.total) && turns.total > 0;
     const turnDisplay = turns.total > 0
-      ? `<span class="text-base font-headline font-bold ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:#1a5252'}">${turns.total}t</span>`
-      : `<span class="text-base font-headline text-outline-variant">0t</span>`;
-    const isNextUp = staffId === nextUpId;
-    const nextUpBadge = isNextUp ? `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 inline-flex items-center gap-0.5" style="background:#1a5252;color:#fff"><span class="material-symbols-outlined" style="font-size:10px">arrow_upward</span>Next up</span>` : '';
+      ? `<span class="text-sm font-headline font-bold flex-shrink-0 ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:#1a5252'}">${turns.total}t</span>`
+      : `<span class="text-sm font-headline text-outline-variant flex-shrink-0">0t</span>`;
     const techCol = `<div class="flex items-center gap-2 w-[155px] flex-shrink-0 pr-2">
       <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
-      <div class="min-w-0"><div class="flex items-center gap-1 leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate">${st.name}</span>${nextUpBadge}</div>
-      <div class="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1" style="${avPres.chip}"><span style="width:6px;height:6px;border-radius:50%;background:${avPres.dot};display:inline-block"></span>${avPres.label}</span>${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary">+${turns.bonus}b</span>` : ''}</div>
-      <div class="turns-billed text-[10px] font-body font-semibold mt-0.5" style="color:#1a5252">$${billed.toFixed(0)} billed</div></div></div>`;
+      <div class="min-w-0" style="flex:1">
+        <div class="flex items-center gap-1.5 leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate" style="min-width:0">${st.name}</span>${turnDisplay}<span class="turns-billed text-[10px] font-body font-semibold flex-shrink-0" style="color:#1a5252;margin-left:auto">$${billed.toFixed(0)}</span></div>
+        <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1 flex-shrink-0" style="${avPres.chip}">${avPres.lead}${avPres.label}</span>${turns.bonus > 0 ? `<span class="text-[10px] text-secondary flex-shrink-0">+${turns.bonus}b</span>` : ''}</div>
+      </div></div>`;
 
     const MIN_SLOTS = 5;
     // Merge real assignments with any manual "skipped turns" for this tech, ordered by time.
@@ -443,7 +451,7 @@ export function renderTurnsTechGrid() {
         turnCounter += 1;
         const ts = new Date(item.skip.at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
         const tl = Number.isInteger(turnCounter) ? turnCounter : turnCounter.toFixed(1);
-        return `<div class="flex-shrink-0 w-[150px] px-1"><div class="w-full h-full rounded-xl px-2 py-1.5 text-left text-xs font-body relative" style="background:#e6e6e6;color:#777;min-height:66px;border:1px dashed #b5b5b5">
+        return `<div class="flex-shrink-0 w-[150px] px-1"><div class="w-full h-full rounded-xl px-2 py-1.5 text-left text-xs font-body relative" style="background:#e6e6e6;color:#777;min-height:${slotH}px;border:1px dashed #b5b5b5">
           <button onclick="event.stopPropagation();removeTurnSkip('${item.skip.id}')" title="Remove skipped turn" style="position:absolute;top:2px;right:3px;color:#999;line-height:1" class="hover:opacity-70"><span class="material-symbols-outlined" style="font-size:15px">close</span></button>
           <div class="flex items-center gap-1 pr-4"><span class="material-symbols-outlined" style="font-size:14px">skip_next</span><span class="font-semibold text-[11px]">Skipped</span><span class="text-[11px] font-headline font-bold ml-auto" style="opacity:.75">${tl}</span></div>
           <div class="text-[10px] opacity-90 leading-tight mt-1">Turn passed · no customer</div>
@@ -474,7 +482,7 @@ export function renderTurnsTechGrid() {
         // time/status row so it never adds a line or crowds the name/chip row on a busy card.
         const apptPill = e.isAppointment ? `<span title="Booked appointment" style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;background:#ede7f6;color:#42306b;font-size:8px;font-weight:700;line-height:1;padding:2px 5px;border-radius:999px"><span class="material-symbols-outlined" style="font-size:9px;font-variation-settings:'FILL' 1">event</span>Appt</span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
-          <button onclick="showGroupAssignModal('${e.id}')" class="w-full h-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:66px${outline}">
+          <button onclick="showGroupAssignModal('${e.id}')" class="w-full h-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:${slotH}px${outline}">
             <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${tt === 'half' ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px' : tt === 'bonus' ? 'background:#a9d2c7;color:#134b3c;padding:0 4px;border-radius:4px' : 'opacity:0.75'}">${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
             ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
@@ -482,12 +490,12 @@ export function renderTurnsTechGrid() {
           </button></div>`;
       }
       return `<div class="flex-shrink-0 w-[150px] px-1 turns-drop-zone" data-tech-id="${staffId}" data-slot="${slotIdx}">
-        <div class="turns-empty-slot w-full h-full rounded-xl border-2 border-dashed border-outline-variant/40 flex items-center justify-center text-outline-variant cursor-pointer hover:border-primary hover:bg-primary/5 hover:text-primary transition-all" style="min-height:66px" onclick="openTurnsAssign('${staffId}',${slotIdx})"><span class="material-symbols-outlined" style="font-size:20px">add</span></div></div>`;
+        <div class="turns-empty-slot w-full h-full rounded-xl border-2 border-dashed border-outline-variant/40 flex items-center justify-center text-outline-variant cursor-pointer hover:border-primary hover:bg-primary/5 hover:text-primary transition-all" style="min-height:${slotH}px" onclick="openTurnsAssign('${staffId}',${slotIdx})"><span class="material-symbols-outlined" style="font-size:20px">add</span></div></div>`;
     });
     // 30-min note: drop an amber "next appt" card into this tech's next-turn position
     // (right after their filled slots) when their soonest upcoming appt is ≤30 min out.
     const nextAppt = nextApptFor(staffId);
-    if (nextAppt) { const mins = Math.round((nextAppt.startMs - _nowMs) / 60000); if (mins <= 30) slotArr.splice(filled.length, 0, turnsDueNoteCard(nextAppt, mins)); }
+    if (nextAppt) { const mins = Math.round((nextAppt.startMs - _nowMs) / 60000); if (mins <= 30) slotArr.splice(filled.length, 0, turnsDueNoteCard(nextAppt, mins, slotH)); }
     const slotHtml = slotArr.join('');
 
     const rowAccent = isNextUp ? 'border-left:3px solid #1a5252;background:#eef5f5;border-radius:0 8px 8px 0;' : '';
@@ -496,7 +504,7 @@ export function renderTurnsTechGrid() {
     const rightSide = sep === 'lane'
       ? `<div class="flex min-w-0" style="flex:1;background:#eef1f2;border:0.5px solid #e0e5e7;border-radius:12px;padding:4px 2px 4px 6px">${slotRow}</div>`
       : `<div class="self-stretch flex-shrink-0" style="width:1px;background:#d3dbdc;margin:6px 0"></div>${slotRow}`;
-    return `<div class="flex items-center border-b border-surface-container-high py-2 gap-2" style="${rowAccent}">${techCol}${rightSide}</div>`;
+    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${rightSide}</div>`;
   }).filter(Boolean).join('');
 
   grid.innerHTML = rows || '<div class="text-sm text-on-surface-variant py-4 text-center">No active technicians.</div>';
@@ -931,7 +939,7 @@ function renderTurnsHistoryView() {
         </button></div>`;
     }).join('');
 
-    return `<div class="flex items-center border-b border-surface-container-high py-2 gap-2">${techCol}
+    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2">${techCol}
       <div class="turns-slot-row flex gap-1.5 overflow-x-auto pb-0.5" style="min-width:0;flex:1;scrollbar-width:thin">${slotHtml}</div></div>`;
   };
 
