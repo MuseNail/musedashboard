@@ -125,6 +125,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.37', items: [
+    { icon: 'sticky_note_2', t: 'Customer note now shows in Assign & Price', d: 'When you open Assign & Price for a checked-in customer, the notes panel now shows the customer’s saved note (allergies, preferences) right above today’s visit note — so you see both while you price the ticket.' },
+  ] },
   { v: 'v5.36', items: [
     { icon: 'sticky_note_2', t: 'Customer + visit notes in the Staff app', d: 'On the Staff app, a tech’s assigned-customer card can now show two notes: a Customer note that stays with the customer every visit (allergies, preferences), and a note for just today’s visit. Tap to edit in a pop-up. You control this per tech in Settings → Staff — view or edit the customer note, view or edit the visit note. Everyone starts able to see the visit note only; turn the rest on per tech.' },
   ] },

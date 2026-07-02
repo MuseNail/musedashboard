@@ -1935,15 +1935,25 @@ tailwind.config = {
       </div>
     </div>
   </div>
-  <!-- Today's transaction note — a separate panel beside the assign modal (does not obstruct it) -->
+  <!-- Notes panel beside the assign modal: the customer's saved note (read-only) + today's visit note -->
   <div id="assign-notes-panel" class="bg-surface-container-lowest rounded-2xl shadow-2xl fade-up max-h-[92vh] flex flex-col flex-shrink-0" style="width:300px">
     <div class="flex items-center gap-2 p-5 border-b border-surface-container-high flex-shrink-0">
       <span class="material-symbols-outlined text-secondary" style="font-size:18px">sticky_note_2</span>
-      <h3 class="font-headline font-bold text-on-surface text-base">Today's Note</h3>
+      <h3 class="font-headline font-bold text-on-surface text-base">Notes</h3>
+    </div>
+    <div class="p-4 border-b border-surface-container-high flex-shrink-0" style="background:rgba(26,82,82,0.06)">
+      <div class="flex items-center gap-1.5 mb-1">
+        <span class="material-symbols-outlined text-primary" style="font-size:15px">favorite</span>
+        <span class="text-[11px] font-body font-bold text-primary uppercase tracking-wide">Customer note · always</span>
+      </div>
+      <textarea id="assign-cust-note" oninput="saveAssignCustNote()" class="w-full bg-surface-container-lowest border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="min-height:70px;max-height:140px"></textarea>
     </div>
     <div class="flex-grow flex flex-col p-4 min-h-0">
-      <p class="text-[11px] font-body text-on-surface-variant mb-2">For this transaction today — separate from the customer's saved note.</p>
-      <textarea id="assign-txn-note" placeholder="Notes for today's visit…" oninput="saveAssignTxnNote()" class="flex-grow w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="min-height:200px"></textarea>
+      <div class="flex items-center gap-1.5 mb-2">
+        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:15px">schedule</span>
+        <span class="text-[11px] font-body font-bold text-on-surface-variant uppercase tracking-wide">Today's visit</span>
+      </div>
+      <textarea id="assign-txn-note" placeholder="Notes for today's visit…" oninput="saveAssignTxnNote()" class="flex-grow w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="min-height:160px"></textarea>
     </div>
   </div>
   </div>
