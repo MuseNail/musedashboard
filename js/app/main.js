@@ -125,6 +125,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.36', items: [
+    { icon: 'sticky_note_2', t: 'Customer + visit notes in the Staff app', d: 'On the Staff app, a tech’s assigned-customer card can now show two notes: a Customer note that stays with the customer every visit (allergies, preferences), and a note for just today’s visit. Tap to edit in a pop-up. You control this per tech in Settings → Staff — view or edit the customer note, view or edit the visit note. Everyone starts able to see the visit note only; turn the rest on per tech.' },
+  ] },
   { v: 'v5.33', items: [
     { icon: 'point_of_sale', t: 'Phone Reports app: drawer shows bill counts, hides cash-outs', d: 'In the phone Reports app, the Drawer view now lists the opening and closing bill counts for each drawer, and no longer shows cash-out entries. The main dashboard drawer view is unchanged.' },
   ] },
