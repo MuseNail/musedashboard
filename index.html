@@ -1769,6 +1769,15 @@ tailwind.config = {
           <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">Download today's transactions PDF</span><input id="staff-app-pdf" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
           <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">View transaction history</span><input id="staff-app-history" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0" onchange="staffAppHistChanged()"></label>
           <label class="flex items-center justify-between gap-3 cursor-pointer" id="staff-app-histnames-row"><span class="text-sm font-body text-on-surface">Show customer names in history</span><input id="staff-app-histnames" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
+          <div class="border-t border-surface-container-high mt-1 pt-2.5">
+            <div class="text-[11px] font-body font-semibold text-outline mb-2">Notes on the assigned-customer card</div>
+            <div class="space-y-2.5">
+              <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">View customer note <span class="text-outline">· sticks with the customer</span></span><input id="staff-app-viewcust" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
+              <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">Edit customer note</span><input id="staff-app-editcust" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0" onchange="if(this.checked){var v=document.getElementById('staff-app-viewcust');if(v)v.checked=true;}"></label>
+              <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">View this visit's note</span><input id="staff-app-viewvisit" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0"></label>
+              <label class="flex items-center justify-between gap-3 cursor-pointer"><span class="text-sm font-body text-on-surface">Edit this visit's note</span><input id="staff-app-editvisit" type="checkbox" class="w-5 h-5 accent-primary flex-shrink-0" onchange="if(this.checked){var v=document.getElementById('staff-app-viewvisit');if(v)v.checked=true;}"></label>
+            </div>
+          </div>
         </div>
         <p class="text-[11px] font-body text-on-surface-variant mt-1">What this tech sees in the Muse Staff app on their phone.</p>
       </div>
