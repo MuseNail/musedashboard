@@ -685,9 +685,9 @@ window.staffSaveNote = () => {
     sync.dispatch('config.set', { key: 'customer_notes', value: notes });
   } else {
     if (!canEditVisit()) return;
-    const clone = JSON.parse(JSON.stringify(entry));
-    clone.txnNote = val;
-    sync.dispatch('queue.upsert', { entry: clone });
+    // Patch ONLY txnNote onto the stored entry (never a whole-entry upsert) so a concurrent
+    // front-desk fees/items/discount edit on the same ticket is never clobbered.
+    sync.dispatch('queue.entryPatch', { entryId: String(entryId), patch: { txnNote: val } });
   }
   window.staffCloseNote();
   showToast('Note saved');
