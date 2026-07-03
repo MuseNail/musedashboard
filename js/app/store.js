@@ -265,6 +265,15 @@ export function setConnection(connected, pendingCount) {
   if (typeof pendingCount === 'number') state.pendingCount = pendingCount;
   notify('connection');
 }
+// Distinguish "no valid sign-in session" (the Worker returned 401) from a plain
+// network outage — otherwise a device that just needs a PIN reads as "Offline" and
+// sends people chasing wifi. Set by sync.js on 401, cleared on a good connection.
+export function setAuthNeeded(v) {
+  const nv = !!v;
+  if (state.authNeeded === nv) return;
+  state.authNeeded = nv;
+  notify('connection');
+}
 
 // ── Offline cache (instant render on reload before the DO snapshot arrives) ─────
 function saveCache() {

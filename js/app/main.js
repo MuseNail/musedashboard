@@ -461,7 +461,11 @@ Object.assign(window, { goTo, showDashPanel, showDashGroup, toggleStaffScheduleV
 
 // Live-sync status pill: tapping it forces a reconnect + fresh snapshot (catches up any
 // changes missed while the socket was asleep), then reports state.
-window.forceSyncNow = () => { sync.resync?.(); utils.showToast(store.getState().connected ? 'Live — syncing…' : 'Reconnecting…'); };
+window.forceSyncNow = () => {
+  // If the block is a missing sign-in, retrying the sync just 401s again — open the PIN screen instead.
+  if (store.getState().authNeeded) { window.showPinModal?.(); return; }
+  sync.resync?.(); utils.showToast(store.getState().connected ? 'Live — syncing…' : 'Reconnecting…');
+};
 
 // ── Square auto-paid ──────────────────────────────
 // The Square return tab writes muse_sq_paid on a successful charge; this (main)
@@ -516,7 +520,18 @@ function updateSyncIndicator(state) {
   const dot = document.getElementById('conn-dot'), text = document.getElementById('conn-text');
   if (!dot) return;
   const pill = dot.parentElement;
-  // A server-rejected/dead-lettered write is the most urgent state — surface it instead of a green "Synced".
+  // "Sign in needed" is NOT the same as "Offline" — the server rejected this device for
+  // lack of a valid session (wrong/fallback code, expired, or removed user). Say so, and
+  // make the pill open the PIN screen, so nobody chases a network problem that isn't there.
+  // Checked BEFORE failed-ops: signing in is the prerequisite to recovering anything, so the
+  // label matches what a tap does (forceSyncNow opens the PIN screen when authNeeded).
+  if (state.authNeeded) {
+    dot.style.background = '#e8730a';   // amber — distinct from the red "Offline"
+    if (text) text.textContent = 'Sign in needed';
+    if (pill) pill.title = 'This device needs a sign-in — enter your front-desk PIN to reconnect. Tap to sign in.';
+    return;
+  }
+  // A server-rejected/dead-lettered write is the next most urgent state — surface it instead of a green "Synced".
   const failed = (sync.failedOps?.() || []).length;
   if (failed > 0) { dot.style.background = '#fa746f'; if (text) text.textContent = `${failed} failed`; if (pill) pill.title = 'A change failed to save — open Settings → Data Recovery'; return; }
   const n = state.pendingCount || 0, queued = n === 1 ? '1 change queued' : `${n} changes queued`;
@@ -530,11 +545,19 @@ function updateSyncIndicator(state) {
     if (pill) pill.title = n > 0 ? `${queued} — they'll send automatically when the connection returns. Tap to retry now.` : 'No connection — changes will queue and send when it returns. Tap to retry.';
   }
 }
+// One-time cleanup of a stray inert config key ('x') left by an ops probe on 2026-07-02.
+// Nothing reads it; neutralize it to null once per session (self-heals across devices).
+let _cfgXPurged = false;
+function _purgeStrayConfigX() {
+  if (_cfgXPurged) return;
+  const c = store.getState().config || {};
+  if (c.x != null) { _cfgXPurged = true; sync.dispatch('config.set', { key: 'x', value: null }); }
+}
 function onStateChange(state, changed) {
   updateSyncIndicator(state);
   if (changed === 'connection') return;
   if (changed === 'chat.append') chat.onChatSync();   // a new chat message — refresh the open panel + badge (its own op, not 'config')
-  if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
+  if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); _purgeStrayConfigX(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync(); timeclock.renderClockButton(); helcim.syncProcessorClass();
     syncNavForRole();   // a role_permissions toggle (any device) can show/hide the Reports tab
