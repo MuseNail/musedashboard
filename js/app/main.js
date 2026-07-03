@@ -125,6 +125,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.38', items: [
+    { icon: 'login', t: '“Sign in needed” is now clear, not a mystery “Offline”', d: 'If a device can’t sync because it needs a sign-in — a manager/fallback code that can’t sync, an expired session, or a removed user — it now shows “Sign in needed” (tap it to enter your PIN) instead of looking like a network problem. And if you unlock the app with a code that can’t sync, it tells you to sign in with your front-desk PIN.' },
+  ] },
   { v: 'v5.37', items: [
     { icon: 'sticky_note_2', t: 'Customer note now shows in Assign & Price', d: 'When you open Assign & Price for a checked-in customer, the notes panel now shows the customer’s saved note (allergies, preferences) right above today’s visit note — so you see both while you price the ticket.' },
   ] },
