@@ -2,7 +2,7 @@ import './setup-globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getState } from '../js/app/store.js';
-import { buildCombinedRecords, reconcileSquareData } from '../js/app/features/reports.js';
+import { buildCombinedRecords, reconcileSquareData, payrollComputedRows } from '../js/app/features/reports.js';
 
 // buildCombinedRecords: records are the single source of truth for finished sales — a paid
 // queue entry surfaces only when no record exists for its id. (Records-authoritative redesign.)
@@ -47,6 +47,57 @@ test('buildCombinedRecords: only finished (paid/done) queue entries are included
 test('buildCombinedRecords: stale totalCost is recomputed from parts (bulletproofing)', () => {
   seed({ records: [{ id: 7, status: 'paid', checkinTime: D, assignments: [{ cost: 40 }], fees: [{ amount: 2 }], totalCost: 40 }], queue: [] });
   assert.equal(buildCombinedRecords()[0].totalCost, 42);   // 40 svc + 2 fee, ignoring the stale stored 40
+});
+
+// ── Payroll "vs previous" override regression ─────────────────────────────────
+// The previous-period Check / Cash / Cash-deduction shown in the payroll comparison must
+// reflect the manual OVERRIDE (config.payroll_adj) that was applied to that period — not the
+// memorized rule value (config.payroll_checks via techCheckAmount). The current period already
+// applies the override; the previous period ignored it, so "vs previous" showed the memorized
+// amount instead of the override. It must also honor a locked previous period's frozen snapshot.
+function seedPayroll(extra = {}) {
+  const s = getState();
+  Object.assign(s.config, {
+    staff: [{ id: 't1', name: 'Alice', commission: 50, checkType: 'variable' }],
+    inactive_staff: [], turns_order: ['t1'],
+    pay_period: { type: 'weekly', startDate: '2020-01-05' },
+    payroll_checks: {}, payroll_adj: {}, payroll_locks: {},
+    ...extra,
+  });
+  s.records = []; s.queue = []; s.deletions = [];
+  return s;
+}
+
+test('payroll vs-previous: prev Check/Cash/Deduction reflect the OVERRIDE, not the memorized value', () => {
+  const s = seedPayroll();
+  const prevKey = payrollComputedRows(0).prevDays[0];   // the previous pay-period key the math uses
+  // memorized check (old mechanism) says $50; a right-click OVERRIDE says $123 for that same period
+  s.config.payroll_checks = { ['t1:' + prevKey]: 50 };
+  s.config.payroll_adj = { ['t1:' + prevKey]: { check: 123, deduction: 7, cash: 45 } };
+  const row = payrollComputedRows(0).T.find(x => x.tech.id === 't1');
+  assert.equal(row.pChk, 123, 'prev Check must show the override ($123), not the memorized ($50)');
+  assert.equal(row.pDed, 7, 'prev Cash deduction must show the override');
+  assert.equal(row.pCash, 45, 'prev Cash must show the override');
+});
+
+test('payroll vs-previous: a LOCKED previous period shows its frozen snapshot', () => {
+  const s = seedPayroll();
+  const prevKey = payrollComputedRows(0).prevDays[0];
+  // even with a live override present, the locked snapshot is what was actually paid
+  s.config.payroll_adj = { ['t1:' + prevKey]: { check: 999 } };
+  s.config.payroll_locks = { [prevKey]: { techs: [{ techId: 't1', billed: 800, commission: 400, check: 250, deduction: 10, cash: 140, total: 390 }] } };
+  const row = payrollComputedRows(0).T.find(x => x.tech.id === 't1');
+  assert.equal(row.pChk, 250, 'locked prev Check comes from the frozen snapshot');
+  assert.equal(row.pCash, 140, 'locked prev Cash comes from the frozen snapshot');
+  assert.equal(row.pTotal, 390, 'locked prev Total comes from the frozen snapshot');
+});
+
+test('payroll vs-previous: with no override or lock, prev still shows the memorized rule value', () => {
+  const s = seedPayroll();
+  const prevKey = payrollComputedRows(0).prevDays[0];
+  s.config.payroll_checks = { ['t1:' + prevKey]: 60 };   // memorized only
+  const row = payrollComputedRows(0).T.find(x => x.tech.id === 't1');
+  assert.equal(row.pChk, 60, 'no override/lock → the memorized rule value is used');
 });
 
 test('reconcileSquareData: matches Square payments to records by payment id', () => {
