@@ -241,12 +241,12 @@ async function checkReportsVersion() {
 }
 
 // ── Boot ──────────────────────────────────────────
-function boot() {
+async function boot() {
   reporter.initReporter();
   window.reportError = reporter.reportError;
   window.addEventListener('error', e => { try { reporter.reportError('window.error', (e && (e.error || e.message)) || 'error'); } catch (x) {} });
   window.addEventListener('unhandledrejection', e => { try { reporter.reportError('unhandledrejection', (e && e.reason) || 'rejection'); } catch (x) {} });
-  sync.start();
+  await sync.start();   // hydrate from the cache (async — IndexedDB) BEFORE the first render
   store.subscribe(() => render());
   render();   // instant render from cached state; subscribe re-renders on hydrate
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/musedashboard/sw.js').catch(() => {});

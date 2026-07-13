@@ -6,6 +6,8 @@
 // No global mutable scope: feature modules import { getState, subscribe } and
 // dispatch writes through sync.js (which calls applyChange + sends the mutation).
 
+import { idbGet, idbSet, idbAvailable } from './idbcache.js';
+
 const CACHE_KEY = 'muse_state_cache';
 
 // Canonical config field names (clean slate — not the old muse_* Sheets keys).
@@ -239,7 +241,7 @@ export function applyChange(op, payload, seq) {
       }
       break;
     }
-    case 'audit.log':       if (payload && payload.event) { state.audit.unshift(payload.event); if (state.audit.length > 500) state.audit.length = 500; } break;
+    case 'audit.log':       if (payload && payload.event) { const ev = payload.event; if (!(ev.id && state.audit.some(x => x && x.id === ev.id))) { state.audit.unshift(ev); if (state.audit.length > 500) state.audit.length = 500; } } break;   // idempotent by id (outbox replay / echo-safe)
     case 'chat.append': {
       // Append a single staff-chat message (mirrors the DO's atomic append). Idempotent by
       // id so the optimistic local apply + a broadcast echo / outbox replay never double-add.
@@ -276,21 +278,74 @@ export function setAuthNeeded(v) {
 }
 
 // ── Offline cache (instant render on reload before the DO snapshot arrives) ─────
-function saveCache() {
-  try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({
-      config: state.config, configMeta: state.configMeta, queue: state.queue, records: state.records,
-      giftcards: state.giftcards, customers: state.customers, deletions: state.deletions,
-      customerDeletions: state.customerDeletions, seq: state.seq,
-    }));
-  } catch (e) { /* quota / unavailable — non-fatal */ }
+// Lives in IndexedDB (Phase 2 — the state blob outgrew the ~5 MB localStorage cap), with
+// a one-time migration from the legacy localStorage cache and a localStorage fallback when
+// IndexedDB is unavailable (private mode / old engine).
+let _useIdb = idbAvailable();
+let _serverHydrated = false;   // set once a DO snapshot has hydrated, so a late async cache read can't clobber it
+
+function _cacheBlob() {
+  return {
+    config: state.config, configMeta: state.configMeta, queue: state.queue, records: state.records,
+    giftcards: state.giftcards, customers: state.customers, deletions: state.deletions,
+    customerDeletions: state.customerDeletions, seq: state.seq,
+  };
 }
 
-export function loadCache() {
+// async, fire-and-forget from applyChange/hydrate. The IDB writer coalesces bursts and is
+// single-in-flight (latest wins), so a stale payload can't overwrite a newer one. Never throws.
+async function saveCache() {
+  const blob = _cacheBlob();
+  if (_useIdb) {
+    try { await idbSet(CACHE_KEY, blob); return; }
+    catch (e) { _useIdb = false; }   // IDB broke → fall back to localStorage for the rest of the session
+  }
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify(blob)); } catch (e) { /* quota/unavailable — non-fatal */ }
+}
+
+// Pure decision (exported for tests): given the IDB blob, the legacy localStorage raw, and
+// the current seq, decide what to hydrate + whether to migrate the legacy copy into IDB.
+export function _decideCacheLoad(idbBlob, lsRaw, currentSeq) {
+  let ls = null;
+  if (lsRaw) { try { ls = JSON.parse(lsRaw); } catch (e) { ls = null; } }
+  // Prefer whichever blob has the higher seq: a localStorage FALLBACK write (made after an IDB
+  // write failed mid-session) can be newer than the IDB copy. Adopting the localStorage one also
+  // migrates it into IDB (migrate=true), so the newer state becomes the canonical IDB cache.
+  let blob = idbBlob, migrate = false;
+  const lsSeq = ls && typeof ls.seq === 'number' ? ls.seq : -Infinity;
+  const idbSeq = idbBlob && typeof idbBlob.seq === 'number' ? idbBlob.seq : (idbBlob ? 0 : -Infinity);
+  if (ls && lsSeq > idbSeq) { blob = ls; migrate = true; }
+  if (!blob) return { hydrate: false };
+  if (typeof blob.seq === 'number' && blob.seq < currentSeq) return { hydrate: false };   // stale cache — never clobber newer live state
+  return { hydrate: true, blob, migrate };
+}
+
+export async function loadCache() {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return false;
-    hydrate({ state: JSON.parse(raw), seq: JSON.parse(raw).seq });
+    let idbBlob = null;
+    if (_useIdb) { try { idbBlob = await idbGet(CACHE_KEY); } catch (e) { _useIdb = false; } }
+    let lsRaw = null;
+    try { lsRaw = localStorage.getItem(CACHE_KEY); } catch (e) {}
+    const d = _decideCacheLoad(idbBlob, lsRaw, state.seq);
+    if (!d.hydrate) return false;
+    // If a DO snapshot already landed during the async read (connect() runs before this await),
+    // don't hydrate/migrate a stale cache over it — covers a factory-reset/restore-to-older race.
+    if (_serverHydrated) return false;
+    if (_useIdb) {
+      // Migrate the adopted legacy blob into IDB, and clear the localStorage copy either way so a
+      // stale localStorage mirror can't resurrect old state (Safari evicts IDB independently of it).
+      try { if (d.migrate) await idbSet(CACHE_KEY, d.blob); localStorage.removeItem(CACHE_KEY); } catch (e) {}
+    }
+    hydrate({ state: d.blob, seq: d.blob.seq });
     return true;
   } catch (e) { return false; }
 }
+
+// On-device cache size (JSON UTF-16 chars ≈ bytes) for the Settings → Diagnostics gauge.
+export function cacheByteSize() { try { return JSON.stringify(_cacheBlob()).length; } catch (e) { return 0; } }
+
+// Marked by sync.js when a DO snapshot hydrates — loadCache defers to it (see above).
+export function markServerHydrated() { _serverHydrated = true; }
+// Force the coalesced cache write to run now (on tab hide/pagehide) so the last op isn't lost
+// in the sub-ms window between an optimistic applyChange and its async IDB commit.
+export function flushCache() { return saveCache(); }

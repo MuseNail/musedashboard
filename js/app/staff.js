@@ -926,12 +926,12 @@ async function checkStaffVersion() {
 window.staffUpdateNow = () => { showToast('Updating…'); hardReloadApp(); };
 
 // ── Boot ──────────────────────────────────────────
-function boot() {
+async function boot() {
   reporter.initReporter();
   window.reportError = reporter.reportError;   // let feature code log silent failures
   window.addEventListener('error', e => { try { reporter.reportError('window.error', (e && (e.error || e.message)) || 'error'); } catch (x) {} });
   window.addEventListener('unhandledrejection', e => { try { reporter.reportError('unhandledrejection', (e && e.reason) || 'rejection'); } catch (x) {} });
-  sync.start();
+  await sync.start();   // hydrate from the cache (async — IndexedDB) BEFORE the first render
   store.subscribe(() => { chat.onChatSync(); if (priceInputFocused()) return; render(); });
   render();   // instant render from cached state; subscribe re-renders on hydrate
   chat.onChatSync();   // baseline the chat unread badge from cache on load

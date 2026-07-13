@@ -129,6 +129,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.41', items: [
+    { icon: 'hard_drive', t: 'More storage headroom + a storage gauge', d: 'Behind the scenes, the app now keeps its offline copy of your data in a much larger place, so a busy salon won’t bump into the old on-device size limit as the years pile up — reloads and offline mode keep working. You can watch it yourself in Settings → Data & System → Diagnostics: a new “On-device storage” gauge shows how much space your data uses and roughly how much runway you have. Also a behind-the-scenes reliability fix so a tech’s just-tapped Start/Complete or a typed price can’t be lost when two devices’ clocks disagree. Nothing changes in how you use Muse.' },
+  ] },
   { v: 'v5.39', items: [
     { icon: 'bug_report', t: 'The app now tells you when something quietly breaks', d: 'Muse now captures errors automatically — even ones that don’t freeze the screen — so a failure you didn’t happen to notice isn’t lost. See them in Settings → Data & System → Diagnostics (newest first, with how many times each happened). Turn on “Bug alerts” there to get a push the moment something new or serious fails (like a card charge or a save that couldn’t reach the server) — deduped so one glitch can’t spam you. Nothing here changes your data; it’s just a safety net so problems surface instead of hiding.' },
   ] },
@@ -762,11 +765,11 @@ window.addEventListener('error', e => { try { console.warn('[error]', e?.error |
 window.addEventListener('unhandledrejection', e => { try { console.warn('[unhandledrejection]', e?.reason); reporter.reportError('unhandledrejection', (e && e.reason) || 'rejection'); } catch (x) {} });
 
 // ── Boot ──────────────────────────────────────────
-function boot() {
+async function boot() {
   if (handleSquarePosReturn()) return; // don't boot a 2nd live app in the Square return tab
   reporter.initReporter();            // flush any queued error reports + re-flush on reconnect
   setupBackHandler();                 // OS back returns to the previous screen, never reloads the PWA
-  sync.start();                       // connect to the DO, hydrate from cache + snapshot
+  await sync.start();                 // hydrate from the cache (async — IndexedDB) BEFORE the first render/decisions
   store.subscribe(onStateChange);
   appearance.applyUserTheme();        // default light palette until a user logs in
 
