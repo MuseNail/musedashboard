@@ -772,6 +772,41 @@ export default {
 // During the v2.00 transition the DO ALSO relays any legacy message verbatim
 // (the current production client sends {type:'queue'|'config'}), so the live app
 // keeps working until the new client cuts over. Remove the legacy relay after cutover.
+
+// ── Backup retention (Phase 1) ───────────────────────────────────────────────
+// Tiered (grandfather-father-son) keep-set for the timestamped R2 snapshots: every
+// 6h point for 1 week, the newest-per-day for 1 month, newest-per-month for 1 year,
+// newest-per-year for 7 years — plus a hard floor (always keep the newest few) and an
+// exemption for DR "safety" snapshots (backups/safety-*). Pure + stateless: recomputed
+// from scratch each run so a missed run self-corrects. Buckets by R2 `uploaded` time
+// (never by parsing the mangled key). UTC period buckets are fine — these are recovery
+// points, not day-attributed financial data. Returns { keep:Set, del:string[] }.
+export function computeBackupKeepSet(backups, nowMs) {
+  const DAY = 86400000;
+  const items = (backups || [])
+    .map(b => ({ key: b && b.key, t: +new Date(b && b.uploaded), safety: /^safety-/.test((((b && b.key) || '').split('/').pop()) || '') }))
+    .filter(x => x.key && Number.isFinite(x.t))
+    .sort((a, b) => b.t - a.t);   // newest first → first-seen-per-bucket is the end-of-period one
+  const keep = new Set();
+  for (const x of items) if (x.t >= nowMs - 7 * DAY) keep.add(x.key);            // 6h points, last week
+  const bucketNewest = (windowMs, periodKey) => {
+    const seen = new Set();
+    for (const x of items) {
+      if (x.t < nowMs - windowMs) continue;
+      const pk = periodKey(x.t);
+      if (!seen.has(pk)) { seen.add(pk); keep.add(x.key); }
+    }
+  };
+  bucketNewest(30 * DAY,      t => new Date(t).toISOString().slice(0, 10));      // daily, last month
+  bucketNewest(365 * DAY,     t => new Date(t).toISOString().slice(0, 7));       // monthly, last year
+  bucketNewest(7 * 365 * DAY, t => new Date(t).toISOString().slice(0, 4));       // yearly, last 7 years
+  for (let i = 0; i < Math.min(8, items.length); i++) keep.add(items[i].key);    // hard floor: newest few, always
+  let safe = 0;                                                                  // DR safety snapshots: newest few, always
+  for (const x of items) { if (x.safety && safe < 5) { keep.add(x.key); safe++; } }
+  const del = items.filter(x => !keep.has(x.key)).map(x => x.key);
+  return { keep, del };
+}
+
 export class MuseSalonDO {
   constructor(state, env) {
     this.state = state;
@@ -1143,6 +1178,9 @@ export class MuseSalonDO {
           const prevEntry = await this.state.storage.get(qKey);
           if (_isStaleWrite(prevEntry, payload.entry)) { stale = true; break; }   // older copy — don't clobber a newer one
           if (_mergeNewerAssignments(payload.entry, prevEntry)) _deriveEntryStatus(payload.entry);   // 3c: protect a concurrent per-assignment change
+          // Preserve the entryPatch guard marker across a whole-entry write (the client entry doesn't
+          // carry it) so a later stale entryPatch replay is still rejected (not silently disarmed).
+          if (prevEntry && typeof prevEntry._patchedAt === 'number' && typeof payload.entry._patchedAt !== 'number') { payload.entry._patchedAt = prevEntry._patchedAt; payload.entry._patchedBy = prevEntry._patchedBy; }
           await this.state.storage.put(qKey, payload.entry);
           this._notifyNewAssignments(prevEntry, payload.entry);   // push to newly-assigned techs (best-effort)
           this._notifyAwaitingPrice(prevEntry, payload.entry);    // push when a service is newly "awaiting price"
@@ -1156,6 +1194,14 @@ export class MuseSalonDO {
           if (e.status === 'paid' || e.status === 'done') break;   // never let a stale device un-pay
           const idx = e.assignments.findIndex(x => x.serviceId === payload.serviceId && x.techId === payload.techId);
           if (idx < 0) break;                                      // assignment reassigned away — ignore
+          // Device-scoped stale-patch guard: reject ONLY a stale replay from the SAME device
+          // (updatedBy match) — never a cross-device action, so clock skew between the front desk
+          // and a tech phone can't silently drop a genuine Start/Complete/price. Rejecting a
+          // same-device older replay keeps the value that device already shows → no divergence.
+          const storedAsg = e.assignments[idx];
+          if (typeof payload.assignment.updatedAt === 'number' && typeof storedAsg.updatedAt === 'number' &&
+              payload.assignment.updatedBy && payload.assignment.updatedBy === storedAsg.updatedBy &&
+              payload.assignment.updatedAt < storedAsg.updatedAt) { stale = true; break; }
           e.assignments[idx] = payload.assignment;
           _deriveEntryStatus(e);
           await this.state.storage.put('queue:' + payload.entryId, e);
@@ -1168,8 +1214,16 @@ export class MuseSalonDO {
           const e = await this.state.storage.get('queue:' + payload.entryId);
           if (!e) break;
           if (e.status === 'paid' || e.status === 'done') break;   // don't touch a closed ticket
+          // Device-scoped stale-patch guard (same rule as assignmentPatch): reject only a
+          // same-device older replay; a cross-device edit always applies. Unstamped patches apply.
+          // Version lives on _patchedAt/_patchedBy — NOT the entry's own updatedAt/updatedBy (the
+          // whole-entry queue.upsert version); reusing those keys would collide with that guard.
+          if (typeof payload.updatedAt === 'number' && typeof e._patchedAt === 'number' &&
+              payload.updatedBy && payload.updatedBy === e._patchedBy &&
+              payload.updatedAt < e._patchedAt) { stale = true; break; }
           const patch = payload.patch || {};
           for (const k of Object.keys(patch)) e[k] = patch[k];
+          if (typeof payload.updatedAt === 'number') { e._patchedAt = payload.updatedAt; e._patchedBy = payload.updatedBy || null; }
           await this.state.storage.put('queue:' + payload.entryId, e);
           break;
         }
@@ -1426,6 +1480,8 @@ export class MuseSalonDO {
           httpMetadata: { contentType: 'application/json' },
         });
       }
+      // Retention prune (its own try so a prune failure never blocks the backup/housekeeping).
+      try { await this.pruneBackups(); } catch (e) { console.error('[retention] prune failed:', (e && e.message) || String(e)); }
       // Bound the idempotency markers: keep the newest ~2000 by seq.
       const muts = await this.state.storage.list({ prefix: 'mut:' });
       if (muts.size > 4000) {
@@ -1468,11 +1524,29 @@ export class MuseSalonDO {
   }
 
   // Force a snapshot to R2 right now (used for testing + before a restore).
-  async backupNow() {
+  async backupNow(opts = {}) {
     const snap = await this.buildSnapshot();
-    const key  = 'backups/state-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
+    // 'safety' = a pre-restore/reset recovery point; tagged so retention pruning never deletes it.
+    const kind = opts.safety ? 'safety' : 'state';
+    const key  = 'backups/' + kind + '-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
     if (this.env.PHOTOS_BUCKET) await this.env.PHOTOS_BUCKET.put(key, JSON.stringify(snap), { httpMetadata: { contentType: 'application/json' } });
     return { backedUp: true, key, seq: snap.seq };
+  }
+
+  // Tiered retention prune (Phase 1). Recomputes the keep-set from the full backup list and
+  // deletes the orphans. GATED: only deletes when BACKUP_RETENTION === 'on' (otherwise logs
+  // what it WOULD delete — safe by default). Prefix-guarded to backups/; the keep-set's hard
+  // floor + safety exemption mean the newest points and recovery snapshots are never removed.
+  async pruneBackups() {
+    const live = this.env.BACKUP_RETENTION === 'on' || this.env.BACKUP_RETENTION === 'true';   // accept either (rest of codebase uses 'true')
+    if (!this.env.PHOTOS_BUCKET) return { total: 0, keep: 0, pruned: 0, wouldPrune: 0, live };
+    const { backups } = await this.listBackups();
+    const { keep, del } = computeBackupKeepSet(backups, Date.now());
+    const safeDel = del.filter(k => typeof k === 'string' && k.startsWith('backups/'));
+    const batch = safeDel.slice(0, 1000);   // R2 array-delete cap; steady state ~0-1, one-time cleanup ~470
+    console.log(`[retention] total=${backups.length} keep=${keep.size} prune=${safeDel.length}${batch.length < safeDel.length ? ` (capped ${batch.length}/run)` : ''} mode=${live ? 'LIVE' : 'log-only'}`);
+    if (live && batch.length) await this.env.PHOTOS_BUCKET.delete(batch);
+    return { total: backups.length, keep: keep.size, pruned: live ? batch.length : 0, wouldPrune: safeDel.length, live };
   }
 
   // Disaster recovery: replace ALL state with a backup snapshot from R2.
@@ -1487,7 +1561,7 @@ export class MuseSalonDO {
     if (!obj) return { error: 'backup not found: ' + useKey };
     let snap; try { snap = JSON.parse(await obj.text()); } catch { return { error: 'backup is not valid JSON' }; }
     const st = snap.state || {};
-    await this.backupNow();                           // safety snapshot before wiping
+    await this.backupNow({ safety: true });           // safety snapshot before wiping (retention-exempt)
     await this.state.storage.deleteAll();
     for (const [k, v] of Object.entries(st.config || {})) await this.state.storage.put('config:' + k, v);
     for (const e of (st.queue || []))     await this.state.storage.put('queue:' + String(e.id), e);
@@ -1508,7 +1582,7 @@ export class MuseSalonDO {
   // R2 (recoverable via /state/restore). Broadcasts the empty snapshot so any
   // connected client clears immediately.
   async factoryReset() {
-    const safety = await this.backupNow();            // recovery point before wiping
+    const safety = await this.backupNow({ safety: true });   // recovery point before wiping (retention-exempt)
     await this.state.storage.deleteAll();
     await this.state.storage.put('meta:seq', 1);
     await this.ensureBackupScheduled();
