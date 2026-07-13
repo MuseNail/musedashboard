@@ -1450,8 +1450,18 @@ export class MuseSalonDO {
   // List the timestamped snapshots in R2 (newest first).
   async listBackups() {
     if (!this.env.PHOTOS_BUCKET) return { backups: [], count: 0 };
-    const listed = await this.env.PHOTOS_BUCKET.list({ prefix: 'backups/' });
-    const backups = (listed.objects || [])
+    // R2 .list() returns at most 1000 objects per call in ascending key order, and the
+    // backup keys are time-ordered, so a single call would surface only the OLDEST 1000
+    // once the history is long enough — and a "restore latest" / the Data Recovery list
+    // would then silently pick a STALE snapshot. Page through every object before sorting.
+    const objects = [];
+    let cursor;
+    do {
+      const listed = await this.env.PHOTOS_BUCKET.list({ prefix: 'backups/', cursor });
+      for (const o of (listed.objects || [])) objects.push(o);
+      cursor = listed.truncated ? listed.cursor : undefined;
+    } while (cursor);
+    const backups = objects
       .map(o => ({ key: o.key, uploaded: o.uploaded, size: o.size }))
       .sort((a, b) => new Date(b.uploaded) - new Date(a.uploaded));
     return { backups, count: backups.length };
