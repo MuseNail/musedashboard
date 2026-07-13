@@ -42,7 +42,9 @@ Everything below assumes (A). Under (B)/(C) the same plan applies, just truncate
 ## Stage 0-pre — TWO standalone fixes that must NOT ride the Phase-3 train
 
 These are pre-existing live issues; per branch discipline they ship as their own **main hotfixes** with their own
-review + your OK, independent of whether Phase 3 is approved:
+review + your OK, independent of whether Phase 3 is approved. **Owner directive (2026-07-13): deploy these
+AFTER the salon closes (off-hours)** — 0-pre-a changes the live refund flow, so ship it when no sale can be
+mid-refund.
 
 - **0-pre-a — Refund idempotency (LIVE bug).** `confirmRefund` (reports.js:2724) builds the Helcim idempotency key
   from a COUNT of prior refund records; deleting a prior refund changes the count → a retry can mint a fresh key →
