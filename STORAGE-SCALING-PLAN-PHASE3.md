@@ -304,6 +304,9 @@ N→W(schemaVersion)+R(migrate-on-read) · O→O(guarded) · P→P(consumer-outp
   restore/factory-reset (live telemetry, not snapshot state) so the Stage-X bake gate never loses its 14-day
   history to a DR restore. Never pruned yet — Stage W's alarm housekeeping is the natural home for dropping
   entries unseen for ~90d. Device rows are opaque ids; a friendly device label is a Stage-X ergonomics candidate.
+- **Fleet map blind spot:** only ≥Stage-0 builds stamp it (older clients send a bare hello). At the FIRST roll-off,
+  cross-check the physical device inventory against the map, and build the "all open sockets ≥ vR" half of the
+  Stage-X gate to FAIL CLOSED for any socket whose hello carried no version.
 - **0-pre-a note for Stage R** (from the hotfix round): refund idempotency keys expire at Helcim after 5 minutes,
   so the per-cents ordinal has NO long-horizon meaning — archiving old refund records cannot create key-reuse
   hazards; the long-horizon guard is the /helcim/refunds processor-truth check, which is archive-independent.

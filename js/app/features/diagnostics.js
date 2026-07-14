@@ -133,9 +133,12 @@ async function _fleetCard() {
     if (!r.ok) throw new Error(String(r.status));
     devices = (await r.json()).devices || [];
   } catch (e) {
+    // 404/426 = the server predates this feature (client shipped first) — say so
+    // instead of looking like an outage.
+    const pending = /^(404|426)$/.test((e && e.message) || '');
     return `<div class="bg-surface-container rounded-xl px-4 py-3 mb-4 border border-surface-container-high">
-      <div class="font-headline font-semibold text-on-surface text-sm mb-1">Connected devices</div>
-      <div class="text-[11px] font-body text-on-surface-variant">Couldn’t load the device list right now.</div>
+      <div class="font-headline font-semibold text-on-surface text-sm mb-1">Devices</div>
+      <div class="text-[11px] font-body text-on-surface-variant">${pending ? 'Server update pending — the device list appears after the next server deploy.' : 'Couldn’t load the device list right now.'}</div>
     </div>`;
   }
   const rows = fleetRows(devices, APP_VERSION, Date.now());
@@ -151,7 +154,7 @@ async function _fleetCard() {
   }).join('') : '<div class="text-[11px] font-body text-on-surface-variant">No devices reported yet — they appear as each one reconnects.</div>';
   return `<div class="bg-surface-container rounded-xl px-4 py-3 mb-4 border border-surface-container-high">
     <div class="flex items-center justify-between gap-2 mb-1">
-      <div class="font-headline font-semibold text-on-surface text-sm">Connected devices</div>
+      <div class="font-headline font-semibold text-on-surface text-sm">Devices</div>
       <div class="text-[11px] text-outline">latest ${_esc(latest)}</div>
     </div>
     <div class="space-y-0.5">${body}</div>
