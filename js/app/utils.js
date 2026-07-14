@@ -178,6 +178,22 @@ export function newEntryId() {
   return `${dev}-${Date.now()}-${(++_idCounter).toString(36)}`;
 }
 
+// ── Salon-timezone month bucketing (Phase 3 Stage 0) ──────────────────────────
+// Which salon-local month a timestamp belongs to ('YYYY-MM'). The archive writer
+// (worker.js has its own copy — no shared modules without a build step; the two are
+// pinned to each other by test/stage0-tz.test.js) and every client reader must agree,
+// so month bucketing NEVER uses the device's local timezone — always config.salon_tz.
+const _tzFmt = new Map();
+export function monthOfTs(ts, tz) {
+  let f = _tzFmt.get(tz);
+  if (!f) { f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit' }); _tzFmt.set(tz, f); }
+  return f.format(new Date(ts));
+}
+export function isValidTz(tz) {
+  if (!tz || typeof tz !== 'string') return false;
+  try { new Intl.DateTimeFormat('en', { timeZone: tz }); return true; } catch { return false; }
+}
+
 // Second token on a queue/turns card's time line: while waiting/in-service/complete
 // it's a LIVE elapsed timer (data-checkin-ts is ticked by updateElapsedTimes); once
 // PAID, the time stops mattering — show the checkout time (when it was marked paid)

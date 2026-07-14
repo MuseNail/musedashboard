@@ -191,6 +191,18 @@ export async function encryptPushPayload(sub, payloadStr) {
   return body;
 }
 
+// ── Salon-timezone month bucketing (Phase 3 Stage 0) ───────────────────────────
+// Which salon-local month a timestamp belongs to ('YYYY-MM'). Duplicate of the
+// client's utils.js monthOfTs (no shared modules; test/stage0-tz.test.js pins the
+// two copies to each other) — the archive writer and every reader must bucket by
+// config.salon_tz, never a device or server-local timezone.
+const _tzFmt = new Map();
+export function monthOfTs(ts, tz) {
+  let f = _tzFmt.get(tz);
+  if (!f) { f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit' }); _tzFmt.set(tz, f); }
+  return f.format(new Date(ts));
+}
+
 // ── Helcim refund idempotency + truth helpers (0-pre-a) ────────────────────────
 // Helcim clears idempotency keys after 5 MINUTES and 409s a reused key with a
 // different payload (devdocs.helcim.com/docs/idempotency) — the key only dedups an
@@ -928,6 +940,9 @@ export class MuseSalonDO {
     if (url.pathname === '/state/backups') {
       return new Response(JSON.stringify(await this.listBackups()), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
+    if (url.pathname === '/state/fleet') {
+      return new Response(JSON.stringify(await this.listFleet()), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
     if (url.pathname === '/state/backup-now' && request.method === 'POST') {
       return new Response(JSON.stringify(await this.backupNow()), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
@@ -1179,6 +1194,7 @@ export class MuseSalonDO {
 
       // New protocol: hydrate
       if (msg.type === 'hello') {
+        try { await this.stampFleet(msg); } catch {}
         const snap = await this.buildSnapshot();
         try { ws.send(JSON.stringify({ type: 'snapshot', state: snap.state, seq: snap.seq, schemaVersion: snap.schemaVersion })); } catch {}
         return;
@@ -1209,6 +1225,39 @@ export class MuseSalonDO {
     const next = cur + 1;
     await this.state.storage.put('meta:seq', next);
     return next;
+  }
+
+  // ── Fleet telemetry (Phase 3 Stage 0) ──────────────────────────────────────
+  // Durable per-device-per-app version stamps from the WS hello ({v, device, app})
+  // — the Stage-X roll-off gate needs "no device below vR seen in N days across
+  // ALL entry points", which in-memory socket state can't answer (wiped by every
+  // deploy). Keyed by device AND app: one browser can run the dashboard + reports,
+  // and a single per-device entry would flip-flop (defeating the throttle) and
+  // hide one app from the gate. Throttled: a write only on version change or an
+  // hour since the last stamp, so reconnect storms never churn storage. fleet:
+  // keys are deliberately OUTSIDE buildSnapshot — telemetry must not ride into
+  // caches or backups — and restore/factory-reset carry the LIVE map through.
+  async stampFleet(msg, nowMs = Date.now()) {
+    const device = String((msg && msg.device) || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+    if (!device) return false;   // legacy bare hello
+    const v = String((msg && msg.v) || '').slice(0, 20);
+    const app = String((msg && msg.app) || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 10);
+    const key = 'fleet:' + device + ':' + (app || '?');
+    const prev = await this.state.storage.get(key);
+    if (prev && prev.v === v && nowMs - prev.lastSeen < 3600000) return false;
+    await this.state.storage.put(key, { v, app, lastSeen: nowMs });
+    return true;
+  }
+
+  async listFleet() {
+    const m = await this.state.storage.list({ prefix: 'fleet:' });
+    const devices = [...m.entries()].map(([k, v]) => {
+      const rest = k.slice('fleet:'.length);
+      const i = rest.indexOf(':');   // device ids are [A-Za-z0-9_-] only, so ':' is unambiguous
+      return { device: i < 0 ? rest : rest.slice(0, i), ...((v && typeof v === 'object') ? v : {}) };
+    });
+    devices.sort((a, b) => (b.lastSeen || 0) - (a.lastSeen || 0));
+    return { devices };
   }
 
   // Apply a mutation to storage, stamp a seq, dedupe by mutationId, broadcast.
@@ -1638,8 +1687,14 @@ export class MuseSalonDO {
     await this.state.blockConcurrencyWhile(async () => {
       await this.backupNow({ safety: true });           // safety snapshot before wiping (retention-exempt)
       const liveSeq = (await this.state.storage.get('meta:seq')) || 0;
+      // fleet: telemetry describes DEVICES, not salon state — it's deliberately outside
+      // snapshots, so the LIVE map must carry through the wipe or the Stage-X bake gate
+      // loses its seen-within-14-days history (an offline stale device would vanish and
+      // the gate would fail OPEN).
+      const fleet = await this.state.storage.list({ prefix: 'fleet:' });
       await this.state.storage.deleteAll();
       const puts = {};
+      for (const [k, v] of fleet) puts[k] = v;
       for (const [k, v] of Object.entries(st.config || {}))     puts['config:' + k] = v;
       // cfgmeta must come back too, or every config key's stale-write guard is disarmed
       // after a restore and any stale offline config.set replay clobbers restored state.
@@ -1678,7 +1733,17 @@ export class MuseSalonDO {
     await this.state.blockConcurrencyWhile(async () => {
       safety = await this.backupNow({ safety: true });   // recovery point before wiping (retention-exempt)
       const liveSeq = (await this.state.storage.get('meta:seq')) || 0;
+      // Same as restore: fleet telemetry describes devices, not salon state — carry it.
+      const fleet = await this.state.storage.list({ prefix: 'fleet:' });
       await this.state.storage.deleteAll();
+      const keep = {};
+      for (const [k, v] of fleet) keep[k] = v;
+      const keys = Object.keys(keep);
+      for (let i = 0; i < keys.length; i += 128) {
+        const chunk = {};
+        for (const k of keys.slice(i, i + 128)) chunk[k] = keep[k];
+        await this.state.storage.put(chunk);
+      }
       await this.state.storage.put('meta:seq', liveSeq + 1);
     });
     await this.ensureBackupScheduled();

@@ -290,3 +290,20 @@ N→W(schemaVersion)+R(migrate-on-read) · O→O(guarded) · P→P(consumer-outp
 - **One lens (design-correctness) failed twice on infra limits; its concerns (async cascade, config transport,
   Intl-in-Worker, IDB version) were independently covered by the other lenses + my own two spot-checks
   (auth-gated route confirmed; Intl timeZone confirmed available in Workers).**
+
+---
+
+## Stage 0 build notes (banked for later stages — from the Stage-0 review round, 2026-07-13)
+- **monthOfTs throws** (RangeError) on an invalid tz or timestamp, by design. Every Stage-W/R call site must read
+  the tz through a guarded accessor — `isValidTz(cfg.salon_tz) ? cfg.salon_tz : 'America/Los_Angeles'` — in BOTH
+  copies' consumers, and skip/log records whose checkinTime isn't a finite epoch before bucketing (one corrupt
+  record must not abort an archive pass inside alarm()).
+- **saveSalonTz hard-block at Stage W:** once `config.archive_state.months` is non-empty, changing salon_tz must
+  hard-block (or demand typed confirmation) — the current confirm() is only the Stage-0 guard.
+- **Fleet map**: keyed `fleet:<device>:<app>` (per-app — one browser can run two entry points); carried THROUGH
+  restore/factory-reset (live telemetry, not snapshot state) so the Stage-X bake gate never loses its 14-day
+  history to a DR restore. Never pruned yet — Stage W's alarm housekeeping is the natural home for dropping
+  entries unseen for ~90d. Device rows are opaque ids; a friendly device label is a Stage-X ergonomics candidate.
+- **0-pre-a note for Stage R** (from the hotfix round): refund idempotency keys expire at Helcim after 5 minutes,
+  so the per-cents ordinal has NO long-horizon meaning — archiving old refund records cannot create key-reuse
+  hazards; the long-horizon guard is the /helcim/refunds processor-truth check, which is archive-independent.

@@ -2,10 +2,11 @@
 // The viewing end of the reporter (js/app/reporter.js): shows the errors the server
 // captured (deduped, newest first) so the owner can see what failed even when they
 // didn't notice it live, and lets a device opt in to a push the moment something breaks.
-import { REPORT_PROXY, PUSH_PROXY, VAPID_PUBLIC_KEY } from '../config.js';
+import { REPORT_PROXY, PUSH_PROXY, STATE_PROXY, VAPID_PUBLIC_KEY, APP_VERSION } from '../config.js';
 import { showToast } from '../utils.js';
 import { getState, cacheByteSize } from '../store.js';
 import { idbAvailable } from '../idbcache.js';
+import { DEVICE_ID } from '../sync.js';
 
 const _esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const _ago = ms => {
@@ -98,6 +99,66 @@ async function _storageCard() {
   </div>`;
 }
 
+// ── Fleet: which devices run which build (Phase 3 Stage 0) ────────────────────
+// Table shaping for the per-device version map the DO keeps from WS hellos. The
+// archive roll-off gate reads the same signal ("no device below vR seen in 14
+// days"), so the flags here mirror that horizon: behind-version and ≥14d-stale.
+// "Behind" compares against the NEWEST build seen anywhere (fleet or viewer) —
+// a viewer that is itself on a stale build must not paint every newer device amber.
+const _vNum = s => { const m = /^v(\d+)\.(\d+)/.exec(String(s || '')); return m ? (+m[1]) * 1000 + (+m[2]) : -1; };
+export function fleetLatest(devices, viewerVersion) {
+  return [viewerVersion, ...(devices || []).map(d => d && d.v)]
+    .reduce((a, b) => (_vNum(b) > _vNum(a) ? b : a), viewerVersion);
+}
+export function fleetRows(devices, viewerVersion, nowMs) {
+  const latest = fleetLatest(devices, viewerVersion);
+  return (devices || []).map(d => {
+    const ageDays = d && d.lastSeen ? (nowMs - d.lastSeen) / 86400000 : null;
+    return {
+      device: String((d && d.device) || ''),
+      app: (d && d.app) || '?',
+      v: (d && d.v) || '?',
+      lastSeen: (d && d.lastSeen) || 0,
+      current: !!(d && d.v) && _vNum(d.v) >= 0 && _vNum(d.v) >= _vNum(latest),
+      staleDays: ageDays == null ? null : Math.floor(ageDays),
+      stale: ageDays != null && ageDays >= 14,
+    };
+  }).sort((a, b) => b.lastSeen - a.lastSeen);
+}
+
+async function _fleetCard() {
+  let devices = [];
+  try {
+    const r = await fetch(STATE_PROXY + '/fleet', { headers: { Accept: 'application/json' } });
+    if (!r.ok) throw new Error(String(r.status));
+    devices = (await r.json()).devices || [];
+  } catch (e) {
+    return `<div class="bg-surface-container rounded-xl px-4 py-3 mb-4 border border-surface-container-high">
+      <div class="font-headline font-semibold text-on-surface text-sm mb-1">Connected devices</div>
+      <div class="text-[11px] font-body text-on-surface-variant">Couldn’t load the device list right now.</div>
+    </div>`;
+  }
+  const rows = fleetRows(devices, APP_VERSION, Date.now());
+  const latest = fleetLatest(devices, APP_VERSION);
+  const body = rows.length ? rows.map(r => {
+    const badge = r.current
+      ? `<span class="text-[10px] font-body font-semibold" style="color:#2a7a4f">${_esc(r.v)}</span>`
+      : `<span class="text-[10px] font-body font-semibold" style="color:#d4860a">${_esc(r.v)} · behind</span>`;
+    return `<div class="flex items-center justify-between gap-2 text-[11px] font-body py-0.5">
+      <span class="text-on-surface min-w-0 truncate">${_esc(r.device)}${r.device === DEVICE_ID ? ' <span class="text-outline">(this device)</span>' : ''} · ${_esc(r.app)}</span>
+      <span class="flex-shrink-0">${badge} <span class="${r.stale ? 'text-error' : 'text-outline'}">${_ago(r.lastSeen)}</span></span>
+    </div>`;
+  }).join('') : '<div class="text-[11px] font-body text-on-surface-variant">No devices reported yet — they appear as each one reconnects.</div>';
+  return `<div class="bg-surface-container rounded-xl px-4 py-3 mb-4 border border-surface-container-high">
+    <div class="flex items-center justify-between gap-2 mb-1">
+      <div class="font-headline font-semibold text-on-surface text-sm">Connected devices</div>
+      <div class="text-[11px] text-outline">latest ${_esc(latest)}</div>
+    </div>
+    <div class="space-y-0.5">${body}</div>
+    <div class="text-[10px] font-body text-outline mt-2">Updated when each device connects (at most hourly). Amber = older build — tap the ↻ badge on that device.</div>
+  </div>`;
+}
+
 function urlB64ToBytes(b64) {
   const pad = '='.repeat((4 - (b64.length % 4)) % 4);
   const base = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
@@ -160,6 +221,8 @@ export async function renderDiagnostics() {
   // Local storage gauge — computed from device state, so it renders even when the
   // error-log fetch below fails (offline is exactly when the cache picture matters).
   let sc = ''; try { sc = await _storageCard(); } catch (e) { /* gauge must never break the error log below */ }
+  let fc = ''; try { fc = await _fleetCard(); } catch (e) { /* fleet card must never break the error log below */ }
+  const cards = sc + fc;
 
   let errors = [];
   try {
@@ -167,7 +230,7 @@ export async function renderDiagnostics() {
     if (!r.ok) throw new Error(String(r.status));
     errors = (await r.json()).errors || [];
   } catch (e) {
-    el.innerHTML = sc + '<div class="text-sm font-body text-error py-3">Couldn’t load the error log (offline, or the server is unreachable). Try again in a moment.</div>';
+    el.innerHTML = cards + '<div class="text-sm font-body text-error py-3">Couldn’t load the error log (offline, or the server is unreachable). Try again in a moment.</div>';
     return;
   }
 
@@ -191,7 +254,7 @@ export async function renderDiagnostics() {
   </div>`;
 
   if (!errors.length) {
-    el.innerHTML = sc + alertCard + header + '<div class="text-sm font-body text-on-surface-variant py-3 opacity-70">No errors logged. 🎉 If something misbehaves, it will show up here (and push you if alerts are on).</div>';
+    el.innerHTML = cards + alertCard + header + '<div class="text-sm font-body text-on-surface-variant py-3 opacity-70">No errors logged. 🎉 If something misbehaves, it will show up here (and push you if alerts are on).</div>';
     return;
   }
 
@@ -216,5 +279,5 @@ export async function renderDiagnostics() {
     </div>`;
   }).join('');
 
-  el.innerHTML = sc + alertCard + header + list;
+  el.innerHTML = cards + alertCard + header + list;
 }

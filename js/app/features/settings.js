@@ -2,7 +2,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { getAppToken, getSessionUser } from '../apptoken.js';
-import { showToast, setSwitchVisual, escHtml } from '../utils.js';
+import { showToast, setSwitchVisual, escHtml, isValidTz } from '../utils.js';
 import { canDo, getActiveUser, ui } from '../session.js';
 import { DEFAULT_ROLE_PERMISSIONS, APP_VERSION } from '../config.js';
 import { renderServicesMerged, renderSettingsItems, renderSettingsFees } from './catalog.js';
@@ -140,6 +140,37 @@ export function renderGcalSettings() {
   window.renderGcalCalendarList?.();
 }
 
+// ── Salon timezone (Business leaf, Phase 3 Stage 0) ─────────────────
+// config.salon_tz decides which salon-local day/month every sale belongs to — the
+// archive writer and all readers bucket by it, never by a device's own timezone.
+// It must be set BEFORE the first archive write; changing it later re-buckets
+// month boundaries for archived history, hence the set-once warning.
+const US_TZS = ['America/Los_Angeles', 'America/Denver', 'America/Phoenix', 'America/Chicago', 'America/New_York', 'America/Anchorage', 'Pacific/Honolulu'];
+export function renderSalonTzSettings() {
+  const el = document.getElementById('salontz-section'); if (!el) return;
+  const cur = cfg().salon_tz || 'America/Los_Angeles';
+  const zones = [...new Set([cur, ...US_TZS])];
+  const opts = zones.map(z => `<option value="${escHtml(z)}" ${z === cur ? 'selected' : ''}>${escHtml(z.split('/').pop().replace(/_/g, ' '))} (${escHtml(z)})</option>`).join('');
+  el.innerHTML = `
+    <p class="text-sm font-body text-on-surface-variant mb-3">Will decide which month each sale is filed under when older history starts being archived — the same on every device, no matter where a device thinks it is. The salon runs on Pacific time (Los Angeles); only change this if the business moves.</p>
+    <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Salon timezone</label>
+    <div class="flex gap-2 mb-2">
+      <select id="salon-tz" class="flex-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface">${opts}</select>
+      <button onclick="saveSalonTz()" class="btn-primary px-4 py-2 rounded-xl font-body font-bold text-sm">Save</button>
+    </div>
+    <div class="text-xs font-body text-on-surface-variant">⚠️ Set once, before archiving starts. Changing it later could make old sales near midnight show under a different month in reports.</div>`;
+}
+export function saveSalonTz() {
+  const v = document.getElementById('salon-tz')?.value || '';
+  if (!isValidTz(v)) { showToast('That timezone isn’t valid'); return; }
+  const cur = cfg().salon_tz || '';
+  if (v === cur) { showToast('Timezone unchanged'); return; }
+  if (cur && !window.confirm('Change the salon timezone? Sales near midnight could move to a different day or month in reports.')) return;
+  dispatch('config.set', { key: 'salon_tz', value: v });
+  showToast('Salon timezone saved ✓');
+  renderSalonTzSettings();
+}
+
 // ── App Info (Data & System leaf) ─────────────────
 export function renderAppInfo() {
   const el = document.getElementById('appinfo-content');
@@ -269,6 +300,7 @@ const SETTINGS_NAV = [
   { id:'business', title:'Business', desc:'Branding', items:[
     { label:'Business Logo', sub:'Header & report logo', content:'logo-section', icon:'image' },
     { label:'Receipt & Reviews', sub:'Re-routable review-QR link on printed receipts', content:'receipt-section', render:'renderReceiptSettings', adminOnly:true, icon:'reviews' },
+    { label:'Timezone', sub:'Which day & month each sale counts under', content:'salontz-section', render:'renderSalonTzSettings', adminOnly:true, icon:'schedule' },
   ]},
   { id:'data', title:'Data & System', desc:'Backup, logs & info', items:[
     { label:'Backup & Restore', sub:'Export / import data', content:'backup-section', icon:'backup' },

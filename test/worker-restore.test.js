@@ -157,6 +157,27 @@ test('restored meta:seq never regresses below the live counter (max(current, sna
   }
 });
 
+test('restore and factory-reset carry the LIVE fleet map through the wipe', async () => {
+  // fleet: keys are deliberately outside snapshots (telemetry, not salon state) — but
+  // wiping them on a restore would erase the Stage-X bake gate's seen-within-14-days
+  // history: an offline device on an old build would vanish and the gate would fail OPEN.
+  const gate = makeGate();
+  const state = makeState(gate);
+  const bucket = makeBucket(gate);
+  const doInst = new MuseSalonDO(state, { PHOTOS_BUCKET: bucket });
+  await state.storage.put('config:business_name', 'Muse');
+  await state.storage.put('fleet:dev-abc123:staff', { v: 'v5.40', app: 'staff', lastSeen: 1751400000000 });
+  await bucket.put('backups/t.json', JSON.stringify({ state: { config: {} }, seq: 1 }));
+
+  await doInst.restoreFromBackup('backups/t.json');
+  assert.deepEqual(await state.storage.get('fleet:dev-abc123:staff'), { v: 'v5.40', app: 'staff', lastSeen: 1751400000000 },
+    'restore must not erase device telemetry');
+
+  await doInst.factoryReset();
+  assert.deepEqual(await state.storage.get('fleet:dev-abc123:staff'), { v: 'v5.40', app: 'staff', lastSeen: 1751400000000 },
+    'factory reset must not erase device telemetry');
+});
+
 test('restore round-trips configMeta (stale-write guard) and the audit trail', async () => {
   const gate = makeGate();
   const state = makeState(gate);

@@ -8,6 +8,7 @@
 import { hydrate, applyChange, setConnection, setAuthNeeded, loadCache, flushCache, markServerHydrated } from './store.js';
 import { requestPersistence } from './idbcache.js';
 import { withAuth } from './apptoken.js';
+import { APP_VERSION } from './config.js';
 
 const PROD_ORIGIN = 'https://musedashboard.musenailandspa.workers.dev';
 // When served from localhost (a static server in front of `wrangler dev`), talk to
@@ -19,6 +20,16 @@ const WS_URL     = ORIGIN.replace(/^http/, 'ws') + '/ws';
 const STATE      = ORIGIN + '/state';
 const OUTBOX_KEY = 'muse_outbox';
 const FAILED_KEY = 'muse_failed_ops';   // dead-letter: writes the server rejected (never silently dropped)
+
+// Which app this device is running, derived from the page path — one shared spot
+// instead of per-entry-point wiring, so all three apps (dashboard / staff / reports)
+// report themselves in the fleet map without touching each entry file.
+export function appKindFromPath(pathname) {
+  const p = String(pathname || '').toLowerCase();
+  if (/(^|\/)staff(\.html)?$/.test(p)) return 'staff';
+  if (/(^|\/)reports(\.html)?$/.test(p)) return 'reports';
+  return 'main';
+}
 
 export const DEVICE_ID = (() => {
   let id = localStorage.getItem('muse_device_id');
@@ -141,7 +152,10 @@ function connect() {
     _lastRecv = Date.now();
     setAuthNeeded(false);   // the WS upgrade only succeeds with a valid session
     setConnection(true, _outbox.length);
-    send({ type: 'hello' });
+    // The hello carries fleet telemetry ({v, device, app}) so the DO keeps a durable
+    // per-device version map — the archive roll-off gate reads it. Old workers ignore
+    // the extra fields, so shipping the client first is safe.
+    send({ type: 'hello', v: APP_VERSION, device: DEVICE_ID, app: appKindFromPath(typeof location !== 'undefined' ? location.pathname : '') });
     _ping = setInterval(() => {
       // Heartbeat watchdog: if nothing (not even a pong) has arrived in ~40s the socket is a
       // zombie — device slept / wifi blipped with no close event — so it silently stops
