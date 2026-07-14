@@ -1561,16 +1561,39 @@ export class MuseSalonDO {
     if (!obj) return { error: 'backup not found: ' + useKey };
     let snap; try { snap = JSON.parse(await obj.text()); } catch { return { error: 'backup is not valid JSON' }; }
     const st = snap.state || {};
-    await this.backupNow({ safety: true });           // safety snapshot before wiping (retention-exempt)
-    await this.state.storage.deleteAll();
-    for (const [k, v] of Object.entries(st.config || {})) await this.state.storage.put('config:' + k, v);
-    for (const e of (st.queue || []))     await this.state.storage.put('queue:' + String(e.id), e);
-    for (const r of (st.records || []))   await this.state.storage.put('record:' + String(r.id), r);
-    for (const g of (st.giftcards || [])) await this.state.storage.put('giftcard:' + String(g.id), g);
-    for (const c of (st.customers || [])) await this.state.storage.put('customer:' + String(c.id), c);
-    for (const d of (st.deletions || [])) await this.state.storage.put('deletion:' + String(d.id), d);
-    for (const c of (st.customerDeletions || [])) await this.state.storage.put('custdeletion:' + String(c.id), c);
-    await this.state.storage.put('meta:seq', (snap.seq || 0) + 1);
+    // The whole wipe/rebuild sits inside blockConcurrencyWhile. DO input gates already
+    // cover the storage awaits — the exposed window is the safety backup's R2 put: a WS
+    // mutate delivered there would be applied + ACKed, then wiped by deleteAll while
+    // absent from the safety snapshot (an acknowledged write silently lost). So
+    // backupNow MUST stay inside the gate. Budget: blockConcurrencyWhile caps at ~30s;
+    // the rebuild uses 128-key batched puts to stay far under it. A throw before
+    // deleteAll is a clean no-op; after it, the safety snapshot + a restore re-run recover.
+    await this.state.blockConcurrencyWhile(async () => {
+      await this.backupNow({ safety: true });           // safety snapshot before wiping (retention-exempt)
+      const liveSeq = (await this.state.storage.get('meta:seq')) || 0;
+      await this.state.storage.deleteAll();
+      const puts = {};
+      for (const [k, v] of Object.entries(st.config || {}))     puts['config:' + k] = v;
+      // cfgmeta must come back too, or every config key's stale-write guard is disarmed
+      // after a restore and any stale offline config.set replay clobbers restored state.
+      for (const [k, v] of Object.entries(st.configMeta || {})) puts['cfgmeta:' + k] = v;
+      for (const e of (st.queue || []))     puts['queue:' + String(e.id)] = e;
+      for (const r of (st.records || []))   puts['record:' + String(r.id)] = r;
+      for (const g of (st.giftcards || [])) puts['giftcard:' + String(g.id)] = g;
+      for (const c of (st.customers || [])) puts['customer:' + String(c.id)] = c;
+      for (const d of (st.deletions || [])) puts['deletion:' + String(d.id)] = d;
+      for (const c of (st.customerDeletions || [])) puts['custdeletion:' + String(c.id)] = c;
+      for (const a of (st.audit || [])) if (a && a.id != null) puts['audit:' + String(a.id)] = a;
+      const keys = Object.keys(puts);
+      for (let i = 0; i < keys.length; i += 128) {
+        const chunk = {};
+        for (const k of keys.slice(i, i + 128)) chunk[k] = puts[k];
+        await this.state.storage.put(chunk);
+      }
+      // Never regress below the live counter — a lower seq undercuts every seq-trusting
+      // consumer (device-cache staleness checks, change ordering) until it re-passes it.
+      await this.state.storage.put('meta:seq', Math.max(liveSeq, snap.seq || 0) + 1);
+    });
     await this.ensureBackupScheduled();
     const fresh = await this.buildSnapshot();
     const payload = JSON.stringify({ type: 'snapshot', state: fresh.state, seq: fresh.seq, schemaVersion: fresh.schemaVersion });
@@ -1582,9 +1605,15 @@ export class MuseSalonDO {
   // R2 (recoverable via /state/restore). Broadcasts the empty snapshot so any
   // connected client clears immediately.
   async factoryReset() {
-    const safety = await this.backupNow({ safety: true });   // recovery point before wiping (retention-exempt)
-    await this.state.storage.deleteAll();
-    await this.state.storage.put('meta:seq', 1);
+    let safety = null;
+    // Same gate as restoreFromBackup: the safety backup's R2 put is the ack-then-wipe
+    // window, and the seq must never regress (a hard reset to 1 drops below every client).
+    await this.state.blockConcurrencyWhile(async () => {
+      safety = await this.backupNow({ safety: true });   // recovery point before wiping (retention-exempt)
+      const liveSeq = (await this.state.storage.get('meta:seq')) || 0;
+      await this.state.storage.deleteAll();
+      await this.state.storage.put('meta:seq', liveSeq + 1);
+    });
     await this.ensureBackupScheduled();
     const fresh = await this.buildSnapshot();
     const payload = JSON.stringify({ type: 'snapshot', state: fresh.state, seq: fresh.seq, schemaVersion: fresh.schemaVersion });
