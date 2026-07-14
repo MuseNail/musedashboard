@@ -1632,7 +1632,9 @@ export class MuseSalonDO {
     // absent from the safety snapshot (an acknowledged write silently lost). So
     // backupNow MUST stay inside the gate. Budget: blockConcurrencyWhile caps at ~30s;
     // the rebuild uses 128-key batched puts to stay far under it. A throw before
-    // deleteAll is a clean no-op; after it, the safety snapshot + a restore re-run recover.
+    // deleteAll leaves storage untouched — but any throw in the gate resets the DO
+    // instance (sockets drop, clients reconnect); after deleteAll, the safety
+    // snapshot + a restore re-run recover.
     await this.state.blockConcurrencyWhile(async () => {
       await this.backupNow({ safety: true });           // safety snapshot before wiping (retention-exempt)
       const liveSeq = (await this.state.storage.get('meta:seq')) || 0;

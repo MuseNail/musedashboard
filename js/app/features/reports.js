@@ -2804,9 +2804,10 @@ export async function confirmRefund() {
     if (unrecorded.length) {
       _refundUnrecorded = { saleId: String(o.id), txns: unrecorded };
       const u = unrecorded[0];
+      const uAmt = (Number(u.amount) || 0).toFixed(2);
       const d = new Date(u.dateCreated);
       const when = u.dateCreated && !isNaN(d) ? ` on ${d.toLocaleDateString()}` : '';
-      done(`Helcim already shows a $${(Number(u.amount) || 0).toFixed(2)} refund${when} for this sale that isn't recorded here — no new charge was made. To record it without refunding the card again, run this refund with the card toggle OFF.`, 10000);
+      done(`Helcim already shows a $${uAmt} refund${when} for this sale that isn't recorded here — no new charge was made. To record it without refunding the card again, run this refund with the card toggle OFF and the amount set to exactly $${uAmt}.`, 10000);
       return;
     }
     if (truth.linked) {
