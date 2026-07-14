@@ -191,6 +191,34 @@ export async function encryptPushPayload(sub, payloadStr) {
   return body;
 }
 
+// ── Helcim refund idempotency + truth helpers (0-pre-a) ────────────────────────
+// Helcim clears idempotency keys after 5 MINUTES and 409s a reused key with a
+// different payload (devdocs.helcim.com/docs/idempotency) — the key only dedups an
+// immediate retry. New-format client keys ('rf' + 30 hex, v5.42+) pass through
+// UNCHANGED so their discriminating parts actually reach Helcim; every other shape
+// (old cached clients, fallbacks) normalizes BYTE-IDENTICALLY to the historical
+// formula so a mid-rollout retry keeps its old effective key.
+export function helcimIdemKey(rawKey, fallback) {
+  const key = String(rawKey || fallback || '');
+  if (/^rf[0-9a-f]{30}$/.test(key)) return key;
+  const safe = key.replace(/[^a-zA-Z0-9_-]/g, '');
+  return ('rf-' + safe + '-0000000000000000000000000000000000').slice(0, 32);
+}
+
+// Approved refund transactions tied to an original card txn, from a Helcim
+// card-transactions response (bare array or {value:[...]}). Used by /helcim/refunds.
+export function filterHelcimRefunds(originalTransactionId, resp) {
+  const list = Array.isArray(resp) ? resp : (resp && Array.isArray(resp.value)) ? resp.value : [];
+  const origId = String(originalTransactionId);
+  const refunds = list.filter(t => t
+    && (t.transactionId ?? t.id) != null
+    && String(t.transactionId ?? t.id) !== origId
+    && /refund/i.test(String(t.type || ''))
+    && String(t.status || '').toUpperCase() === 'APPROVED');
+  const refundedTotal = Math.round(refunds.reduce((s, t) => s + (Number(t.amount) || 0), 0) * 100) / 100;
+  return { refunds, refundedTotal };
+}
+
 // ── Origin gate (OFF by default; flip on live via the ORIGIN_GATE_ENABLED secret) ──
 // When enabled, browser requests from a non-allowed Origin get 403. Requests with
 // NO Origin header (server-to-server, <img> loads, curl, the cron) always pass —
@@ -652,8 +680,8 @@ export default {
     //   POST /v2/payment/refund { originalTransactionId, amount(DOLLARS), ipAddress } + an
     //   `idempotency-key` header (required, 25–36 chars). Partial refunds are supported.
     // originalTransactionId = the Helcim transactionId stored on the record (squarePaymentIds[0]).
-    // The client sends a DETERMINISTIC idempotencyKey tied to (sale, txn, cents) so a retry after a
-    // timeout returns the SAME refund instead of issuing a second one — the core double-refund guard.
+    // The client's deterministic key dedups an IMMEDIATE retry only (Helcim clears keys
+    // after 5 minutes) — delayed-retry safety comes from /helcim/refunds below.
     if (path === '/helcim/refund' && method === 'POST') {
       let b = {}; try { b = await request.json(); } catch {}
       const originalTransactionId = parseInt(b.originalTransactionId, 10);
@@ -661,8 +689,7 @@ export default {
       if (!Number.isInteger(originalTransactionId) || originalTransactionId <= 0) return json({ error: 'originalTransactionId required' }, 400);
       if (!(amount > 0)) return json({ error: 'amount (dollars) must be > 0' }, 400);
       const ip = request.headers.get('CF-Connecting-IP') || '127.0.0.1';   // ipAddress is required by Helcim
-      const safe = String(b.idempotencyKey || (originalTransactionId + '-' + Math.round(amount * 100))).replace(/[^a-zA-Z0-9_-]/g, '');
-      const idem = ('rf-' + safe + '-0000000000000000000000000000000000').slice(0, 32);   // normalize to Helcim's 25–36 char window
+      const idem = helcimIdemKey(b.idempotencyKey, originalTransactionId + '-' + Math.round(amount * 100));
       const r = await fetch('https://api.helcim.com/v2/payment/refund', {
         method:  'POST',
         headers: { 'api-token': env.HELCIM_API_TOKEN, 'accept': 'application/json', 'Content-Type': 'application/json', 'idempotency-key': idem },
@@ -676,6 +703,44 @@ export default {
         return json({ error: String(msg).slice(0, 300) }, r.status >= 500 ? 502 : 400);
       }
       return json({ ok: true, transactionId: j.transactionId || null, status: j.status || '', amount: (j.amount ?? amount) });
+    }
+    // Processor-truth for the refund flow (0-pre-a): the original txn + every approved
+    // refund Helcim already has against it. Idempotency keys expire in 5 minutes, so the
+    // client can NOT rely on them for a delayed retry — before charging a card refund it
+    // calls this and blocks when Helcim shows money it doesn't have recorded.
+    // Linkage: a refund inherits the original's invoiceNumber. If the original has no
+    // invoice (shouldn't happen — every purchase sends tkt-refs) this degrades to
+    // linked:false + refunds:[] — no worse than the pre-truth-check behavior.
+    if (path === '/helcim/refunds' && method === 'GET') {
+      const origId = parseInt(url.searchParams.get('originalTransactionId'), 10);
+      if (!Number.isInteger(origId) || origId <= 0) return json({ error: 'originalTransactionId required' }, 400);
+      const hh = { 'api-token': env.HELCIM_API_TOKEN, 'accept': 'application/json' };
+      const or = await fetch(`https://api.helcim.com/v2/card-transactions/${origId}`, { headers: hh });
+      const otext = await or.text();
+      let oj = {}; try { oj = JSON.parse(otext); } catch {}
+      if (oj && Array.isArray(oj.value)) oj = oj.value[0] || {};
+      if (or.status >= 400 || !oj || oj.transactionId == null) {
+        console.error('[helcim refunds] original lookup', or.status, otext.slice(0, 200));
+        return json({ error: 'could not load the original transaction' }, or.status >= 500 ? 502 : 400);
+      }
+      let refunds = [], refundedTotal = 0;
+      const linked = !!oj.invoiceNumber;
+      if (linked) {
+        const rr = await fetch(`https://api.helcim.com/v2/card-transactions?invoiceNumber=${encodeURIComponent(oj.invoiceNumber)}`, { headers: hh });
+        const rtext = await rr.text();
+        if (rr.status >= 400) {
+          console.error('[helcim refunds] list', rr.status, rtext.slice(0, 200));
+          return json({ error: 'could not list the transactions' }, rr.status >= 500 ? 502 : 400);
+        }
+        let rj = {}; try { rj = JSON.parse(rtext); } catch {}
+        ({ refunds, refundedTotal } = filterHelcimRefunds(origId, rj));
+      }
+      return json({
+        ok: true, linked,
+        original: { transactionId: oj.transactionId, amount: (oj.amount ?? null), invoiceNumber: oj.invoiceNumber || '' },
+        refunds: refunds.map(t => ({ transactionId: String(t.transactionId ?? t.id), amount: Number(t.amount) || 0, dateCreated: t.dateCreated || '' })),
+        refundedTotal,
+      });
     }
     if (path === '/terminal/webhook' && method === 'POST') {
       const raw = await request.text();

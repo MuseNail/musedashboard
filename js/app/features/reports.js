@@ -10,7 +10,7 @@ import { isPaidStatus } from './status.js';
 import { squareUpsertCustomer } from './square-customers.js';
 import { avgServiceTime, fmtDur } from './servicetime.js';
 import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS, SQUARE_PROXY, HELCIM_PROXY } from '../config.js';
-import { helcimActive, refundOnHelcim } from './helcim.js';
+import { helcimActive, refundOnHelcim, fetchHelcimRefunds } from './helcim.js';
 import { gcRedemptions, gcTotalUsed } from './giftcards.js';
 import { fdPaidHours, fdPunches, fdSetPunches, roundQuarterHours, fdPunchSuspect } from './timeclock.js';
 import { printTechReceipts80 } from './receipt.js';
@@ -2583,11 +2583,71 @@ const _squareRefundable = rec => (rec?.squarePaymentIds?.length)
   : 0;
 // Helcim can only refund the CARD portion back to the card (cash/Zelle were never in Helcim —
 // those are returned from the drawer / by hand). The stored Helcim card txn = squarePaymentIds[0].
+// Helcim txn ids are numeric — a Square-era sale (alphanumeric payment id) must never route
+// down the Helcim path (parseInt of a Square id could name an unrelated Helcim transaction).
 const _helcimRefundable = rec => {
   if (!rec?.squarePaymentIds?.length) return 0;
+  if (!/^\d+$/.test(String(rec.squarePaymentIds[0] || ''))) return 0;
   if (rec.tenders) return rec.tenders.card || 0;     // mixed tenders → only the card is Helcim-refundable
   return rec.totalCost || 0;                          // older record with no tender breakdown → assume all card
 };
+
+// ── Refund idempotency + processor-truth helpers (0-pre-a) ──────────────────────
+// Helcim clears idempotency keys after 5 MINUTES (devdocs.helcim.com/docs/idempotency):
+// same key + identical payload replays the first successful response; same key +
+// different payload → 409. So the key's only job is deduping an IMMEDIATE retry —
+// double-tap, quick timeout-retry — and every longer-horizon protection (delayed or
+// cross-device retry, an already-refunded sale) comes from the fetchHelcimRefunds
+// truth check in confirmRefund, never from the key.
+export async function _refundIdemKey(saleId, txnId, cents, n) {
+  try {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${saleId}|${txnId}|${cents}|${n}`));
+    const hex = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+    return 'rf' + hex.slice(0, 30);
+  } catch {
+    return `${saleId}-${txnId}-${cents}-${n}`;   // no crypto.subtle → legacy shape; the Worker normalizes it
+  }
+}
+
+// The intent ordinal n: recorded card-bearing refunds of this sale at the SAME card
+// cents. Per-cents (not a flat count) so deleting an unrelated refund can never shift
+// another amount's ordinal onto a consumed key. Deleted refunds don't count — a
+// delete-then-redo is caught by the truth check instead (the money already moved).
+export function _priorCardRefunds(recordsArr, saleId, cents) {
+  return (recordsArr || []).filter(r => r && r.status === 'refund'
+    && String(r.refundOf) === String(saleId)
+    && (r.cardRefund === true || (r.squareRefundIds || []).length > 0)
+    && (typeof r.cardRefundCents === 'number'
+        ? r.cardRefundCents === cents
+        : Math.round(Math.abs(r.totalCost || 0) * 100) === cents)).length;
+}
+
+// When the unrecorded-refund block fires, the txns are stashed here for the SAME modal
+// session: if the operator follows the guidance (confirm again with the card toggle OFF
+// at the matching amount), the record-only refund gets stamped with that Helcim txn id —
+// otherwise the truth check would flag the same txn forever and block every future card
+// refund on the sale. Cleared on modal open/close.
+let _refundUnrecorded = null;
+
+// The record-only reconciliation match: exactly ONE stashed Helcim refund whose amount
+// equals what the operator is recording (±½¢). Ambiguity stamps nothing — a wrong tie
+// would hide a genuinely unrecorded refund.
+export function _matchUnrecordedTxn(txns, amountDollars) {
+  const hits = (txns || []).filter(t => Math.abs((Number(t.amount) || 0) - amountDollars) < 0.005);
+  return hits.length === 1 ? hits[0] : null;
+}
+
+// Helcim refund transactions with no live recorded counterpart on this sale — money the
+// processor already returned that the app doesn't show (a timed-out attempt that in fact
+// processed — any device, any day — or a recorded refund that was later deleted).
+export function _unrecordedHelcimRefunds(helcimRefunds, recordsArr, saleId) {
+  const recorded = new Set();
+  (recordsArr || []).forEach(r => {
+    if (r && r.status === 'refund' && String(r.refundOf) === String(saleId))
+      (r.squareRefundIds || []).forEach(id => recorded.add(String(id)));
+  });
+  return (helcimRefunds || []).filter(t => t && !recorded.has(String(t.transactionId)));
+}
 export function initiateRefund(recordId) {
   if (!canDo('refund')) { showToast('Permission denied'); return; }
   const rec = records().find(r => String(r.id) === String(recordId)) || buildCombinedRecords().find(r => String(r.id) === String(recordId));
@@ -2604,11 +2664,24 @@ export function initiateRefund(recordId) {
   const helcim = helcimActive();
   const cardAmt = helcim ? _helcimRefundable(rec) : _squareRefundable(rec);
   const row = document.getElementById('refund-square-row'), cb = document.getElementById('refund-to-square');
-  if (cb) cb.checked = false;
+  if (cb) { cb.checked = false; cb.disabled = false; }
+  _refundUnrecorded = null;
   if (row) row.classList.toggle('hidden', cardAmt <= 0);
   const procLbl = document.getElementById('refund-processor-label');
   if (procLbl) procLbl.textContent = helcim ? 'to the card (Helcim)' : 'in Square';
   if (cardAmt > 0) { const a = document.getElementById('refund-square-amt'); if (a) a.textContent = helcim ? `up to $${cardAmt.toFixed(2)} back to the card` : `up to $${cardAmt.toFixed(2)} in Square`; }
+  // Processor-truth refresh (fire-and-forget): the local estimate never subtracts prior
+  // refunds, so once Helcim answers, show what can genuinely still go back to the card.
+  // The confirm-time check re-fetches and is authoritative — this is display only.
+  if (helcim && cardAmt > 0) {
+    fetchHelcimRefunds(rec.squarePaymentIds?.[0]).then(t => {
+      if (!t.ok || !t.linked || String(_refundTxnId) !== String(recordId)) return;
+      const remaining = Math.max(0, Math.min(cardAmt, (Number(t.original?.amount) || cardAmt) - t.refundedTotal));
+      const a = document.getElementById('refund-square-amt');
+      if (a) a.textContent = remaining > 0.005 ? `up to $${remaining.toFixed(2)} back to the card` : 'already fully refunded';
+      if (remaining <= 0.005 && cb) { cb.checked = false; cb.disabled = true; }
+    }).catch(() => {});
+  }
   // Cash-from-drawer row: shown only when a drawer is open, so a cash refund can log a Cash Out
   // and the close reconciliation isn't thrown short. Always reset OFF (per-refund opt-in).
   const coRow = document.getElementById('refund-cash-out-row'), coCb = document.getElementById('refund-cash-out');
@@ -2657,7 +2730,7 @@ async function refundInSquare(record, amountDollars, reason) {
   if (remaining > 0) return { ok: false, error: `Only $${((wantCents - remaining) / 100).toFixed(2)} was refundable in Square (the rest is gift-card or already refunded).`, refundIds, refundedCents: wantCents - remaining };
   return { ok: true, refundIds, refundedCents: wantCents };
 }
-export function closeRefundModal() { const m = document.getElementById('refund-modal'); m.classList.add('hidden'); m.style.display = ''; _refundTxnId = null; _refundTxnRecord = null; }
+export function closeRefundModal() { const m = document.getElementById('refund-modal'); m.classList.add('hidden'); m.style.display = ''; _refundTxnId = null; _refundTxnRecord = null; _refundUnrecorded = null; }
 
 // ── Heal: recompute stored record totals from their parts (one-time fix) ────────
 // Corrects any saved record whose cached totalCost drifted from its services+items+
@@ -2712,23 +2785,58 @@ export async function confirmRefund() {
   const wantCardRefund = !!document.getElementById('refund-to-square')?.checked;
   let squareRefundIds = null;
   let refundAmount = amount;   // may be lowered to what the processor ACTUALLY returned on a partial failure
+  let cardRefundCents = null;   // stamped on the record when the Helcim card leg ran (counts toward the intent ordinal)
+  let successToast = null;      // card-path result message — shown as the final toast so it isn't overwritten
   if (wantCardRefund && helcimActive() && _helcimRefundable(o) > 0) {
     // ── Helcim: send the card portion back to the card. ──
     const helcimTxn = o.squarePaymentIds?.[0];
     const cardAmt = Math.min(amount, _helcimRefundable(o));   // Helcim returns only the card portion
     const btn = document.querySelector('#refund-modal button[onclick="confirmRefund()"]'); if (btn) { btn.disabled = true; btn.textContent = 'Refunding to the card…'; }
-    // Idempotency key = sale + txn + cents + (# refunds already recorded for this sale). A retry after a
-    // timeout runs BEFORE the new refund record is saved, so the count is unchanged → SAME key → Helcim
-    // returns the same refund (never a 2nd charge back). A genuine later partial of the same amount runs
-    // AFTER the prior one is recorded → count differs → a fresh key → it processes normally.
-    const priorRefunds = records().filter(r => r.status === 'refund' && String(r.refundOf) === String(o.id)).length;
-    const r = await refundOnHelcim(helcimTxn, cardAmt, { idempotencyKey: `${o.id}-${helcimTxn}-${Math.round(cardAmt * 100)}-${priorRefunds}` });
-    if (btn) { btn.disabled = false; btn.textContent = 'Confirm Refund'; }
-    if (!r.ok) { showToast('Helcim refund failed: ' + r.error + ' — nothing recorded.'); return; }
+    const done = (msg, ms) => { if (btn) { btn.disabled = false; btn.textContent = 'Confirm Refund'; } if (msg) showToast(msg, ms); };
+    // Processor truth FIRST. Helcim clears idempotency keys after 5 minutes, so the key
+    // below only dedups an immediate retry — this check is what protects everything
+    // later: a timed-out attempt that actually processed (any device, any day), a
+    // deleted-then-redone refund, and over-refunding past what Helcim will honor.
+    // Fail-CLOSED: no verification, no card charge (record-only still works, toggle off).
+    const truth = await fetchHelcimRefunds(helcimTxn);
+    if (!truth.ok) { done("Couldn't verify prior refunds with Helcim — nothing charged, nothing recorded. Check the connection and try again (or record without the card toggle).", 9000); return; }
+    const unrecorded = _unrecordedHelcimRefunds(truth.refunds, records(), o.id);
+    if (unrecorded.length) {
+      _refundUnrecorded = { saleId: String(o.id), txns: unrecorded };
+      const u = unrecorded[0];
+      const d = new Date(u.dateCreated);
+      const when = u.dateCreated && !isNaN(d) ? ` on ${d.toLocaleDateString()}` : '';
+      done(`Helcim already shows a $${(Number(u.amount) || 0).toFixed(2)} refund${when} for this sale that isn't recorded here — no new charge was made. To record it without refunding the card again, run this refund with the card toggle OFF.`, 10000);
+      return;
+    }
+    if (truth.linked) {
+      const remaining = Math.max(0, (Number(truth.original?.amount) || cardAmt) - truth.refundedTotal);
+      if (cardAmt > remaining + 0.005) {
+        done(truth.refundedTotal > 0
+          ? `Helcim shows $${truth.refundedTotal.toFixed(2)} already refunded on this sale — only $${remaining.toFixed(2)} can still go back to the card.`
+          : `Helcim will only return up to $${remaining.toFixed(2)} on this sale.`, 9000);
+        return;
+      }
+    }
+    const cents = Math.round(cardAmt * 100);
+    const n = _priorCardRefunds(records(), o.id, cents);
+    const r = await refundOnHelcim(helcimTxn, cardAmt, { idempotencyKey: await _refundIdemKey(o.id, helcimTxn, cents, n) });
+    if (!r.ok) { done('Helcim refund failed: ' + r.error + ' — nothing recorded.'); return; }
+    // Same-key replay belt (double-tap race): if Helcim handed back a transaction we
+    // already have recorded live, no NEW money moved — record nothing a second time.
+    if (r.transactionId && _unrecordedHelcimRefunds([{ transactionId: r.transactionId }], records(), o.id).length === 0) {
+      done('This matched a refund that already went through — no new money moved, nothing recorded twice.', 9000);
+      return;
+    }
+    done();
     squareRefundIds = r.transactionId ? [String(r.transactionId)] : [];
-    showToast(cardAmt < amount
+    cardRefundCents = cents;
+    // Shown as the FINAL toast (successToast) — a mid-flow toast here would be wiped
+    // milliseconds later by the generic "recorded ✓" one, taking the return-it-by-hand
+    // instruction with it.
+    successToast = cardAmt < amount
       ? `Refunded $${cardAmt.toFixed(2)} to the card ✓ — the remaining $${(amount - cardAmt).toFixed(2)} (cash/Zelle) is recorded; return it by hand.`
-      : `Refunded $${cardAmt.toFixed(2)} to the card ✓`);
+      : `Refunded $${cardAmt.toFixed(2)} to the card ✓ — recorded.`;
   } else if (wantCardRefund && !helcimActive() && _squareRefundable(o) > 0) {
     const btn = document.querySelector('#refund-modal button[onclick="confirmRefund()"]'); if (btn) { btn.disabled = true; btn.textContent = 'Refunding in Square…'; }
     const r = await refundInSquare(o, amount, reason);
@@ -2760,7 +2868,17 @@ export async function confirmRefund() {
   const refundTechBilled = (o.assignments || [])
     .filter(a => a.techId)
     .map(a => ({ techId: a.techId, billed: -((a.cost || 0) * ratio) }));
-  const record = { id: newEntryId(), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -refundAmount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: refundOfId, refundTechBilled, loggedBy: getActiveUser()?.name || '', ...(squareRefundIds && squareRefundIds.length ? { squareRefundIds } : {}) };
+  // Record-only path after an unrecorded-refund block: tie this refund to the Helcim
+  // transaction it represents, or the truth check flags the same txn forever and every
+  // future card refund on this sale stays blocked.
+  if (!squareRefundIds && _refundUnrecorded && _refundUnrecorded.saleId === String(o.id)) {
+    const m = _matchUnrecordedTxn(_refundUnrecorded.txns, refundAmount);
+    if (m) { squareRefundIds = [String(m.transactionId)]; cardRefundCents = Math.round((Number(m.amount) || refundAmount) * 100); }
+  }
+  // cardRefund/cardRefundCents mark that the CARD leg ran (even if Helcim returned no
+  // transactionId) — the idempotency ordinal counts on them, so a card refund can never
+  // become invisible to the next key derivation.
+  const record = { id: newEntryId(), name: o.name, phone: o.phone||'', services: o.services||[], assignments: [], items: [], fees: [], discount: 0, discountNote: reason, totalCost: -refundAmount, checkinTime: now, completedAt: now, status: 'refund', isAppointment: false, refundOf: refundOfId, refundTechBilled, loggedBy: getActiveUser()?.name || '', ...(squareRefundIds && squareRefundIds.length ? { squareRefundIds } : {}), ...(cardRefundCents != null ? { cardRefund: true, cardRefundCents } : {}) };
   dispatch('record.save', { record });
   window.logAudit?.('Refund', `${o.name || '—'} · $${refundAmount.toFixed(2)}${squareRefundIds && squareRefundIds.length ? ' · refunded in Square' : ''}${reason ? ' · ' + reason : ''}`);
   // If the operator returned cash from the open drawer, log a Cash Out so the shift reconciliation
@@ -2769,7 +2887,7 @@ export async function confirmRefund() {
   closeRefundModal();
   renderTransactions();
   if (document.getElementById('panel-reports')?.classList.contains('active')) runReport();
-  showToast(`Refund of $${refundAmount.toFixed(2)} recorded ✓`);
+  showToast(successToast || `Refund of $${refundAmount.toFixed(2)} recorded ✓`, successToast ? 8000 : undefined);
 }
 
 // ── Delete transaction (soft delete via DO) ───────

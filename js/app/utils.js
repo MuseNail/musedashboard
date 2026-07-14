@@ -580,13 +580,15 @@ function _closeNumpadModal() {
 
 // ── Toast ────────────────────────────────────────
 let _toastTimer;
-export function showToast(msg) {
+// ms: pass a longer duration for messages that carry the operator's next action
+// (e.g. the refund safety blocks) — 3s is not enough to read guidance under pressure.
+export function showToast(msg, ms) {
   const toast = document.getElementById('toast');
   document.getElementById('toast-text').textContent = msg;
   toast.classList.remove('hidden');
   toast.style.display = 'flex';
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => { toast.classList.add('hidden'); toast.style.display = ''; }, 3000);
+  _toastTimer = setTimeout(() => { toast.classList.add('hidden'); toast.style.display = ''; }, ms || 3000);
 }
 
 // ── Global listeners (run once on import) ─────────────────────────────────────

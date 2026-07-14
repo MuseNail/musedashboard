@@ -30,8 +30,10 @@ export async function helcimCustomerCode(name, phone) {
 }
 
 // Refund a Helcim card transaction back to the card (via the Worker → Helcim refund API).
-// amountDollars = the CARD portion to return (Helcim caps it at the original). opts.idempotencyKey
-// MUST be deterministic for this refund intent (sale + txn + cents) so a retry can't double-refund.
+// amountDollars = the CARD portion to return (Helcim rejects a refund above the original).
+// opts.idempotencyKey MUST be deterministic for this refund intent so an IMMEDIATE retry
+// dedups — Helcim clears keys after 5 minutes, so anything later is protected by the
+// fetchHelcimRefunds truth check in confirmRefund, never by the key.
 // Returns { ok, transactionId, amount, error } — never throws.
 export async function refundOnHelcim(originalTransactionId, amountDollars, opts = {}) {
   if (!originalTransactionId) return { ok: false, error: 'No Helcim transaction is on this sale.' };
@@ -46,6 +48,21 @@ export async function refundOnHelcim(originalTransactionId, amountDollars, opts 
     return { ok: true, transactionId: j.transactionId ? String(j.transactionId) : null, amount: j.amount };
   } catch (e) { try { window.reportError?.('helcim.refund', 'Could not reach the refund service: ' + ((e && e.message) || e), { serious: true }); } catch (x) {} return { ok: false, error: 'Could not reach the refund service.' }; }
 }
+
+// Processor-truth for the refund flow: the original txn + every approved refund Helcim
+// already has against it (Worker /helcim/refunds). Because idempotency keys expire in
+// 5 minutes, THIS — not the key — is what protects a delayed or cross-device retry.
+// Fail-closed: the caller BLOCKS the card leg on { ok:false }. Never throws.
+export async function fetchHelcimRefunds(originalTransactionId) {
+  if (!originalTransactionId) return { ok: false, error: 'No Helcim transaction is on this sale.' };
+  try {
+    const r = await fetch(`${HELCIM_PROXY}/refunds?originalTransactionId=${encodeURIComponent(originalTransactionId)}`);
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.error || !j.ok) return { ok: false, error: j.error || `Helcim lookup failed (${r.status}).` };
+    return { ok: true, original: j.original || {}, refunds: j.refunds || [], refundedTotal: Number(j.refundedTotal) || 0, linked: j.linked !== false };
+  } catch { return { ok: false, error: 'Could not reach Helcim to check prior refunds.' }; }
+}
+
 export function setPaymentProcessor(p) {
   const v = p === 'helcim' ? 'helcim' : 'square';
   if (v === activeProcessor()) return;
