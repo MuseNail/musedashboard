@@ -236,6 +236,8 @@ export function dispatch(op, payload) {
   if (op === 'customer.upsert' && payload && payload.customer) { payload.customer.updatedAt = Date.now(); payload.customer.updatedBy = DEVICE_ID; }
   // Bulk customer import — stamp every customer in the batch (one apply, not one-per-customer).
   if (op === 'customer.bulkUpsert' && payload && Array.isArray(payload.customers)) { const ts = Date.now(); payload.customers.forEach(c => { c.updatedAt = ts; c.updatedBy = DEVICE_ID; }); }
+  // Signed waiver — stamp the record so its stored acceptedAt/attribution is device-consistent.
+  if (op === 'waiver.save' && payload && payload.waiver) { payload.waiver.updatedAt = payload.waiver.updatedAt || Date.now(); payload.waiver.updatedBy = DEVICE_ID; }
   applyChange(op, payload);                                  // optimistic
   const msg = { type: 'mutate', op, payload, mutationId, device: DEVICE_ID };
   enqueue(msg);

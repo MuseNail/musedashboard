@@ -27,6 +27,12 @@ function emptyConfig() {
     cash_drawer_history: [],   // closed drawer shifts (rolling cap), each with its reconciliation
     edit_locks: {},            // cross-device Assign&Price hard lock { [lockKey]: {device,name,at} }; see queue.js
     last_rollover_date: '',    // SHARED day-rollover marker (localDateStr). Gates the once-per-day housekeeping globally so a device first opened mid-day can't re-clear the roster — see main.js runDayRolloverIfNeeded
+    // ── Service waiver (features/waiver.js) ──
+    waiver_enabled: false,     // require the check-in waiver? off until the owner turns it on
+    waiver_version: '',        // current version string (e.g. '02'); a change re-prompts every client
+    waiver_text: '',           // full agreement text shown in the "Read the full waiver" popup
+    waiver_versions: {},       // { [version]: { text, hash, effectiveAt } } — historical text, for reproduction
+    kiosk_device_id: '',       // device id designated as the confirmation kiosk (Release 2)
   };
 }
 
@@ -253,6 +259,12 @@ export function applyChange(op, payload, seq) {
       if (log.length > 300) log.splice(0, log.length - 300);
       break;
     }
+    case 'waiver.save':
+      // Signed waivers live ONLY in the Durable Object (their own key, never in the synced
+      // snapshot/cache — they hold PII + full legal text). The optimistic local apply is a
+      // deliberate no-op; `dispatch` still enqueues + sends it to the DO. `return` (not break)
+      // so we skip the state.rev/saveCache/notify tail — a no-op must not churn the cache.
+      return;
     default: console.warn('[store] unknown op', op); return;
   }
   if (typeof seq === 'number' && seq > state.seq) state.seq = seq;

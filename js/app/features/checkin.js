@@ -192,7 +192,7 @@ function notesSectionHtml(idx) {
 export function removeGuest(idx) { document.getElementById(`guest-card-${idx}`)?.remove(); }
 export function toggleService(btn) { btn.classList.toggle('selected'); }
 
-export function submitCheckin(skipApptGuard) {
+export function submitCheckin(skipApptGuard, skipWaiver) {
   const newEntries = [];
   for (let i = 1; i <= guestCount; i++) {
     const card = document.getElementById(`guest-card-${i}`);
@@ -225,6 +225,10 @@ export function submitCheckin(skipApptGuard) {
   // Appointment guard: if a guest already has a not-checked-in appointment today, prompt to
   // check in FROM the appointment (linked, services included) or proceed as its own check-in.
   if (skipApptGuard !== true && window.checkinApptGuard?.(newEntries.map(e => ({ name: e.name, phone: e.phone })), () => submitCheckin(true))) return;
+  // Waiver gate (after the appt guard, before the submit lock so the re-call isn't swallowed).
+  // A distinct signal from skipApptGuard — the appt "Separately" branch passes skipApptGuard=true
+  // and must still hit the waiver; only the waiver's own re-call skips both.
+  if (skipWaiver !== true && window.waiverGate?.(newEntries, () => submitCheckin(true, true))) return;
   if (_submitting) return;                 // ignore a bounced/double tap while the first submit is in flight
   _submitting = true;
   setTimeout(() => { _submitting = false; }, 1500);   // self-release so the lock can never wedge the kiosk

@@ -1298,17 +1298,21 @@ function _gatherParty(calId, eventId) {
 // Check in the given party members. All check-ins from one multi-person booking
 // share a stable queue group (derived from the booking id) so partial check-ins —
 // some now, the rest when they arrive — still land together in the queue.
-function _doCalCheckin(members, apptGroupId, partySize) {
+function _doCalCheckin(members, apptGroupId, partySize, skipWaiver) {
   if (!members.length) { showToast('Already checked in'); return; }
   const queueGroupId = (partySize > 1 && apptGroupId) ? ('apptq_' + apptGroupId) : null;
+  const built = [];
+  members.forEach(({ ev, calId }) => { const entry = _buildCheckinEntry(ev, calId, queueGroupId); if (entry) built.push(entry); });
+  if (built.length === 0) { showToast('Already checked in'); return; }
+  // Waiver gate — the SAME shared gate as the kiosk/front-desk paths, so appointment
+  // clients (a primary daily path) can't bypass the waiver. On accept, finish directly
+  // (no re-build/re-gate). Kept before the dispatch so nothing is queued unaccepted.
+  if (skipWaiver !== true && window.waiverGate?.(built, () => _finishCalCheckin(built))) return;
+  _finishCalCheckin(built);
+}
+function _finishCalCheckin(built) {
   let added = 0, firstName = '';
-  members.forEach(({ ev, calId }) => {
-    const entry = _buildCheckinEntry(ev, calId, queueGroupId);
-    if (!entry) return;
-    dispatch('queue.upsert', { entry }); squareUpsertCustomer(entry);
-    added++; if (!firstName) firstName = entry.name;
-  });
-  if (added === 0) { showToast('Already checked in'); return; }
+  built.forEach(entry => { dispatch('queue.upsert', { entry }); squareUpsertCustomer(entry); added++; if (!firstName) firstName = entry.name; });
   // Stay put when the check-in was initiated from the Turns tab (its upcoming-appts
   // strip) — only jump to the Queue when checking in from elsewhere (e.g. calendar).
   const onTurns = document.getElementById('panel-turns')?.classList.contains('active');

@@ -858,6 +858,11 @@ export default {
 // from scratch each run so a missed run self-corrects. Buckets by R2 `uploaded` time
 // (never by parsing the mangled key). UTC period buckets are fine — these are recovery
 // points, not day-attributed financial data. Returns { keep:Set, del:string[] }.
+// A separate legal-record dump (backups/waivers-*.json is a JSON ARRAY, not a state
+// snapshot). It shares the backups/ namespace but must NEVER be offered as, or selected
+// for, a state restore — restoring one would rebuild from an empty state and wipe the salon.
+export function isWaiverDump(key) { return (((key || '').split('/').pop()) || '').startsWith('waivers-'); }
+
 export function computeBackupKeepSet(backups, nowMs) {
   const DAY = 86400000;
   const items = (backups || [])
@@ -937,8 +942,32 @@ export class MuseSalonDO {
       });
     }
 
+    // Signed waivers — on-demand only (they're out of buildSnapshot, never synced). GET lists
+    // every acceptance (admin audit view + JSON export/download). Each record carries its full
+    // signed text inline, so the export is a complete, portable legal archive.
+    if (url.pathname === '/state/waivers' && request.method === 'GET') {
+      const wmap = await this.state.storage.list({ prefix: 'waiver:' });
+      const waivers = [...wmap.values()].sort((a, b) => (b.acceptedAt || 0) - (a.acceptedAt || 0));   // newest first
+      return new Response(JSON.stringify({ waivers, count: waivers.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    // Deliberate clear — the ONLY thing that removes waivers (restore/reset preserve them).
+    // Token-gated + { confirm:true }, mirroring /state/reset. The client gates this behind an
+    // explicit "I have exported" confirmation so records are never lost by accident.
+    if (url.pathname === '/state/waivers/clear' && request.method === 'POST') {
+      let body = {}; try { body = await request.json(); } catch {}
+      if (!body.confirm) return new Response(JSON.stringify({ error: 'clear requires { confirm: true }' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      if (this.env.RESTORE_TOKEN && body.token !== this.env.RESTORE_TOKEN) return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 403, headers: { 'Content-Type': 'application/json' } });
+      const wmap = await this.state.storage.list({ prefix: 'waiver:' });
+      const keys = [...wmap.keys()];
+      for (let i = 0; i < keys.length; i += 128) await this.state.storage.delete(keys.slice(i, i + 128));
+      return new Response(JSON.stringify({ cleared: keys.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+
     if (url.pathname === '/state/backups') {
-      return new Response(JSON.stringify(await this.listBackups()), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      // Recovery UI list: hide waiver dumps so one can never be OFFERED as a restore candidate.
+      const l = await this.listBackups();
+      const backups = l.backups.filter(b => !isWaiverDump(b.key));
+      return new Response(JSON.stringify({ backups, count: backups.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (url.pathname === '/state/fleet') {
       return new Response(JSON.stringify(await this.listFleet()), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -1440,6 +1469,20 @@ export class MuseSalonDO {
           await this.state.storage.put('config:chat_log', arr);
           break;
         }
+        case 'waiver.save': {
+          // Legal record → its own DO key `waiver:<id>`. NEVER in buildSnapshot and NEVER
+          // broadcast (it carries PII: signer name, e-signature, marketing/photo consents).
+          // Kept a mutate op (not a side route) so an OFFLINE kiosk still captures the
+          // acceptance via the outbox and replays it idempotently by mutationId. We return
+          // here — bypassing the broadcast loop below — so the PII never hits the wire.
+          const w = payload && payload.waiver;
+          if (!w || !w.id) return { error: 'bad waiver' };
+          await this.state.storage.put('waiver:' + w.id, w);
+          const seqW = await this.nextSeq();
+          if (mutationId) await this.state.storage.put('mut:' + mutationId, seqW);
+          await this.ensureBackupScheduled();
+          return { applied: true, seq: seqW };
+        }
         default:
           console.warn('[mutate] unknown op:', op);
           return { error: 'unknown op: ' + op };
@@ -1594,6 +1637,20 @@ export class MuseSalonDO {
           httpMetadata: { contentType: 'application/json' },
         });
       }
+      // Waivers are legal records kept OUT of buildSnapshot (not broadcast/cached), so they
+      // need their own R2 copy. Own try — a waiver-scan failure must never block the state
+      // backup above or the housekeeping below. Written under a distinct `backups/waivers-`
+      // prefix so retention (pruneBackups) never treats a legal record as a prunable snapshot.
+      if (this.env.PHOTOS_BUCKET) {
+        try {
+          const wmap = await this.state.storage.list({ prefix: 'waiver:' });
+          if (wmap.size > 0) {
+            await this.env.PHOTOS_BUCKET.put('backups/waivers-' + ts + '.json', JSON.stringify([...wmap.values()]), {
+              httpMetadata: { contentType: 'application/json' },
+            });
+          }
+        } catch (e) { console.error('[waiver-backup] failed:', (e && e.message) || String(e)); }
+      }
       // Retention prune (its own try so a prune failure never blocks the backup/housekeeping).
       try { await this.pruneBackups(); } catch (e) { console.error('[retention] prune failed:', (e && e.message) || String(e)); }
       // Bound the idempotency markers: keep the newest ~2000 by seq.
@@ -1655,8 +1712,15 @@ export class MuseSalonDO {
     const live = this.env.BACKUP_RETENTION === 'on' || this.env.BACKUP_RETENTION === 'true';   // accept either (rest of codebase uses 'true')
     if (!this.env.PHOTOS_BUCKET) return { total: 0, keep: 0, pruned: 0, wouldPrune: 0, live };
     const { backups } = await this.listBackups();
-    const { keep, del } = computeBackupKeepSet(backups, Date.now());
-    const safeDel = del.filter(k => typeof k === 'string' && k.startsWith('backups/'));
+    // Waiver backups (backups/waivers-*) are legal-record dumps and must NOT flow through the
+    // state keep-set: computeBackupKeepSet buckets by time and keeps one key per period, so a
+    // waiver dump would compete with a state snapshot for a slot. Partition them out and give
+    // them their own retention (each dump is an append-only superset → keep the newest 30).
+    const stateBackups = backups.filter(b => !isWaiverDump(b.key));
+    const waiverBackups = backups.filter(b => isWaiverDump(b.key));   // already newest-first from listBackups
+    const { keep, del } = computeBackupKeepSet(stateBackups, Date.now());
+    const waiverDel = waiverBackups.slice(30).map(b => b.key);        // keep newest 30, prune older
+    const safeDel = [...del, ...waiverDel].filter(k => typeof k === 'string' && k.startsWith('backups/'));
     const batch = safeDel.slice(0, 1000);   // R2 array-delete cap; steady state ~0-1, one-time cleanup ~470
     console.log(`[retention] total=${backups.length} keep=${keep.size} prune=${safeDel.length}${batch.length < safeDel.length ? ` (capped ${batch.length}/run)` : ''} mode=${live ? 'LIVE' : 'log-only'}`);
     if (live && batch.length) await this.env.PHOTOS_BUCKET.delete(batch);
@@ -1669,11 +1733,16 @@ export class MuseSalonDO {
   async restoreFromBackup(key) {
     if (!this.env.PHOTOS_BUCKET) return { error: 'no backup storage configured' };
     let useKey = key;
-    if (!useKey) { const l = await this.listBackups(); useKey = l.backups[0]?.key; }
+    // Default-latest must skip legal-record dumps: they share backups/ but are arrays, not
+    // state snapshots — restoring one would rebuild from empty state and wipe the salon.
+    if (!useKey) { const l = await this.listBackups(); useKey = (l.backups.find(b => !isWaiverDump(b.key)) || {}).key; }
     if (!useKey) return { error: 'no backup found' };
+    if (isWaiverDump(useKey)) return { error: 'that is a waiver archive, not a state snapshot — cannot restore from it' };
     const obj = await this.env.PHOTOS_BUCKET.get(useKey);
     if (!obj) return { error: 'backup not found: ' + useKey };
     let snap; try { snap = JSON.parse(await obj.text()); } catch { return { error: 'backup is not valid JSON' }; }
+    // Shape guard (defense-in-depth): only ever wipe+rebuild from a real state snapshot.
+    if (!snap || typeof snap !== 'object' || Array.isArray(snap) || !snap.state) return { error: 'not a state snapshot' };
     const st = snap.state || {};
     // The whole wipe/rebuild sits inside blockConcurrencyWhile. DO input gates already
     // cover the storage awaits — the exposed window is the safety backup's R2 put: a WS
@@ -1692,9 +1761,14 @@ export class MuseSalonDO {
       // loses its seen-within-14-days history (an offline stale device would vanish and
       // the gate would fail OPEN).
       const fleet = await this.state.storage.list({ prefix: 'fleet:' });
+      // Signed waivers are legal records kept OUT of buildSnapshot, so the restore snapshot
+      // (st) has NONE — carry the LIVE waiver: keys through the wipe or a restore permanently
+      // erases every acceptance. Merged into `puts` → flushed by the existing 128-key batches.
+      const waivers = await this.state.storage.list({ prefix: 'waiver:' });
       await this.state.storage.deleteAll();
       const puts = {};
       for (const [k, v] of fleet) puts[k] = v;
+      for (const [k, v] of waivers) puts[k] = v;
       for (const [k, v] of Object.entries(st.config || {}))     puts['config:' + k] = v;
       // cfgmeta must come back too, or every config key's stale-write guard is disarmed
       // after a restore and any stale offline config.set replay clobbers restored state.
@@ -1735,9 +1809,13 @@ export class MuseSalonDO {
       const liveSeq = (await this.state.storage.get('meta:seq')) || 0;
       // Same as restore: fleet telemetry describes devices, not salon state — carry it.
       const fleet = await this.state.storage.list({ prefix: 'fleet:' });
+      // Legal waivers survive a factory reset too (owner decision — retained by design). The
+      // deliberate "Clear signed waivers" action is the ONLY thing that removes them.
+      const waivers = await this.state.storage.list({ prefix: 'waiver:' });
       await this.state.storage.deleteAll();
       const keep = {};
       for (const [k, v] of fleet) keep[k] = v;
+      for (const [k, v] of waivers) keep[k] = v;
       const keys = Object.keys(keep);
       for (let i = 0; i < keys.length; i += 128) {
         const chunk = {};
