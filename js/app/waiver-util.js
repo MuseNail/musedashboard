@@ -39,19 +39,6 @@ export function waiverActive(config) {
   return true;
 }
 
-// The re-sign rule: the party is covered ONLY when every guest resolves to a customer
-// stamped at the current version. A phone-less guest can never be proven covered → gate.
-// `coveredByPhoneKey` maps phoneKey → the customer's stamped waiverVersion.
-export function partyNeedsWaiver(guests, coveredByPhoneKey, currentVersion) {
-  const map = coveredByPhoneKey || {};
-  for (const g of (guests || [])) {
-    const pk = g && g.phoneKey;
-    if (!pk) return true;                          // no phone → cannot prove coverage
-    if (map[pk] !== currentVersion) return true;   // missing or older version
-  }
-  return false;
-}
-
 export function buildWaiverRecord({
   id, now, primary, guests, waiverVersion, text, method, deviceId, byUser, optIns, arbitrationOptOut, bypassed, ip,
 }) {

@@ -6,26 +6,49 @@ import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
 import { STATE_PROXY } from '../config.js';
 import { showToast, escHtml } from '../utils.js';
-import { notePhoneKey, ensureCustomerInStore } from './square-customers.js';
-import { waiverActive, partyNeedsWaiver, buildWaiverRecord, newWaiverId, textHash } from '../waiver-util.js';
+import { notePhoneKey } from './square-customers.js';
+import { waiverActive, buildWaiverRecord, newWaiverId, textHash } from '../waiver-util.js';
 
 const cfg = () => getState().config || {};
 
-// ── The gate ─────────────────────────────────────────────────────────────────
-// Returns true (and shows the modal) when the party must accept before this check-in can
-// complete; false when the feature is off or the whole party is already covered. On accept
-// the modal calls onCleared() to resume the caller's flow (which re-runs, skip-waiver).
-export function waiverGate(entries, onCleared, opts = {}) {
+const primaryDisplay = entry => { const p = String((entry && entry.name) || '').trim().split(/\s+/); return p[1] ? `${p[0]} ${p[1][0]}.` : (p[0] || ''); };
+function primaryFields(entry) {
+  const parts = String((entry && entry.name) || '').trim().split(/\s+/);
+  const phone = (entry && entry.phone) || '';
+  const pk = notePhoneKey(phone);
+  return { firstName: parts[0] || '', lastName: parts.slice(1).join(' '), phone, phoneKey: pk, customerId: pk ? 'cust-' + pk : null };
+}
+
+// Build + persist ONE acceptance for the party (signed by the primary). Called on EVERY
+// check-in — every visit requires acceptance. Returns { id, version, at }.
+function saveWaiverRecord(entries, opts = {}) {
   const c = cfg();
-  if (!waiverActive(c)) return false;
-  const covered = {};
-  for (const cust of (getState().customers || [])) {
-    const pk = notePhoneKey(cust.phone);
-    if (pk && cust.waiverVersion) covered[pk] = cust.waiverVersion;
-  }
-  const guests = (entries || []).map(e => ({ name: e.name, phoneKey: notePhoneKey(e.phone) || null }));
-  if (!partyNeedsWaiver(guests, covered, c.waiver_version)) return false;
-  showWaiverModal(entries, guests, onCleared, opts);
+  const now = Date.now();
+  const id = newWaiverId(now, Math.random().toString(36).slice(2, 10));
+  const rec = buildWaiverRecord({
+    id, now, primary: primaryFields(entries[0] || {}),
+    guests: (entries || []).map(e => ({ name: e.name, phoneKey: notePhoneKey(e.phone) || null })),
+    waiverVersion: c.waiver_version, text: c.waiver_text,
+    method: opts.method || 'self-kiosk', deviceId: DEVICE_ID, byUser: opts.byUser || null,
+    optIns: opts.optIns || {}, bypassed: !!opts.bypassed,
+  });
+  dispatch('waiver.save', { waiver: rec });
+  window.logAudit?.('Waiver accepted', `${rec.signerDisplay} accepted v${c.waiver_version}${(entries || []).length > 1 ? ` for ${entries.length} guests` : ''}`);
+  return { id, version: c.waiver_version, at: now };
+}
+
+// Stamp the per-visit waiver link onto each queue entry (mutates in place) so the visit is
+// provably signed — surfaced in the customer directory + visit history.
+export function stampEntriesWaiver(entries, waiverId, version, at) {
+  for (const e of (entries || [])) { e.waiverId = waiverId; e.waiverVersion = version; e.waiverAt = at; }
+}
+
+// ── The gate (modal — appointment + front-desk paths keep this) ────────────────
+// Every visit requires acceptance when active. On accept it stamps the passed-in entries
+// (mutated in place) and calls onCleared() — the caller re-dispatches those stamped entries.
+export function waiverGate(entries, onCleared, opts = {}) {
+  if (!waiverActive(cfg())) return false;
+  showWaiverModal(entries, onCleared, opts);
   return true;
 }
 
@@ -35,21 +58,58 @@ export function isKioskDevice() {
   return !!id && id === DEVICE_ID;
 }
 
-function stampCustomerWaiver(entry, stamp) {
-  const id = ensureCustomerInStore(entry);   // resolve/create (dispatches optimistically), returns id
-  if (!id) return;                           // phone-less guest — recorded on the waiver, no stamp possible
-  const cur = (getState().customers || []).find(x => x.id === id);
-  if (!cur) return;
-  dispatch('customer.upsert', { customer: { ...cur, waiverVersion: stamp.version, waiverAt: stamp.at, waiverId: stamp.waiverId } });
+// ── Inline acknowledgment (kiosk check-in screen) ──────────────────────────────
+// The checkbox lives inline on the check-in screen (always visible when active), with the
+// Read-the-full-waiver link. Check In stays disabled until it's checked (see checkin.js).
+export function renderCheckinWaiver() {
+  const host = document.getElementById('checkin-waiver-inline');
+  if (!host) return;
+  if (!waiverActive(cfg())) { host.innerHTML = ''; return; }
+  host.innerHTML = `
+    <div style="background:var(--surface-container-lowest,#fff);border:1px solid var(--outline,#d4d7e0);border-radius:12px;padding:9px 12px;margin-bottom:10px">
+      <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
+        <input type="checkbox" id="ci-waiver-accept" onchange="updateCheckinSubmitState()" style="width:20px;height:20px;flex-shrink:0;margin-top:1px;accent-color:var(--primary,#1a5252)">
+        <span style="font-size:11.5px;line-height:1.45;color:var(--on-surface,#1a1d27)">I have read and agree to the <a href="#" onclick="showWaiverTextPopup();return false" style="color:var(--primary,#1a5252);font-weight:700;text-decoration:underline">service waiver</a>. Checking this box is my electronic signature, using the name I provide.</span>
+      </label>
+    </div>`;
+}
+export function checkinWaiverAccepted() {
+  return !waiverActive(cfg()) || !!document.getElementById('ci-waiver-accept')?.checked;
+}
+// Kiosk submit calls this: persist the acceptance + stamp the entries. Returns false only if
+// the box isn't checked (submitCheckin already gates the button, so this is a safety net).
+export function acceptWaiverInline(entries, opts = {}) {
+  if (!waiverActive(cfg())) return true;
+  if (!document.getElementById('ci-waiver-accept')?.checked) return false;
+  const s = saveWaiverRecord(entries, { method: 'self-kiosk', ...opts });
+  stampEntriesWaiver(entries, s.id, s.version, s.at);
+  return true;
+}
+export function showWaiverTextPopup() { showWaiverText(cfg().waiver_text); }
+
+// Open a specific signed waiver by id (from a visit-history badge) — shows the EXACT text
+// stored on that record (the system of record), not the current config text.
+export async function openSignedWaiver(id) {
+  showWaiverText('Loading the signed waiver…');
+  try {
+    const r = await fetch(STATE_PROXY + '/waivers', { method: 'GET' });
+    const list = (await r.json()).waivers || [];
+    const w = list.find(x => x.id === id);
+    document.getElementById('waiver-text-modal')?.remove();
+    if (!w) { showToast('That signed waiver was not found.'); return; }
+    const header = `Signed by ${w.signerDisplay || w.signerFullName || ''} · v${w.waiverVersion || ''} · ${(() => { try { return new Date(w.acceptedAt).toLocaleString(); } catch { return ''; } })()}\n${'─'.repeat(28)}\n\n`;
+    showWaiverText(header + (w.text || '(no text stored on this record)'));
+  } catch (e) {
+    document.getElementById('waiver-text-modal')?.remove();
+    showToast('Couldn’t load the signed waiver — check the connection.');
+  }
 }
 
 // ── Modal ────────────────────────────────────────────────────────────────────
-function showWaiverModal(entries, guests, onCleared, opts) {
+function showWaiverModal(entries, onCleared, opts) {
   closeWaiverModal();
   const c = cfg();
-  const primary = entries[0] || {};
-  const parts = String(primary.name || '').trim().split(/\s+/);
-  const display = parts[1] ? `${parts[0]} ${parts[1][0]}.` : parts[0];
+  const display = primaryDisplay(entries[0]);
   const partyLine = entries.length > 1 ? `<div style="font-size:13px;color:var(--on-surface-variant,#5b606e);margin-bottom:10px">This applies to all guests in this check-in: ${escHtml(entries.map(e => e.name).join(', '))}.</div>` : '';
 
   const overlay = document.createElement('div');
@@ -87,22 +147,8 @@ function showWaiverModal(entries, guests, onCleared, opts) {
   overlay.querySelector('#wv-read').addEventListener('click', () => showWaiverText(c.waiver_text));
   complete.addEventListener('click', () => {
     if (!accept.checked) return;
-    const now = Date.now();
-    const pk = notePhoneKey(primary.phone);
-    const id = newWaiverId(now, Math.random().toString(36).slice(2, 10));
-    const rec = buildWaiverRecord({
-      id, now,
-      primary: { firstName: parts[0] || '', lastName: parts.slice(1).join(' '), phone: primary.phone, phoneKey: pk, customerId: pk ? 'cust-' + pk : null },
-      guests, waiverVersion: c.waiver_version, text: c.waiver_text,
-      method: opts.method || 'self-kiosk', deviceId: DEVICE_ID, byUser: opts.byUser || null,
-      // Optional marketing/photo consents are hidden for now (re-enabled with the marketing
-      // feature). The record keeps the field so the shape stays stable across versions.
-      optIns: { marketing: !!overlay.querySelector('#wv-marketing')?.checked, media: !!overlay.querySelector('#wv-media')?.checked },
-    });
-    dispatch('waiver.save', { waiver: rec });
-    const stamp = { version: c.waiver_version, at: now, waiverId: id };
-    for (const e of entries) stampCustomerWaiver(e, stamp);
-    window.logAudit?.('Waiver accepted', `${rec.signerDisplay} accepted v${c.waiver_version}${entries.length > 1 ? ` for ${entries.length} guests` : ''}`);
+    const s = saveWaiverRecord(entries, opts);
+    stampEntriesWaiver(entries, s.id, s.version, s.at);
     closeWaiverModal();
     if (typeof onCleared === 'function') onCleared();
   });
@@ -151,7 +197,7 @@ export function renderWaiverSettings() {
     <div style="margin-top:14px">
       <label style="font-size:13px;font-weight:700;color:var(--on-surface,#1a1d27)">Waiver text</label>
       <textarea id="wv-text" rows="10" style="width:100%;margin-top:6px;padding:10px;border:1px solid var(--outline,#d4d7e0);border-radius:10px;font-size:12.5px;line-height:1.5;font-family:inherit;color:var(--on-surface,#1a1d27);background:var(--surface,#fff)">${escHtml(c.waiver_text || '')}</textarea>
-      <div style="font-size:12px;color:var(--on-surface-variant,#5b606e);margin-top:4px">Saving changed text bumps the version and re-prompts every client on their next check-in.</div>
+      <div style="font-size:12px;color:var(--on-surface-variant,#5b606e);margin-top:4px">The waiver is acknowledged at every check-in. Saving changed text bumps the version, so past signatures stay tied to the exact text that was signed.</div>
       <button onclick="saveWaiverText()" style="margin-top:8px;padding:10px 16px;border:0;border-radius:10px;background:var(--primary,#1a5252);color:#fff;font-weight:700;cursor:pointer">Save waiver text</button>
     </div>
     <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap">

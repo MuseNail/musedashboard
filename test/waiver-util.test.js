@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  WAIVER_METHODS, textHash, newWaiverId, waiverActive, partyNeedsWaiver,
+  WAIVER_METHODS, textHash, newWaiverId, waiverActive,
   buildWaiverRecord, signerDisplayName,
 } from '../js/app/waiver-util.js';
 
@@ -34,23 +34,6 @@ test('waiverActive requires enabled + version + non-empty text', () => {
   assert.equal(waiverActive({}), false);
 });
 
-// ── partyNeedsWaiver (the re-sign rule) ──────────────────────
-test('party is covered only when every guest has the current version', () => {
-  const covered = { '9091234567': '02', '9095551212': '02' };
-  // all covered → no gate
-  assert.equal(partyNeedsWaiver([{ phoneKey: '9091234567' }, { phoneKey: '9095551212' }], covered, '02'), false);
-  // a co-guest on an older version → gate
-  assert.equal(partyNeedsWaiver([{ phoneKey: '9091234567' }, { phoneKey: '0000000000' }], covered, '02'), true);
-  // a co-guest with an OLD version stamp → gate
-  assert.equal(partyNeedsWaiver([{ phoneKey: '9091234567' }], { '9091234567': '01' }, '02'), true);
-});
-test('a phone-less guest can never be proven covered → always gate', () => {
-  assert.equal(partyNeedsWaiver([{ phoneKey: '9091234567' }, { phoneKey: '' }], { '9091234567': '02' }, '02'), true);
-  assert.equal(partyNeedsWaiver([{ phoneKey: null }], {}, '02'), true);
-});
-test('empty party is not a gate', () => {
-  assert.equal(partyNeedsWaiver([], {}, '02'), false);
-});
 
 // ── buildWaiverRecord ────────────────────────────────────────
 test('buildWaiverRecord stores full text inline + hash + attribution', () => {
