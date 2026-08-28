@@ -71,7 +71,7 @@ export function renderCheckinWaiver() {
     <div style="background:var(--surface-container-lowest,#fff);border:1px solid var(--outline,#d4d7e0);border-radius:12px;padding:9px 12px;margin-bottom:10px">
       <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
         <input type="checkbox" id="ci-waiver-accept" onchange="updateCheckinSubmitState()" style="width:20px;height:20px;flex-shrink:0;margin-top:1px;accent-color:var(--primary,#1a5252)">
-        <span style="font-size:11.5px;line-height:1.45;color:var(--on-surface,#1a1d27)">I have read and agree to the <a href="#" onclick="showWaiverDoc();return false" style="color:var(--primary,#1a5252);font-weight:700;text-decoration:underline">service waiver</a>. Checking this box is my electronic signature, using the name I provide.</span>
+        <span style="font-size:11.5px;line-height:1.45;color:var(--on-surface,#1a1d27)">I have read and agree to the <a href="#" onclick="showWaiverDoc();return false" style="color:var(--primary,#1a5252);font-weight:700;text-decoration:underline">service waiver</a>. Checking this box is my electronic signature; the name I provide represents me and binds me even if it is not my full legal name.</span>
       </label>
     </div>`;
 }
@@ -162,7 +162,7 @@ function showWaiverModal(entries, onCleared, opts) {
         ${partyLine}
         <label id="wv-accept-row" style="display:flex;gap:12px;align-items:flex-start;padding:14px;border:2px solid var(--primary,#1a5252);border-radius:14px;background:var(--primary-container,#e1f5ee);cursor:pointer">
           <input type="checkbox" id="wv-accept" style="width:22px;height:22px;flex-shrink:0;margin-top:1px;accent-color:var(--primary,#1a5252)">
-          <span style="font-size:13.5px;line-height:1.5;color:var(--on-primary-container,#0a2e2e)">I have read and agree to the entire waiver, and I understand that checking this box is my electronic signature, using the name I provided at check-in.
+          <span style="font-size:13.5px;line-height:1.5;color:var(--on-primary-container,#0a2e2e)">I have read and agree to the entire waiver. Checking this box is my electronic signature, using the name I provided at check-in, which represents me and legally binds me to the same extent as my full legal name even if it is not my full legal name.
             <span style="display:block;margin-top:6px;font-weight:700;color:var(--on-primary-container,#0a2e2e)">Signing as: ${escHtml(display)}</span>
           </span>
         </label>
