@@ -41,8 +41,12 @@ export function updateCheckinSubmitState() {
   if (!btn) return;
   const first = (document.getElementById('first-1')?.value || '').trim();
   const last  = (document.getElementById('last-1')?.value || '').trim();
-  const waiverOk = window.checkinWaiverAccepted ? window.checkinWaiverAccepted() : true;
-  const ok = !!first && !!last && waiverOk;
+  // The waiver is active iff the inline box was rendered. When active, the primary needs a
+  // last initial + the box; when OFF, keep the original first-name-only requirement (no
+  // regression for salons not using the waiver).
+  const waiverOn = !!document.getElementById('ci-waiver-accept');
+  const boxOk = window.checkinWaiverAccepted ? window.checkinWaiverAccepted() : true;
+  const ok = !!first && (!waiverOn || (!!last && boxOk));
   btn.disabled = !ok;
   btn.style.opacity = ok ? '1' : '.5';
   btn.style.pointerEvents = ok ? '' : 'none';

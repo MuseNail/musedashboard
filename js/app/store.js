@@ -31,7 +31,11 @@ function emptyConfig() {
     waiver_enabled: false,     // require the check-in waiver? off until the owner turns it on
     waiver_version: '',        // current version string (e.g. '02'); a change re-prompts every client
     waiver_text: '',           // full agreement text shown in the "Read the full waiver" popup
-    waiver_versions: {},       // { [version]: { text, hash, effectiveAt } } — historical text, for reproduction
+    waiver_source: 'text',     // 'text' (custom text) or 'pdf' (uploaded file)
+    waiver_pdf_url: '',        // R2 url of the active waiver PDF (versioned, immutable)
+    waiver_pdf_name: '',       // display name of the uploaded PDF
+    waiver_pdf_hash: '',       // SHA-256 fingerprint (first 16 hex) of the active PDF
+    waiver_versions: {},       // { [version]: { source, text?/hash? | pdfUrl?/pdfHash?/pdfName?, effectiveAt } } — historical, for reproduction
     kiosk_device_id: '',       // device id designated as the confirmation kiosk (Release 2)
   };
 }

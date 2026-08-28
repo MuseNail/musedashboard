@@ -154,7 +154,7 @@ export function renderCustomerHistory(phone, name, targetId = 'edit-cust-history
     const note = (r.txnNote || r.discountNote || '').trim();
     const amt = isRefund ? `-$${Math.abs(r.totalCost || 0).toFixed(2)}` : `$${(r.totalCost || 0).toFixed(2)}`;
     const waiverBadge = r.waiverId
-      ? `<button onclick="openSignedWaiver('${r.waiverId}')" class="text-[10px] font-body font-semibold text-primary mt-1 inline-flex items-center gap-1 hover:underline"><span class="material-symbols-outlined" style="font-size:13px">verified</span>Waiver v${r.waiverVersion || ''} signed · view</button>`
+      ? `<button onclick="openSignedWaiver('${String(r.waiverId).replace(/[^\w-]/g, '')}')" class="text-[10px] font-body font-semibold text-primary mt-1 inline-flex items-center gap-1 hover:underline"><span class="material-symbols-outlined" style="font-size:13px">verified</span>Waiver v${String(r.waiverVersion || '').replace(/[^\w.]/g, '')} signed · view</button>`
       : '';
     return `<div class="rounded-xl border border-surface-container-high px-3 py-2 mb-1.5 ${isRefund ? 'bg-error/5' : 'bg-surface-container-low'}">
       <div class="flex items-center justify-between gap-2"><span class="text-xs font-headline font-semibold text-on-surface">${dateStr}${isRefund ? ' · refund' : ''}</span><span class="text-sm font-headline font-bold ${isRefund ? 'text-error' : 'text-primary'}">${amt}</span></div>

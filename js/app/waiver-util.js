@@ -29,20 +29,22 @@ export function signerDisplayName(firstName, lastName) {
   return l ? (f + ' ' + l[0] + '.').trim() : f;
 }
 
-// The feature is active only when enabled AND a non-empty agreement text exists for the
-// current version — otherwise check-in must proceed (never hard-block behind empty terms).
+// The feature is active only when enabled, a version exists, AND the active source has
+// content (text OR an uploaded PDF) — otherwise check-in proceeds (never hard-block behind
+// empty terms). `waiver_source` is 'text' (default) or 'pdf'.
 export function waiverActive(config) {
   const c = config || {};
   if (!c.waiver_enabled) return false;
   if (!c.waiver_version) return false;
-  if (!String(c.waiver_text || '').trim()) return false;
-  return true;
+  if ((c.waiver_source || 'text') === 'pdf') return !!String(c.waiver_pdf_url || '').trim();
+  return !!String(c.waiver_text || '').trim();
 }
 
 export function buildWaiverRecord({
-  id, now, primary, guests, waiverVersion, text, method, deviceId, byUser, optIns, arbitrationOptOut, bypassed, ip,
+  id, now, primary, guests, waiverVersion, source, text, pdfUrl, pdfHash, pdfName, method, deviceId, byUser, optIns, arbitrationOptOut, bypassed, ip,
 }) {
   const p = primary || {};
+  const src = source === 'pdf' ? 'pdf' : 'text';
   return {
     id,
     customerId: p.customerId || null,
@@ -52,8 +54,14 @@ export function buildWaiverRecord({
     signerPhone: p.phone || '',
     guests: (guests || []).map(g => ({ name: g.name || '', phoneKey: g.phoneKey || null })),
     waiverVersion: String(waiverVersion || ''),
-    textHash: textHash(text),
-    text: String(text == null ? '' : text).slice(0, WAIVER_MAX_TEXT),   // full signed text inline = system of record
+    source: src,
+    // Reproduction: text mode pins the full text inline (system of record); PDF mode pins the
+    // versioned, immutable R2 url + fingerprint (the PDF object itself is never overwritten).
+    text: src === 'text' ? String(text == null ? '' : text).slice(0, WAIVER_MAX_TEXT) : '',
+    textHash: src === 'text' ? textHash(text) : null,
+    pdfUrl: src === 'pdf' ? (pdfUrl || '') : null,
+    pdfHash: src === 'pdf' ? (pdfHash || '') : null,
+    pdfName: src === 'pdf' ? (pdfName || '') : null,
     acceptedAt: now,
     method: WAIVER_METHODS.includes(method) ? method : 'self-kiosk',
     deviceId: deviceId || '',

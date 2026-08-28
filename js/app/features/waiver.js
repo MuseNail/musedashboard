@@ -4,7 +4,7 @@
 // Shared by all three check-in entry points via window.waiverGate(entries, onCleared).
 import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
-import { STATE_PROXY } from '../config.js';
+import { STATE_PROXY, PHOTOS_PROXY } from '../config.js';
 import { showToast, escHtml } from '../utils.js';
 import { notePhoneKey } from './square-customers.js';
 import { waiverActive, buildWaiverRecord, newWaiverId, textHash } from '../waiver-util.js';
@@ -28,7 +28,9 @@ function saveWaiverRecord(entries, opts = {}) {
   const rec = buildWaiverRecord({
     id, now, primary: primaryFields(entries[0] || {}),
     guests: (entries || []).map(e => ({ name: e.name, phoneKey: notePhoneKey(e.phone) || null })),
-    waiverVersion: c.waiver_version, text: c.waiver_text,
+    waiverVersion: c.waiver_version,
+    source: c.waiver_source || 'text', text: c.waiver_text,
+    pdfUrl: c.waiver_pdf_url, pdfHash: c.waiver_pdf_hash, pdfName: c.waiver_pdf_name,
     method: opts.method || 'self-kiosk', deviceId: DEVICE_ID, byUser: opts.byUser || null,
     optIns: opts.optIns || {}, bypassed: !!opts.bypassed,
   });
@@ -69,7 +71,7 @@ export function renderCheckinWaiver() {
     <div style="background:var(--surface-container-lowest,#fff);border:1px solid var(--outline,#d4d7e0);border-radius:12px;padding:9px 12px;margin-bottom:10px">
       <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer">
         <input type="checkbox" id="ci-waiver-accept" onchange="updateCheckinSubmitState()" style="width:20px;height:20px;flex-shrink:0;margin-top:1px;accent-color:var(--primary,#1a5252)">
-        <span style="font-size:11.5px;line-height:1.45;color:var(--on-surface,#1a1d27)">I have read and agree to the <a href="#" onclick="showWaiverTextPopup();return false" style="color:var(--primary,#1a5252);font-weight:700;text-decoration:underline">service waiver</a>. Checking this box is my electronic signature, using the name I provide.</span>
+        <span style="font-size:11.5px;line-height:1.45;color:var(--on-surface,#1a1d27)">I have read and agree to the <a href="#" onclick="showWaiverDoc();return false" style="color:var(--primary,#1a5252);font-weight:700;text-decoration:underline">service waiver</a>. Checking this box is my electronic signature, using the name I provide.</span>
       </label>
     </div>`;
 }
@@ -85,10 +87,15 @@ export function acceptWaiverInline(entries, opts = {}) {
   stampEntriesWaiver(entries, s.id, s.version, s.at);
   return true;
 }
-export function showWaiverTextPopup() { showWaiverText(cfg().waiver_text); }
+// Show the CURRENT active waiver (what a customer reads before signing) — PDF or text.
+export function showWaiverDoc() {
+  const c = cfg();
+  if ((c.waiver_source || 'text') === 'pdf' && c.waiver_pdf_url) showWaiverPdf(c.waiver_pdf_url, c.waiver_pdf_name);
+  else showWaiverText(c.waiver_text);
+}
 
-// Open a specific signed waiver by id (from a visit-history badge) — shows the EXACT text
-// stored on that record (the system of record), not the current config text.
+// Open a specific SIGNED waiver by id (from a visit-history badge) — reproduces exactly what
+// that person signed: the versioned PDF (immutable in R2) or the full text stored inline.
 export async function openSignedWaiver(id) {
   showWaiverText('Loading the signed waiver…');
   try {
@@ -97,12 +104,37 @@ export async function openSignedWaiver(id) {
     const w = list.find(x => x.id === id);
     document.getElementById('waiver-text-modal')?.remove();
     if (!w) { showToast('That signed waiver was not found.'); return; }
+    if (w.source === 'pdf' && w.pdfUrl) { showWaiverPdf(w.pdfUrl, w.pdfName); return; }
     const header = `Signed by ${w.signerDisplay || w.signerFullName || ''} · v${w.waiverVersion || ''} · ${(() => { try { return new Date(w.acceptedAt).toLocaleString(); } catch { return ''; } })()}\n${'─'.repeat(28)}\n\n`;
     showWaiverText(header + (w.text || '(no text stored on this record)'));
   } catch (e) {
     document.getElementById('waiver-text-modal')?.remove();
     showToast('Couldn’t load the signed waiver — check the connection.');
   }
+}
+
+function showWaiverPdf(url, name) {
+  document.getElementById('waiver-text-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'waiver-text-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:2147483450;display:flex;align-items:center;justify-content:center;background:rgba(20,22,30,.6);padding:16px';
+  overlay.innerHTML = `
+    <div style="background:var(--surface,#fff);border-radius:16px;max-width:760px;width:100%;height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.32)">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--outline,#e5e7eb)">
+        <span style="font-size:15px;font-weight:800;color:var(--on-surface,#1a1d27)">Service waiver${name ? ' · ' + escHtml(name) : ''}</span>
+        <button id="wvt-close" aria-label="Close" style="width:32px;height:32px;border:0;border-radius:50%;background:var(--surface-container,#f1f0f4);cursor:pointer;font-size:18px">✕</button>
+      </div>
+      <iframe src="${escHtml(url)}#toolbar=1" style="flex:1;width:100%;border:0" title="Service waiver PDF"></iframe>
+      <div style="padding:10px 16px;border-top:1px solid var(--outline,#e5e7eb);display:flex;gap:8px;align-items:center;justify-content:space-between">
+        <a href="${escHtml(url)}" target="_blank" rel="noopener" style="font-size:13px;color:var(--primary,#1a5252);font-weight:600">Open in a new tab</a>
+        <button id="wvt-done" style="padding:10px 18px;border:0;border-radius:11px;background:var(--primary,#1a5252);color:#fff;font-size:15px;font-weight:700;cursor:pointer">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#wvt-close').addEventListener('click', close);
+  overlay.querySelector('#wvt-done').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 }
 
 // ── Modal ────────────────────────────────────────────────────────────────────
@@ -144,7 +176,7 @@ function showWaiverModal(entries, onCleared, opts) {
   const accept = overlay.querySelector('#wv-accept');
   const complete = overlay.querySelector('#wv-complete');
   accept.addEventListener('change', () => { complete.disabled = !accept.checked; complete.style.opacity = accept.checked ? '1' : '.45'; complete.style.cursor = accept.checked ? 'pointer' : 'not-allowed'; });
-  overlay.querySelector('#wv-read').addEventListener('click', () => showWaiverText(c.waiver_text));
+  overlay.querySelector('#wv-read').addEventListener('click', () => showWaiverDoc());
   complete.addEventListener('click', () => {
     if (!accept.checked) return;
     const s = saveWaiverRecord(entries, opts);
@@ -184,9 +216,10 @@ export function renderWaiverSettings() {
   const host = document.getElementById('waiver-section');
   if (!host) return;
   const c = cfg();
+  const src = c.waiver_source || 'text';
   const active = waiverActive(c);
   const warn = c.waiver_enabled && !active
-    ? `<div style="margin:10px 0;padding:10px 12px;border-radius:10px;background:#fdecec;color:#a12626;font-size:13px">Waiver is ON but the text is empty — check-in will proceed without it until you add the text below.</div>` : '';
+    ? `<div style="margin:10px 0;padding:10px 12px;border-radius:10px;background:#fdecec;color:#a12626;font-size:13px">Waiver is ON but no ${src === 'pdf' ? 'PDF is uploaded' : 'text is entered'} — check-in will proceed without it until you add the ${src === 'pdf' ? 'PDF' : 'text'} below.</div>` : '';
   host.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0 12px;border-bottom:1px solid var(--outline,#e5e7eb)">
       <div><div style="font-weight:700;color:var(--on-surface,#1a1d27)">Require waiver at check-in</div>
@@ -195,11 +228,27 @@ export function renderWaiverSettings() {
     </div>
     ${warn}
     <div style="margin-top:14px">
+      <label style="font-size:13px;font-weight:700;color:var(--on-surface,#1a1d27)">Waiver source</label>
+      <div style="display:inline-flex;margin-top:6px;border:1px solid var(--outline,#d4d7e0);border-radius:10px;overflow:hidden">
+        ${['text', 'pdf'].map(s => `<button onclick="setWaiverSource('${s}')" style="padding:8px 16px;border:0;cursor:pointer;font-weight:700;font-size:13px;background:${src === s ? 'var(--primary,#1a5252)' : 'transparent'};color:${src === s ? '#fff' : 'var(--on-surface,#1a1d27)'}">${s === 'pdf' ? 'Uploaded PDF' : 'Custom text'}</button>`).join('')}
+      </div>
+    </div>
+    ${src === 'pdf' ? `
+    <div style="margin-top:14px">
+      ${c.waiver_pdf_url
+        ? `<div style="font-size:13px;color:var(--on-surface,#1a1d27)">Current: <a href="#" onclick="showWaiverDoc();return false" style="color:var(--primary,#1a5252);font-weight:700;text-decoration:underline">${escHtml(c.waiver_pdf_name || 'waiver.pdf')}</a> · v${escHtml(c.waiver_version || '')}</div>`
+        : `<div style="font-size:13px;color:var(--on-surface-variant,#5b606e)">No PDF uploaded yet.</div>`}
+      <label style="display:inline-block;margin-top:8px;padding:10px 16px;border:0;border-radius:10px;background:var(--primary,#1a5252);color:#fff;font-weight:700;cursor:pointer">
+        ${c.waiver_pdf_url ? 'Replace PDF' : 'Upload PDF'}<input type="file" accept="application/pdf" onchange="uploadWaiverPdf(this)" style="display:none">
+      </label>
+      <div style="font-size:12px;color:var(--on-surface-variant,#5b606e);margin-top:6px">Uploading bumps the version; past signatures stay tied to the exact PDF that was signed (older versions are kept).</div>
+    </div>` : `
+    <div style="margin-top:14px">
       <label style="font-size:13px;font-weight:700;color:var(--on-surface,#1a1d27)">Waiver text</label>
       <textarea id="wv-text" rows="10" style="width:100%;margin-top:6px;padding:10px;border:1px solid var(--outline,#d4d7e0);border-radius:10px;font-size:12.5px;line-height:1.5;font-family:inherit;color:var(--on-surface,#1a1d27);background:var(--surface,#fff)">${escHtml(c.waiver_text || '')}</textarea>
       <div style="font-size:12px;color:var(--on-surface-variant,#5b606e);margin-top:4px">The waiver is acknowledged at every check-in. Saving changed text bumps the version, so past signatures stay tied to the exact text that was signed.</div>
       <button onclick="saveWaiverText()" style="margin-top:8px;padding:10px 16px;border:0;border-radius:10px;background:var(--primary,#1a5252);color:#fff;font-weight:700;cursor:pointer">Save waiver text</button>
-    </div>
+    </div>`}
     <div style="margin-top:18px;display:flex;gap:8px;flex-wrap:wrap">
       <button onclick="viewSignedWaivers()" style="padding:10px 16px;border:1px solid var(--outline,#d4d7e0);border-radius:10px;background:transparent;color:var(--on-surface,#1a1d27);font-weight:600;cursor:pointer">View signed waivers</button>
       <button onclick="exportWaivers()" style="padding:10px 16px;border:1px solid var(--outline,#d4d7e0);border-radius:10px;background:transparent;color:var(--on-surface,#1a1d27);font-weight:600;cursor:pointer">Export all (download)</button>
@@ -209,18 +258,39 @@ export function renderWaiverSettings() {
 
 export function saveWaiverEnabled(on) {
   dispatch('config.set', { key: 'waiver_enabled', value: !!on });
-  // First time turning it on with text present but no version → seed version 01.
+  // First time turning it on with content present but no version → seed version 01.
   const c = cfg();
-  if (on && String(c.waiver_text || '').trim() && !c.waiver_version) bumpWaiverVersion(c.waiver_text);
+  const src = c.waiver_source || 'text';
+  const hasContent = src === 'pdf' ? !!c.waiver_pdf_url : !!String(c.waiver_text || '').trim();
+  if (on && hasContent && !c.waiver_version) bumpWaiverVersion(currentContent());
+  setTimeout(renderWaiverSettings, 50);
+}
+export function setWaiverSource(src) {
+  dispatch('config.set', { key: 'waiver_source', value: src === 'pdf' ? 'pdf' : 'text' });
+  // Re-version to the now-active content so the version number can never describe a different
+  // source than what's live (a legal-record integrity guard). No-op when the target source is
+  // still empty — waiverActive stays false until content is added.
+  const content = currentContent();
+  const has = content.source === 'pdf' ? !!content.pdfUrl : !!String(content.text || '').trim();
+  if (has) bumpWaiverVersion(content);
   setTimeout(renderWaiverSettings, 50);
 }
 
-function bumpWaiverVersion(text) {
+// The active-source content descriptor used for versioning.
+function currentContent() {
+  const c = cfg();
+  return (c.waiver_source || 'text') === 'pdf'
+    ? { source: 'pdf', pdfUrl: c.waiver_pdf_url, pdfHash: c.waiver_pdf_hash, pdfName: c.waiver_pdf_name }
+    : { source: 'text', text: c.waiver_text };
+}
+function bumpWaiverVersion(content) {
   const c = cfg();
   const cur = Number(c.waiver_version || 0);
   const next = String(cur + 1).padStart(2, '0');
   const versions = { ...(c.waiver_versions || {}) };
-  versions[next] = { text, hash: textHash(text), effectiveAt: Date.now() };
+  versions[next] = content.source === 'pdf'
+    ? { source: 'pdf', pdfUrl: content.pdfUrl, pdfHash: content.pdfHash, pdfName: content.pdfName, effectiveAt: Date.now() }
+    : { source: 'text', text: content.text, hash: textHash(content.text), effectiveAt: Date.now() };
   dispatch('config.set', { key: 'waiver_version', value: next });
   dispatch('config.set', { key: 'waiver_versions', value: versions });
   return next;
@@ -230,10 +300,38 @@ export function saveWaiverText() {
   if (!text) { showToast('Enter the waiver text first.'); return; }
   const c = cfg();
   dispatch('config.set', { key: 'waiver_text', value: text });
-  if (text !== (c.waiver_text || '') || !c.waiver_version) {
-    const v = bumpWaiverVersion(text);
-    showToast(`Saved — now version ${v}. Clients will be re-prompted.`);
+  if (text !== (c.waiver_text || '') || !c.waiver_version || (c.waiver_source || 'text') !== 'text') {
+    const v = bumpWaiverVersion({ source: 'text', text });
+    showToast(`Saved — now version ${v}. Clients acknowledge it at check-in.`);
   } else showToast('Saved.');
+  setTimeout(renderWaiverSettings, 50);
+}
+
+// Upload a PDF to R2 under a version-stamped, never-overwritten key so every signed version
+// stays reproducible. Uploading bumps the version.
+export async function uploadWaiverPdf(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf') { showToast('Please choose a PDF file.'); input.value = ''; return; }
+  if (file.size > 15 * 1024 * 1024) { showToast('That PDF is too large (max 15 MB).'); input.value = ''; return; }
+  showToast('Uploading…');
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const hashBuf = await crypto.subtle.digest('SHA-256', bytes);
+    const pdfHash = [...new Uint8Array(hashBuf)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+    const next = String(Number(cfg().waiver_version || 0) + 1).padStart(2, '0');
+    const key = `waiver-v${next}-${pdfHash}.pdf`;   // versioned + fingerprinted → never overwritten
+    const res = await fetch(`${PHOTOS_PROXY}/${key}`, { method: 'PUT', body: bytes, headers: { 'Content-Type': 'application/pdf' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const url = (await res.json()).url;
+    dispatch('config.set', { key: 'waiver_source', value: 'pdf' });
+    dispatch('config.set', { key: 'waiver_pdf_url', value: url });
+    dispatch('config.set', { key: 'waiver_pdf_name', value: file.name });
+    dispatch('config.set', { key: 'waiver_pdf_hash', value: pdfHash });
+    const v = bumpWaiverVersion({ source: 'pdf', pdfUrl: url, pdfHash, pdfName: file.name });
+    showToast(`PDF uploaded — now version ${v}.`);
+  } catch (e) { showToast('Upload failed — check the connection.'); }
+  input.value = '';
   setTimeout(renderWaiverSettings, 50);
 }
 

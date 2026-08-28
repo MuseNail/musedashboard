@@ -32,6 +32,9 @@ test('waiverActive requires enabled + version + non-empty text', () => {
   assert.equal(waiverActive({ waiver_enabled: true, waiver_version: '02', waiver_text: '   ' }), false);
   assert.equal(waiverActive({ waiver_enabled: true, waiver_version: '', waiver_text: 'x' }), false);
   assert.equal(waiverActive({}), false);
+  // PDF source: active needs a pdf url (not text)
+  assert.equal(waiverActive({ waiver_enabled: true, waiver_version: '02', waiver_source: 'pdf', waiver_pdf_url: 'https://x/w.pdf' }), true);
+  assert.equal(waiverActive({ waiver_enabled: true, waiver_version: '02', waiver_source: 'pdf', waiver_pdf_url: '', waiver_text: 'has text' }), false);
 });
 
 
@@ -60,6 +63,22 @@ test('buildWaiverRecord stores full text inline + hash + attribution', () => {
   assert.equal(rec.arbitrationOptOut, false);
   assert.equal(rec.bypassed, false);
   assert.equal(rec.guests.length, 2);
+  assert.equal(rec.source, 'text');
+  assert.equal(rec.pdfUrl, null);
+});
+
+test('buildWaiverRecord PDF mode pins the versioned pdf ref, no inline text', () => {
+  const rec = buildWaiverRecord({
+    id: 'wv-pdf', now: 9, primary: { firstName: 'Sarah', lastName: 'Miller', phoneKey: 'pk' }, guests: [],
+    waiverVersion: '03', source: 'pdf', pdfUrl: 'https://x/waiver-v03-abc.pdf', pdfHash: 'abc123', pdfName: 'waiver.pdf',
+    text: 'IGNORED', method: 'self-kiosk',
+  });
+  assert.equal(rec.source, 'pdf');
+  assert.equal(rec.pdfUrl, 'https://x/waiver-v03-abc.pdf');
+  assert.equal(rec.pdfHash, 'abc123');
+  assert.equal(rec.pdfName, 'waiver.pdf');
+  assert.equal(rec.text, '');          // no inline text in pdf mode
+  assert.equal(rec.textHash, null);
 });
 
 test('buildWaiverRecord defaults optIns/bypass safely', () => {
