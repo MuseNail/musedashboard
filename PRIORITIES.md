@@ -18,6 +18,14 @@ The build pipeline for the live single-salon app, ordered by impact. Refreshed *
 ## 2 — Helcim void/reverse (refund is done)
 Refund is live. Still missing: `POST /v2/payment/reverse` (same-day void) routing in the client + Worker proxy (idempotency-key, `cardTransactionId` + ipAddress — verified findings in `HELCIM-MIGRATION.md`). Lower urgency than refund.
 
+## 2b — v5.42 refund-safety hotfix (Phase 3 0-pre) — accepted residuals + follow-ups
+Built + committed on `main` (`8ce64d6` restore hardening, `abca853` refund idempotency + processor-truth), awaiting the off-hours deploy. ⚠️ Helcim fact (verified, devdocs): **idempotency keys expire after 5 minutes** — the deterministic key only dedups immediate retries; long-horizon double-refund protection = the `GET /helcim/refunds` truth check in `confirmRefund`. Known residuals (documented decisions, not bugs):
+- **Two devices, same amount, within 5 min** → Helcim replays (money moves once) but a duplicate refund RECORD can save if sync lagged — books-only, delete one. Hardening candidate: store-level dedup on intersecting `squareRefundIds` per sale.
+- **Unrecorded-refund recovery is same-modal-session only:** if the block toast fires and the operator closes the modal (or records a non-matching amount), the record-only refund saves unstamped and the block re-fires next time. In-UI recovery: delete the unstamped refund record, re-attempt the card refund (fresh block), then record toggle-OFF **at exactly the stated amount** in that same session. Hardening candidate: match against a fresh truth fetch at record time.
+- **Restore truncates audit to the snapshot's 500-entry cap** (pre-existing snapshot design; restore used to keep ZERO) — revisit when Phase 3 Stage X/O defines audit archival.
+- **PHASE3.md Stage-R amendment (when Stage R builds):** the refund ordinal has no long-horizon meaning under the 5-min TTL, so archiving old refund records can't create key hazards; the truth check is processor-side and archive-independent.
+- **Rollback pairs:** a worker rollback also reverts 0-pre-b (shared deploy) and a v5.42 client against an old worker fail-closes card refunds — roll back worker + client together.
+
 ## 3 — Retire Square (owner calls the timing)
 Helcim is live + default; Square is still selectable. When called: stop the Square customer **dual-write**, remove the `/square` proxy + `SQUARE_TOKEN`, the Square config UI + deep-link, and the Square reconcile; keep historical Square ids on old records. (Don't fix bugs in this doomed code.)
 
@@ -27,6 +35,17 @@ Helcim is live + default; Square is still selectable. When called: stop the Squa
 3. **Card-on-file / deposits / no-show fees** — Helcim supports card-on-file; `customerCode` already rides purchases.
 4. **Online self-booking** — the big one; overlaps the (superseded) TurnDesk thesis.
 - Cosmetic steals: per-tech calendar color-coding, rebook chips on the paid screen, calendar week view.
+
+## 4b — Cosmetic consistency pass (APPROVED, deferred) — `COSMETIC-PHASE-A.md`
+Owner approved the full Live-vs-Suggestion direction **2026-06-29**, wants to build it later. Pure
+polish on the existing teal/amber identity (no re-skin). **Phase A** (the keystone): unify the 3
+teals → `--primary` token (route the `#2a6868` selected/focus/sync + the bare `#1a5252` literals
+through the var); fix the 11 dead `--md-*` fallback refs (reports date-picker/compare/perf chart);
+remove the 34 lingering inline `active:scale-95` "bounce" buttons (finishes v5.35); converge the
+button system **gradually**. **B** = systematize the report-card tints (keep colored, one rule per
+metric family + dark variants, fix muddy-amber). **C** = stop leaking raw `sq-` IDs in the Calendar
+appointment list. **D** = one radius/elevation scale. Full spec + exact selectors in
+`COSMETIC-PHASE-A.md`.
 
 ## 5 — Deferred / low-priority (owner-acknowledged)
 - **Permission-toggle wiring:** `canDo('viewReports'/'manageStaff'/'manageServices')` read config but aren't all enforced at the nav/Settings leaves (check live `fd_users` roles first so nobody locks out).
