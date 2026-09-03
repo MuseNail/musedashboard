@@ -30,5 +30,10 @@ The version badge already reopens the changelog popup (`window.showWhatsNew()`, 
 
 ---
 
+## Infra / hardening
+
+### Port BackOffice's IndexedDB state-cache fix (localStorage-quota)
+Muse, BackOffice, and TurnDesk share the ONE ~10 MB `musenail.github.io` localStorage. BackOffice's `bo_state_cache_<biz>` mirror (7.4 MB) filled it and blocked sign-in with a mislabeled "can't reach the server". BackOffice fixed it (LIVE 2026-09): **Option 1** `safeSetItem` evict-and-retry so a full cache never blocks sign-in (v0.71.19), then **Option 2** moving the big snapshot mirror (`muse_state_cache`) to IndexedDB via `js/app/lib/idb-cache.js` — timeout-bounded/never-reject, localStorage fallback, lazy migrate-then-delete, async `openBusiness` read (v0.71.21). **Port both to Muse** (same architecture; Muse's cache key is the suffix-less `muse_state_cache`). Do Option 1 first (cheap; protects sign-in) — Muse's staff app + front desk both write the cache. Reference: BackOffice `STORAGE-QUOTA-PLAN.md` + the shipped `idb-cache.js`/`ls-quota.js`/`session.js safeSetItem`.
+
 ## Growth candidates
 The bigger competitive features (automated SMS reminders, review requests, card-on-file/deposits, online booking) are tracked in `PRIORITIES.md` §5 — they're pipeline candidates, not parked.
