@@ -47,6 +47,10 @@ const state = {
   records:   [],
   giftcards: [],
   customers: [],   // synced customer directory entities ({id,firstName,lastName,phone,email,...}); per-record DO keys (customer:<id>), NOT a config blob
+  appointments: [],   // synced app-native appointments (per-record DO keys appt:<id>); one row per booking, guests + per-service staffId inside
+  apptDeletions: [],  // deleted appointment ids (tombstones)
+  tasks: [],          // synced app-native tasks (per-record DO keys task:<id>); the in-app to-do list (was Google Tasks)
+  taskDeletions: [],  // deleted task ids (tombstones)
   deletions: [],   // array of deleted record ids (strings)
   customerDeletions: [],   // array of deleted customer ids (strings) — tombstones so a stale offline upsert can't revive a deleted customer
   audit:     [],   // universal activity log (newest first, capped) — synced via the DO
@@ -149,6 +153,10 @@ export function hydrate(snap) {
   state.records   = Array.isArray(incoming.records)   ? incoming.records   : [];
   state.giftcards = Array.isArray(incoming.giftcards) ? incoming.giftcards : [];
   state.customers = Array.isArray(incoming.customers) ? incoming.customers : [];
+  state.appointments = Array.isArray(incoming.appointments) ? incoming.appointments : [];
+  state.apptDeletions = Array.isArray(incoming.apptDeletions) ? incoming.apptDeletions.map(d => String(d.id ?? d)) : [];
+  state.tasks = Array.isArray(incoming.tasks) ? incoming.tasks : [];
+  state.taskDeletions = Array.isArray(incoming.taskDeletions) ? incoming.taskDeletions.map(d => String(d.id ?? d)) : [];
   state.deletions = Array.isArray(incoming.deletions) ? incoming.deletions.map(d => String(d.id ?? d)) : [];
   state.customerDeletions = Array.isArray(incoming.customerDeletions) ? incoming.customerDeletions.map(d => String(d.id ?? d)) : [];
   state.audit     = Array.isArray(incoming.audit) ? incoming.audit : [];
@@ -251,6 +259,22 @@ export function applyChange(op, payload, seq) {
       }
       break;
     }
+    case 'appt.upsert':
+      if (state.apptDeletions.includes(String(payload.appt && payload.appt.id))) return;   // don't revive a cancelled appt
+      if (!upsertByIdGuarded(state.appointments, payload.appt)) return;                     // stale → keep the newer copy
+      break;
+    case 'appt.delete':
+      removeById(state.appointments, payload.id);
+      if (!state.apptDeletions.includes(String(payload.id))) state.apptDeletions.push(String(payload.id));
+      break;
+    case 'task.upsert':
+      if (state.taskDeletions.includes(String(payload.task && payload.task.id))) return;   // don't revive a deleted task
+      if (!upsertByIdGuarded(state.tasks, payload.task)) return;
+      break;
+    case 'task.delete':
+      removeById(state.tasks, payload.id);
+      if (!state.taskDeletions.includes(String(payload.id))) state.taskDeletions.push(String(payload.id));
+      break;
     case 'audit.log':       if (payload && payload.event) { const ev = payload.event; if (!(ev.id && state.audit.some(x => x && x.id === ev.id))) { state.audit.unshift(ev); if (state.audit.length > 500) state.audit.length = 500; } } break;   // idempotent by id (outbox replay / echo-safe)
     case 'chat.append': {
       // Append a single staff-chat message (mirrors the DO's atomic append). Idempotent by
@@ -304,7 +328,9 @@ function _cacheBlob() {
   return {
     config: state.config, configMeta: state.configMeta, queue: state.queue, records: state.records,
     giftcards: state.giftcards, customers: state.customers, deletions: state.deletions,
-    customerDeletions: state.customerDeletions, seq: state.seq,
+    customerDeletions: state.customerDeletions,
+    appointments: state.appointments, apptDeletions: state.apptDeletions, tasks: state.tasks, taskDeletions: state.taskDeletions,
+    seq: state.seq,
   };
 }
 

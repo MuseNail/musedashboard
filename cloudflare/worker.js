@@ -1441,6 +1441,36 @@ export class MuseSalonDO {
           }
           break;
         }
+        case 'appt.upsert': {
+          // App-native appointment (per-record key, mirrors records/customers). Don't revive a
+          // cancelled appt, and reject a stale offline copy so it can't clobber a newer edit.
+          const aKey = 'appt:' + payload.appt.id;
+          if (await this.state.storage.get('apptdeletion:' + payload.appt.id)) { stale = true; break; }
+          const prevAppt = await this.state.storage.get(aKey);
+          if (_isStaleWrite(prevAppt, payload.appt)) { stale = true; break; }
+          await this.state.storage.put(aKey, payload.appt);
+          break;
+        }
+        case 'appt.delete': {
+          await this.state.storage.delete('appt:' + payload.id);
+          await this.state.storage.put('apptdeletion:' + payload.id, { id: payload.id, at: new Date().toISOString() });
+          break;
+        }
+        case 'task.upsert': {
+          // App-native task (the in-app to-do list, replacing Google Tasks). Same per-record +
+          // tombstone + stale-guard pattern as appointments.
+          const tKey = 'task:' + payload.task.id;
+          if (await this.state.storage.get('taskdeletion:' + payload.task.id)) { stale = true; break; }
+          const prevTask = await this.state.storage.get(tKey);
+          if (_isStaleWrite(prevTask, payload.task)) { stale = true; break; }
+          await this.state.storage.put(tKey, payload.task);
+          break;
+        }
+        case 'task.delete': {
+          await this.state.storage.delete('task:' + payload.id);
+          await this.state.storage.put('taskdeletion:' + payload.id, { id: payload.id, at: new Date().toISOString() });
+          break;
+        }
         case 'audit.log': {
           // Append-only activity log (who/when/device/action). Each event is its own key
           // so concurrent writes never clobber. Probabilistically prune to the last ~1000.
@@ -1596,7 +1626,7 @@ export class MuseSalonDO {
 
   // Assemble the full state from storage (prefix scans skip mut:/meta: keys).
   async buildSnapshot() {
-    const state = { config: {}, configMeta: {}, queue: [], records: [], giftcards: [], customers: [], deletions: [], customerDeletions: [], audit: [] };
+    const state = { config: {}, configMeta: {}, queue: [], records: [], giftcards: [], customers: [], appointments: [], apptDeletions: [], tasks: [], taskDeletions: [], deletions: [], customerDeletions: [], audit: [] };
     const cfg = await this.state.storage.list({ prefix: 'config:' });
     for (const [k, v] of cfg) state.config[k.slice('config:'.length)] = v;
     const cm = await this.state.storage.list({ prefix: 'cfgmeta:' });
@@ -1609,6 +1639,14 @@ export class MuseSalonDO {
     for (const [, v] of g) state.giftcards.push(v);
     const cu = await this.state.storage.list({ prefix: 'customer:' });
     for (const [, v] of cu) state.customers.push(v);
+    const ap = await this.state.storage.list({ prefix: 'appt:' });
+    for (const [, v] of ap) state.appointments.push(v);
+    const apd = await this.state.storage.list({ prefix: 'apptdeletion:' });
+    for (const [, v] of apd) state.apptDeletions.push(v);
+    const tk = await this.state.storage.list({ prefix: 'task:' });
+    for (const [, v] of tk) state.tasks.push(v);
+    const tkd = await this.state.storage.list({ prefix: 'taskdeletion:' });
+    for (const [, v] of tkd) state.taskDeletions.push(v);
     const cd = await this.state.storage.list({ prefix: 'custdeletion:' });
     for (const [, v] of cd) state.customerDeletions.push(v);
     const d = await this.state.storage.list({ prefix: 'deletion:' });
@@ -1777,6 +1815,10 @@ export class MuseSalonDO {
       for (const r of (st.records || []))   puts['record:' + String(r.id)] = r;
       for (const g of (st.giftcards || [])) puts['giftcard:' + String(g.id)] = g;
       for (const c of (st.customers || [])) puts['customer:' + String(c.id)] = c;
+      for (const a of (st.appointments || [])) if (a && a.id != null) puts['appt:' + String(a.id)] = a;
+      for (const d of (st.apptDeletions || [])) if (d && d.id != null) puts['apptdeletion:' + String(d.id)] = d;
+      for (const t of (st.tasks || [])) if (t && t.id != null) puts['task:' + String(t.id)] = t;
+      for (const d of (st.taskDeletions || [])) if (d && d.id != null) puts['taskdeletion:' + String(d.id)] = d;
       for (const d of (st.deletions || [])) puts['deletion:' + String(d.id)] = d;
       for (const c of (st.customerDeletions || [])) puts['custdeletion:' + String(c.id)] = c;
       for (const a of (st.audit || [])) if (a && a.id != null) puts['audit:' + String(a.id)] = a;
