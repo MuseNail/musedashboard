@@ -2,6 +2,7 @@
 // Ported from the original utils.js. No global mutable app state lives here.
 // Functions used by inline HTML handlers are exported and attached to window in main.js.
 import { getState } from './store.js';
+import { CUSTOMER_COLORS } from './config.js';   // config.js imports nothing cyclic → safe
 
 // Numpad price entry mode: whole dollars (digits build $, dot adds optional cents) vs the
 // default cents accumulator. Read from synced config; store.js has no imports so no cycle.
@@ -130,6 +131,16 @@ export function dedupByLabel(arr) {
 // Alphabetical by .name (case-insensitive). For display/selection lists only —
 // not for custom-ordered data (turns rotation, calendar column order).
 export function byName(a, b) { return (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }); }
+
+// Stable color for a customer key (phone digits or lowercased name): the same key always maps to
+// the same CUSTOMER_COLORS entry. Blank/"guest" → neutral gray. Used by the app-native calendar.
+export function customerColor(key) {
+  const k = String(key == null ? '' : key).trim().toLowerCase();
+  if (!k || k === 'guest') return '#9ca3af';
+  let h = 0;
+  for (let i = 0; i < k.length; i++) h = (h * 31 + k.charCodeAt(i)) >>> 0;
+  return CUSTOMER_COLORS[h % CUSTOMER_COLORS.length];
+}
 
 // Map each distinct party groupId (first-seen order) → a letter A,B,C… so members of
 // the same check-in can be tagged at-a-glance (live queue/turns + history).

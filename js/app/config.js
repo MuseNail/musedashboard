@@ -37,6 +37,14 @@ export const GROUP_COLORS = [
   '#2a7a4f','#7a1a5c','#4f4f1a','#1a3a7a','#7a4f1a',
 ];
 
+// Stable per-customer palette (hashed by phone/name) — the app-native calendar colors a
+// booking's primary guest by this so the same customer always reads the same color.
+export const CUSTOMER_COLORS = [
+  '#1a5252','#7b1fa2','#6a1b9a','#4527a0','#8e24aa','#5c3d8f',
+  '#ad1457','#37474f','#6d4c41','#7a1a5c','#4e342e','#283593',
+  '#00838f','#c2185b','#512da8','#00695c',
+];
+
 export const SCHEDULE_COLORS = {
   // Working is the common case → a soft light fill so the exceptions (Off/Sick/
   // Vacation) stand out when scanning the grid.

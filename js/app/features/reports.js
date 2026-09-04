@@ -38,6 +38,7 @@ export function saveRecord(entry) {
     checkinTime: typeof entry.checkinTime === 'string' ? entry.checkinTime : new Date(entry.checkinTime).toISOString(),
     completedAt: entry.completedAt, status: entry.status, isAppointment: entry.isAppointment || false,
     loggedBy: getActiveUser()?.name || '',
+    ...(entry.appointmentId ? { appointmentId: entry.appointmentId } : {}),   // links a paid ticket back to its app-native appointment (past-day Completed/No-Show resolution)
     ...(entry.squareOrderId ? { squareOrderId: entry.squareOrderId } : {}),
     ...(entry.squarePaymentIds?.length ? { squarePaymentIds: entry.squarePaymentIds } : {}),
     ...(entry.tenders ? { tenders: entry.tenders } : {}),

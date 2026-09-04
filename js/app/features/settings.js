@@ -136,6 +136,7 @@ export function renderGcalSettings() {
   const status = document.getElementById('gcal-settings-status');
   if (status) { status.textContent = on ? '✓ Connected' : 'Not connected'; status.style.color = on ? '#2a7a4f' : ''; }
   document.getElementById('gcal-connect-btn')?.classList.toggle('hidden', on);
+  document.getElementById('gimport-btn')?.classList.toggle('hidden', !on);       // import needs a live connection — only show it once connected
   document.getElementById('gcal-disconnect-btn')?.classList.toggle('hidden', !on);
   window.renderGcalCalendarList?.();
 }
@@ -292,7 +293,7 @@ const SETTINGS_NAV = [
   { id:'integrations', title:'Integrations', desc:'Payments & Google', items:[
     { label:'Payment Processing', sub:'Card processor, terminal & Square', content:'helcim-section', render:'renderHelcimSettings', icon:'credit_card' },
     { label:'Square', sub:'Location, connection & sync', content:'square-section', hidden:true, icon:'storefront' },   // reached from the Payment Processing panel
-    { label:'Google Calendar', sub:'Connect for appointments', content:'gcal-section', render:'renderGcalSettings', icon:'calendar_month' },
+    { label:'Google Calendar', sub:'One-time import of old appointments', content:'gcal-section', render:'renderGcalSettings', icon:'calendar_month' },
     { label:'Text Messaging', sub:'SMS confirmations & replies (httpSMS)', content:'sms-section', render:'renderSmsSettings', adminOnly:true, icon:'sms' },
     { label:'Back Office sync', sub:'Push daily sales & payroll to the books app', content:'bosync-section', render:'renderBoSyncSettings', adminOnly:true, icon:'sync' },
     { label:'Customer Directory', sub:'Browse synced customers', action:'showCustomerDir', icon:'contacts' },

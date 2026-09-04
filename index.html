@@ -1096,11 +1096,15 @@ tailwind.config = {
         <!-- Leaf: Google Calendar -->
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="gcal-section" class="hidden px-5 py-4 space-y-3">
-            <p class="text-sm font-body text-on-surface-variant">Connect Google Calendar to view and create appointments in the Calendar tab.</p>
+            <p class="text-sm font-body text-on-surface-variant">The Calendar and Tasks now live in the app itself — no Google connection is needed to use them. Google is only here to <strong>import your existing appointments and tasks one time</strong> so nothing is lost. Connect, run the import, verify, and you're done.</p>
             <div class="text-xs font-body" id="gcal-settings-status">Checking…</div>
             <button id="gcal-connect-btn" onclick="calSignIn()" class="w-full btn-primary">
               <span class="material-symbols-outlined" style="font-size:18px">login</span> Connect Google Calendar
             </button>
+            <button id="gimport-btn" onclick="importFromGoogle()" class="hidden w-full btn-primary">
+              <span class="material-symbols-outlined" style="font-size:18px">cloud_download</span> <span id="gimport-label">Import from Google</span>
+            </button>
+            <p class="text-[11px] font-body text-on-surface-variant leading-snug">Copies upcoming appointments and all tasks into the app. Safe to run more than once — anything already imported is skipped. Your Google data is never changed.</p>
             <button id="gcal-disconnect-btn" onclick="calSignOut();renderGcalSettings()" class="hidden w-full btn-secondary">
               <span class="material-symbols-outlined" style="font-size:18px">logout</span> Disconnect
             </button>
