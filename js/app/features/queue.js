@@ -11,6 +11,7 @@ import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
+import { staffOnBreakNow } from './breaks.js';
 import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate, customerNote, notePhoneKey } from './square-customers.js';
 
 const cfg   = () => getState().config;
@@ -1102,7 +1103,7 @@ export function renderGroupAssignContent() {
       if (assigned) opts = [...checkedIn, assigned];
     }
     return opts.length > 0
-      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}</option>`).join('')
+      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}${staffOnBreakNow(cfg().breaks, st.id) ? ' · On Break' : ''}</option>`).join('')
       : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
   };
   const stationOptions = sel => stationDefs().map(s => `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${s.label || s.id}</option>`).join('');
@@ -1359,7 +1360,7 @@ function _renderAssignOneList() {
     let opts = checkedIn;
     if (sel && !checkedIn.some(s => s.id === sel)) { const assigned = staffById(sel); if (assigned) opts = [...checkedIn, assigned]; }
     return opts.length > 0
-      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}</option>`).join('')
+      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}${staffOnBreakNow(cfg().breaks, st.id) ? ' · On Break' : ''}</option>`).join('')
       : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
   };
   const stationOptions = sel => stationDefs().map(s => `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${s.label || s.id}</option>`).join('');

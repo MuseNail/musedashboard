@@ -4,6 +4,7 @@ import { dispatch } from '../sync.js';
 import { PUSH_PROXY } from '../config.js';
 import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel, customerColor } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer, notePhoneKey, customerNote } from './square-customers.js';
+import { breaksForColumnDay } from './breaks.js';
 
 // Stable per-customer color for a booking's primary guest (phone-keyed, name fallback);
 // blank/placeholder → neutral gray. One source of truth for both grid views.
@@ -44,6 +45,9 @@ let _apptEditId = null, _apptLines = [], _apptExtraGuests = [], _apptEditGroupId
 // Re-entry guard: blocks a second Save tap from minting a fresh groupId and inserting a whole
 // duplicate party (+ duplicate Square upserts) while the first save is still settling.
 let _apptSaving = false;
+// Break time-blocks (per-tech; synced config list cfg().breaks). _breakEditId set when editing.
+const calBreaks = () => getState().config.breaks || [];
+let _breakEditId = null, _breakStaffId = '';
 let _calSelectorDraft = null, _calDragIdx = null;
 let _calSlotH = 52, _calSlotMins = 30, _calTouchStartDist = null;
 let _calHidden = new Set(JSON.parse(localStorage.getItem('muse_cal_staff_hidden') || '[]'));
@@ -457,6 +461,21 @@ export function calRenderGrid() {
     events.forEach(a => { if (!a.start) return; bookings.set(a.id, [a]); });   // one appt = one booking
     const _e = s => (s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/\n/g,' ').replace(/\r/g,'');
     const escHtml = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // Break time-blocks for this tech's column: greyed striped bands (below appt bubbles; tap to
+    // edit/delete). Only real tech columns — the Unassigned column has no tech to block.
+    if (cal.id) {
+      const dayStartB = new Date(_calDate); dayStartB.setHours(0,0,0,0);
+      const dayEndB = new Date(dayStartB); dayEndB.setDate(dayEndB.getDate()+1);
+      breaksForColumnDay(calBreaks(), cal.id, +dayStartB, +dayEndB).forEach(b => {
+        const bs = new Date(b.start), be = new Date(b.end);
+        const sMin = bs.getHours()*60 + bs.getMinutes(), eMin = be.getHours()*60 + be.getMinutes();
+        let topMin = sMin - START_HOUR*60, durMin = Math.max(eMin - sMin, 15);
+        if (topMin >= (END_HOUR-START_HOUR)*60 || topMin + durMin <= 0) return;   // outside the visible hours
+        if (topMin < 0) { durMin += topMin; topMin = 0; }   // clamp a break starting before the grid's first hour
+        // Theme-aware muted striped band (dims in dark mode via surface tokens; hex fallbacks for safety).
+        body += `<div onclick="calBreakClick('${_e(b.id)}')" title="Blocked — tap to edit" style="position:absolute;left:2px;right:2px;top:${(topMin/SLOT_MINS)*SLOT_H}px;height:${Math.max((durMin/SLOT_MINS)*SLOT_H,18)}px;background:repeating-linear-gradient(45deg,var(--surface-container-high,#e5e7eb),var(--surface-container-high,#e5e7eb) 5px,var(--surface-container-highest,#d6dadd) 5px,var(--surface-container-highest,#d6dadd) 10px);border:1px dashed var(--outline-variant,#9aa3ab);border-radius:6px;z-index:1;cursor:pointer;overflow:hidden;display:flex;align-items:center;justify-content:center;gap:2px;box-sizing:border-box"><span class="material-symbols-outlined" style="font-size:11px;flex-shrink:0;color:var(--on-surface-variant,#556270)">block</span><span style="font-size:10px;font-family:var(--font-body);font-weight:700;color:var(--on-surface-variant,#556270);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(b.label)}</span></div>`;
+      });
+    }
     // Lay out bookings: position + height, then assign side-by-side lanes so that
     // different customers booked at the same time sit next to each other instead of
     // stacking on top of each other (req: cleanly see concurrent appointments).
@@ -841,7 +860,89 @@ function calReorderEnd(e) {
 }
 
 // ── Event click + quick check-in ─────────────────
-export function calSlotClick(colId, hour, minute) { showNewApptModal(colId, hour, minute, _calCalendars.find(c => c.id === colId)?.name); }
+// Tapping an empty slot: on a real tech's column, offer New appointment OR Block time (break);
+// the Unassigned column (id '') has no tech to block, so it goes straight to a new appointment.
+export function calSlotClick(colId, hour, minute) {
+  const techName = _calCalendars.find(c => c.id === colId)?.name;
+  if (!colId) { showNewApptModal(colId, hour, minute, techName); return; }
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Escaper for a value placed in a single-quoted JS string inside a double-quoted onclick attribute.
+  const _je = s => (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+  const t2 = n => String(n).padStart(2, '0');
+  const modal = document.createElement('div');
+  modal.id = 'cal-slot-chooser';
+  modal.className = 'fixed inset-0 z-[86] flex items-center justify-center bg-on-surface/40 px-4';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-full max-w-xs shadow-2xl">
+    <div class="text-center mb-1"><div class="font-headline font-bold text-on-surface text-base">${esc(techName || 'Tech')}</div>
+      <div class="text-xs font-body text-on-surface-variant">${_calDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${((hour%12)||12)}:${t2(minute)} ${hour>=12?'PM':'AM'}</div></div>
+    <div class="space-y-2 mt-3">
+      <button onclick="document.getElementById('cal-slot-chooser')?.remove(); showNewApptModal('${_je(colId)}',${hour},${minute},'${_je(techName)}')" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-primary/40 hover:bg-primary/5 transition-colors text-left"><span class="material-symbols-outlined text-primary" style="font-size:22px">event</span><div><div class="font-headline font-semibold text-sm text-on-surface">New appointment</div><div class="text-[11px] font-body text-on-surface-variant">Book a customer</div></div></button>
+      <button onclick="document.getElementById('cal-slot-chooser')?.remove(); showBreakModal('${_je(colId)}',${hour},${minute})" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 border-surface-container-high hover:bg-surface-container transition-colors text-left"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">block</span><div><div class="font-headline font-semibold text-sm text-on-surface">Block time</div><div class="text-[11px] font-body text-on-surface-variant">Break / lunch — marks the tech unavailable</div></div></button>
+    </div>
+    <button onclick="document.getElementById('cal-slot-chooser')?.remove()" class="w-full mt-3 py-2 rounded-xl text-on-surface-variant font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Cancel</button>
+  </div>`;
+  document.body.appendChild(modal);
+}
+function newBreakId() { return 'brk_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7); }
+export function showBreakModal(staffId, hour, minute) { _breakEditId = null; _breakStaffId = staffId; _renderBreakForm({ startH: hour, startM: minute, durMin: 30, label: 'Break', isEdit: false }); }
+export function calBreakClick(id) {
+  const b = calBreaks().find(x => x.id === id); if (!b) return;
+  const s = new Date(b.start), e = new Date(b.end);
+  _breakEditId = b.id; _breakStaffId = b.staffId;
+  _renderBreakForm({ startH: s.getHours(), startM: s.getMinutes(), durMin: Math.max(15, Math.round((e - s) / 60000)), label: b.label || 'Break', isEdit: true });
+}
+function _renderBreakForm({ startH, startM, durMin, label, isEdit }) {
+  const techName = _calCalendars.find(c => c.id === _breakStaffId)?.name || 'Tech';
+  const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const t2 = n => String(n).padStart(2, '0');
+  const durs = [15, 30, 45, 60, 90, 120];
+  const modal = document.createElement('div');
+  modal.id = 'break-modal';
+  modal.className = 'fixed inset-0 z-[88] flex items-center justify-center bg-on-surface/40 px-4';
+  modal.onclick = e => { if (e.target === modal) closeBreakModal(); };
+  modal.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl p-5 w-full max-w-sm shadow-2xl">
+    <div class="flex items-center justify-between mb-3"><h3 class="font-headline font-bold text-on-surface text-lg">${isEdit ? 'Edit block' : 'Block time'}</h3><button onclick="closeBreakModal()" class="w-8 h-8 rounded-full hover:bg-surface-container flex items-center justify-center"><span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">close</span></button></div>
+    <div class="text-xs font-body text-on-surface-variant mb-3">${esc(techName)} · ${_calDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Start</label>
+        <input id="break-start" type="time" value="${t2(startH)}:${t2(startM)}" class="w-full px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface"></div>
+      <div><label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Length</label>
+        <select id="break-dur" class="w-full px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface">${durs.map(d => `<option value="${d}" ${d === durMin ? 'selected' : ''}>${d < 60 ? d + ' min' : (d / 60) + (d === 60 ? ' hr' : ' hrs')}</option>`).join('')}</select></div>
+    </div>
+    <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Label (optional)</label>
+    <input id="break-label" type="text" value="${esc(label)}" placeholder="e.g. Lunch" maxlength="24" class="w-full px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface mb-4">
+    <div class="flex gap-2">
+      ${isEdit ? `<button onclick="deleteBreak()" class="px-4 py-2.5 rounded-xl border-2 border-error text-error font-headline font-semibold text-sm hover:bg-error/10 transition-colors">Delete</button>` : ''}
+      <button onclick="closeBreakModal()" class="flex-1 py-2.5 rounded-xl border border-surface-container-high text-on-surface-variant font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Cancel</button>
+      <button onclick="saveBreak()" class="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-headline font-bold text-sm hover:bg-primary-dim transition-colors">${isEdit ? 'Save' : 'Block'}</button>
+    </div></div>`;
+  document.body.appendChild(modal);
+}
+export function closeBreakModal() { document.getElementById('break-modal')?.remove(); _breakEditId = null; _breakStaffId = ''; }
+export function saveBreak() {
+  const st = document.getElementById('break-start')?.value || '';
+  const durMin = parseInt(document.getElementById('break-dur')?.value) || 30;
+  const label = (document.getElementById('break-label')?.value || '').trim() || 'Break';
+  const [h, m] = st.split(':').map(Number);
+  if (!isFinite(h)) { showToast('Pick a start time'); return; }
+  const wasEdit = !!_breakEditId;
+  const start = new Date(_calDate); start.setHours(h, m || 0, 0, 0);
+  const brk = { id: _breakEditId || newBreakId(), staffId: _breakStaffId, start: start.toISOString(), end: new Date(start.getTime() + durMin * 60000).toISOString(), label };
+  const arr = calBreaks().filter(b => b.id !== brk.id); arr.push(brk);
+  dispatch('config.set', { key: 'breaks', value: arr });
+  closeBreakModal();
+  showToast(wasEdit ? 'Block updated ✓' : 'Time blocked ✓');
+  if (document.getElementById('panel-calendar')?.classList.contains('active')) calLoadAndRender(true);
+}
+export function deleteBreak() {
+  if (!_breakEditId) return;
+  const arr = calBreaks().filter(b => b.id !== _breakEditId);
+  dispatch('config.set', { key: 'breaks', value: arr });
+  closeBreakModal();
+  showToast('Block removed ✓');
+  if (document.getElementById('panel-calendar')?.classList.contains('active')) calLoadAndRender(true);
+}
 export function calEventClick(e, apptId) {
   e.stopPropagation();
   const a = (getState().appointments || []).find(x => x.id === apptId);
