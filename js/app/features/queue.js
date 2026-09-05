@@ -1103,7 +1103,7 @@ export function renderGroupAssignContent() {
       if (assigned) opts = [...checkedIn, assigned];
     }
     return opts.length > 0
-      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}${staffOnBreakNow(cfg().breaks, st.id) ? ' · On Break' : ''}</option>`).join('')
+      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}${staffOnBreakNow(cfg().breaks, cfg().break_rules, st.id) ? ' · On Break' : ''}</option>`).join('')
       : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
   };
   const stationOptions = sel => stationDefs().map(s => `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${s.label || s.id}</option>`).join('');
@@ -1360,7 +1360,7 @@ function _renderAssignOneList() {
     let opts = checkedIn;
     if (sel && !checkedIn.some(s => s.id === sel)) { const assigned = staffById(sel); if (assigned) opts = [...checkedIn, assigned]; }
     return opts.length > 0
-      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}${staffOnBreakNow(cfg().breaks, st.id) ? ' · On Break' : ''}</option>`).join('')
+      ? opts.map(st => `<option value="${st.id}" ${sel === st.id ? 'selected' : ''}>${st.name}${cfg().inactive_staff.includes(st.id) ? ' (inactive)' : ''}${staffOnBreakNow(cfg().breaks, cfg().break_rules, st.id) ? ' · On Break' : ''}</option>`).join('')
       : `<option value="" disabled>No techs checked in — add in Turns tab</option>`;
   };
   const stationOptions = sel => stationDefs().map(s => `<option value="${s.id}" ${sel === s.id ? 'selected' : ''}>${s.label || s.id}</option>`).join('');
