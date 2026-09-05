@@ -388,9 +388,6 @@ export function cacheByteSize() { try { return JSON.stringify(_cacheBlob()).leng
 
 // Marked by sync.js when a DO snapshot hydrates — loadCache defers to it (see above).
 export function markServerHydrated() { _serverHydrated = true; }
-// True once a live DO snapshot has hydrated this session (not just the local cache). The
-// one-time Google import gates on this so its "already imported?" check reads real server state.
-export function isServerHydrated() { return _serverHydrated; }
 // Force the coalesced cache write to run now (on tab hide/pagehide) so the last op isn't lost
 // in the sub-ms window between an optimistic applyChange and its async IDB commit.
 export function flushCache() { return saveCache(); }

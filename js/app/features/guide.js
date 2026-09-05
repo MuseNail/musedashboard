@@ -279,7 +279,7 @@ const FULL = `
 </ul>
 
 <h2>Appointments (calendar)</h2>
-<p>Appointments are backed by <strong>Google Calendar</strong> and shown in the app. You can adjust the visible <strong>columns</strong> and <strong>display hours</strong>. <strong>Appointment reminders</strong> can be sent to customers by text.</p>
+<p>Appointments live <strong>in the app</strong> and sync across every device. You can adjust the visible <strong>columns</strong> and <strong>display hours</strong>. <strong>Appointment reminders</strong> can be sent to customers by text.</p>
 
 <h2>Reports, payroll &amp; refunds</h2>
 <ul>
@@ -373,7 +373,7 @@ const QUICK = `
 </ul>
 
 <h2>Appointments (calendar)</h2>
-<p>Appointments are backed by Google Calendar and shown in the app. Columns and display hours are adjustable. Appointment reminders can be sent by text.</p>
+<p>Appointments live in the app and sync across every device. Columns and display hours are adjustable. Appointment reminders can be sent by text.</p>
 
 <h2>Reports, payroll &amp; refunds</h2>
 <ul>

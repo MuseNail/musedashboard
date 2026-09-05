@@ -159,7 +159,7 @@ export function renderRecoveryReport() {
     </div>`;
 
   el.innerHTML =
-    section('Calendar — past no-shows', 'Clears the No-Show flag from appointments before today (today is left alone). Use this once to undo the old auto-no-show that wrongly flagged served customers. Needs Google Calendar connected on this device.', noShowBody) +
+    section('Calendar — past no-shows', 'Clears the No-Show flag from appointments before today (today is left alone). Use this once to undo the old auto-no-show that wrongly flagged served customers.', noShowBody) +
     section('Customer notes', 'Notes are keyed by phone so a Square ID change can\'t orphan them. Run this once to migrate legacy notes — it\'s safe to re-run. Any note with no matching customer is listed below.', notesBtn + orphanHtml) +
     section('Waiting to sync', 'Writes from this device not yet confirmed by the server. These send automatically on reconnect.', pendingHtml) +
     section('Failed writes', 'Writes the server rejected. Restore re-adds the customer/transaction to the queue.', failedHtml) +

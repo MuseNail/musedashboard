@@ -275,7 +275,7 @@ function renderTurnsSepSettings() {
     <button onclick="setTurnsSep('lane')" class="${sep === 'lane' ? on : off}">Recessed lane<span class="block text-[10px] font-normal opacity-80">bubbles in a tinted track</span></button>`;
 }
 
-// ── Upcoming appointments (Google Calendar) on the Turns sheet ────────────────
+// ── Upcoming appointments on the Turns sheet ──────────────────────────────────
 // Strip = the "Next up" row (toggled by the Appointments button, device-local).
 // In-grid note = an always-on amber card in a tech's next-turn slot when their next
 // upcoming appt is ≤30 min away. Data comes from window.apptsForTurns() (calendar.js),
@@ -381,8 +381,7 @@ export function renderTurnsTechGrid() {
     const el = document.getElementById('turns-active-count'); if (el) el.textContent = '0';
     return;
   }
-  // Next upcoming appt per tech (for the 30-min in-grid note). Empty if Google
-  // Calendar isn't connected/synced on this device.
+  // Next upcoming appt per tech (for the 30-min in-grid note), from the app-native store.
   const _nowMs = Date.now(), _upcoming = turnsUpcomingAppts();
   const nextApptFor = id => _upcoming.filter(a => a.techStaffId === id).sort((a,b) => a.startMs - b.startMs)[0] || null;
 

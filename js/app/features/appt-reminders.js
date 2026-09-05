@@ -1,10 +1,9 @@
 // ── Appointment reminders ───────────────────────────────────────────────────
 // Floating top-center banners that fire a configurable lead time before each upcoming
-// Google-Calendar appointment, persist until the operator taps OK, and never block the app
+// appointment, persist until the operator taps OK, and never block the app
 // (the container is pointer-events:none; only the OK button is interactive). Appointments come
-// from the connected calendar (calendar.js apptsForReminders), so reminders only fire when
-// Google Calendar is signed in + synced. Lead-time choice is a synced setting; the "already
-// fired" set is device-local and resets each day.
+// from the app-native store (calendar.js apptsForReminders). Lead-time choice is a synced setting;
+// the "already fired" set is device-local and resets each day.
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { getActiveUser } from '../session.js';

@@ -1,22 +1,13 @@
-// ── Google Calendar + Tasks ─────────────────────────────────────────────────
-import { getState, subscribe, isServerHydrated } from '../store.js';
+// ── Calendar + Tasks (app-native) ───────────────────────────────────────────
+import { getState, subscribe } from '../store.js';
 import { dispatch } from '../sync.js';
 import { PUSH_PROXY } from '../config.js';
-import { withAuth } from '../apptoken.js';
 import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel, customerColor } from '../utils.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer, notePhoneKey, customerNote } from './square-customers.js';
-import { _regroupGoogleAppts, _mapGoogleTask } from './calendar-import.js';   // Release A only — deleted at the clean break
 
 // Stable per-customer color for a booking's primary guest (phone-keyed, name fallback);
 // blank/placeholder → neutral gray. One source of truth for both grid views.
 const apptCustomerColor = g0 => customerColor(notePhoneKey(g0.phone || '') || (g0.name || '').trim().toLowerCase());
-
-const GCAL_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
-const GTASK_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest';
-// Server-side refresh-token auth: the Worker holds the Google refresh token and mints access
-// tokens on demand, so the iPad never depends on Safari/Chrome silent renewal. gapi (below) is
-// still loaded for the Calendar/Tasks API calls; the access token comes from the Worker, not GIS.
-const GCAL_PROXY = 'https://musedashboard.musenailandspa.workers.dev/gcal';
 
 const cfg = () => getState().config;
 const queue = () => getState().queue;
@@ -35,15 +26,7 @@ const STAFF_PALETTE = ['#1a5252','#7b1fa2','#0277bd','#00695c','#e65100','#5c3d8
 const _escHtml = s => (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const _escAttrJs = s => (s == null ? '' : String(s)).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-let _calGapiLoaded = false, _calRefreshTimer = null;
-let _calDate = new Date(), _calCalendars = [], _calEvents = {}, _calPrimaryId = '';
-// Today's appointment events, loaded INDEPENDENTLY of the calendar's viewed day (_calDate) so
-// the Turns "upcoming" strip + appointment reminders always reflect TODAY even when the Calendar
-// tab is parked on another date. (Before, both read _calEvents, which holds whatever day you're
-// viewing — so navigating the calendar polluted Turns/reminders.) Short TTL; refreshed in the
-// background by callers (fire-and-forget). Needs gapi + a Google token (Calendar opened/connected
-// at least once this session); otherwise empty and callers fall back to _calEvents when it's today.
-let _todayEvents = {}, _todayEventsAt = 0, _todayLoading = false;
+let _calDate = new Date(), _calCalendars = [], _calEvents = {};
 let _unassignedOnly = false;
 // Day | Week view (device-local). Week = a 7-day overview: all visible techs' bookings
 // merged per day column, colored by tech; tapping a day drills into the Day view.
@@ -58,12 +41,10 @@ export function toggleApptsUpcoming() {
   renderTodaysAppointments();
 }
 let _apptEditId = null, _apptLines = [], _apptExtraGuests = [], _apptEditGroupId = '';
-// Re-entry guard: saveAppt runs a multi-second sequence of awaited Google writes while
-// the modal stays open. Without this, an impatient second Save tap mints a fresh groupId
-// and inserts a whole duplicate party (+ duplicate Square upserts). Blocks re-entry until
-// the in-flight save settles.
+// Re-entry guard: blocks a second Save tap from minting a fresh groupId and inserting a whole
+// duplicate party (+ duplicate Square upserts) while the first save is still settling.
 let _apptSaving = false;
-let _calSyncTimer = null, _calSelectorDraft = null, _calDragIdx = null;
+let _calSelectorDraft = null, _calDragIdx = null;
 let _calSlotH = 52, _calSlotMins = 30, _calTouchStartDist = null;
 let _calHidden = new Set(JSON.parse(localStorage.getItem('muse_cal_staff_hidden') || '[]'));
 let _calOrder = JSON.parse(localStorage.getItem('muse_cal_staff_order') || 'null');
@@ -71,45 +52,6 @@ let _calOrder = JSON.parse(localStorage.getItem('muse_cal_staff_order') || 'null
 // staff is off/sick/vacation are hidden by default each day. _calOffPeek holds the ones
 // the operator turned on for the CURRENTLY-viewed day; it resets on day navigation.
 let _calOffPeek = new Set();
-const CAL_SYNC_INTERVAL = 60000;
-
-// ── Google eventual-consistency guards ────────────────────────────────────────
-// Right after a write, events.list can still RETURN just-deleted events (ghosts) and
-// MISS just-inserted/updated ones for several seconds. That made edits — especially
-// multi-staff bookings, which are delete+reinsert fan-outs — "not display properly"
-// (duplicates, stale copies) until a later sync. Every delete records a tombstone and
-// every insert/update/patch pins the resource Google returned; _gcalApplyGuards()
-// reconciles each fetched list against both for a couple of minutes.
-const GCAL_LAG_MS = 120000;
-const _calGhosts = new Map();   // `${calId}|${eventId}` -> expiresAt
-const _calPins   = new Map();   // `${calId}|${eventId}` -> { ev, expiresAt }
-export function _gcalNoteDeleted(calId, eventId) {
-  if (!calId || !eventId) return;
-  _calGhosts.set(calId + '|' + eventId, Date.now() + GCAL_LAG_MS);
-  _calPins.delete(calId + '|' + eventId);
-}
-export function _gcalNoteWritten(calId, ev) {
-  if (!calId || !ev || !ev.id) return;
-  _calPins.set(calId + '|' + ev.id, { ev, expiresAt: Date.now() + GCAL_LAG_MS });
-  _calGhosts.delete(calId + '|' + ev.id);
-}
-export function _gcalApplyGuards(calId, items) {
-  const now = Date.now();
-  for (const [k, exp] of _calGhosts) if (exp <= now) _calGhosts.delete(k);
-  for (const [k, v] of _calPins) if (v.expiresAt <= now) _calPins.delete(k);
-  let out = (items || []).filter(e => !_calGhosts.has(calId + '|' + e.id));
-  // Prefer the pinned (post-write) copy while the fetched one is older; once Google
-  // catches up the fetched copy wins and the pin ages out.
-  out = out.map(e => {
-    const p = _calPins.get(calId + '|' + e.id);
-    return (p && +new Date(p.ev.updated || 0) > +new Date(e.updated || 0)) ? p.ev : e;
-  });
-  for (const [k, v] of _calPins) {
-    const sep = k.indexOf('|');
-    if (k.slice(0, sep) === calId && !out.some(e => e.id === k.slice(sep + 1))) out.push(v.ev);
-  }
-  return out;
-}
 
 // The calendar's columns are the salon's active staff + a trailing "Unassigned" column.
 // Column id === staffId (a real config.staff[].id); the Unassigned column id === ''.
@@ -214,25 +156,6 @@ function _queueForAppt(apptId) { return apptId ? queue().find(x => String(x.appo
 // Returns the loaded events for a calendar (exposed via window.calEventsFor in main.js).
 export function getCalEvents(calId) { return _calEvents[calId] || []; }
 
-// Load TODAY's events for all calendars into _todayEvents, independent of _calDate. Cached with
-// a 60s TTL; fire-and-forget from the callers. Re-renders the Turns strip when a load completes.
-async function ensureTodayApptEvents(force) {
-  if (_todayLoading) return;
-  if (!force && _todayEventsAt && Date.now() - _todayEventsAt < 60000) return;
-  if (!window.gapi?.client?.calendar || !localStorage.getItem('gcal_token') || !_calCalendars.length) return;
-  _todayLoading = true;
-  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = new Date(); dayEnd.setHours(23, 59, 59, 999);
-  const next = {};
-  try {
-    await Promise.all(_calCalendars.map(async cal => {
-      try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 100 }); next[cal.id] = _gcalApplyGuards(cal.id, r.result.items); }
-      catch (e) { next[cal.id] = _todayEvents[cal.id] || []; }
-    }));
-    _todayEvents = next; _todayEventsAt = Date.now();
-    if (document.getElementById('panel-turns')?.classList.contains('active')) window.renderTurnsApptStrip?.();
-  } finally { _todayLoading = false; }
-}
 // For the appointment-reminder engine: today's TIMED appointment bookings (grouped like the
 // Today's-Appointments panel), as { id, name, startMs }. Only events that have a start time.
 export function apptsForReminders() {
@@ -254,8 +177,8 @@ export function apptsForReminders() {
 
 // An appointment this many minutes past its start that was never checked in is
 // treated as a de-facto no-show and DROPPED from the Turns strip / next-up — computed
-// live each render, NEVER written to Google. (We used to PATCH museNoShow onto these,
-// which permanently mis-flagged served-but-unlinked customers as No Show on past days.)
+// live each render, never a persisted flag (a persisted auto-no-show once mis-flagged
+// served-but-unlinked customers as No Show on past days).
 const STALE_APPT_DROP_MIN = 60;
 // For the Turns sheet: today's UPCOMING timed appointments, one entry per
 // (booking × assigned tech). Excludes anything not still upcoming — passed start
@@ -296,29 +219,6 @@ function calDisplayName(idOrCal) {
   if (idOrCal && typeof idOrCal === 'object' && idOrCal.name) return idOrCal.name;
   return _calCalendars.find(c => c.id === id)?.name || 'Unassigned';
 }
-export function setUnassignedCal(calId) {
-  dispatch('config.set', { key: 'unassigned_cal_id', value: calId || '' });
-  renderGcalCalendarList();
-  if (document.getElementById('panel-calendar')?.classList.contains('active')) calRenderGridPreserveScroll();
-  showToast('Unassigned-appointments calendar set ✓');
-}
-export function renderGcalCalendarList() {
-  const el = document.getElementById('gcal-calendar-list');
-  if (!el) return;
-  if (_calCalendars.length === 0) { el.innerHTML = '<div class="text-xs font-body text-on-surface-variant py-2">No calendars loaded yet — connect above, then reopen this page.</div>'; return; }
-  const uid = unassignedCalId();
-  el.innerHTML = `<div class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Your calendars · pick where unassigned appointments go</div>`
-    + _calCalendars.map(c => {
-        const isU = c.id === uid, isP = c.id === _calPrimaryId;
-        return `<label class="flex items-center gap-2 py-2 px-2 rounded-lg hover:bg-surface-container cursor-pointer">
-          <input type="radio" name="unassigned-cal" ${isU?'checked':''} onchange="setUnassignedCal('${c.id.replace(/'/g,"\\'")}')" style="accent-color:#1a5252;width:16px;height:16px;flex-shrink:0">
-          <span style="width:12px;height:12px;border-radius:50%;background:${c.color};flex-shrink:0"></span>
-          <span class="flex-grow text-sm font-body text-on-surface">${_escHtml(c.name)}${isP?' <span style="font-size:10px;color:#9ca3af">(primary)</span>':''}</span>
-          ${isU?'<span style="font-size:10px;font-weight:600;color:#1a5252">Unassigned →</span>':''}
-        </label>`;
-      }).join('');
-}
-
 // ── Today's Appointments list (right rail, above Tasks) ───────────────────────
 // Lists the VIEWED day's appointments (follows the date nav), one row per booking
 // (party + cross-calendar split = one row), sorted by time. Tap opens the appt.
@@ -377,59 +277,10 @@ export function renderTodaysAppointments() {
   }).join('');
 }
 
-// ── Script loading + auth ─────────────────────────
-// Proactively refresh the Google token ~5 min before it expires (silent, no
-// prompt) so the calendar stays connected — no 401, no manual reconnect.
-function scheduleCalTokenRefresh(expires) {
-  clearTimeout(_calRefreshTimer);
-  const delay = Math.max(10000, expires - Date.now() - 5 * 60 * 1000);
-  _calRefreshTimer = setTimeout(() => { _fetchWorkerToken().catch(() => {}); }, delay);
-}
-// Server-side token acquisition: ask the Worker (which holds the refresh token) for a fresh
-// access token. Always works regardless of browser context (PWA / Safari / Chrome) — no GIS,
-// no ITP. Throws on not_connected / reauth_required so the caller can show the Connect button.
-async function _fetchWorkerToken() {
-  const r = await fetch(`${GCAL_PROXY}/token`);
-  if (!r.ok) { let e = 'token-' + r.status; try { e = (await r.json()).error || e; } catch {} throw new Error(e); }
-  const j = await r.json();
-  const saved = { token: j.access_token, expires: j.expires };
-  localStorage.setItem('gcal_token', JSON.stringify(saved));
-  if (window.gapi?.client) gapi.client.setToken({ access_token: saved.token });
-  scheduleCalTokenRefresh(saved.expires);
-  return saved;
-}
-
-// ── On-demand token freshness ─────────────────────
-// The proactive refresh above is a single setTimeout, which browsers THROTTLE in a backgrounded
-// tab — so it can fire late and the access token lapses. ensureFreshToken() re-mints from the
-// Worker on demand right before any Google call when the token is expired/near expiry, so reads
-// and writes always run on a valid token.
-let _calInitDone = false, _calFocusHooked = false;
-function _tokenFresh(skewMs = 120000) {
-  try { const s = JSON.parse(localStorage.getItem('gcal_token') || 'null'); return !!(s && s.token && Date.now() < s.expires - skewMs); } catch (e) { return false; }
-}
-function ensureFreshToken() {
-  if (_tokenFresh()) return Promise.resolve();
-  return _fetchWorkerToken().then(() => {});
-}
-// First-connect side effects, run once. The calendar + tasks are app-native (they render off the
-// store, no Google), so connecting Google no longer starts a live poll — Google is only read by
-// the one-time import. calLoadAndRender/loadTaskLists just refresh the app-native views.
-function _calInitialLoad() { if (_calInitDone) return; _calInitDone = true; calLoadAndRender(); loadTaskLists(); }
-// A failed write is "authentication" when the token expired/was revoked or a refresh failed.
-// Drop the stale token, kick a silent reconnect so the NEXT attempt works, and tell the user.
-function _calWriteError(err, verb) {
-  const msg = err?.result?.error?.message || err?.message || '';
-  const auth = err?.status === 401 || err?.result?.error?.status === 'UNAUTHENTICATED' || /auth|credential|invalid.?token/i.test(msg);
-  if (auth) {
-    localStorage.removeItem('gcal_token');
-    document.getElementById('cal-signin-btn')?.classList.remove('hidden');
-    _fetchWorkerToken().catch(() => {});   // re-mint from the Worker's refresh token for the retry
-    showToast('Calendar session expired — reconnecting. Please try again in a moment.');
-  } else showToast(verb + ' failed: ' + (msg || 'Unknown error'));
-}
-// On desktop tab re-focus, refresh the app-native grid's "now" line and re-render (cheap; the
-// store also pushes live changes via subscribe). No Google poll — the calendar is app-native.
+// ── App-native focus refresh ──────────────────────
+// On desktop tab re-focus, refresh the grid's "now" line and re-render (cheap; the store also
+// pushes live changes via subscribe). Registered once from initCalendar.
+let _calFocusHooked = false;
 function _hookCalFocusRefresh() {
   if (_calFocusHooked) return; _calFocusHooked = true;
   const onActive = () => { updateCalNowLine(); if (document.getElementById('panel-calendar')?.classList.contains('active')) { try { calLoadAndRender(true); } catch {} } };
@@ -438,26 +289,8 @@ function _hookCalFocusRefresh() {
   window.addEventListener('online', onActive);
 }
 
-export function loadGCalScripts() {
-  _hookCalFocusRefresh();
-  if (document.getElementById('gapi-script')) return;
-  // Only gapi (the Calendar/Tasks API). The access token comes from the Worker (/gcal/token),
-  // not the browser GIS sign-in — so there's no gsi/client script anymore.
-  const s1 = document.createElement('script'); s1.id = 'gapi-script'; s1.src = 'https://apis.google.com/js/api.js';
-  s1.onload = () => gapi.load('client', async () => { await gapi.client.init({ discoveryDocs: [GCAL_DISCOVERY, GTASK_DISCOVERY] }); _calGapiLoaded = true; _calTryReady(); });
-  document.head.appendChild(s1);
-}
-
-function _calTryReady() {
-  if (!_calGapiLoaded) return;
-  // Bootstrap from the Worker: succeeds if a refresh token is stored, else show Connect.
-  _fetchWorkerToken()
-    .then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); _calInitialLoad(); })
-    .catch(() => { document.getElementById('cal-signin-btn')?.classList.remove('hidden'); calSetStatus('Click "Connect Google Calendar" to get started'); });
-}
-
 // Grid AND tasks are app-native — both render immediately, with zero Google dependency.
-export function initCalendar() { _calDate = new Date(); calUpdateDateLabel(); calLoadAndRender(); loadTaskLists(); }
+export function initCalendar() { _hookCalFocusRefresh(); _calDate = new Date(); calUpdateDateLabel(); calLoadAndRender(); loadTaskLists(); }
 // Re-render the calendar when appointments/tasks change on ANY device (the DO broadcast lands via
 // sync.js → applyChange → notify). Only touch the DOM when the Calendar panel is showing;
 // the Turns strip re-renders itself off apptsForTurns.
@@ -481,24 +314,6 @@ subscribe((state, op) => {
   }
   if (document.getElementById('panel-turns')?.classList.contains('active')) { try { window.renderTurnsApptStrip?.(); } catch {} }
 });
-export function calSignIn(silent) {
-  // Silent = re-mint from the Worker's stored refresh token (no user action). Interactive = send
-  // the owner to Google's consent via the Worker; on return the app reloads and auto-connects.
-  if (silent) { _fetchWorkerToken().then(() => { document.getElementById('cal-signin-btn')?.classList.add('hidden'); calSetStatus(''); if (_calInitDone) { try { calLoadAndRender(true); } catch {} } else _calInitialLoad(); }).catch(() => {}); return; }
-  // Top-level navigation — no headers possible, so the §13 app token rides as ?auth=.
-  location.href = withAuth(`${GCAL_PROXY}/connect?return=${encodeURIComponent(location.href.split('#')[0])}`);
-}
-export function calSignOut() {
-  fetch(`${GCAL_PROXY}/disconnect`, { method: 'POST' }).catch(() => {});   // revoke + clear the refresh token server-side
-  if (window.gapi?.client) gapi.client.setToken(null);
-  localStorage.removeItem('gcal_token');
-  _calInitDone = false;   // so a fresh sign-in re-runs the initial load
-  _calCalendars = []; _calEvents = {};
-  document.getElementById('cal-grid').classList.add('hidden');
-  document.getElementById('cal-loading').classList.remove('hidden');
-  document.getElementById('cal-signin-btn')?.classList.remove('hidden');
-  calSetStatus('Signed out. Click Connect to sign back in.');
-}
 function calSetStatus(msg) {
   const el = document.getElementById('cal-status-msg'), loading = document.getElementById('cal-loading');
   if (!el || !loading) return;
@@ -892,7 +707,7 @@ function calRenderWeekGrid() {
 
 // ── "Now" line keep-alive ─────────────────────────
 // The red current-time line is positioned at grid-render time, so on its own it only moves when
-// the grid re-renders (every CAL_SYNC_INTERVAL) and FREEZES while a backgrounded / asleep iPad
+// the grid re-renders, and FREEZES while a backgrounded / asleep iPad
 // throttles timers — that's the "lags behind" report. This repositions the existing line(s)
 // cheaply (no re-render) on a short timer, and onActive() snaps it the instant the iPad wakes.
 // Geometry (start hour / slot size) is read from the line's data-attrs so it tracks the zoom.
@@ -911,37 +726,6 @@ function updateCalNowLine() {
   lines.forEach(el => { el.style.display = vis ? '' : 'none'; if (vis) el.style.top = lineTop + 'px'; });
 }
 function startCalNowLine() { if (_calNowTimer) return; _calNowTimer = setInterval(updateCalNowLine, 30000); }
-
-// ── Sync ──────────────────────────────────────────
-async function calSilentSync() {
-  if (!gapi?.client?.getToken()?.access_token) return;
-  // Keep the token alive on the foreground sync tick too (self-heals the read loop if the
-  // proactive refresh timer was throttled). If it's expired and can't refresh, bail to error.
-  if (!_tokenFresh(0)) { try { await ensureFreshToken(); } catch (e) { setCalSyncIndicator('error'); return; } }
-  try {
-    setCalSyncIndicator('syncing');
-    const dayStart = calIsWeek() ? calWeekStart(_calDate) : new Date(_calDate); dayStart.setHours(0,0,0,0);
-    const dayEnd = new Date(dayStart); if (calIsWeek()) dayEnd.setDate(dayEnd.getDate() + 6); dayEnd.setHours(23,59,59,999);
-    const newEvents = {}; let anyFail = false;
-    await Promise.all(_calCalendars.map(async cal => { try { const r = await gapi.client.calendar.events.list({ calendarId: cal.id, timeMin: dayStart.toISOString(), timeMax: dayEnd.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: calIsWeek() ? 250 : 100 }); newEvents[cal.id] = _gcalApplyGuards(cal.id, r.result.items); } catch (e) { anyFail = true; console.warn('[calendar] silent sync failed for', cal.name, e); newEvents[cal.id] = _calEvents[cal.id] || []; } }));
-    _calEvents = newEvents;
-    // Preserve the user's scroll position on a silent refresh — calRenderGrid()
-    // re-scrolls to ~1hr-before-now, which yanked the view away mid-use.
-    if (document.getElementById('panel-calendar')?.classList.contains('active')) calRenderGridPreserveScroll();
-    renderTodaysAppointments();
-    // A per-cal failure keeps that column's stale events; flag the pill 'error' so a frozen
-    // column isn't masked by a healthy green pill.
-    setCalSyncIndicator(anyFail ? 'error' : 'ok');
-  } catch (e) { setCalSyncIndicator('error'); }
-}
-function startCalSync() { if (_calSyncTimer) return; setCalSyncIndicator('ok'); _calSyncTimer = setInterval(() => calSilentSync(), CAL_SYNC_INTERVAL); }
-export async function calForceSync() { setCalSyncIndicator('syncing'); try { await calLoadAndRender(true); setCalSyncIndicator('ok'); showToast('Calendar refreshed ✓'); } catch (e) { setCalSyncIndicator('error'); showToast('Calendar refresh failed'); } }
-function setCalSyncIndicator(state) {
-  const dot = document.getElementById('cal-sync-dot'), text = document.getElementById('cal-sync-text'), pill = document.getElementById('cal-sync-pill');
-  if (!dot) return; if (pill) pill.style.display = 'flex';
-  const states = { ok:{bg:'#2a7a4f',label:'Calendar'}, syncing:{bg:'#f5c870',label:null}, error:{bg:'#fa746f',label:'Cal ✗'}, idle:{bg:'#adb3b5',label:'Calendar'} };
-  const s = states[state] || states.idle; dot.style.background = s.bg; if (text && s.label !== null) text.textContent = s.label;
-}
 
 // ── Zoom (ctrl+wheel / pinch) ─────────────────────
 export function calHandleWheel(e) { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); calAdjustZoom(e.deltaY > 0 ? -1 : 1); }
@@ -1147,8 +931,7 @@ export function calSaveVisitNote(entryId, val) {
   dispatch('queue.entryPatch', { entryId: String(entryId), patch: { txnNote: (val || '').trim() } });
 }
 
-// Toggle the "confirmed" flag on an appointment (stored in extendedProperties so it
-// syncs through Google Calendar; shown as a ✓ on the bubble + popup).
+// Toggle the "confirmed" flag on an appointment (synced app-native; shown as a ✓ on the bubble + popup).
 // Match a live-queue visit to an appointment by phone, but ONLY when the visit's
 // check-in time is near the appointment time. Without the window, a customer's earlier
 // same-day visit (e.g. a paid morning walk-in) would wrongly stamp its status onto a
@@ -1190,52 +973,6 @@ function _pastRecordMatch(eventIds, rawPhone, apptStartMs) {
 }
 
 // ── Booking ↔ queue matching across calendar copies ──────────────────────────
-// A check-in stores ONE copy's id as the queue entry's calEventId — whichever copy it
-// went through — but a booking has a copy per calendar (each tech + Unassigned). Any
-// queue lookup must therefore match against a SET of ids, or sibling copies read as
-// "not checked in" after check-in/payment (the Melissa-Smith bug: Paid on the tech's
-// column, orange on Unassigned). Booking-wide set = the status badge; person-scoped
-// set = the per-guest "already checked in" guards (a party member must not be blocked
-// by ANOTHER member's entry). Pure on (ev, eventsMap) — exported for unit tests.
-export function _bookingEventIds(ev, eventsMap = _calEvents) {
-  const ids = new Set([String(ev.id)]);
-  const gid = ev.extendedProperties?.private?.museGroupId || '';
-  if (gid) Object.values(eventsMap).forEach(list => (list || []).forEach(e => {
-    if ((e.extendedProperties?.private?.museGroupId || '') === gid) ids.add(String(e.id));
-  }));
-  return ids;
-}
-const _evPersonName = e => (e.extendedProperties?.private?.museName || (e.summary || '').split(' — ')[0] || '').trim().toLowerCase();
-export function _personEventIds(ev, eventsMap = _calEvents) {
-  const ids = new Set([String(ev.id)]);
-  const gid = ev.extendedProperties?.private?.museGroupId || '';
-  if (!gid) return ids;
-  const pname = _evPersonName(ev);
-  Object.values(eventsMap).forEach(list => (list || []).forEach(e => {
-    if ((e.extendedProperties?.private?.museGroupId || '') === gid && _evPersonName(e) === pname) ids.add(String(e.id));
-  }));
-  return ids;
-}
-export function _queueEntryForEventIds(queueArr, ids) {
-  return (queueArr || []).find(x => x.calEventId && ids.has(String(x.calEventId))) || null;
-}
-const _queueByEventIds = ids => _queueEntryForEventIds(queue(), ids);
-
-// Every calendar copy of a booking. A multi-staff/party appointment is stored as one
-// Google event per staff column, all sharing museGroupId — so confirm / no-show must
-// hit ALL copies, else only the clicked staff column reflects the change. Solo event
-// (no groupId) → just itself.
-function _eventGroupRefs(calId, eventId) {
-  const ev = (_calEvents[calId] || []).find(x => x.id === eventId);
-  if (!ev) return [];
-  const gid = ev.extendedProperties?.private?.museGroupId || '';
-  if (!gid) return [{ calId, eventId }];
-  const refs = [];
-  Object.entries(_calEvents).forEach(([cid, list]) => (list || []).forEach(e => {
-    if ((e.extendedProperties?.private?.museGroupId || '') === gid) refs.push({ calId: cid, eventId: e.id });
-  }));
-  return refs.length ? refs : [{ calId, eventId }];
-}
 export async function calToggleConfirmed(apptId) {
   const a = (getState().appointments || []).find(x => x.id === apptId); if (!a) return;
   const appt = { ...a, confirmed: !a.confirmed };
@@ -1244,8 +981,8 @@ export async function calToggleConfirmed(apptId) {
   if (document.getElementById('panel-calendar')?.classList.contains('active')) calLoadAndRender(true);
 }
 
-// Mark an appointment "No Show" (museNoShow flag in extendedProperties, synced via
-// Google Calendar — shown as a red badge on the bubble + today's panel, and hidden by
+// Mark an appointment "No Show" (appt.noShow flag, synced app-native — shown as a red badge on
+// the bubble + today's panel, and hidden by
 // the upcoming-only filter). On marking, open the matched customer's account so the
 // front desk can notate it (match by phone to the Square directory).
 export async function calMarkNoShow(apptId) {
@@ -1535,33 +1272,6 @@ function _buildTechOptions(sel) {
 }
 function _buildSvcOptions(sel) { return '<option value="">— Service —</option>' + cfg().services.filter(s => !cfg().hidden_dash_services.includes(s.id)).map(s => `<option value="${s.id}" ${s.id === sel ? 'selected' : ''}>${s.label}</option>`).join(''); }
 
-// ── Appointment metadata (structured in extendedProperties; description = notes) ─
-// New events store service lines + phone in extendedProperties.private so the
-// description is purely the user's notes. Old events fall back to parsing the
-// legacy "Service (Tech)\nphone\nnotes" description.
-function _apptPhone(ev) {
-  const ext = ev?.extendedProperties?.private || {};
-  if (ext.musePhone) return ext.musePhone;
-  const m = (ev?.description || '').match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
-  return m ? m[1] : '';
-}
-function _apptNotes(ev) {
-  const ext = ev?.extendedProperties?.private || {};
-  if (ext.museLines !== undefined) return ev?.description || '';   // new format: description IS the notes
-  return (ev?.description || '').replace(/\([^)]*\)\s*/g, '').replace(/\d{3}[\s.-]?\d{3}[\s.-]?\d{4}/g, '').trim();
-}
-function _parseApptLines(ev, calId) {
-  const ext = ev?.extendedProperties?.private || {};
-  if (ext.museLines !== undefined) { try { return JSON.parse(ext.museLines) || []; } catch { return []; } }
-  const lines = [], desc = ev?.description || '', re = /(.+?)\s*\(([^)]+)\)/g; let m;
-  while ((m = re.exec(desc)) !== null) {
-    const svcLabel = m[1].trim(), techName = m[2].trim();
-    const s = cfg().services.find(x => x.label.toLowerCase() === svcLabel.toLowerCase());
-    const cal = _calCalendars.find(x => x.name.toLowerCase() === techName.toLowerCase()) || _calCalendars.find(x => x.id === calId);
-    if (s || cal) lines.push({ svcId: s?.id || '', calId: cal?.id || calId });
-  }
-  return lines;
-}
 export function renderApptServiceLines() {
   const container = document.getElementById('appt-service-lines'); if (!container) return;
   container.innerHTML = _apptLines.map((line,i) => `<div class="flex items-center gap-2" data-line="${i}"><select onchange="updateApptLine(${i},'svc',this.value)" class="flex-1 border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">${_buildSvcOptions(line.svcId)}</select><select onchange="updateApptLine(${i},'staff',this.value)" class="flex-1 border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body focus:border-primary outline-none">${_buildTechOptions(line.staffId)}</select><button type="button" onclick="removeApptLine(${i})" class="w-8 h-8 rounded-xl text-outline hover:text-error hover:bg-error/10 flex items-center justify-center transition-colors flex-shrink-0"><span class="material-symbols-outlined" style="font-size:18px">remove</span></button></div>`).join('');
@@ -1631,21 +1341,6 @@ export function showEditApptModal(apptId) {
   const m = document.getElementById('appt-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
 }
 export function closeApptModal() { const m = document.getElementById('appt-modal'); m.classList.add('hidden'); m.style.display = ''; _apptEditId = null; _apptExtraGuests = []; _apptEditGroupId = ''; const eg = document.getElementById('appt-extra-guests'); if (eg) eg.innerHTML = ''; }
-
-// Build one person's event body. museLines/museName/musePhone (per person) + a
-// shared museGroupId link everyone in the booking so quick check-in can pull the
-// whole party in as one group.
-function _apptEventBody(person, startDt, endDt, notes, groupId, primary) {
-  const svcTitles = person.lines.filter(l => l.svcId).map(l => cfg().services.find(s=>s.id===l.svcId)?.label).filter(Boolean);
-  const summary = svcTitles.length > 0 ? `${person.name} — ${svcTitles.join(', ')}` : person.name;
-  const museLines = person.lines.filter(l => l.svcId || l.calId).map(l => ({ svcId: l.svcId || '', calId: l.calId || '' }));
-  const priv = { museLines: JSON.stringify(museLines), musePhone: person.phone || '', museName: person.name };
-  if (groupId) priv.museGroupId = groupId;
-  // Every event in a booking carries the primary's name/phone so the calendar can
-  // render the whole party as one bubble labelled by the primary guest.
-  if (primary) { priv.musePrimaryName = primary.name; priv.musePrimaryPhone = primary.phone || ''; if (primary.isPrimary) priv.musePrimary = '1'; }
-  return { summary, description: notes, start: { dateTime: startDt.toISOString() }, end: { dateTime: endDt.toISOString() }, extendedProperties: { private: priv } };
-}
 
 export async function saveAppt() {
   if (_apptSaving) return;
@@ -1720,84 +1415,6 @@ export async function deleteAppt(apptIdParam) {
     showToast('Appointment cancelled');
     if (document.getElementById('panel-calendar')?.classList.contains('active')) calLoadAndRender(true);
   } catch (err) { console.warn('[calendar] deleteAppt failed:', err); showToast('Could not cancel the appointment'); }
-}
-
-// ── One-time Google import (Release A only) ───────
-// Manual, explicitly-triggered admin action: pull upcoming Google appointments AND all Google
-// Tasks into the app-native stores. Google is never modified. Idempotent — re-running skips a
-// booking already imported (by googleGroupId) and a task already imported (by googleTaskId), so
-// it's safe to run twice. Removed entirely in Release B with the rest of the Google plumbing.
-export async function importFromGoogle() {
-  // Gate on a LIVE server snapshot (not just the local cache) so the "already imported?" checks
-  // read real state — otherwise a run before the DO snapshot arrives would duplicate everything.
-  if (!getState().connected || !isServerHydrated()) { showToast('Not fully synced yet — wait a moment, then try again'); return; }
-  if (typeof gapi === 'undefined' || !gapi.client?.calendar || !gapi.client?.tasks) { showToast('Connect Google Calendar first'); return; }
-  const setBtn = t => { const b = document.getElementById('gimport-btn'), l = document.getElementById('gimport-label'); if (l) l.textContent = t; if (b) b.disabled = t !== 'Import from Google'; };   // update the label only — keep the button's icon
-  setBtn('Importing…'); showToast('Importing from Google…');
-  try { await ensureFreshToken(); } catch { showToast('Google auth failed — reconnect and retry'); setBtn('Import from Google'); return; }
-
-  // ── Appointments ──
-  let cals = [];
-  try { const cl = await gapi.client.calendar.calendarList.list({ maxResults: 250 }); cals = cl.result.items || []; }
-  catch { showToast('Could not read your Google calendars'); setBtn('Import from Google'); return; }
-  if (!cals.length) { showToast('No Google calendars found — nothing to import'); setBtn('Import from Google'); return; }   // fail loud, never import everything as Unassigned
-  const norm = s => (s || '').trim().toLowerCase();
-  const staff = cfg().staff || [];
-  const calToStaff = {};   // Google calendar id → staff id (name-matched); non-matches → '' (Unassigned)
-  cals.forEach(c => { const st = staff.find(s => s.name && norm(s.name) === norm(c.summaryOverride || c.summary)); calToStaff[c.id] = st ? st.id : ''; });
-
-  const timeMin = new Date(); timeMin.setHours(0, 0, 0, 0);
-  const timeMax = new Date(timeMin.getTime()); timeMax.setMonth(timeMax.getMonth() + 12);
-  const events = [];
-  for (const c of cals) {
-    let pageToken;
-    do {
-      let r;
-      try { r = await gapi.client.calendar.events.list({ calendarId: c.id, timeMin: timeMin.toISOString(), timeMax: timeMax.toISOString(), singleEvents: true, showDeleted: false, maxResults: 250, pageToken }); }
-      catch { break; }
-      (r.result.items || []).forEach(ev => events.push(ev));
-      pageToken = r.result.nextPageToken;
-    } while (pageToken);
-  }
-  const { appts, unmatchedLines } = _regroupGoogleAppts(events, calToStaff, () => 'appt_g' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8));
-  const existingGids = new Set((getState().appointments || []).map(a => a.googleGroupId).filter(Boolean));
-  let apptImported = 0, apptSkipped = 0;
-  appts.forEach(a => { if (existingGids.has(a.googleGroupId)) { apptSkipped++; return; } dispatch('appt.upsert', { appt: a }); apptImported++; });
-
-  // ── Tasks ──
-  let taskImported = 0, taskSkipped = 0;
-  try {
-    const tl = await gapi.client.tasks.tasklists.list({ maxResults: 100 });
-    const lists = tl.result.items || [];
-    const existingTaskIds = new Set((getState().tasks || []).map(t => t.googleTaskId).filter(Boolean));
-    for (const list of lists) {
-      let pageToken;
-      do {
-        let r;
-        try { r = await gapi.client.tasks.tasks.list({ tasklist: list.id, showCompleted: true, showHidden: true, maxResults: 100, pageToken }); }
-        catch { break; }
-        (r.result.items || []).forEach(gt => {
-          const t = _mapGoogleTask(gt, list.title, () => 'task_g' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8));
-          if (!t) return;
-          if (t.googleTaskId && existingTaskIds.has(t.googleTaskId)) { taskSkipped++; return; }
-          dispatch('task.upsert', { task: t }); taskImported++;
-          if (t.googleTaskId) existingTaskIds.add(t.googleTaskId);
-        });
-        pageToken = r.result.nextPageToken;
-      } while (pageToken);
-    }
-  } catch { /* tasks import is best-effort — appointments are the critical path */ }
-
-  try { calLoadAndRender(true); loadTaskLists(); } catch {}
-  setBtn('Import from Google');
-  const parts = [`${apptImported} appointment${apptImported !== 1 ? 's' : ''}`];
-  if (apptSkipped) parts.push(`${apptSkipped} already imported`);
-  if (unmatchedLines) parts.push(`${unmatchedLines} service line${unmatchedLines !== 1 ? 's' : ''} left Unassigned (assign a tech)`);
-  parts.push(`${taskImported} task${taskImported !== 1 ? 's' : ''}`);
-  if (taskSkipped) parts.push(`${taskSkipped} tasks already imported`);
-  const msg = 'Imported ' + parts.join(', ') + '.';
-  showToast(msg);
-  window.showWarnModal?.('Import complete', msg + '\n\nCompare the calendar against Google. Once everything looks right, you can safely disconnect Google.', () => {}, 'Done');
 }
 
 // ── Tasks (app-native) ────────────────────────────

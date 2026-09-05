@@ -233,11 +233,6 @@ tailwind.config = {
         <span class="sync-dot" id="conn-dot" style="background:#adb3b5"></span>
         <span id="conn-text">Live</span>
       </div>
-      <div id="cal-sync-pill" class="hidden items-center gap-2 px-3 rounded-full bg-surface-container text-xs font-body text-on-surface-variant cursor-pointer hover:bg-surface-container-high transition-colors select-none" style="height:32px;min-width:72px"
-        onclick="calForceSync()" title="Tap to sync calendar">
-        <span class="sync-dot" id="cal-sync-dot" style="background:#adb3b5"></span>
-        <span id="cal-sync-text">Calendar</span>
-      </div>
       <span id="app-version-badge" class="text-[10px] font-body text-outline-variant select-none" title="musedashboard"></span>
       <!-- Popover for the clock notice / admin nudge (filled by timeclock.js). -->
       <div id="clock-popover" class="hidden bg-surface-container-lowest border border-surface-container-high rounded-2xl shadow-xl p-4" style="position:fixed;z-index:62;width:264px"></div>
@@ -708,7 +703,7 @@ tailwind.config = {
           </div>
         </div>
 
-        <!-- Upcoming appointments strip (Google Calendar). Toggle in header; hidden by default. -->
+        <!-- Upcoming appointments strip. Toggle in header; hidden by default. -->
         <div id="turns-appts-strip" class="rounded-xl border border-surface-container-high overflow-hidden mb-3 hidden" style="background:#faf8ff">
           <div class="flex items-center gap-2 px-3 py-1 border-b border-surface-container-high" style="background:#f3effa">
             <span class="material-symbols-outlined" style="font-size:16px;color:#7b1fa2">event_upcoming</span>
@@ -809,12 +804,6 @@ tailwind.config = {
                 </div>
               </div>
             </div>
-            <!-- Auth / New appointment -->
-            <div id="cal-auth-area">
-              <button onclick="calSignIn()" id="cal-signin-btn" class="hidden btn-primary">
-                <span class="material-symbols-outlined" style="font-size:16px">login</span> Connect Google Calendar
-              </button>
-            </div>
             <button onclick="showNewApptModal()" class="btn-primary">
               <span class="material-symbols-outlined" style="font-size:16px">add</span> New Appointment
             </button>
@@ -828,7 +817,7 @@ tailwind.config = {
             <!-- Loading / auth state -->
             <div id="cal-loading" class="flex flex-col items-center justify-center h-64 text-on-surface-variant">
               <span class="material-symbols-outlined text-5xl mb-3 opacity-30">calendar_month</span>
-              <p class="font-body text-sm" id="cal-status-msg">Connecting to Google Calendar…</p>
+              <p class="font-body text-sm" id="cal-status-msg">Loading…</p>
             </div>
             <!-- Side-by-side grid (built by JS) -->
             <div id="cal-grid" class="hidden flex-1 min-h-0"></div>
@@ -921,7 +910,7 @@ tailwind.config = {
           </button>
           <button onclick="settingsOpenCategory('integrations')" class="flex items-center gap-4 px-5 py-4 bg-surface-container-lowest rounded-xl border border-surface-container-high hover:bg-surface-container hover:border-primary/40 transition-colors text-left">
             <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined text-primary">hub</span></div>
-            <div class="min-w-0"><div class="font-headline font-bold text-on-surface">Integrations</div><div class="text-xs font-body text-on-surface-variant mt-0.5">Square &amp; Google</div></div>
+            <div class="min-w-0"><div class="font-headline font-bold text-on-surface">Integrations</div><div class="text-xs font-body text-on-surface-variant mt-0.5">Payments &amp; messaging</div></div>
           </button>
           <button onclick="settingsOpenCategory('business')" class="flex items-center gap-4 px-5 py-4 bg-surface-container-lowest rounded-xl border border-surface-container-high hover:bg-surface-container hover:border-primary/40 transition-colors text-left">
             <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined text-primary">storefront</span></div>
@@ -1090,25 +1079,6 @@ tailwind.config = {
               </button>
               <p class="text-[11px] font-body text-on-surface-variant mt-1">Enables itemized in-person payments on your Square Terminal (the "Pay on Terminal" button at checkout).</p>
             </div>
-          </div>
-        </div>
-
-        <!-- Leaf: Google Calendar -->
-        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
-          <div id="gcal-section" class="hidden px-5 py-4 space-y-3">
-            <p class="text-sm font-body text-on-surface-variant">The Calendar and Tasks now live in the app itself — no Google connection is needed to use them. Google is only here to <strong>import your existing appointments and tasks one time</strong> so nothing is lost. Connect, run the import, verify, and you're done.</p>
-            <div class="text-xs font-body" id="gcal-settings-status">Checking…</div>
-            <button id="gcal-connect-btn" onclick="calSignIn()" class="w-full btn-primary">
-              <span class="material-symbols-outlined" style="font-size:18px">login</span> Connect Google Calendar
-            </button>
-            <button id="gimport-btn" onclick="importFromGoogle()" class="hidden w-full btn-primary">
-              <span class="material-symbols-outlined" style="font-size:18px">cloud_download</span> <span id="gimport-label">Import from Google</span>
-            </button>
-            <p class="text-[11px] font-body text-on-surface-variant leading-snug">Copies upcoming appointments and all tasks into the app. Safe to run more than once — anything already imported is skipped. Your Google data is never changed.</p>
-            <button id="gcal-disconnect-btn" onclick="calSignOut();renderGcalSettings()" class="hidden w-full btn-secondary">
-              <span class="material-symbols-outlined" style="font-size:18px">logout</span> Disconnect
-            </button>
-            <div id="gcal-calendar-list" class="border-t border-surface-container-high pt-3 space-y-0.5"></div>
           </div>
         </div>
 
@@ -1740,7 +1710,7 @@ tailwind.config = {
           class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
       </div>
       <div>
-        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Preferred Name <span class="normal-case tracking-normal text-on-surface-variant">(display &amp; Google Calendar)</span></label>
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Preferred Name <span class="normal-case tracking-normal text-on-surface-variant">(display name)</span></label>
         <input id="staff-name-input" type="text" placeholder="e.g. Christina"
           class="w-full border-b-2 border-surface-container-high bg-transparent py-2 text-lg font-headline text-on-surface focus:border-primary transition-colors placeholder:text-outline-variant outline-none">
       </div>

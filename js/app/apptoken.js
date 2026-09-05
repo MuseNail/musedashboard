@@ -8,7 +8,7 @@
 // Importing this module installs a fetch wrapper that adds
 // `Authorization: Bearer <token>` to every request bound for the Worker, so
 // feature code keeps calling fetch() plainly. Contexts that can't send headers
-// (the WebSocket, the /gcal/connect navigation) append the token with withAuth().
+// (the WebSocket) append the token with withAuth().
 // Import it FIRST in every entry point (main.js, staff.js, reports-app.js).
 
 const KEY = 'muse_session';

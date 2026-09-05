@@ -124,22 +124,6 @@ export function syncSquareFromSettings() {
   window.syncSquare?.();
 }
 
-// ── Google Calendar (Integrations leaf) ───────────
-function gcalConnected() {
-  try { const l = JSON.parse(localStorage.getItem('gcal_token') || 'null'); if (l && Date.now() < l.expires - 60000) return true; } catch (e) {}
-  const s = cfg().gcal_token;
-  return !!(s && Date.now() < s.expires - 60000);
-}
-export function renderGcalSettings() {
-  window.loadGCalScripts?.();
-  const on = gcalConnected();
-  const status = document.getElementById('gcal-settings-status');
-  if (status) { status.textContent = on ? '✓ Connected' : 'Not connected'; status.style.color = on ? '#2a7a4f' : ''; }
-  document.getElementById('gcal-connect-btn')?.classList.toggle('hidden', on);
-  document.getElementById('gimport-btn')?.classList.toggle('hidden', !on);       // import needs a live connection — only show it once connected
-  document.getElementById('gcal-disconnect-btn')?.classList.toggle('hidden', !on);
-  window.renderGcalCalendarList?.();
-}
 
 // ── Salon timezone (Business leaf, Phase 3 Stage 0) ─────────────────
 // config.salon_tz decides which salon-local day/month every sale belongs to — the
@@ -182,7 +166,6 @@ export function renderAppInfo() {
     ['Device ID', localStorage.getItem('muse_device_id') || '—'],
     ['Live sync', st.connected ? `Connected${st.pendingCount ? ` · ${st.pendingCount} pending` : ''}` : 'Offline'],
     ['Square', cfg().square_config ? `Connected · ${cfg().square_config.locationId}` : 'Not connected'],
-    ['Google Calendar', gcalConnected() ? 'Connected' : 'Not connected'],
     ['Server sign-in', getAppToken() ? `Active${getSessionUser()?.name ? ` · ${getSessionUser().name}` : ''}` : 'None yet — minted on the next PIN entry'],
   ];
   el.innerHTML = rows.map(([k, v]) => `
@@ -290,10 +273,9 @@ const SETTINGS_NAV = [
     { label:'Turns Board Display', sub:'Text size & tech/turn separation (divider or lane) — set per device', content:'settings-turnsdisplay-section', render:'renderTurnsDisplaySettings', icon:'format_size' },
     { label:'Calendar Hours', sub:'Visible time range', content:'settings-calhours-section', icon:'schedule' },
   ]},
-  { id:'integrations', title:'Integrations', desc:'Payments & Google', items:[
+  { id:'integrations', title:'Integrations', desc:'Payments & messaging', items:[
     { label:'Payment Processing', sub:'Card processor, terminal & Square', content:'helcim-section', render:'renderHelcimSettings', icon:'credit_card' },
     { label:'Square', sub:'Location, connection & sync', content:'square-section', hidden:true, icon:'storefront' },   // reached from the Payment Processing panel
-    { label:'Google Calendar', sub:'One-time import of old appointments', content:'gcal-section', render:'renderGcalSettings', icon:'calendar_month' },
     { label:'Text Messaging', sub:'SMS confirmations & replies (httpSMS)', content:'sms-section', render:'renderSmsSettings', adminOnly:true, icon:'sms' },
     { label:'Back Office sync', sub:'Push daily sales & payroll to the books app', content:'bosync-section', render:'renderBoSyncSettings', adminOnly:true, icon:'sync' },
     { label:'Customer Directory', sub:'Browse synced customers', action:'showCustomerDir', icon:'contacts' },

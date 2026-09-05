@@ -15,7 +15,8 @@ import * as store from './store.js';
 import * as sync from './sync.js';
 import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp } from './utils.js';
 import { applyAssignmentStatus, isPaidStatus } from './features/status.js';
-import { VAPID_PUBLIC_KEY, PUSH_PROXY, GCAL_PROXY, APP_VERSION } from './config.js';
+import { VAPID_PUBLIC_KEY, PUSH_PROXY, APP_VERSION } from './config.js';
+import { deriveMyAppts } from './features/staff-appts.js';
 import { getFdShift, fdShiftLabel } from './features/fd-schedule.js';
 import * as chat from './features/chat.js';
 Object.assign(window, chat);   // chat panel uses inline onclick= handlers
@@ -24,6 +25,7 @@ import { fdPaidHours, fdPunches, roundQuarterHours, fdPunchSuspect } from './fea
 const cfg     = () => store.getState().config;
 const queue   = () => store.getState().queue;
 const records = () => store.getState().records;
+const appointments = () => store.getState().appointments || [];
 const svc     = id => (cfg().services || []).find(s => s.id === id);
 // Station label for an assignment's a.station id (mirrors queue.js stationLabel without importing it).
 const stationLbl = id => { if (!id) return ''; const d = (cfg().stations || []).find(s => s.id === id); return d ? (d.label || d.id) : String(id); };
@@ -445,98 +447,32 @@ function renderHistoryHtml() {
   }).join('');
 }
 
-// ── My appointments (Google Calendar, read-only) ──────────────────────────────
-// The tech's upcoming appointments, read straight from Google with a Worker-minted
-// access token (/gcal/token) — plain REST, no gapi. The tech's calendar is found by
-// the same rule the dashboard uses: Google calendar name == staff name
-// (case-insensitive, trimmed). Cached 60s; refreshed when the tab is opened.
-let _appts = null, _apptsAt = 0, _apptsLoading = false, _apptsErr = '';
-const APPTS_TTL_MS = 60000, APPTS_DAYS = 7;
-async function _gcalGet(url, token) {
-  const r = await fetch(url, { headers: { Authorization: 'Bearer ' + token } });
-  if (!r.ok) throw new Error('google_' + r.status);
-  return r.json();
-}
-async function loadMyAppts(force) {
-  const meStaff = me();
-  if (_apptsLoading || !meStaff) return;
-  if (!force && _apptsAt && Date.now() - _apptsAt < APPTS_TTL_MS) return;
-  _apptsLoading = true;
-  try {
-    const tr = await fetch(GCAL_PROXY + '/token');
-    if (!tr.ok) { _apptsErr = tr.status === 401 ? 'not_connected' : 'error'; _appts = _appts || []; return; }
-    const token = (await tr.json()).access_token;
-    const cl = await _gcalGet('https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=owner&maxResults=100', token);
-    const myName = (meStaff.name || '').trim().toLowerCase();
-    const myCal = (cl.items || []).find(c => (c.summary || '').trim().toLowerCase() === myName);
-    if (!myCal) { _apptsErr = 'nocal'; _appts = []; _apptsAt = Date.now(); return; }
-    const start = new Date(); start.setHours(0, 0, 0, 0);
-    const end = new Date(start); end.setDate(end.getDate() + APPTS_DAYS + 1);
-    const q = new URLSearchParams({ timeMin: start.toISOString(), timeMax: end.toISOString(), singleEvents: 'true', orderBy: 'startTime', maxResults: '150' });
-    const evs = await _gcalGet(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(myCal.id)}/events?${q}`, token);
-    // One row per BOOKING: events on my calendar sharing museGroupId (a party) collapse
-    // into one, labelled by the primary guest — mirrors the dashboard's grid bubbles.
-    const groups = new Map();
-    (evs.items || []).forEach(ev => {
-      if (!ev.start?.dateTime) return;   // skip all-day events
-      const k = ev.extendedProperties?.private?.museGroupId || ('solo:' + ev.id);
-      if (!groups.has(k)) groups.set(k, []);
-      groups.get(k).push(ev);
-    });
-    _appts = [...groups.values()].map(evsIn => {
-      const priv = e => e.extendedProperties?.private || {};
-      const first = evsIn[0];
-      const startMs = +new Date(first.start.dateTime);
-      const endMs = +new Date(first.end?.dateTime || (startMs + 3600000));
-      const names = [...new Set(evsIn.map(e => priv(e).museName).filter(Boolean))];
-      const name = priv(first).musePrimaryName || priv(first).museName || (first.summary || '').split(' — ')[0] || 'Guest';
-      // Only the lines booked on MY calendar — a party can span techs.
-      const myLines = evsIn.flatMap(e => { try { return JSON.parse(priv(e).museLines || '[]'); } catch { return []; } })
-        .filter(l => l.calId === myCal.id && l.svcId);
-      const services = [...new Set(myLines.map(l => svc(l.svcId)?.label).filter(Boolean))];
-      if (!services.length) { const t = (first.summary || '').split(' — ')[1]; if (t) services.push(t); }   // non-app event fallback
-      return {
-        startMs, endMs, name, guests: Math.max(0, names.length - 1), services,
-        notes: (first.description || '').trim(),
-        confirmed: evsIn.some(e => priv(e).museConfirmed === '1'),
-        noShow: evsIn.some(e => priv(e).museNoShow === '1'),
-      };
-    }).sort((a, b) => a.startMs - b.startMs);
-    _apptsErr = ''; _apptsAt = Date.now();
-  } catch { _apptsErr = 'error'; _appts = _appts || []; }
-  finally { _apptsLoading = false; if (_view === 'appts' && !priceInputFocused()) render(); }
-}
-window.staffApptsRefresh = () => { loadMyAppts(true); showToast('Refreshing…'); };
+// ── My appointments (app-native) ──────────────────────────────────────────────
+// The tech's upcoming appointments, derived from the synced app-native store (no Google) — one row
+// per booking the tech has a service line in, over today + the next APPTS_DAYS days (see
+// features/staff-appts.js). The global store.subscribe() in boot() re-renders on appt.upsert/
+// hydrate, so this needs no fetch, cache, or TTL — renderApptsHtml reads getState() live.
+const APPTS_DAYS = 7;
+window.staffApptsRefresh = () => { if (_view === 'appts' && !priceInputFocused()) render(); showToast('Refreshed'); };
 
 function renderApptsHtml() {
-  loadMyAppts();   // fire-and-forget — re-renders this tab when the load lands
-  if (_appts === null) {
-    return `<div class="text-center text-on-surface-variant font-body py-16 px-6">
-      <span class="material-symbols-outlined" style="font-size:52px;opacity:0.4">event</span>
-      <div class="mt-3 text-xl font-headline font-bold">Loading your appointments…</div></div>`;
-  }
-  let note = '';
-  if (_apptsErr === 'not_connected') note = 'Google Calendar isn’t connected on the dashboard yet — ask the front desk.';
-  else if (_apptsErr === 'nocal') note = `No Google calendar named “${esc(me()?.name || '')}” was found — ask the front desk to check that your calendar matches your staff name.`;
-  else if (_apptsErr === 'error') note = 'Couldn’t reach Google Calendar — check your connection and tap Refresh.';
-  const rows = _appts.filter(a => !a.noShow);
+  const rows = deriveMyAppts(appointments(), me()?.id, cfg().services, Date.now(), APPTS_DAYS).filter(a => !a.noShow);
   const refreshBar = `<div class="flex items-center justify-between mb-3 px-1">
-    <span class="text-xs font-body text-on-surface-variant">Today + next ${APPTS_DAYS} days${_apptsAt ? ' · updated ' + new Date(_apptsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}</span>
+    <span class="text-xs font-body text-on-surface-variant">Today + next ${APPTS_DAYS} days</span>
     <button onclick="staffApptsRefresh()" class="text-sm font-headline font-bold text-primary flex items-center gap-1 active:scale-95">
       <span class="material-symbols-outlined" style="font-size:16px">refresh</span> Refresh</button></div>`;
   if (rows.length === 0) {
     return refreshBar + `<div class="text-center text-on-surface-variant font-body py-16 px-6">
       <span class="material-symbols-outlined" style="font-size:52px;opacity:0.4">event_upcoming</span>
-      <div class="mt-3 text-xl font-headline font-bold">${note ? 'Appointments unavailable' : 'No upcoming appointments'}</div>
-      <div class="text-sm mt-1 text-outline-variant">${esc(note) || 'New bookings for you show up here — and ping your phone when alerts are on.'}</div></div>`;
+      <div class="mt-3 text-xl font-headline font-bold">No upcoming appointments</div>
+      <div class="text-sm mt-1 text-outline-variant">New bookings for you show up here — and ping your phone when alerts are on.</div></div>`;
   }
-  const errBanner = note ? `<div class="mb-3 rounded-xl px-4 py-3 text-sm font-body" style="background:#fdecea;color:#7a2a1a">${esc(note)} Showing the last loaded list.</div>` : '';
   const byDate = {};
   rows.forEach(a => { const d = localDateStr(new Date(a.startMs)); (byDate[d] = byDate[d] || []).push(a); });
   const today = todayStr();
   const tomorrow = (() => { const d = new Date(); d.setDate(d.getDate() + 1); return localDateStr(d); })();
   const fmtT = ms => new Date(ms).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  return refreshBar + errBanner + Object.keys(byDate).sort().map(date => {
+  return refreshBar + Object.keys(byDate).sort().map(date => {
     const items = byDate[date];
     const d = new Date(date + 'T12:00:00');
     const dayName = date === today ? 'Today' : date === tomorrow ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'short' });
@@ -795,7 +731,6 @@ window.staffPinSubmit = async () => {
     if (res.ok) {
       if (res.user.kind === 'tech') { myId = res.user.id; myFdId = null; localStorage.setItem(MY_KEY, myId); localStorage.removeItem(MY_FD_KEY); }
       else { myFdId = res.user.id; myId = null; localStorage.setItem(MY_FD_KEY, myFdId); localStorage.removeItem(MY_KEY); }
-      _appts = null; _apptsAt = 0; _apptsErr = '';
       sync.resync();                                   // reconnect with the session → snapshot arrives
       render();
       registerPush();   // tech OR front-desk → subscribe for assignment + chat pushes
@@ -808,7 +743,6 @@ window.staffPinSubmit = async () => {
   const match = staffByPin(cfg().staff, cfg().inactive_staff, pin);
   if (match) {
     myId = match.id; myFdId = null; localStorage.setItem(MY_KEY, myId); localStorage.removeItem(MY_FD_KEY);
-    _appts = null; _apptsAt = 0; _apptsErr = '';   // never show another tech's cached appointments
     if (input) input.value = ''; render();
     registerPush();   // re-tag this device's push subscription to the signed-in tech (no-op if alerts off)
     serverLogin({ pin, userId: match.id, device: 'staff-app' }).then(r => { if (r.ok) sync.resync(); });   // §13 session mint/refresh
@@ -836,7 +770,7 @@ window.staffPinInput = () => {
     || (cfg().fd_users || []).some(u => u.pin && String(u.pin) !== pin && String(u.pin).startsWith(pin));
   if (!ambiguous) window.staffPinSubmit();
 };
-window.staffSwitch = () => { unregisterPush(); localStorage.removeItem(MY_KEY); localStorage.removeItem(MY_FD_KEY); myId = null; myFdId = null; _appts = null; _apptsAt = 0; _apptsErr = ''; render(); };
+window.staffSwitch = () => { unregisterPush(); localStorage.removeItem(MY_KEY); localStorage.removeItem(MY_FD_KEY); myId = null; myFdId = null; render(); };
 window.staffLogout = window.staffSwitch;
 
 // ── Push notifications (assignment alerts) ────────
