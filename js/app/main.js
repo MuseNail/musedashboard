@@ -123,6 +123,7 @@ function goTo(screenId, param) {
       : 'Walk-In Check-In';
   }
   if (screenId === 'screen-desk') { utils.updateDeskDate(); settings.initCalHoursSelectors(); maybeShowWhatsNew(); }
+  if (screenId !== 'screen-checkin') checkin.renderKioskHandoff?.();   // a handoff deferred during a self-check-in re-shows once that screen closes
 }
 
 // ── "What's new" — one-time popup after a device loads a new version ──────────
@@ -574,6 +575,9 @@ function onStateChange(state, changed) {
   if (changed === 'hydrate') { applySquarePaidFlag(); runDayRolloverIfNeeded(); helcim.checkUnfinalizedCharges?.(); _purgeStrayConfigX(); }   // apply pending Square auto-paid + roll over the day; catch any unfinalized Helcim charge (throttled)
   if (changed === 'hydrate' || (changed && changed.startsWith('config'))) {
     photos.setLogo(); auth.updateLoggedInDisplay(); chat.onChatSync(); timeclock.renderClockButton(); helcim.syncProcessorClass();
+    checkin.renderKioskHandoff?.();     // kiosk side: show/update/hide the pushed check-in window
+    queue.onDeskHandoffState?.();        // desk side: resolve a waiting "sent to kiosk" view
+    queue.refreshManualAddChrome?.();    // keep the manual-add footer label/banner in sync if config changed elsewhere
     syncNavForRole();   // a role_permissions toggle (any device) can show/hide the Reports tab
     // The customer directory is now a DO entity — it hydrates from the snapshot like records,
     // so no Square auto-pull on boot. (A one-time "Import from Square" seeds it; see the
@@ -677,6 +681,7 @@ function runDayRolloverIfNeeded() {
     window.logAudit?.('Day rollover', `Cleared ${stale.length} finished ticket(s) from a prior day`);
   }
   if (stale.length || didRollover) { queue.renderQueue(); queue.updateStats(); turns.renderTurns(); chat.renderChat(); chat.updateChatBadge(); }
+  settings.checkinBypassDailyReminder?.();   // once-a-day nudge while waiver bypass mode is left on
 }
 // Arm a one-shot timer to the next local midnight (+30s); it re-arms itself after firing.
 // Hydrate + visibilitychange are the real safety net (cover device sleep / clock changes);
@@ -703,7 +708,10 @@ function wireKeyboard() {
       const gm = document.getElementById('group-assign-modal');
       if (gm && !gm.classList.contains('hidden')) { e.preventDefault(); queue.saveGroupAssignments(); return; }
       const mm = document.getElementById('manual-modal');
-      if (mm && !mm.classList.contains('hidden')) { const tag = document.activeElement?.tagName; if (tag !== 'SELECT' && tag !== 'TEXTAREA') { e.preventDefault(); queue.submitManualAdd(); return; } }
+      if (mm && !mm.classList.contains('hidden')) {
+        if (document.getElementById('manual-waiting-overlay')) { e.preventDefault(); return; }   // waiting on the kiosk — Enter must not re-send
+        const tag = document.activeElement?.tagName; if (tag !== 'SELECT' && tag !== 'TEXTAREA') { e.preventDefault(); queue.submitManualAdd(); return; }
+      }
     }
     if (e.key === 'Escape') {
       for (const [id, fn] of MODAL_CLOSERS) { const el = document.getElementById(id); if (el && !el.classList.contains('hidden')) { fn(); return; } }

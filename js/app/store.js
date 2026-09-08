@@ -36,7 +36,9 @@ function emptyConfig() {
     waiver_pdf_name: '',       // display name of the uploaded PDF
     waiver_pdf_hash: '',       // SHA-256 fingerprint (first 16 hex) of the active PDF
     waiver_versions: {},       // { [version]: { source, text?/hash? | pdfUrl?/pdfHash?/pdfName?, effectiveAt } } — historical, for reproduction
-    kiosk_device_id: '',       // device id designated as the confirmation kiosk (Release 2)
+    kiosk_device_id: '',       // device id designated as the check-in kiosk (front-desk → kiosk handoff)
+    kiosk_handoff: null,       // live-shared pending check-in signal (pending obj OR {done,result,ts} tombstone); cleared to a tombstone, never left null once used
+    checkin_bypass_mode: false, // salon-wide "skip waiver at every check-in" toggle (records bypassed waivers)
   };
 }
 

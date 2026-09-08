@@ -13,6 +13,8 @@ import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
 import { staffOnBreakNow } from './breaks.js';
 import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate, customerNote, notePhoneKey } from './square-customers.js';
+import { waiverActive } from '../waiver-util.js';
+import { HANDOFF_TTL_MS, handoffNonce, handoffEntryId, buildHandoff, handoffTombstone, handoffIsTombstone, handoffResult, handoffPrimaryName, handoffMultiGuest } from './checkin-handoff.js';
 
 const cfg   = () => getState().config;
 const q     = () => getState().queue;
@@ -567,7 +569,36 @@ export function showManualAdd() {
   const tw = document.getElementById('manual-appt-tech-wrap'); if (tw) tw.classList.add('hidden');
   const ts = document.getElementById('manual-appt-tech'); if (ts) { ts.innerHTML = '<option value="">— Leave unassigned —</option>'; ts.value = ''; }
   const m = document.getElementById('manual-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
+  document.getElementById('manual-waiting-overlay')?.remove();   // clear any stale waiting scrim
+  refreshManualAddChrome();
   setTimeout(() => document.getElementById('manual-phone-1')?.focus(), 100);
+}
+
+// Set the primary-button label + the secondary "skip waiver" button + the bypass banner based on
+// the current waiver/kiosk/bypass config. The primary button always calls submitManualAdd (which
+// routes); this only reflects what WILL happen so staff aren't surprised.
+export function refreshManualAddChrome() {
+  const c = cfg();
+  const btn = document.getElementById('manual-primary-btn');
+  const skip = document.getElementById('manual-skip-btn');
+  const banner = document.getElementById('manual-bypass-banner');
+  const active = waiverActive(c);
+  const bypass = !!c.checkin_bypass_mode;
+  const kioskSet = !!(c.kiosk_device_id || '').trim();
+  // Warn whenever a check-in will be recorded WITHOUT a signed waiver — both when bypass mode is on
+  // and (owner's no-kiosk ruling) when the waiver is active but no kiosk is designated, so it's never silent.
+  if (banner) {
+    if (active && bypass) { banner.innerHTML = '⚠️ Bypass mode is on — this check-in will be added <strong>without</strong> a signed waiver.'; banner.classList.remove('hidden'); }
+    else if (active && !kioskSet) { banner.innerHTML = '⚠️ No check-in kiosk is set — this check-in will be added <strong>without</strong> a signed waiver. Set a kiosk in Settings to have customers sign.'; banner.classList.remove('hidden'); }
+    else banner.classList.add('hidden');
+  }
+  if (btn) {
+    if (!active || bypass || !kioskSet) btn.textContent = 'Add to Queue';   // straight to queue (plain or bypassed)
+    else btn.textContent = 'Send to kiosk';                                  // customer signs at the kiosk
+  }
+  // The explicit "skip waiver" escape hatch only matters when the waiver is active AND a kiosk
+  // would otherwise be used — otherwise the primary button already queues directly.
+  if (skip) skip.classList.toggle('hidden', !(active && !bypass && kioskSet));
 }
 // Appointment check-ins can pre-assign a technician. Show the picker only when the
 // "Appointment" box is checked; populate it with active staff (lazily, keeping any
@@ -590,7 +621,9 @@ export function closeManualAdd() {
   const c = document.getElementById('manual-guests-container'); if (c) c.innerHTML = '';
 }
 
-export function submitManualAdd(skipApptGuard) {
+// Collect + validate + group-tag the manual-add party from the DOM. Returns the finished
+// entry objects (full queue-entry shape, group-tagged for party>1) or null on a validation miss.
+function collectManualEntries() {
   const newEntries = [];
   const isAppointment = document.getElementById('manual-is-appointment')?.checked || false;
   const apptTechId = isAppointment ? (document.getElementById('manual-appt-tech')?.value || '') : '';
@@ -601,7 +634,7 @@ export function submitManualAdd(skipApptGuard) {
     let phone, first, last;
     if (sameContact) { first = document.getElementById(`manual-firstonly-${i}`)?.value.trim() || ''; phone = document.getElementById('manual-phone-1')?.value.trim() || ''; last = ''; }
     else { phone = document.getElementById(`manual-phone-${i}`)?.value.trim() || ''; first = document.getElementById(`manual-first-${i}`)?.value.trim() || ''; last = document.getElementById(`manual-last-${i}`)?.value.trim() || ''; }
-    if (!first) { showToast('Please enter a first name for each guest.'); return; }
+    if (!first) { showToast('Please enter a first name for each guest.'); return null; }
     const services = Array.from(card.querySelectorAll('.service-btn.selected')).map(b => b.dataset.service);
     const visitNote = document.getElementById(`manual-visit-note-${i}`)?.value.trim() || '';
     const entry = { id: newEntryId(), name: first + (last ? ' ' + last : ''), phone, services, status: 'waiting', checkinTime: new Date().toISOString(), isNew: false, skipSquare: sameContact, isAppointment };
@@ -611,19 +644,212 @@ export function submitManualAdd(skipApptGuard) {
     if (apptTechId && services.length) entry.assignments = services.map(sid => ({ serviceId: sid, techId: apptTechId, station: '', status: 'waiting', cost: 0, assignedAt: Date.now() }));
     newEntries.push(entry);
   }
-  if (newEntries.length === 0) return;
-  // Appointment guard: same prompt as the kiosk — offer to check in FROM today's appointment.
-  if (skipApptGuard !== true && window.checkinApptGuard?.(newEntries.map(e => ({ name: e.name, phone: e.phone })), () => submitManualAdd(true))) return;
+  if (newEntries.length === 0) return null;
   if (newEntries.length > 1) {
     const groupId = `grp-${Date.now()}`, groupColor = GROUP_COLORS[groupColorIndex++ % GROUP_COLORS.length], primaryName = newEntries[0].name;
     newEntries.forEach((e, i) => { e.groupId = groupId; e.groupColor = groupColor; e.groupLabel = i === 0 ? `${e.name} (primary)` : `${primaryName} — ${e.name}`; });
   }
-  newEntries.forEach(e => upsert(e));
-  upsertPartyCustomers(newEntries);   // one Square profile per distinct phone (no shared-phone flip-flop)
-  window.logAudit?.('Check-in', `${newEntries.map(e => e.name).join(' & ')} added (manual)`);
+  return newEntries;
+}
+
+export function submitManualAdd(skipApptGuard) {
+  const entries = collectManualEntries();
+  if (!entries) return;
+  // Appointment guard runs at the DESK (staff decision), never on the kiosk — offer to check in
+  // FROM today's appointment; only a clean party continues to routing.
+  if (skipApptGuard !== true && window.checkinApptGuard?.(entries.map(e => ({ name: e.name, phone: e.phone })), () => routeManualCheckin(entries))) return;
+  routeManualCheckin(entries);
+}
+// Deliberate escape hatch: skip the waiver for THIS check-in (records a bypassed waiver).
+export function submitManualAddSkip() {
+  const entries = collectManualEntries();
+  if (!entries) return;
+  if (window.checkinApptGuard?.(entries.map(e => ({ name: e.name, phone: e.phone })), () => finalizeManualBypass(entries, 'front-desk-bypass', getActiveUser()?.name || null))) return;
+  finalizeManualBypass(entries, 'front-desk-bypass', getActiveUser()?.name || null);
+}
+
+// Decide what a manual check-in does, in priority order. Waiver-inactive keeps today's exact
+// behavior; bypass/no-kiosk record a bypassed waiver (owner-chosen); a designated kiosk gets the
+// handoff (the customer signs there).
+function routeManualCheckin(entries) {
+  const c = cfg();
+  const byUser = getActiveUser()?.name || null;
+  if (!waiverActive(c)) { finalizeManual(entries); return; }                    // (0) nothing to sign → plain queue
+  if (c.checkin_bypass_mode) { finalizeManualBypass(entries, 'front-desk-bypass', byUser); return; }  // (1) bypass mode
+  const kioskId = (c.kiosk_device_id || '').trim();
+  if (kioskId) { sendManualToKiosk(entries, kioskId, byUser); return; }         // (2/3) designated kiosk (this device or another)
+  finalizeManualBypass(entries, 'front-desk-bypass', byUser);                    // (4) no kiosk → owner chose skip
+}
+
+// Self-releasing guard so a bounced double-tap on the desk finalize paths (which now also write a
+// waiver record) can't create the party + waiver twice before closeManualAdd clears the form.
+let _manualFinalizing = false;
+function finalizeManual(entries) {
+  if (_manualFinalizing) return; _manualFinalizing = true; setTimeout(() => { _manualFinalizing = false; }, 1500);
+  entries.forEach(e => upsert(e));
+  upsertPartyCustomers(entries);
+  window.logAudit?.('Check-in', `${entries.map(e => e.name).join(' & ')} added (manual)`);
+  afterManualFinalize(entries);
+}
+function finalizeManualBypass(entries, method, byUser) {
+  if (_manualFinalizing) return; _manualFinalizing = true; setTimeout(() => { _manualFinalizing = false; }, 1500);
+  window.acceptWaiverForHandoff?.(entries, { bypassed: true, method, byUser });   // save+stamp a bypassed record (audited in waiver.js)
+  entries.forEach(e => upsert(e));
+  upsertPartyCustomers(entries);
+  window.logAudit?.('Check-in', `${entries.map(e => e.name).join(' & ')} added (manual, waiver ${method === 'front-desk-takeover' ? 'taken over' : 'bypassed'})`);
+  afterManualFinalize(entries);
+}
+function afterManualFinalize(entries) {
   renderQueue(); updateStats(); window.renderTurns?.();
   closeManualAdd();
-  showToast(`${newEntries.map(e => e.name).join(' & ')} added to queue`);
+  showToast(`${entries.map(e => e.name).join(' & ')} added to queue`);
+}
+
+// ── Front-desk → kiosk handoff (desk side) ────────────────────────────────────
+// The desk ships FINISHED entries with deterministic ids (idempotent finalize) as a synced
+// config signal, then waits. It never queues the party itself unless it takes over.
+let _deskWaiting = null;         // { nonce, entries } while THIS desk is waiting on the kiosk
+let _deskWaitTimer = null;
+function sendManualToKiosk(entries, kioskId, byUser) {
+  const nonce = handoffNonce(Date.now(), Math.random().toString(36).slice(2, 8));
+  entries.forEach((e, i) => { e.id = handoffEntryId(nonce, i); });   // deterministic → a re-Confirm/replay collapses onto the same rows
+  const h = buildHandoff(entries, kioskId, byUser, DEVICE_ID, nonce, Date.now());
+  dispatch('config.set', { key: 'kiosk_handoff', value: h });
+  if (kioskId === DEVICE_ID) { closeManualAdd(); return; }   // single device: the kiosk ack opens here via onStateChange; no waiting scrim
+  _deskWaiting = { nonce, entries };
+  showManualWaitingView(h);
+  clearTimeout(_deskWaitTimer);
+  _deskWaitTimer = setTimeout(() => {   // desk-side TTL: if the customer never acts, expire it ourselves
+    if (_deskWaiting && _deskWaiting.nonce === nonce) {
+      dispatch('config.set', { key: 'kiosk_handoff', value: handoffTombstone(nonce, 'expired', Date.now()) });
+    }
+  }, HANDOFF_TTL_MS);
+}
+
+function showManualWaitingView(h) {
+  document.getElementById('manual-waiting-overlay')?.remove();
+  const el = document.createElement('div');
+  el.id = 'manual-waiting-overlay';
+  el.className = 'absolute inset-0 z-10 flex items-center justify-center rounded-2xl';
+  el.style.cssText = 'position:absolute;inset:0;background:var(--surface-container-lowest,#fff);border-radius:1rem;display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto';
+  el.innerHTML = renderWaitingBody(h);
+  const card = document.getElementById('manual-card');   // explicit id — the note panel shares the same class
+  if (card) { card.style.position = 'relative'; card.appendChild(el); }
+}
+function renderWaitingBody(h) {
+  const guests = h.entries || [];
+  const rows = guests.map((e, i) => {
+    const parts = String(e.name || '').trim().split(/\s+/);
+    const first = parts[0] || '', last = parts.slice(1).join(' ');
+    return `<div class="mb-3 p-3 rounded-xl border border-surface-container-high">
+      <div class="flex gap-2 mb-2">
+        <input value="${escHtml(first)}" oninput="deskEditHandoffName(${i},'first',this.value)" placeholder="First" class="flex-1 bg-surface-container rounded-lg border border-surface-container-high px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary">
+        <input value="${escHtml(last)}" oninput="deskEditHandoffName(${i},'last',this.value)" placeholder="Last" class="flex-1 bg-surface-container rounded-lg border border-surface-container-high px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary">
+      </div>
+      <div class="text-xs font-body text-on-surface-variant">${escHtml(e.phone || '—')}${(e.services||[]).length?` · ${e.services.length} service${e.services.length>1?'s':''}`:''}${e.txnNote?` · ${escHtml(e.txnNote)}`:''}</div>
+    </div>`;
+  }).join('');
+  return `<div class="w-full max-w-md text-center">
+    <div class="text-3xl mb-2">📲</div>
+    <div class="text-lg font-headline font-bold text-on-surface mb-1">Waiting for ${escHtml(handoffPrimaryName(h))} at the kiosk</div>
+    <div class="text-sm font-body text-on-surface-variant mb-4">${handoffMultiGuest(h) ? 'The primary reviews the details and signs for the group.' : 'The customer reviews their details and signs the waiver.'} You can fix a name here; a wrong phone number means you'll need to cancel and start over.</div>
+    <div class="text-left">${rows}</div>
+    <div class="flex gap-3 mt-4">
+      <button onclick="deskCancelHandoff()" class="flex-1 py-3 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold hover:bg-surface-container transition-colors">Cancel</button>
+      <button onclick="deskTakeoverHandoff()" class="flex-1 py-3 rounded-xl bg-primary text-on-primary font-headline font-bold hover:bg-primary-dim transition-colors active:scale-95">Take over here</button>
+    </div>
+    <div class="text-[11px] font-body text-on-surface-variant mt-2">“Take over” checks them in now without a customer signature (recorded as bypassed).</div>
+  </div>`;
+}
+let _deskNameTimer = null;
+export function deskEditHandoffName(idx, which, value) {
+  if (!_deskWaiting) return;
+  const e = _deskWaiting.entries[idx]; if (!e) return;
+  const parts = String(e.name || '').trim().split(/\s+/);
+  let first = parts[0] || '', last = parts.slice(1).join(' ');
+  if (which === 'first') first = value.trim(); else last = value.trim();
+  e.name = first + (last ? ' ' + last : '');
+  // re-derive the primary's group label so the queue card reads correctly for a party
+  if (_deskWaiting.entries.length > 1) {
+    const primaryName = _deskWaiting.entries[0].name;
+    _deskWaiting.entries.forEach((g, i) => { g.groupLabel = i === 0 ? `${g.name} (primary)` : `${primaryName} — ${g.name}`; });
+  }
+  clearTimeout(_deskNameTimer);
+  _deskNameTimer = setTimeout(() => {
+    if (!_deskWaiting) return;
+    const h = buildHandoff(_deskWaiting.entries, (cfg().kiosk_device_id || '').trim(), getActiveUser()?.name || null, DEVICE_ID, _deskWaiting.nonce, Date.now());
+    dispatch('config.set', { key: 'kiosk_handoff', value: h });   // fresh ts → survives the per-key stale guard; kiosk re-gates its box
+  }, 400);
+}
+// Did the kiosk already confirm this nonce? Check both the tombstone AND the actual queue row
+// (deterministic id) — either signal may land first across the network, and this closes the
+// race where the operator acts in the sub-second before the confirmed broadcast arrives.
+function _kioskAlreadyConfirmed(nonce) {
+  const cur = cfg().kiosk_handoff;
+  if (handoffIsTombstone(cur) && cur.done === nonce && handoffResult(cur) === 'confirmed') return true;
+  return getState().queue.some(e => e.id === handoffEntryId(nonce, 0));
+}
+export function deskCancelHandoff() {
+  if (!_deskWaiting) return;
+  const nonce = _deskWaiting.nonce;
+  if (_kioskAlreadyConfirmed(nonce)) {   // don't tell staff it cancelled — the customer is already queued
+    _deskWaiting = null; clearTimeout(_deskWaitTimer);
+    document.getElementById('manual-waiting-overlay')?.remove();
+    closeManualAdd(); renderQueue(); updateStats(); window.renderTurns?.();
+    showToast('Already checked in at the kiosk'); return;
+  }
+  _deskWaiting = null; clearTimeout(_deskWaitTimer);
+  dispatch('config.set', { key: 'kiosk_handoff', value: handoffTombstone(nonce, 'cancelled', Date.now()) });
+  document.getElementById('manual-waiting-overlay')?.remove();
+  showToast('Kiosk check-in cancelled');
+}
+export function deskTakeoverHandoff() {
+  if (!_deskWaiting) return;
+  const { nonce, entries } = _deskWaiting;
+  if (_kioskAlreadyConfirmed(nonce)) {   // kiosk beat us — don't double-create or overwrite the signed waiver
+    _deskWaiting = null; clearTimeout(_deskWaitTimer);
+    document.getElementById('manual-waiting-overlay')?.remove();
+    closeManualAdd(); renderQueue(); updateStats(); window.renderTurns?.();
+    showToast('Already checked in at the kiosk'); return;
+  }
+  _deskWaiting = null; clearTimeout(_deskWaitTimer);
+  dispatch('config.set', { key: 'kiosk_handoff', value: handoffTombstone(nonce, 'takeover', Date.now()) });
+  document.getElementById('manual-waiting-overlay')?.remove();
+  // The queue row is idempotent (deterministic id), so the true sub-second take-over-vs-confirm race
+  // yields ONE party. The bypassed waiver here keeps a RANDOM id on purpose: if the kiosk also just
+  // signed (wv-<nonce>), we keep both records rather than let this bypassed one overwrite the signed one.
+  finalizeManualBypass(entries, 'front-desk-takeover', getActiveUser()?.name || null);
+}
+// Called from onStateChange on every config change — resolve this desk's waiting view when the
+// kiosk (or another desk / a timeout) settles the handoff.
+export function onDeskHandoffState() {
+  if (!_deskWaiting) return;
+  const cur = cfg().kiosk_handoff;
+  if (handoffIsTombstone(cur) && cur.done === _deskWaiting.nonce) {
+    const r = handoffResult(cur), entries = _deskWaiting.entries;
+    _deskWaiting = null; clearTimeout(_deskWaitTimer);
+    document.getElementById('manual-waiting-overlay')?.remove();
+    if (r === 'confirmed') { closeManualAdd(); renderQueue(); updateStats(); window.renderTurns?.(); showToast(`${entries.map(e => e.name).join(' & ')} checked in ✓`); }
+    else if (r === 'cancelled') showToast('Customer cancelled at the kiosk — check the details and resend');
+    else if (r === 'expired') showToast('Kiosk timed out — try again');
+    return;
+  }
+  // Same-nonce pending update (the kiosk edited a name) → keep our copy in sync (so a take-over uses
+  // the latest names) and refresh the waiting view, unless the operator is mid-edit in it.
+  if (cur && !cur.done && cur.nonce === _deskWaiting.nonce && Array.isArray(cur.entries)) {
+    const overlay = document.getElementById('manual-waiting-overlay');
+    const editingHere = document.activeElement?.tagName === 'INPUT' && overlay?.contains(document.activeElement);
+    // Only adopt the incoming names when the operator is NOT mid-edit here — otherwise an unrelated
+    // config.set landing during the debounce would revert their uncommitted keystrokes on the legal name.
+    if (overlay && !editingHere) { _deskWaiting.entries = cur.entries; overlay.innerHTML = renderWaitingBody(cur); }
+    return;
+  }
+  // Another desk's Send replaced our pending handoff (nonce changed, still pending).
+  if (cur && !cur.done && cur.nonce && cur.nonce !== _deskWaiting.nonce) {
+    _deskWaiting = null; clearTimeout(_deskWaitTimer);
+    document.getElementById('manual-waiting-overlay')?.remove();
+    showToast('Another check-in took the kiosk — please resend');
+  }
 }
 
 // ── Edit Check-In ─────────────────────────────────

@@ -24,7 +24,9 @@ function primaryFields(entry) {
 function saveWaiverRecord(entries, opts = {}) {
   const c = cfg();
   const now = Date.now();
-  const id = newWaiverId(now, Math.random().toString(36).slice(2, 10));
+  // opts.id lets the handoff pass a deterministic id (wv-<nonce>) so a re-Confirm/replay
+  // overwrites the SAME waiver key instead of minting a duplicate (idempotency).
+  const id = opts.id || newWaiverId(now, Math.random().toString(36).slice(2, 10));
   const rec = buildWaiverRecord({
     id, now, primary: primaryFields(entries[0] || {}),
     guests: (entries || []).map(e => ({ name: e.name, phoneKey: notePhoneKey(e.phone) || null })),
@@ -35,8 +37,20 @@ function saveWaiverRecord(entries, opts = {}) {
     optIns: opts.optIns || {}, bypassed: !!opts.bypassed,
   });
   dispatch('waiver.save', { waiver: rec });
-  window.logAudit?.('Waiver accepted', `${rec.signerDisplay} accepted v${c.waiver_version}${(entries || []).length > 1 ? ` for ${entries.length} guests` : ''}`);
+  const nGuests = (entries || []).length;
+  if (opts.bypassed) window.logAudit?.('Waiver bypassed', `${rec.signerDisplay} — ${rec.method} by ${opts.byUser || 'staff'}${nGuests > 1 ? ` (${nGuests} guests)` : ''}`);
+  else window.logAudit?.('Waiver accepted', `${rec.signerDisplay} accepted v${c.waiver_version}${nGuests > 1 ? ` for ${nGuests} guests` : ''}`);
   return { id, version: c.waiver_version, at: now };
+}
+
+// Exported save→stamp for the front-desk → kiosk handoff (and its bypass/take-over paths).
+// waiver.js stays the sole owner of the save+stamp+audit sequence; callers pass opts:
+//   { method, byUser, id, bypassed }. Mutates entries in place with the waiver link, then the
+//   caller dispatches queue.upsert. Returns { id, version, at }.
+export function acceptWaiverForHandoff(entries, opts = {}) {
+  const s = saveWaiverRecord(entries, opts);
+  stampEntriesWaiver(entries, s.id, s.version, s.at);
+  return s;
 }
 
 // Stamp the per-visit waiver link onto each queue entry (mutates in place) so the visit is

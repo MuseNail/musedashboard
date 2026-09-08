@@ -89,5 +89,5 @@ test('buildWaiverRecord defaults optIns/bypass safely', () => {
 });
 
 test('WAIVER_METHODS is the closed set', () => {
-  assert.deepEqual(WAIVER_METHODS, ['self-kiosk', 'front-desk-kiosk']);
+  assert.deepEqual(WAIVER_METHODS, ['self-kiosk', 'front-desk-kiosk', 'front-desk-bypass', 'front-desk-takeover']);
 });
