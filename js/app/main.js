@@ -60,6 +60,7 @@ window.breadcrumb   = reporter.breadcrumb;
 // never leaves an orphaned modal floating over the new screen / silently eating nav taps).
 // `pin-modal` is handled separately in the Esc handler.
 const MODAL_CLOSERS = [
+  ['dup-guard-modal', queue.dupGuardCancel],   // sits ABOVE manual-modal — must close first on Esc
   ['tech-status-menu', turns.closeTechStatusMenu], ['group-assign-modal', queue.closeGroupAssignModal],
   ['manual-modal', queue.closeManualAdd], ['warn-modal', queue.closeWarnModal],
   ['turns-assign-modal', turns.closeTurnsAssignModal], ['turns-tech-modal', turns.closeTurnsTechModal],
@@ -707,6 +708,8 @@ function wireKeyboard() {
       if (utils.commitAmountField(document.activeElement)) { e.preventDefault(); return; }
       const gm = document.getElementById('group-assign-modal');
       if (gm && !gm.classList.contains('hidden')) { e.preventDefault(); queue.saveGroupAssignments(); return; }
+      const dg = document.getElementById('dup-guard-modal');
+      if (dg && !dg.classList.contains('hidden')) { e.preventDefault(); return; }   // duplicate warning open — Enter must not re-submit behind it
       const mm = document.getElementById('manual-modal');
       if (mm && !mm.classList.contains('hidden')) {
         if (document.getElementById('manual-waiting-overlay')) { e.preventDefault(); return; }   // waiting on the kiosk — Enter must not re-send

@@ -1,5 +1,5 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
-export const APP_VERSION = 'v5.52';
+export const APP_VERSION = 'v5.53';
 export const APP_NAME    = 'musedashboard';
 export const STAFF_PIN   = '1234'; // fallback when no front desk users are configured
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
@@ -30,6 +30,10 @@ export const DEFAULT_ROLE_PERMISSIONS = {
   // review numbers without operating the register.
   reviewer:  { historicalEntry: false, deleteTransaction: false, refund: false, viewReports: true,  manageStaff: false, manageServices: false, markPaidDirect: false, viewClockedIn: false },
 };
+
+// How recently a PAID ticket still counts for the duplicate-check-in guard (warn if the same phone
+// was checked out within this window). Soft warning only.
+export const DUP_PAID_WINDOW_MS = 30 * 60 * 1000;
 
 export const GROUP_COLORS = [
   '#1a5252','#785a1a','#5c3d8f','#1a5c7a','#7a2a1a',

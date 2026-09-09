@@ -6,7 +6,8 @@
 import { getState } from '../store.js';
 import { dispatch, DEVICE_ID } from '../sync.js';
 import { showToast, formatElapsed, byName, todayStr, localDateStr, openNumpad, commitNumpad, partyLetterMap, newEntryId, ticketTotal, escHtml, escAttrJs, dateBtnLabel } from '../utils.js';
-import { GROUP_COLORS } from '../config.js';
+import { GROUP_COLORS, DUP_PAID_WINDOW_MS } from '../config.js';
+import { findDuplicateCheckins } from './dup-guard.js';
 import { ui, canDo, getActiveUser } from '../session.js';
 import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssignmentStatus, isPaidStatus, serviceLineStyle, effectiveServiceStatus, isAwaitingPrice } from './status.js';
 import { isServiceVisibleOnDash } from './catalog.js';
@@ -655,17 +656,94 @@ function collectManualEntries() {
 export function submitManualAdd(skipApptGuard) {
   const entries = collectManualEntries();
   if (!entries) return;
+  // proceed = duplicate guard → routing. Wrapping the SAME callback passed to the appointment guard
+  // (which calls it directly on "Check In Separately") ensures that path is guarded too.
+  const proceed = () => checkDuplicatesThenRoute(entries, () => routeManualCheckin(entries));
   // Appointment guard runs at the DESK (staff decision), never on the kiosk — offer to check in
-  // FROM today's appointment; only a clean party continues to routing.
-  if (skipApptGuard !== true && window.checkinApptGuard?.(entries.map(e => ({ name: e.name, phone: e.phone })), () => routeManualCheckin(entries))) return;
-  routeManualCheckin(entries);
+  // FROM today's appointment; only a clean party continues.
+  if (skipApptGuard !== true && window.checkinApptGuard?.(entries.map(e => ({ name: e.name, phone: e.phone })), proceed)) return;
+  proceed();
 }
 // Deliberate escape hatch: skip the waiver for THIS check-in (records a bypassed waiver).
 export function submitManualAddSkip() {
   const entries = collectManualEntries();
   if (!entries) return;
-  if (window.checkinApptGuard?.(entries.map(e => ({ name: e.name, phone: e.phone })), () => finalizeManualBypass(entries, 'front-desk-bypass', getActiveUser()?.name || null))) return;
-  finalizeManualBypass(entries, 'front-desk-bypass', getActiveUser()?.name || null);
+  const proceed = () => checkDuplicatesThenRoute(entries, () => finalizeManualBypass(entries, 'front-desk-bypass', getActiveUser()?.name || null));
+  if (window.checkinApptGuard?.(entries.map(e => ({ name: e.name, phone: e.phone })), proceed)) return;
+  proceed();
+}
+
+// ── Duplicate check-in guard (desk side) ──────────────────────────────────────
+// Warn before adding a customer whose phone is already on today's board (open) or was paid in the
+// last DUP_PAID_WINDOW_MS. Soft + non-blocking. Reads the live queue only (works offline).
+let _dupProceed = null;
+export function checkDuplicatesThenRoute(entries, proceedFn) {
+  const q = getState().queue || [];
+  const now = Date.now();
+  const ids = entries.map(e => String(e.id));
+  const seen = new Set(), openM = [], paidM = [];
+  for (const e of entries) {
+    const key = notePhoneKey(e.phone || '');
+    if (!key) continue;   // blank/short phone → skip (no false positives on phone-less walk-ins)
+    const { open, recentlyPaid } = findDuplicateCheckins({ phoneKey: key, queue: q, nowMs: now, paidWindowMs: DUP_PAID_WINDOW_MS, excludeIds: ids, normalize: notePhoneKey });
+    open.forEach(m => { if (!seen.has(String(m.id))) { seen.add(String(m.id)); openM.push(m); } });
+    recentlyPaid.forEach(m => { if (!seen.has(String(m.id))) { seen.add(String(m.id)); paidM.push(m); } });
+  }
+  if (!openM.length && !paidM.length) { proceedFn(); return; }
+  _dupProceed = proceedFn;
+  showDupGuardModal(openM, paidM);
+}
+
+const _dupPill = status => { const p = serviceLineStyle(status).pill; return `<span style="background:${p.bg};color:${p.fg};border-radius:12px;padding:2px 9px;font-size:11px;font-weight:600">${escHtml(p.label)}</span>`; };
+const _dupMins = t => { const at = typeof t === 'number' ? t : Date.parse(t); if (Number.isNaN(at)) return 'recently'; const m = Math.max(0, Math.round((Date.now() - at) / 60000)); return m < 1 ? 'just now' : `${m} min ago`; };
+const _dupTechs = ids => (ids || []).map(id => (cfg().staff || []).find(s => s.id === id)?.name).filter(Boolean).join(', ');
+
+function showDupGuardModal(openM, paidM) {
+  const host = document.getElementById('dup-guard-modal');
+  if (!host) { _dupProceed?.(); _dupProceed = null; return; }   // fail-open: never block a check-in on a missing modal
+  const sect = label => `<div class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest mt-2 mb-1">${label}</div>`;
+  const openRows = !openM.length ? '' : sect('On the board now') + openM.map(m => `
+    <button onclick="dupGuardGoTo('${escAttrJs(String(m.id))}')" class="w-full text-left mb-2 p-3 rounded-xl border border-surface-container-high hover:bg-surface-container transition-colors">
+      <div class="flex items-center justify-between gap-2">
+        <span class="font-body font-semibold text-on-surface">${escHtml(m.name || '—')}</span>
+        <span class="text-xs font-body text-primary font-semibold flex items-center gap-0.5">Tap to open <span class="material-symbols-outlined" style="font-size:16px">arrow_forward</span></span>
+      </div>
+      <div class="text-xs font-body text-on-surface-variant mt-1 flex items-center gap-1.5 flex-wrap">${_dupPill(m.status)} <span>${_dupMins(m.checkinTime)}${_dupTechs(m.techIds) ? ` · ${escHtml(_dupTechs(m.techIds))}` : ''}</span></div>
+    </button>`).join('');
+  const paidRows = !paidM.length ? '' : sect('Just checked out') + paidM.map(m => `
+    <div class="mb-2 p-3 rounded-xl border border-surface-container-high" style="opacity:.9">
+      <div class="font-body font-semibold text-on-surface">${escHtml(m.name || '—')}</div>
+      <div class="text-xs font-body text-on-surface-variant mt-1">Paid ${_dupMins(m.paidAt)}${_dupTechs(m.techIds) ? ` · ${escHtml(_dupTechs(m.techIds))}` : ''}</div>
+    </div>`).join('');
+  host.innerHTML = `
+    <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-md shadow-2xl fade-up max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style="background:#fef3c7;color:#854f0b"><span class="material-symbols-outlined" style="font-size:19px">warning</span></span>
+        <h2 class="text-lg font-headline font-bold text-on-surface">Someone with this phone is already on the board</h2>
+      </div>
+      <p class="text-sm font-body text-on-surface-variant mb-2 ml-10">Add them again only if this is a separate visit.</p>
+      ${openRows}${paidRows}
+      <div class="flex gap-2 mt-3">
+        <button onclick="dupGuardCancel()" class="flex-1 py-3 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold hover:bg-surface-container transition-colors">Cancel</button>
+        <button onclick="dupGuardAddAnyway()" class="flex-1 py-3 rounded-xl border border-surface-container-high text-on-surface-variant font-body font-semibold hover:bg-surface-container transition-colors">Add anyway</button>
+      </div>
+    </div>`;
+  host.classList.remove('hidden'); host.style.display = 'flex';
+  host.onclick = e => { if (e.target === host) dupGuardCancel(); };   // backdrop tap = cancel (matches apptGuard)
+}
+function closeDupGuard() { const m = document.getElementById('dup-guard-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; m.innerHTML = ''; } }
+export function dupGuardAddAnyway() { const p = _dupProceed; _dupProceed = null; closeDupGuard(); p?.(); }
+export function dupGuardCancel() { _dupProceed = null; closeDupGuard(); }   // leave the builder open
+export function dupGuardGoTo(id) {
+  _dupProceed = null; closeDupGuard(); closeManualAdd();
+  window.showDashPanel?.('queue');   // switches to + re-renders the queue panel (front desk is on screen-desk)
+  setTimeout(() => {
+    const row = document.querySelector(`.queue-row[data-id="${(window.CSS && CSS.escape) ? CSS.escape(String(id)) : String(id)}"]`);
+    if (!row) return;
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.style.transition = 'box-shadow .3s'; row.style.boxShadow = '0 0 0 3px var(--primary,#1a5252)';
+    setTimeout(() => { row.style.boxShadow = ''; }, 2200);
+  }, 80);
 }
 
 // Decide what a manual check-in does, in priority order. Waiver-inactive keeps today's exact
