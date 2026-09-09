@@ -200,6 +200,9 @@ tailwind.config = {
 ═══════════════════════════════════════════════ -->
 <div id="screen-desk" class="screen flex-col bg-surface min-h-screen">
 
+  <!-- Loud offline / unsynced banner (safeguard #2) — filled by renderSyncBanner; .hidden when synced -->
+  <div id="sync-banner" class="sync-banner hidden" role="status" aria-live="polite"></div>
+
   <!-- Top bar: logo left, nav centered, sync+user right -->
   <header class="w-full bg-surface-container-lowest border-b border-surface-container-high sticky top-0 z-10 flex items-center gap-2" style="height:62px;padding:0 12px;min-width:0">
     <!-- Logo -->
