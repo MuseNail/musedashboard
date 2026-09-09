@@ -17,6 +17,19 @@ export const notePhoneKey = phone => (phone || '').replace(/\D/g, '').replace(/^
 const isPhoneKey   = key => /^\d{7,15}$/.test(key);
 export const customerNote = phone => ((cfg().customer_notes || {})[notePhoneKey(phone)] || '').trim();
 
+// A short note preview for cards (queue rows, turn cards, floor tiles): permanent customer note
+// (♥, phone-keyed) and/or this-visit note (⏱, txnNote). `visitOnly` (tight floor tiles) shows only
+// when THIS visit has a note; `iconOnly` renders just a 📝 with the full note in the tooltip.
+export function cardNotePreview(phone, txnNote, opts = {}) {
+  const perm = customerNote(phone);
+  const visit = (txnNote || '').trim();
+  const primary = opts.visitOnly ? visit : (visit || perm);
+  if (!primary) return '';
+  const full = [!opts.visitOnly && perm && 'Customer note: ' + perm, visit && 'Visit: ' + visit].filter(Boolean).join('  ·  ');
+  if (opts.iconOnly) return `<span title="${escHtml(full)}" style="flex-shrink:0;font-size:${opts.fontSize || 10}px" aria-label="Has a note">📝</span>`;
+  return `<div class="text-[10px] leading-tight text-on-surface-variant truncate mt-0.5" title="${escHtml(full)}">📝 ${escHtml(primary)}</div>`;
+}
+
 export let squareCustomers   = [];
 export let customerDirectory = [];
 

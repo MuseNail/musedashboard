@@ -7,6 +7,7 @@ import { canDo } from '../session.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle, effectiveServiceStatus } from './status.js';
 import { renderQueue, showGroupAssignModal } from './queue.js';
 import { serviceTimeInfo } from './servicetime.js';
+import { cardNotePreview } from './square-customers.js';
 
 const cfg = () => getState().config;
 const q   = () => getState().queue;
@@ -577,7 +578,7 @@ export function renderTurnsQueue() {
     const bgTint = e.status==='inservice' ? 'rgba(42,122,79,0.10)' : e.status==='complete' ? 'rgba(26,92,122,0.12)' : 'rgba(255,224,178,0.25)';
     return `<div class="px-3 py-2 cursor-grab hover:brightness-95 transition-all select-none border-b border-surface-container-high border-l-4" style="border-left-color:${borderColor};background:${bgTint}" data-entry-id="${e.id}" onclick="showGroupAssignModal('${e.id}')">
       <div class="flex items-start gap-2 pointer-events-none">${avatar}
-        <div class="min-w-0 flex-grow"><div class="flex items-center gap-1 flex-wrap leading-tight">${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span>${groupLbl}<span class="text-[10px] font-body text-on-surface-variant ml-1">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></span></div>${serviceContent}</div></div></div>`;
+        <div class="min-w-0 flex-grow"><div class="flex items-center gap-1 flex-wrap leading-tight">${groupDot}<span class="font-headline font-semibold text-on-surface text-sm">${e.name}</span>${groupLbl}<span class="text-[10px] font-body text-on-surface-variant ml-1">${timeStr} · <span data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span></span></div>${serviceContent}${cardNotePreview(e.phone, e.txnNote)}</div></div></div>`;
   }
   waitingList.innerHTML = waiting.length === 0 ? '<div class="px-4 py-3 text-xs text-on-surface-variant text-center">No one waiting</div>' : waiting.map(buildCard).join('');
   const activeCards = [...complete, ...inservice];   // completed (awaiting payment) at the top, then in-service

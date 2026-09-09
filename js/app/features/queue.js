@@ -13,7 +13,7 @@ import { getAssignmentStatus, applyEntryStatus, applyAssignmentStatus, setAssign
 import { isServiceVisibleOnDash } from './catalog.js';
 import { serviceTimeInfo } from './servicetime.js';
 import { staffOnBreakNow } from './breaks.js';
-import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate, customerNote, notePhoneKey } from './square-customers.js';
+import { squareUpsertCustomer, upsertPartyCustomers, showEditCustomer, customerDirectory, closeCustomerNote, customerNeedsUpdate, customerNote, notePhoneKey, cardNotePreview } from './square-customers.js';
 import { waiverActive } from '../waiver-util.js';
 import { HANDOFF_TTL_MS, handoffNonce, handoffEntryId, buildHandoff, handoffTombstone, handoffIsTombstone, handoffResult, handoffPrimaryName, handoffMultiGuest } from './checkin-handoff.js';
 
@@ -364,6 +364,7 @@ function buildQueueRow(e) {
         ${assignSummary ? '' : `<div class="text-[11px] font-body text-on-surface-variant truncate">${serviceLabels}</div>`}
         ${assignSummary ? `<div class="text-[11px] font-body mt-0.5 space-y-0.5">${assignSummary}</div>` : ''}
         ${visitSub}
+        ${cardNotePreview(e.phone, e.txnNote)}
         <div class="text-[10px] font-body text-outline">${timeStr}${e.phone ? ' · ' + e.phone : ''}</div>
       </div>
       <div class="flex items-stretch gap-1 flex-shrink-0">

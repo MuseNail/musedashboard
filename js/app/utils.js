@@ -142,6 +142,17 @@ export function customerColor(key) {
   return CUSTOMER_COLORS[h % CUSTOMER_COLORS.length];
 }
 
+// Split a staff array into active vs inactive by inactive_staff membership, preserving order.
+export function partitionStaff(staff, inactiveIds) {
+  const inact = new Set(inactiveIds || []);
+  const active = [], inactive = [];
+  for (const s of (staff || [])) (inact.has(s.id) ? inactive : active).push(s);
+  return { active, inactive };
+}
+// SSN is stored as LAST-4 ONLY (config.staff syncs to every device + backups — never store the full number).
+export const normalizeSsn4 = raw => String(raw == null ? '' : raw).replace(/\D/g, '').slice(-4);
+export const maskSsn = ssn4 => ssn4 ? '•••-••-' + ssn4 : '';
+
 // Map each distinct party groupId (first-seen order) → a letter A,B,C… so members of
 // the same check-in can be tagged at-a-glance (live queue/turns + history).
 export function partyLetterMap(items) {
