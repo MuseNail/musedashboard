@@ -91,14 +91,26 @@ function seenMap() {
   for (const k in synced) out[k] = Math.max(out[k] || 0, synced[k] || 0);   // either device clearing it wins
   return out;
 }
+// Pure decision behind markSeen: given a channel's messages and the timestamp it was last
+// marked seen up to, return the ts to newly mark seen, or null if there is nothing to write.
+// MUST use the latest MESSAGE timestamp, never the wall clock — an empty channel has nothing
+// unread (→ null) and an already-caught-up channel returns null, so re-marking is idempotent.
+// This is what makes an open chat panel safe: markSeen dispatches config.set, which re-enters
+// onChatSync (main.js) → markSeen; a wall-clock fallback (Date.now) strictly increases and never
+// latches the guard, so it looped dispatch→sync→dispatch and hard-froze the app every morning
+// after the 4 AM day-clear (all channels read empty). Returning null closes that loop.
+export function seenAdvance(msgs, curTs) {
+  if (!msgs || !msgs.length) return null;
+  const latest = msgs.reduce((mx, m) => Math.max(mx, m.ts || 0), 0);
+  return (curTs || 0) >= latest ? null : latest;
+}
 function markSeen(ch) {
-  // Mark seen UP TO the latest message in the channel (not wall-clock), so re-marking when nothing
-  // new arrived is a no-op — avoids re-dispatching on every unrelated config sync while chat is open.
   const msgs = msgsFor(ch);
-  const now = msgs.length ? msgs.reduce((mx, m) => Math.max(mx, m.ts || 0), 0) : Date.now();
   const pid = myPid();
   const cur = pid ? { ...(cfg()[seenKeyFor(pid)] || {}) } : null;
-  if (cur && (cur[ch] || 0) >= now) return;   // already caught up → nothing to write
+  const seenBase = cur ? (cur[ch] || 0) : (localSeen()[ch] || 0);
+  const now = seenAdvance(msgs, seenBase);
+  if (now == null) return;   // empty channel or already caught up → never write (no re-dispatch loop)
   try { const m = localSeen(); if ((m[ch] || 0) < now) { m[ch] = now; localStorage.setItem(SEEN_KEY, JSON.stringify(m)); } } catch (e) {}   // instant + offline mirror
   if (!pid) return;
   cur[ch] = now;

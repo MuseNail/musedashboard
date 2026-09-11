@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.57', items: [
+    { icon: 'chat', t: 'Fixed: opening a chat could freeze the app', d: 'Opening a staff chat conversation that had no messages yet — which happens first thing every morning, since chat clears overnight — could lock up the whole app. That’s fixed. Nothing changes in how you use chat.' },
+  ] },
   { v: 'v5.41', items: [
     { icon: 'hard_drive', t: 'More storage headroom + a storage gauge', d: 'Behind the scenes, the app now keeps its offline copy of your data in a much larger place, so a busy salon won’t bump into the old on-device size limit as the years pile up — reloads and offline mode keep working. You can watch it yourself in Settings → Data & System → Diagnostics: a new “On-device storage” gauge shows how much space your data uses and roughly how much runway you have. Also a behind-the-scenes reliability fix so a tech’s just-tapped Start/Complete or a typed price can’t be lost when two devices’ clocks disagree. Nothing changes in how you use Muse.' },
   ] },
