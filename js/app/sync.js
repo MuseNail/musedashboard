@@ -62,7 +62,26 @@ function loadOutbox() {
     arr = [...others, ...bulk];
     try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(arr)); } catch {}
   }
+  // Self-heal a flooded config.set outbox (the "not enough memory to open this page" boot OOM):
+  // the pre-v5.57 chat mark-seen bug could enqueue thousands of config.set for the SAME key while
+  // the tab was frozen. That giant outbox then froze/OOM'd the tab on EVERY reload as reapplyOutbox
+  // + replayOutbox walked it. config.set is last-writer-wins per key, so all but the last write to
+  // a key are superseded — collapse them here, before either walk runs.
+  const coalesced = coalesceConfigSets(arr);
+  if (coalesced.length !== arr.length) { arr = coalesced; try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(arr)); } catch {} }
   return arr;
+}
+// Drop superseded config.set ops (keep only the LAST write per key, order preserved) once the
+// outbox is pathologically full of them. Pure + exported for tests. Only kicks in past a flood
+// threshold so a normal outbox is untouched; even then it only drops same-key duplicates, never a
+// distinct key or a non-config op, so no pending write is ever lost.
+export function coalesceConfigSets(arr) {
+  const cfgCount = arr.reduce((n, m) => n + (m && m.op === 'config.set' ? 1 : 0), 0);
+  if (cfgCount <= 50) return arr;
+  const lastIdx = new Map();
+  arr.forEach((m, i) => { if (m && m.op === 'config.set' && m.payload && m.payload.key != null) lastIdx.set(m.payload.key, i); });
+  const keep = new Set(lastIdx.values());
+  return arr.filter((m, i) => !(m && m.op === 'config.set' && m.payload && m.payload.key != null) || keep.has(i));
 }
 function saveOutbox() {
   try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(_outbox)); } catch {}

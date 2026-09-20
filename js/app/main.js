@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.58', items: [
+    { icon: 'memory', t: 'Fixed: a device that couldn’t open the app (“not enough memory”)', d: 'On a device that had hit the earlier chat freeze, the app could keep a huge backlog of tiny leftover changes and choke on it every time it started — the browser would say it ran out of memory and refuse to open the page. The app now clears that harmless backlog on startup and opens normally. Your data is safe; nothing was lost.' },
+  ] },
   { v: 'v5.57', items: [
     { icon: 'chat', t: 'Fixed: opening a chat could freeze the app', d: 'Opening a staff chat conversation that had no messages yet — which happens first thing every morning, since chat clears overnight — could lock up the whole app. That’s fixed. Nothing changes in how you use chat.' },
   ] },
