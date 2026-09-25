@@ -133,6 +133,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.59', items: [
+    { icon: 'palette', t: 'Turns board: finished-but-unpriced tickets stand out', d: 'On the Turns board, a ticket where service is done but no price is set yet now shows in violet ("Awaiting price"), so it’s no longer mistaken for a ready-to-pay "Done" ticket. Long service/tech names also trim cleanly instead of overflowing the card.' },
+    { icon: 'restore', t: 'Data Recovery can now restore gift cards and customers', d: 'Settings → Data Recovery could already bring back a lost queue entry or transaction; it now also restores a gift card or a customer record that the server had rejected — so nothing recoverable is left stranded.' },
+  ] },
   { v: 'v5.58', items: [
     { icon: 'memory', t: 'Fixed: a device that couldn’t open the app (“not enough memory”)', d: 'On a device that had hit the earlier chat freeze, the app could keep a huge backlog of tiny leftover changes and choke on it every time it started — the browser would say it ran out of memory and refuse to open the page. The app now clears that harmless backlog on startup and opens normally. Your data is safe; nothing was lost.' },
   ] },

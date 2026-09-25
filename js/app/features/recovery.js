@@ -50,6 +50,8 @@ function probableLostCheckins(windowDays = 7) {
 function _entryName(op, payload) {
   if (op === 'queue.upsert') return payload?.entry?.name || '(queue entry)';
   if (op === 'record.save') return payload?.record?.name || '(transaction)';
+  if (op === 'giftcard.save') return payload?.card?.code || payload?.card?.id || '(gift card)';
+  if (op === 'customer.upsert') return [payload?.customer?.firstName, payload?.customer?.lastName].filter(Boolean).join(' ') || '(customer)';
   return op;
 }
 
@@ -68,6 +70,13 @@ export function recoveryRestoreFailed(mutationId) {
     if (getState().deletions.includes(String(item.payload.record.id))) { showToast('That transaction was deleted — not restored'); return; }
     dispatch('record.save', { record: { ...item.payload.record } });
     showToast('Transaction restored ✓');
+  } else if (item.op === 'giftcard.save' && item.payload?.card) {
+    dispatch('giftcard.save', { card: { ...item.payload.card } });
+    showToast('Gift card restored ✓');
+  } else if (item.op === 'customer.upsert' && item.payload?.customer) {
+    if ((getState().customerDeletions || []).includes(String(item.payload.customer.id))) { showToast('That customer was deleted — not restored'); return; }
+    dispatch('customer.upsert', { customer: { ...item.payload.customer } });
+    showToast('Customer restored ✓');
   } else { showToast('This item can’t be auto-restored'); return; }
   clearFailedOp(mutationId);
   renderRecoveryReport();
@@ -124,7 +133,7 @@ export function renderRecoveryReport() {
   // B — failed (rejected) writes
   const failedHtml = failed.length ? failed.slice().reverse().map(f => {
     const when = f.at ? new Date(f.at).toLocaleString() : '—';
-    const restorable = (f.op === 'queue.upsert' && f.payload?.entry) || (f.op === 'record.save' && f.payload?.record);
+    const restorable = (f.op === 'queue.upsert' && f.payload?.entry) || (f.op === 'record.save' && f.payload?.record) || (f.op === 'giftcard.save' && f.payload?.card) || (f.op === 'customer.upsert' && f.payload?.customer);
     return `<div class="bg-surface-container rounded-xl px-4 py-3 mb-1.5 border border-error/40">
       <div class="flex items-center justify-between gap-2 mb-1"><div class="min-w-0"><span class="font-headline font-semibold text-on-surface text-sm">${_esc(_entryName(f.op, f.payload))}</span></div><span class="text-[11px] text-outline flex-shrink-0">${when}</span></div>
       <div class="text-[11px] font-body text-on-surface-variant mb-2">${f.op} · ${_esc(f.error || 'rejected')}</div>

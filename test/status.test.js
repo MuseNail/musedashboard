@@ -1,7 +1,27 @@
 import './setup-globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isPaidStatus, getAssignmentStatus, deriveEntryStatus, effectiveServiceStatus, isAwaitingPrice, applyAssignmentStatus, serviceLineStyle } from '../js/app/features/status.js';
+import { isPaidStatus, getAssignmentStatus, deriveEntryStatus, effectiveServiceStatus, isAwaitingPrice, applyAssignmentStatus, serviceLineStyle, isEntryAwaitingPrice, effectiveEntryStatus } from '../js/app/features/status.js';
+
+// Entry-level "Awaiting price" (ported from TurnDesk): a finished ticket with an unpriced done
+// service reads as violet 'awaiting' on the Turns card, not blue 'done'.
+test('isEntryAwaitingPrice: complete entry with an unpriced done service', () => {
+  const entry = { status: 'complete', assignments: [{ status: 'complete', awaitingPrice: true }] };
+  assert.equal(isEntryAwaitingPrice(entry), true);
+  assert.equal(effectiveEntryStatus(entry), 'awaiting');
+});
+test('isEntryAwaitingPrice: false when all done services are priced', () => {
+  const entry = { status: 'complete', assignments: [{ status: 'complete', awaitingPrice: false }] };
+  assert.equal(isEntryAwaitingPrice(entry), false);
+  assert.equal(effectiveEntryStatus(entry), 'complete');
+});
+test('effectiveEntryStatus: non-complete entries pass their status through; empty → waiting', () => {
+  assert.equal(effectiveEntryStatus({ status: 'inservice', assignments: [{ status: 'inservice' }] }), 'inservice');
+  assert.equal(effectiveEntryStatus({ status: 'waiting', assignments: [] }), 'waiting');
+  assert.equal(effectiveEntryStatus(null), 'waiting');
+  // an unpriced service on a NON-complete entry does not trigger awaiting (checkout isn't gated yet)
+  assert.equal(effectiveEntryStatus({ status: 'inservice', assignments: [{ status: 'complete', awaitingPrice: true }, { status: 'inservice' }] }), 'inservice');
+});
 
 // The 4-state workflow: waiting → inservice → complete → paid (legacy 'done' ≡ paid).
 // These encode the exact spec so a regression in the state machine fails CI.
