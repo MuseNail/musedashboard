@@ -25,6 +25,7 @@ The build pipeline for the live single-salon app, ordered by impact. Refreshed *
 
 ## 1 — Server-side cross-device duplicate guard (BACK BURNER)
 The real fix for the offline-outage duplicate check-ins: a DO-side idempotency rule that rejects/flags a 2nd OPEN ticket for the same phone+day at the Worker (the client v5.53 guard only sees one device's board). Owner-parked pending recurrence. Design leaning "flag, don't block." Detail → `[[project-offline-safeguards]]`.
+- **Flagged 2026-10-02 (from the tech-price-decouple build):** revisit `queue.assignmentPatch` cross-device conflict handling. The guard (client + DO) is deliberately **device-scoped** (rejects only a *same-device* stale replay) to avoid clock-skew data-loss; it does NOT catch a stale patch from a *different* device acting as the same tech (e.g. the same tech signed in on two phones). The realistic tech↔front-desk case is already safe (an FD upsert preserves the assignment's tech `updatedBy`, so the DO rejects the tech's stale replay). The proper root-cause fix is the op-id idempotency / DO-side guard above, not a naive cross-device `updatedAt` compare (which would reintroduce the clock-skew bug). Same applies to `queue.entryPatch`.
 
 ## 2 — Helcim void/reverse (refund is done)
 Still missing: `POST /v2/payment/reverse` (same-day void) in client + Worker proxy (idempotency-key, `cardTransactionId` + ip — findings in `HELCIM-MIGRATION.md`). Lower urgency than refund.

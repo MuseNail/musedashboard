@@ -1,9 +1,8 @@
 # Implementation plan v2 — decouple tech price entry from completion
 
-Grounded in the code; revised after a 4-lens adversarial review. Companion to
-`2026-09-26-tech-price-decouple-design.md`. **Scope now includes a Worker/DO sync
-hardening** (owner chose to fix the stale-patch gap in this change), so it is NOT
-client-only — a `wrangler deploy` is required.
+Grounded in the code; revised after a 4-lens adversarial review and a deeper sync-path read.
+Companion to `2026-09-26-tech-price-decouple-design.md`. **Client-only — NO Worker change, NO
+`wrangler deploy`** (the DO already protects the price + flag; see §G).
 
 ## Behavior (final)
 
@@ -123,24 +122,32 @@ client-only — a `wrangler deploy` is required.
     an annotation (icon + short label / outline), not a filled status pill, so it never reads as a
     5th status. Exact treatment verified in the live preview during build.
 
-### G. Sync hardening — the stale-patch gap (owner: fix now)
-14. **Client** `js/app/store.js`, `queue.assignmentPatch` reducer (196–206): before
-    `e.assignments[idx] = payload.assignment`, add the SAME conflict rule as `mergeNewerAssignments`:
+### G. Sync hardening — the stale-patch gap (REVISED after deeper code-read)
+**Decision (owner, Option 1 + flag-for-later):** do NOT change the DO conflict rule. Mirror the
+DO's existing *device-scoped* guard into the client reducer only. No Worker change, no deploy.
+
+Why the original "updatedAt switch" was dropped: the DO's `assignmentPatch` guard is DELIBERATELY
+device-scoped (`worker.js` 1250–1253 + `test/worker-patch-guards.test.js` header) to avoid
+clock-skew data-loss — a naive cross-device `updatedAt` compare would drop a tech's genuinely-later
+price when their phone clock lags the front desk. And the realistic stale-replay (tech prices → FD
+corrects via upsert → tech's offline patch replays) is ALREADY handled on the authoritative DO: a
+tech patch stamps `assignment.updatedBy = <tech device>` (sync.js:247); an FD upsert does NOT
+overwrite `assignment.updatedBy`, so the stored assignment keeps the tech device id; the tech's
+replay then matches `updatedBy` and the DO marks it stale → not persisted, not broadcast
+(worker.js:1431). So the price AND the new `techPriced` flag are both protected server-side today.
+
+14. **Client** `js/app/store.js`, `queue.assignmentPatch` reducer (196–206): mirror the DO's
+    device-scoped guard so the client (defense in depth) rejects a SAME-DEVICE older replay too
+    (never a cross-device action → no clock-skew risk):
     ```js
     const sa = e.assignments[idx], ia = payload.assignment;
-    if (sa && typeof sa.updatedAt === 'number' && (typeof ia.updatedAt !== 'number' || ia.updatedAt < sa.updatedAt)) return; // stored is newer → drop stale patch
+    if (sa && typeof sa.updatedAt === 'number' && typeof ia.updatedAt === 'number' &&
+        ia.updatedBy && ia.updatedBy === sa.updatedBy && ia.updatedAt < sa.updatedAt) return; // same-device stale replay → keep stored
     ```
-15. **DO/Worker** `cloudflare/worker.js`, `queue.assignmentPatch` (1238–1256): REPLACE the
-    device-scoped guard (1250–1253) with the same `updatedAt` rule (keep stored when stamped and
-    incoming is older or unstamped → `stale = true; break;`). This unifies assignmentPatch with the
-    upsert path's `_mergeNewerAssignments` and rejects a stale patch from ANY device, while a
-    genuinely newer tech action still always wins. Keep the existing `paid/done` guard and the
-    "reassigned away → drop" guard. `entryPatch` is OUT OF SCOPE (visit-note only).
-    - Rationale for safety: the upsert path already trusts cross-device `updatedAt`; this makes the
-      two paths consistent. A tech action is only ever dropped when a strictly-newer write already
-      superseded it (correct), not because it came from another device.
-    - Deploy: `wrangler deploy` from `cloudflare/` (account info@musenailandspa.com), with owner OK.
-      Deploy the Worker BEFORE the client ships so the server guard is in place first.
+    Keep the existing `paid/done` guard and `idx < 0` drop. No DO/Worker change; `entryPatch`
+    untouched. **Flagged for a later, separate review:** the true root-cause for cross-device
+    offline conflicts (e.g. same tech on two devices) is op-id idempotency / a DO-side idempotency
+    guard — tracked, not part of this change.
 
 ### H. Version trio (at dev→main)
 `js/app/config.js` APP_VERSION, `version.json`, `sw.js` CACHE_NAME together, via `ship` with OK.
@@ -154,30 +161,29 @@ client-only — a `wrangler deploy` is required.
   default→none. Plus: a tech price>0 sets `techPriced`; reopen (no price) leaves it unset.
 - `staff.test.js`: drive `staffComplete` on a **comped** assignment → completes (not a dead tap);
   on an unpriced non-comped → blocked.
-- `store.test.js`: `queue.assignmentPatch` guard — newer patch applies; strictly-older patch
-  dropped (keeps stored); equal applies; incoming-unstamped vs stored-stamped dropped;
-  stored-unstamped applies; paid entry drops; reassigned-away drops. Plus the FD-clears-techPriced
-  path via a queue.upsert carrying the cleared flag with a newer `updatedAt` winning the merge.
-- (If feasible) a worker-side test mirroring the DO guard (see `test/worker-patch-guards.test.js`).
+- `store.test.js`: client `queue.assignmentPatch` device-scoped guard — SAME-device older replay
+  dropped (keeps stored); CROSS-device older patch APPLIES (no clock-skew drop); newer same-device
+  applies; equal applies; unstamped applies; paid entry drops; reassigned-away (idx<0) drops. Plus
+  the FD-clears-techPriced path via a queue.upsert carrying the cleared flag with a newer
+  `updatedAt` winning `mergeNewerAssignments`.
 
 ## Data / migration / rollback
 - `techPriced`: additive optional boolean; absent = today's behavior; no storage-key/DO-schema/
   records change → no migration.
-- Sync hardening changes only CONFLICT RESOLUTION (which of two writes wins), not storage shape.
-  Rollback = revert the reducer/worker edits; behavior returns to cross-device-always-applies. A
-  stray `techPriced` is ignored by old code. Worker rollback = redeploy the previous `worker.js`.
-- Order of operations: deploy Worker guard first, then ship the client.
+- The client reducer mirror changes only CONFLICT RESOLUTION for a same-device stale replay (which
+  the DO already rejects), not storage shape. Rollback = revert the one reducer edit. A stray
+  `techPriced` is ignored by old code. No Worker change, so no deploy/rollback there.
 
 ## Risk register (post-review)
-- R-sync: the DO guard change alters a deliberately-chosen behavior (cross-device patches always
-  applied). Mitigation: it mirrors the already-trusted upsert merge; thorough reducer tests above;
-  Worker-first deploy; clear rollback. This is the highest-risk item — verify cross-device by hand
-  in the live preview before shipping.
+- R-sync: RESOLVED as low-risk — no DO change; the client mirror is device-scoped only (no
+  cross-device clock-skew compare). The realistic stale-replay is already handled server-side.
+  Deeper cross-device conflict handling flagged for a separate later review.
 - Confirmed NON-issues (reviewers verified against code): `act-<entryId>:<serviceId>` id is valid
   and unique per rendered row; Start-with-a-typed-price jumping to Complete is intended; the
   always-stamp `updatedAt` is required.
 - Surfaced + owner-accepted: two taps from Waiting; Today/History updates at Complete.
 
 ## TurnDesk carry-over
-TD has equivalent `status.js`/`staff.js`/`store.js`/`worker.js`. Port the same edits (incl. the DO
-guard) after Muse ships and verifies; log in `turndesk/docs/MUSE-PORT-LOG.md`.
+TD has equivalent `status.js`/`staff.js`/`store.js`. Port the same client edits (status predicate,
+morphing button, techPriced flag + clears, marker, client reducer mirror) after Muse ships and
+verifies; log in `turndesk/docs/MUSE-PORT-LOG.md`. No TD Worker change either.
