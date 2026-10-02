@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.60', items: [
+    { icon: 'price_check', t: 'Techs can enter a price early without ending the service', d: 'When a technician types in the charge before they’re actually finished, the service no longer flips to “done” — so the front desk won’t think a tech is free when they’re still working. The tech app now has one button that moves forward a step at a time (Start → Save price → Complete), and only the front desk marks a service finished. A small “Price in ✓” tag shows the front desk when a tech has already entered the charge.' },
+  ] },
   { v: 'v5.59', items: [
     { icon: 'palette', t: 'Turns board: finished-but-unpriced tickets stand out', d: 'On the Turns board, a ticket where service is done but no price is set yet now shows in violet ("Awaiting price"), so it’s no longer mistaken for a ready-to-pay "Done" ticket. Long service/tech names also trim cleanly instead of overflowing the card.' },
     { icon: 'restore', t: 'Data Recovery can now restore gift cards and customers', d: 'Settings → Data Recovery could already bring back a lost queue entry or transaction; it now also restores a gift card or a customer record that the server had rejected — so nothing recoverable is left stranded.' },
