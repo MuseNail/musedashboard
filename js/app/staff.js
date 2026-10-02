@@ -131,12 +131,16 @@ export function staffServiceAction(a, fieldPrice) {
   if (status === 'inservice') {
     if (a && a.comped)                               return { mode: 'complete', label: 'Complete',   fn: 'staffComplete', style: 'primary' };
     const saved = (a && a.cost) || 0;
-    if (saved > 0 && fieldPrice === saved)           return { mode: 'complete', label: 'Complete',   fn: 'staffComplete', style: 'primary' };
-    return { mode: 'saveprice', label: 'Save price', fn: 'staffSavePrice', style: 'primary' };   // nothing saved yet, or field edited away from the saved price
+    const eff = fieldPrice == null ? saved : fieldPrice;   // an empty/cleared field keeps the saved price (no forced re-type)
+    if (saved > 0 && eff === saved)                  return { mode: 'complete', label: 'Complete',   fn: 'staffComplete', style: 'primary' };
+    return { mode: 'saveprice', label: 'Save price', fn: 'staffSavePrice', style: 'primary' };   // nothing saved yet, or field edited to a NEW amount
   }
   if (status === 'complete')                         return { mode: 'reopen',   label: 'Reopen',     fn: 'staffReopen',   style: 'outline' };
   return { mode: 'none' };
 }
+// The in-service Save-price button is greyed until a valid price is in the field. ONE predicate so
+// the initial render (lineHtml) and the live keystroke morph (staffPriceInput) can never disagree.
+export function saveDisabled(act, fieldPrice) { return act.mode === 'saveprice' && act.style === 'primary' && !(fieldPrice > 0); }
 // Complete needs a real price OR a comp (a deliberate $0). Shared by staffServiceAction's gate and
 // staffComplete's defense-in-depth check so the shown button and the tap can never disagree.
 export function completeGateOk(effective, comped) { return !!comped || (effective != null && effective > 0); }
@@ -417,21 +421,22 @@ function lineHtml(entry, a) {
   // line (mode 'none') shows no button so a finalized sale is never reactivated.
   const fieldPrice = parsePrice(priceVal);
   const act = staffServiceAction(a, fieldPrice);
-  const actBtnDisabled = act.mode === 'saveprice' && act.style === 'primary' && !(fieldPrice > 0);
+  const actBtnDisabled = saveDisabled(act, fieldPrice);
   const actBtn = act.mode === 'none' ? '' : (() => {
     const common = 'flex-1 py-4 rounded-xl font-headline font-bold text-lg transition-all active:scale-95';
     const cls = act.style === 'primary' ? 'bg-primary hover:bg-primary-dim text-on-primary'
               : act.style === 'outline' ? 'border-2 border-primary text-primary hover:bg-primary/10' : 'text-white';
     const inl = act.style === 'violet' ? ' style="background:#6b4fb0"' : '';
     const dis = actBtnDisabled ? ' opacity-40 pointer-events-none' : '';
-    return `<button id="act-${key}" data-mode="${act.mode}" data-style="${act.style}"${actBtnDisabled ? ' disabled' : ''} onclick="${act.fn}('${entry.id}','${esc(a.serviceId)}')"${inl}
+    return `<button id="act-${key}"${actBtnDisabled ? ' disabled' : ''} onclick="${act.fn}('${entry.id}','${esc(a.serviceId)}')"${inl}
       class="${common} ${cls}${dis}">${act.label}</button>`;
   })();
   // "Price in ✓": a tech has entered a price while still IN SERVICE — tells the tech (and the front
-  // desk) the charge is ready, without implying they're done. Teal annotation, distinct from the
-  // green In-Service status pill; only shows when a TECH set the price (isTechPriced).
+  // desk) the charge is ready, without implying they're done. A filled soft-teal pill so it reads as
+  // a distinct annotation (not a 5th status, and separated from the brand-teal $price); only shows
+  // when a TECH set the price (isTechPriced). Brand teal via the --primary token (themes with the button).
   const pricedTag = isTechPriced(a)
-    ? `<span class="text-[11px] font-body font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-0.5" style="color:#1a5252;border:1px solid #1a5252"><span class="material-symbols-outlined" style="font-size:13px">check</span>Price in</span>`
+    ? `<span class="text-[11px] font-body font-bold px-2 py-0.5 rounded-full" style="background:#e1efe9;color:var(--primary,#1a5252)">Price in ✓</span>`
     : '';
   const stn = stationLbl(a.station);
   // Station is the hero (big chair + number). With no station, the service takes the hero slot.
@@ -604,9 +609,9 @@ window.staffPriceInput = (entryId, serviceId, val) => {
     .find(x => x.serviceId === serviceId && x.techId === myId);
   if (!a || a.status !== 'inservice' || a.comped) return;   // only the in-service, non-comped button morphs
   const act = staffServiceAction(a, parsePrice(val));
-  b.textContent = act.label; b.dataset.mode = act.mode;
+  b.textContent = act.label;
   b.setAttribute('onclick', `${act.fn}('${entryId}','${esc(serviceId)}')`);
-  const dis = act.mode === 'saveprice' && !(parsePrice(val) > 0);
+  const dis = saveDisabled(act, parsePrice(val));
   b.disabled = dis; b.classList.toggle('opacity-40', dis); b.classList.toggle('pointer-events-none', dis);
 };
 

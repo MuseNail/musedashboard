@@ -83,10 +83,18 @@ action (still gated on a price existing). `staffStart` unchanged.
 
 - **Tech card:** beside the green **In Service** pill, a small secondary tag
   `Price in ✓` once `techPriced` is set (status stays green — tech reads as busy).
-- **Front desk (queue / turns / floor):** the same small `Price in ✓` marker beside the
-  In Service pill, shown **only when `techPriced === true`** (an FD-entered price shows
-  no marker — the FD already knows). The card stays In-Service green; availability is
-  unchanged.
+- **Front desk (queue + turns):** the `Price in ✓` marker (compact `✓` on the dense turns row)
+  beside the In Service pill, shown **only when `techPriced === true`** (an FD-entered price shows
+  no marker — the FD already knows). Filled soft-teal pill (brand `--primary` text) so it reads as
+  an annotation, not a 5th status, and stands apart from the brand-teal `$price`. The card stays
+  In-Service green; availability is unchanged.
+- **Floor plan: intentionally excluded** — `custLines` renders only a status dot + text (no
+  per-service pill) in ~10px cells; a marker would crowd/clip. The tech still reads busy via the
+  green dot/station tint.
+- **Two intended edges (confirmed in build):** the marker reappears if a completed service is
+  reopened to in-service (the saved price is still the tech's — accurate provenance); and clearing
+  the price field on an already-priced line keeps **Complete** (saved price stands, no forced
+  re-type), while typing a *different* amount returns it to **Save price**.
 - Implemented as an additive marker next to the existing status pill, **not** a new
   `serviceLineStyle` state (so the base In-Service styling and availability reading are
   untouched). Predicate helper in `status.js`, e.g. `isTechPriced(a)` =

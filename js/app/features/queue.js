@@ -314,7 +314,7 @@ function buildQueueRow(e) {
       ${tech ? `<span class="text-on-surface-variant">→ ${escHtml(tech.name)}${a.station ? ' @' + escHtml(String(a.station)) : ''}</span>` : (a.station ? `<span class="text-on-surface-variant">@${escHtml(String(a.station))}</span>` : '')}
       ${a.comped ? `<span class="font-semibold" style="color:#7a5a00">${escHtml(a.compReason || 'Comp')}</span>` : (isAwaitingPrice(a) ? `<span class="font-semibold" style="color:#6b4fb0">Pending</span>` : (a.cost ? `<span class="font-semibold text-primary">$${Number(a.cost).toFixed(2)}</span>` : ''))}
       ${tip}
-      ${isTechPriced(a) ? `<span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0 inline-flex items-center gap-0.5 ${tip ? '' : 'ml-auto'}" style="color:#1a5252;border:1px solid #1a5252" title="A tech entered this price — ready to check out">✓ Price in</span>` : ''}
+      ${isTechPriced(a) ? `<span class="text-[9px] font-bold px-1.5 rounded-full flex-shrink-0 ${tip ? '' : 'ml-auto'}" style="background:#e1efe9;color:var(--primary,#1a5252)" title="Price entered by the tech">Price in ✓</span>` : ''}
       <span class="text-[9px] font-bold px-1.5 rounded-full flex-shrink-0 ${(tip || isTechPriced(a)) ? '' : 'ml-auto'}" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>
     </div>`;
   }).join('');

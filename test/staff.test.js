@@ -1,7 +1,7 @@
 import './setup-globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { staffByPin, myActiveAssignments, myHistory, staffServiceAction, completeGateOk } from '../js/app/staff.js';
+import { staffByPin, myActiveAssignments, myHistory, staffServiceAction, completeGateOk, saveDisabled } from '../js/app/staff.js';
 
 // ── Single morphing action button (decouple price entry from completion) ──────
 // staffServiceAction(a, fieldPrice) is pure: it maps (status + saved cost/comped + the price
@@ -18,9 +18,18 @@ test('staffServiceAction: in-service with no saved price → Save price', () => 
 test('staffServiceAction: in-service, field matches saved price → Complete', () => {
   assert.equal(staffServiceAction({ status: 'inservice', cost: 38 }, 38).mode, 'complete');   // untouched (field shows saved)
 });
-test('staffServiceAction: in-service, field edited away from saved price → back to Save price', () => {
+test('staffServiceAction: in-service, field edited to a NEW amount → back to Save price', () => {
   assert.equal(staffServiceAction({ status: 'inservice', cost: 38 }, 40).mode, 'saveprice');  // re-price
-  assert.equal(staffServiceAction({ status: 'inservice', cost: 38 }, null).mode, 'saveprice'); // field cleared
+});
+test('staffServiceAction: in-service, field cleared keeps the saved price → Complete (no forced re-type)', () => {
+  assert.equal(staffServiceAction({ status: 'inservice', cost: 38 }, null).mode, 'complete');  // empty field falls back to saved cost
+});
+test('saveDisabled: only a primary Save-price with no valid price is greyed', () => {
+  assert.equal(saveDisabled({ mode: 'saveprice', style: 'primary' }, null), true);
+  assert.equal(saveDisabled({ mode: 'saveprice', style: 'primary' }, 0), true);
+  assert.equal(saveDisabled({ mode: 'saveprice', style: 'primary' }, 38), false);
+  assert.equal(saveDisabled({ mode: 'complete', style: 'primary' }, null), false);   // Complete never greyed here
+  assert.equal(saveDisabled({ mode: 'saveprice', style: 'violet' }, null), false);   // awaiting Save price isn't gated this way
 });
 test('staffServiceAction: in-service comped → Complete (a valid $0)', () => {
   assert.equal(staffServiceAction({ status: 'inservice', comped: true, cost: 0 }, null).mode, 'complete');

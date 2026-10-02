@@ -565,7 +565,7 @@ export function renderTurnsQueue() {
             <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
             ${techHtml}${a.cost ? ` <span class="font-semibold text-primary">$${a.cost}</span>` : ''}
           </span>
-          ${isTechPriced(a) ? `<span class="flex-shrink-0 font-bold" style="color:#1a5252" title="A tech entered this price — ready to check out">✓$</span>` : ''}
+          ${isTechPriced(a) ? `<span class="flex-shrink-0 text-[9px] font-bold px-1 rounded-full" style="background:#e1efe9;color:var(--primary,#1a5252)" title="Price entered by the tech">✓</span>` : ''}
           <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>${accept}
         </div>`;
       }).join('');
