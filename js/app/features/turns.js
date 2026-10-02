@@ -4,7 +4,7 @@ import { dispatch } from '../sync.js';
 import { showToast, todayStr, byName, localDateStr, formatElapsed, partyLetterMap, statusTimeHtml, escHtml, dateBtnLabel } from '../utils.js';
 import { GROUP_COLORS } from '../config.js';
 import { canDo } from '../session.js';
-import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle, effectiveServiceStatus, effectiveEntryStatus } from './status.js';
+import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentStatus, serviceLineStyle, effectiveServiceStatus, effectiveEntryStatus, isTechPriced } from './status.js';
 import { renderQueue, showGroupAssignModal } from './queue.js';
 import { serviceTimeInfo } from './servicetime.js';
 import { cardNotePreview } from './square-customers.js';
@@ -565,6 +565,7 @@ export function renderTurnsQueue() {
             <span class="${hot ? 'font-bold' : 'font-semibold'} text-on-surface">${escHtml(s ? s.label : 'Service')}</span>
             ${techHtml}${a.cost ? ` <span class="font-semibold text-primary">$${a.cost}</span>` : ''}
           </span>
+          ${isTechPriced(a) ? `<span class="flex-shrink-0 font-bold" style="color:#1a5252" title="A tech entered this price — ready to check out">✓$</span>` : ''}
           <span class="text-[9px] font-bold px-1 rounded-full flex-shrink-0" style="background:${ls.pill.bg};color:${ls.pill.fg}">${ls.pill.label}</span>${accept}
         </div>`;
       }).join('');
