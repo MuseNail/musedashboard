@@ -438,6 +438,18 @@ function lineHtml(entry, a) {
   const pricedTag = isTechPriced(a)
     ? `<span class="text-[11px] font-body font-bold px-2 py-0.5 rounded-full" style="background:#e1efe9;color:var(--primary,#1a5252)">Price in ✓</span>`
     : '';
+  // Price entry (field + calculator) only appears once the service is Started — a tech prices
+  // DURING/after the work, not before. On a Waiting service the only action is Start.
+  const priceRow = status === 'waiting' ? '' : `<div class="flex items-center gap-2 mb-3">
+      <span class="text-on-surface-variant font-headline text-2xl">$</span>
+      <input type="text" inputmode="decimal" value="${priceVal}" placeholder="${placeholder}"
+        oninput="staffPriceInput('${entry.id}','${esc(a.serviceId)}',this.value)"
+        class="staff-price-input flex-1 min-w-0 bg-surface-container border-2 rounded-xl px-4 py-3 text-3xl font-headline text-right focus:outline-none focus:border-primary ${awaiting ? '' : 'border-surface-container-high'}"${awaiting ? ' style="border-color:#6b4fb0"' : ''}>
+      <button onclick="staffCalc('${entry.id}','${esc(a.serviceId)}')" title="Calculator"
+        class="flex-shrink-0 w-14 h-14 flex items-center justify-center rounded-xl border-2 border-primary text-primary hover:bg-primary/10 active:scale-95 transition-all">
+        <span class="material-symbols-outlined" style="font-size:26px">calculate</span>
+      </button>
+    </div>`;
   const stn = stationLbl(a.station);
   // Station is the hero (big chair + number). With no station, the service takes the hero slot.
   const stationHero = stn
@@ -450,16 +462,7 @@ function lineHtml(entry, a) {
     </div>
     ${stn ? `<div class="font-headline font-bold text-xl text-on-surface truncate mb-3">${esc(label)}</div>` : ''}
     ${awaiting ? `<div class="flex items-center gap-2 mb-3 rounded-xl px-3 py-2 text-sm font-body" style="background:rgba(107,79,176,.1);color:#534ab7"><span class="material-symbols-outlined" style="font-size:18px">info</span>Front desk marked this done — add the price.</div>` : ''}
-    <div class="flex items-center gap-2 mb-3">
-      <span class="text-on-surface-variant font-headline text-2xl">$</span>
-      <input type="text" inputmode="decimal" value="${priceVal}" placeholder="${placeholder}"
-        oninput="staffPriceInput('${entry.id}','${esc(a.serviceId)}',this.value)"
-        class="staff-price-input flex-1 min-w-0 bg-surface-container border-2 rounded-xl px-4 py-3 text-3xl font-headline text-right focus:outline-none focus:border-primary ${awaiting ? '' : 'border-surface-container-high'}"${awaiting ? ' style="border-color:#6b4fb0"' : ''}>
-      <button onclick="staffCalc('${entry.id}','${esc(a.serviceId)}')" title="Calculator"
-        class="flex-shrink-0 w-14 h-14 flex items-center justify-center rounded-xl border-2 border-primary text-primary hover:bg-primary/10 active:scale-95 transition-all">
-        <span class="material-symbols-outlined" style="font-size:26px">calculate</span>
-      </button>
-    </div>
+    ${priceRow}
     <div class="flex gap-2">${actBtn}</div>
   </div>`;
 }
@@ -778,11 +781,19 @@ window.staffCalcOk = () => {
   const r = _calcEval(_calcExpr);
   if (r == null) { showToast('Enter an amount'); return; }
   const val = Math.round(r * 100) / 100;
+  if (!(val > 0)) { showToast('Enter an amount over $0'); return; }   // a price must be > $0 — keep the calc open (mirrors the empty guard) instead of auto-submitting a $0 that Save-price would reject
   const out = Number.isInteger(val) ? String(val) : val.toFixed(2);
-  if (_calcTarget) _priceDraft[_calcTarget.key] = out;
+  const t = _calcTarget;
   window.staffCalcClose();
-  render();
-  showToast('Amount set to $' + out);
+  if (!t) { render(); return; }
+  _priceDraft[t.key] = out;
+  // One tap: the calculator total is submitted straight through as the price the front desk sees,
+  // via the decoupled Save-price path (status unchanged — it never completes the service). A
+  // finalized (paid) line is never re-priced here — just fill the field, as before.
+  const a = (queue().find(e => String(e.id) === String(t.entryId))?.assignments || [])
+    .find(x => x.serviceId === t.serviceId && x.techId === myId);
+  if (a && isPaidStatus(a.status)) { render(); showToast('Amount set to $' + out); return; }
+  window.staffSavePrice(t.entryId, t.serviceId);   // saves the price + toasts "Price saved ✓"
 };
 window.staffCalcClose = () => { const m = document.getElementById('staff-calc-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } };
 

@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.61', items: [
+    { icon: 'calculate', t: 'One-tap price entry on the tech app', d: 'In the technician app, the calculator’s “Use this total” button now sends the price straight through in one tap — the front desk sees it immediately, with no separate approve step. The price box and calculator also now appear only after a service is started: tap Start first, then price it while or after you do the work.' },
+  ] },
   { v: 'v5.60', items: [
     { icon: 'price_check', t: 'Techs can enter a price early without ending the service', d: 'When a technician types in the charge before they’re actually finished, the service no longer flips to “done” — so the front desk won’t think a tech is free when they’re still working. The tech app now has one button that moves forward a step at a time (Start → Save price → Complete), and only the front desk marks a service finished. A small “Price in ✓” tag shows the front desk when a tech has already entered the charge.' },
   ] },
