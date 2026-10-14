@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.62', items: [
+    { icon: 'sync', t: 'Fixed: a phone left open could miss a newly-assigned customer', d: 'When a tech left the app open and the phone went to sleep, the screen could quietly fall out of sync — so a customer assigned to them at the front desk wouldn’t show up until they manually refreshed. The app now notices when the phone wakes up (or the moment the tech taps the screen) and reconnects on its own, so new assignments appear without a refresh. Nothing changes in how you use the app.' },
+  ] },
   { v: 'v5.61', items: [
     { icon: 'calculate', t: 'One-tap price entry on the tech app', d: 'In the technician app, the calculator’s “Use this total” button now sends the price straight through in one tap — the front desk sees it immediately, with no separate approve step. The price box and calculator also now appear only after a service is started: tap Start first, then price it while or after you do the work.' },
   ] },
