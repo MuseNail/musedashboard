@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.63', items: [
+    { icon: 'functions', t: 'Payroll: a running total across all technicians', d: 'The Payroll tab’s technician table now has a “All techs” total column pinned on the left. For every line — billed, commission, check, cash, total paid, and each day — it shows the whole-salon total across all your techs, next to last period for comparison. It stays put while you scroll across technicians, and it always matches what’s on screen: if you override a tech’s amount, the total updates with it. It’s read-only (you can’t edit the total itself).' },
+  ] },
   { v: 'v5.62', items: [
     { icon: 'sync', t: 'Fixed: a phone left open could miss a newly-assigned customer', d: 'When a tech left the app open and the phone went to sleep, the screen could quietly fall out of sync — so a customer assigned to them at the front desk wouldn’t show up until they manually refreshed. The app now notices when the phone wakes up (or the moment the tech taps the screen) and reconnects on its own, so new assignments appear without a refresh. Nothing changes in how you use the app.' },
   ] },
