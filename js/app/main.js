@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.69', items: [
+    { icon: 'assignment_ind', t: 'Assign tasks to a person — front desk and technicians', d: 'Tasks can now be given to a specific person. On the dashboard, a manager can assign a task when adding it (there’s a proper add-task box now) or tap a task’s name-tag to reassign it; front-desk staff see their own tasks plus “Anyone” tasks, and only managers can delete. Technicians now have a “Tasks” button in the top corner of their staff app with a count badge — it shows the tasks assigned to them, which they can check off, and it updates on their phone the moment you assign something.' },
+  ] },
   { v: 'v5.68', items: [
     { icon: 'sticky_note_2', t: 'Notes & preferences on each technician', d: 'Tap a technician’s photo (on the Turns grid or the Floor Plan) and you’ll see a new “Notes / Preferences” box — jot things like “prefers pedicures,” “leaves at 5,” or “no fumes.” Managers can edit it; everyone else can read it. It saves automatically and shows up wherever that tech’s status popup opens. (Notes are visible to anyone at the front desk, so keep sensitive personal info out of them.)' },
   ] },
