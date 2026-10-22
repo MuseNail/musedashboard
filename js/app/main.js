@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.66', items: [
+    { icon: 'how_to_reg', t: 'Check in a customer straight from their profile', d: 'When you look up a customer — on the Customers tab or in their profile — there’s now a “Check in” button. Tap it and the normal check-in builder opens with their name and phone already filled in, so you just pick the service(s) and go. Everything still works the same from there: the waiver prompt, the duplicate-check-in warning, and the appointment match all still apply.' },
+  ] },
   { v: 'v5.65', items: [
     { icon: 'volunteer_activism', t: 'Comps: the customer pays $0, but the tech still gets paid', d: 'When you mark a service as a Comp, it now works the way you’d expect: the price you enter stays (you can set it in both Assign & Price and the tech app), the customer is charged $0 for that line, but the technician is still paid in full on it (their billed amount and commission include it). The business simply absorbs it as a giveaway. A new “Comped” total on the Reports tab shows how much you gave away over the date range. (Previously, checking Comp wiped the price, so the tech earned nothing on it.)' },
   ] },
