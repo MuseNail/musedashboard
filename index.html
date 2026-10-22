@@ -2449,6 +2449,7 @@ tailwind.config = {
     </div>
     <div class="flex gap-2 mt-5">
       <button id="edit-cust-delete-btn" onclick="deleteCustomerFromEdit()" class="hidden px-4 py-3 rounded-xl border border-error/60 text-error font-headline font-semibold hover:bg-error/10 transition-colors"><span class="material-symbols-outlined" style="font-size:18px">delete</span></button>
+      <button id="edit-cust-checkin-btn" onclick="checkInFromEditCustomer()" title="Check this customer in now" class="hidden px-4 py-3 rounded-xl border border-primary/60 text-primary font-headline font-semibold hover:bg-primary/10 transition-colors inline-flex items-center gap-1"><span class="material-symbols-outlined" style="font-size:18px">how_to_reg</span>Check in</button>
       <button onclick="closeEditCustomer()" class="flex-1 border border-outline-variant/60 text-on-surface-variant py-3 rounded-xl font-headline font-semibold">Cancel</button>
       <button onclick="saveEditCustomer()" class="flex-1 bg-primary text-on-primary py-3 rounded-xl font-headline font-bold hover:bg-primary-dim transition-all active:scale-95">Save</button>
     </div>
