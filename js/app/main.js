@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.67', items: [
+    { icon: 'event_seat', t: 'Check in a walk-in right from the Floor Plan', d: 'You can now start a check-in without leaving the Floor Plan. Tap any open chair and the check-in window opens aimed at that seat — finish it and the walk-in is seated right there. There’s also a “Check in” button on the Floor Plan toolbar for a quick add (that guest lands in the “not seated” tray to drag wherever). On desktop, hovering an open chair shows a faint ＋ so you can see it’s tappable. The waiver, duplicate-check-in, and appointment prompts all still work exactly as before.' },
+  ] },
   { v: 'v5.66', items: [
     { icon: 'how_to_reg', t: 'Check in a customer straight from their profile', d: 'When you look up a customer — on the Customers tab or in their profile — there’s now a “Check in” button. Tap it and the normal check-in builder opens with their name and phone already filled in, so you just pick the service(s) and go. Everything still works the same from there: the waiver prompt, the duplicate-check-in warning, and the appointment match all still apply.' },
   ] },
