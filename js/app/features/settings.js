@@ -365,6 +365,7 @@ const SETTINGS_NAV = [
   ]},
   { id:'business', title:'Business', desc:'Branding', items:[
     { label:'Business Logo', sub:'Header & report logo', content:'logo-section', icon:'image' },
+    { label:'Price Menu', sub:'Edit the printed customer price menu', content:'settings-pricemenu-section', render:'renderPriceMenuEditor', adminOnly:true, icon:'receipt_long' },
     { label:'Receipt & Reviews', sub:'Re-routable review-QR link on printed receipts', content:'receipt-section', render:'renderReceiptSettings', adminOnly:true, icon:'reviews' },
     { label:'Service Waiver', sub:'Require & manage the check-in waiver + signed records', content:'waiver-section', render:'renderWaiverSettings', adminOnly:true, icon:'gavel' },
     { label:'Timezone', sub:'Which day & month each sale counts under', content:'salontz-section', render:'renderSalonTzSettings', adminOnly:true, icon:'schedule' },

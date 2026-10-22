@@ -200,18 +200,20 @@ function _normItem(it) {
 }
 function _normPages(pages) {
   return pages.map(p => ({
+    id: (p && p.id) || _pmUid(),   // pages + foot lines carry ids too, so the editor can address EVERYTHING by id
     title: _str(p && p.title),
     cols: (Array.isArray(p && p.cols) ? p.cols : []).map(col => (Array.isArray(col) ? col : []).map(_normItem).filter(Boolean)),
-    foot: (Array.isArray(p && p.foot) ? p.foot : []).map(f => (f && typeof f === 'object') ? { text: _str(f.text), cls: _WL_CLS.has(f.cls) ? f.cls : '' } : null).filter(Boolean),
+    foot: (Array.isArray(p && p.foot) ? p.foot : []).map(f => (f && typeof f === 'object') ? { id: f.id || _pmUid(), text: _str(f.text), cls: _WL_CLS.has(f.cls) ? f.cls : '' } : null).filter(Boolean),
   }));
 }
 // Return a valid, id-stamped menu — NEVER throw and never let a malformed/partial/stale synced
 // config.price_menu blank the customer-facing menu. Falls back to the default for anything that
 // isn't a well-formed { pages: [...] }; coerces junk nodes per-field; backfills missing ids.
-export function normalizePriceMenu(stored) {
+export function normalizePriceMenu(stored, opts) {
   const src = (stored && Array.isArray(stored.pages) && stored.pages.length) ? stored : DEFAULT_PRICE_MENU;
   let pages;
   try { pages = _normPages(src.pages); } catch { pages = _normPages(DEFAULT_PRICE_MENU.pages); }
+  if (opts && opts.allowEmpty) return { v: 1, pages };   // preview renders the LITERAL draft, even mid-build
   // A structurally-valid but CONTENT-empty config (e.g. {pages:[{cols:[[]]}]}) would render blank
   // customer-facing pages — the one thing this function promises can't happen. Fall back to the default
   // whenever nothing renders. (Phase 2's editor can decide separately if an owner-emptied menu is meant.)
@@ -239,19 +241,33 @@ export function priceMenuToHtml(menu, logoTag, esc) {
   ).join('');
 }
 
-function priceMenuDoc(logoUrl) {
+// menuOverride (optional) renders that menu instead of the live config — used by the editor preview,
+// which passes the unsaved DRAFT and renders it literally (allowEmpty) so a half-built menu shows as-is.
+// A preview also gets a per-page overflow banner (accurate — measured with the real print fonts).
+function priceMenuDoc(logoUrl, menuOverride) {
   const logo = `<img class="logo" src="${escHtml(logoUrl)}" alt="${escHtml('Muse Nails & Spa')}">`;
+  const preview = menuOverride != null;
   let body;
-  try { body = priceMenuToHtml(normalizePriceMenu(getState().config.price_menu), logo, escHtml); }
-  catch { try { body = priceMenuToHtml(normalizePriceMenu(null), logo, escHtml); } catch { body = ''; } }
+  try {
+    const menu = preview ? normalizePriceMenu(menuOverride, { allowEmpty: true }) : normalizePriceMenu(getState().config.price_menu);
+    body = priceMenuToHtml(menu, logo, escHtml);
+  } catch { try { body = priceMenuToHtml(normalizePriceMenu(null), logo, escHtml); } catch { body = ''; } }
+  const overflowScript = preview ? `<script>addEventListener('load',function(){document.querySelectorAll('.page').forEach(function(pg){if(pg.scrollHeight>pg.clientHeight+2){var b=document.createElement('div');b.textContent='⚠ This page is longer than one printed sheet — some items may be cut off when printed.';b.style.cssText='background:#fdecec;color:#8a2b2b;font-size:12px;padding:6px 12px;text-align:center;font-family:sans-serif';pg.parentNode.insertBefore(b,pg);}});});</script>` : '';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
-    `<meta name="viewport" content="width=device-width,initial-scale=1"><title>Muse — Price Menu</title>` +
+    `<meta name="viewport" content="width=device-width,initial-scale=1"><title>Muse — Price Menu${preview ? ' (preview)' : ''}</title>` +
     `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
     `<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">` +
     `<style>${PRICE_MENU_STYLE}</style></head><body>` +
-    `<div class="bar"><strong>MUSE NAILS &amp; SPA · PRICE MENU</strong><button onclick="window.print()">Print / Save as PDF</button></div>` +
-    body +
+    `<div class="bar"><strong>MUSE NAILS &amp; SPA · PRICE MENU${preview ? ' · PREVIEW' : ''}</strong><button onclick="window.print()">Print / Save as PDF</button></div>` +
+    body + overflowScript +
     `</body></html>`;
+}
+// Open the editor's unsaved DRAFT in a single reused tab (named window) — not the live menu.
+export function openPriceMenuPreview(menu) {
+  const logoUrl = new URL('assets/muse-wordmark.png', location.href).href;
+  const w = window.open('', 'muse-price-preview');
+  if (!w) { alert('Please allow pop-ups for this site to open the preview.'); return; }
+  w.document.open(); w.document.write(priceMenuDoc(logoUrl, menu)); w.document.close(); try { w.focus(); } catch {}
 }
 
 // ── Full guide — the detailed manual: every screen, button, symbol, and color ──

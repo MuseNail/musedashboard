@@ -693,3 +693,38 @@
   .snote-v { font-size:16px; color:var(--on-surface); line-height:1.35; white-space:pre-line; overflow-wrap:anywhere; }
   .snote-v.snote-empty { color:var(--outline-variant); }
   .snote-pen, .snote-lock { font-size:18px; color:var(--outline-variant); flex-shrink:0; margin-top:1px; }
+
+  /* ── Price menu editor (Settings → Price Menu) ───────────────────────── */
+  .pm-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+  .pm-filter { flex:1; min-width:150px; }
+  .pm-bar-btns { display:flex; gap:8px; flex-wrap:wrap; }
+  .pm-f { width:100%; background:var(--surface-container,#f1f0f4); border:1px solid var(--surface-container-high,#e2e1e6); border-radius:8px; padding:6px 8px; font-size:13px; font-family:var(--font-body); color:var(--on-surface,#1a1d27); outline:none; box-sizing:border-box; }
+  .pm-f:focus { border-color:var(--primary,#1a5252); }
+  .pm-page { border:1px solid var(--surface-container-high,#e2e1e6); border-radius:14px; padding:12px; margin-bottom:14px; background:var(--surface-container-lowest,#fff); }
+  .pm-page-h { margin-bottom:10px; }
+  .pm-page-title { font-weight:700; font-size:15px; }
+  .pm-cols { display:grid; gap:12px; margin-bottom:10px; }
+  .pm-col { border:1px solid var(--surface-container-high,#e2e1e6); border-radius:10px; padding:8px; background:var(--surface-container,#f6f7f9); }
+  .pm-col-h { font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--outline,#8a8f98); margin-bottom:6px; }
+  .pm-card { border:1px solid var(--surface-container-high,#e2e1e6); border-radius:8px; padding:6px 8px; margin-bottom:6px; background:var(--surface-container-lowest,#fff); }
+  .pm-sec { background:var(--surface-container-high,#eceaf0); }
+  .pm-blank { outline:1.5px solid rgba(245,200,112,.6); }
+  .pm-sec-head, .pm-row-head { display:flex; align-items:center; gap:6px; }
+  .pm-tag { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--primary,#1a5252); flex-shrink:0; }
+  .pm-row-pr, .pm-sub-pr { width:70px; flex-shrink:0; text-align:right; }
+  .pm-sec-nm, .pm-row-nm, .pm-sub-nm, .pm-foot-t { flex:1; min-width:0; }
+  .pm-desc { margin-top:4px; font-size:12px; font-style:italic; }
+  .pm-ctrls { display:flex; align-items:center; justify-content:flex-end; gap:2px; margin-top:4px; }
+  .pm-ic { width:26px; height:26px; display:flex; align-items:center; justify-content:center; border:0; background:transparent; border-radius:6px; color:var(--on-surface-variant,#5b606e); cursor:pointer; padding:0; }
+  .pm-ic:hover { background:var(--surface-container,#f1f0f4); }
+  .pm-move { font-size:11px; border:1px solid var(--surface-container-high,#e2e1e6); border-radius:6px; background:var(--surface-container-lowest,#fff); color:var(--on-surface,#1a1d27); max-width:118px; padding:2px; }
+  .pm-ins { display:flex; gap:8px; margin-top:5px; }
+  .pm-add, .pm-add-min, .pm-add-sub { border:1px dashed var(--outline-variant,#c7c9cf); background:transparent; color:var(--primary,#1a5252); border-radius:7px; font-size:12px; font-weight:600; padding:5px 10px; cursor:pointer; }
+  .pm-add:hover, .pm-add-min:hover, .pm-add-sub:hover { background:rgba(26,82,82,.06); }
+  .pm-col-add { display:flex; gap:8px; margin-top:6px; }
+  .pm-add-min, .pm-add-sub { font-size:11px; padding:3px 8px; }
+  .pm-subwrap { margin-top:5px; padding-left:10px; border-left:2px solid var(--surface-container-high,#e2e1e6); }
+  .pm-sublabel { font-size:10px; font-weight:600; color:var(--outline,#8a8f98); margin:2px 0; }
+  .pm-sub, .pm-foot-line { display:flex; align-items:center; gap:4px; margin-bottom:3px; }
+  .pm-foot-cls { font-size:11px; border:1px solid var(--surface-container-high,#e2e1e6); border-radius:6px; padding:2px; flex-shrink:0; }
+  .pm-foot { border-top:1px solid var(--surface-container-high,#e2e1e6); padding-top:8px; }
