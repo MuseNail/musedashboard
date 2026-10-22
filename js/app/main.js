@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.68', items: [
+    { icon: 'sticky_note_2', t: 'Notes & preferences on each technician', d: 'Tap a technician’s photo (on the Turns grid or the Floor Plan) and you’ll see a new “Notes / Preferences” box — jot things like “prefers pedicures,” “leaves at 5,” or “no fumes.” Managers can edit it; everyone else can read it. It saves automatically and shows up wherever that tech’s status popup opens. (Notes are visible to anyone at the front desk, so keep sensitive personal info out of them.)' },
+  ] },
   { v: 'v5.67', items: [
     { icon: 'event_seat', t: 'Check in a walk-in right from the Floor Plan', d: 'You can now start a check-in without leaving the Floor Plan. Tap any open chair and the check-in window opens aimed at that seat — finish it and the walk-in is seated right there. There’s also a “Check in” button on the Floor Plan toolbar for a quick add (that guest lands in the “not seated” tray to drag wherever). On desktop, hovering an open chair shows a faint ＋ so you can see it’s tappable. The waiver, duplicate-check-in, and appointment prompts all still work exactly as before.' },
   ] },
