@@ -1276,6 +1276,26 @@ export class MuseSalonDO {
           await this.state.storage.put('queue:' + payload.entryId, e);
           break;
         }
+        case 'staff.patch': {
+          // Field-merge onto ONE staff entry in config:staff by id (e.g. tech notes). The DO runs serially,
+          // so this read-modify-write is atomic: a note patch merges into the CURRENT stored array and can
+          // never clobber a concurrent whole-array profile/payroll config.set. It deliberately does NOT bump
+          // cfgmeta:staff — bumping it could reject a slightly-older-but-unsynced profile config.set and lose
+          // a payroll edit; a note is the lower-stakes side, so it yields to a later whole-array write.
+          const arr = await this.state.storage.get('config:staff');
+          if (!Array.isArray(arr)) break;
+          const i = arr.findIndex(s => s && String(s.id) === String(payload.id));
+          if (i < 0) break;
+          const cur = arr[i];
+          // Device-scoped stale-patch guard (same rule as entryPatch): reject only a stale SAME-device replay.
+          if (typeof payload.updatedAt === 'number' && typeof cur._notesAt === 'number' &&
+              payload.updatedBy && payload.updatedBy === cur._notesBy &&
+              payload.updatedAt < cur._notesAt) { stale = true; break; }
+          arr[i] = { ...cur, ...(payload.fields || {}) };
+          if (typeof payload.updatedAt === 'number') { arr[i]._notesAt = payload.updatedAt; arr[i]._notesBy = payload.updatedBy || null; }
+          await this.state.storage.put('config:staff', arr);
+          break;
+        }
         case 'queue.remove':
           await this.state.storage.delete('queue:' + payload.id);
           break;

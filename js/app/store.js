@@ -224,6 +224,24 @@ export function applyChange(op, payload, seq) {
       for (const k of Object.keys(patch)) e[k] = patch[k];
       break;
     }
+    case 'staff.patch': {
+      // Field-merge onto ONE staff entry in config.staff by id (e.g. tech notes), so a note write can't
+      // clobber a concurrent whole-array profile/payroll edit. Sibling of queue.entryPatch, for config.staff.
+      const arr = state.config.staff;
+      if (!Array.isArray(arr)) return;
+      const i = arr.findIndex(s => s && String(s.id) === String(payload.id));
+      if (i < 0) return;
+      const cur = arr[i];
+      // Device-scoped stale-patch guard (mirrors entryPatch/assignmentPatch): reject only a SAME-device
+      // older replay; a cross-device edit always applies. Marker lives on _notesAt/_notesBy, never the
+      // staff object's own fields, so it can't collide with anything the profile editor writes.
+      if (typeof payload.updatedAt === 'number' && typeof cur._notesAt === 'number' &&
+          payload.updatedBy && payload.updatedBy === cur._notesBy && payload.updatedAt < cur._notesAt) return;
+      const fields = payload.fields || {};
+      arr[i] = { ...cur, ...fields };
+      if (typeof payload.updatedAt === 'number') { arr[i]._notesAt = payload.updatedAt; arr[i]._notesBy = payload.updatedBy || null; }
+      break;
+    }
     case 'queue.remove':  removeById(state.queue, payload.id); break;
     case 'record.save':
       // Never revive a deleted transaction: a stale paid queue copy on another device can re-fire

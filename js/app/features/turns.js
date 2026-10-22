@@ -733,6 +733,11 @@ export function showTechStatusMenu(event, staffId) {
   document.getElementById('tsm-break').style.opacity = isBreak ? '1' : '0.4';
   const profileSvcs = (st.services && st.services.length > 0) ? st.services.map(sid => svc(sid)?.label).filter(Boolean) : cfg().services.map(s => s.label);
   document.getElementById('tech-status-menu-services').innerHTML = profileSvcs.length > 0 ? profileSvcs.map(l => `<div>${l}</div>`).join('') : '<div class="italic text-outline">No services configured</div>';
+  // Notes/preferences: editable by managers (canDo manageStaff), read-only for everyone else. The id is
+  // stashed on the field so saveTechNotes never depends on _techStatusMenuId still being set at blur time.
+  const canEditNotes = canDo('manageStaff');
+  const nt = document.getElementById('tsm-notes');
+  if (nt) { nt.value = st.notes || ''; nt.dataset.sid = staffId; nt.readOnly = !canEditNotes; nt.placeholder = canEditNotes ? 'e.g. prefers pedicures · leaves at 5' : (st.notes ? '' : 'No notes yet'); }
   const rect = event.currentTarget.getBoundingClientRect();
   menu.style.left = Math.min(rect.left, window.innerWidth - 290) + 'px';
   menu.classList.remove('hidden');
@@ -740,9 +745,39 @@ export function showTechStatusMenu(event, staffId) {
   const menuH = menu.offsetHeight;
   const openAbove = (window.innerHeight - rect.bottom) < (menuH + 16) && rect.top > (menuH + 16);
   menu.style.top = (openAbove ? rect.top - menuH - 8 : rect.bottom + 8) + 'px';
-  setTimeout(() => document.addEventListener('click', closeTechStatusMenu, { once: true }), 10);
+  // Named outside-click handler (not {once:true}) that IGNORES clicks inside the popup, so the notes
+  // textarea can be focused/typed without dismissing. addEventListener dedupes the same reference, so
+  // re-opening never stacks it; closeTechStatusMenu removes it (the single close path → no leak).
+  setTimeout(() => document.addEventListener('click', _tsmOutsideClick), 10);
 }
-export function closeTechStatusMenu() { document.getElementById('tech-status-menu')?.classList.add('hidden'); _techStatusMenuId = null; }
+function _tsmOutsideClick(e) {
+  const m = document.getElementById('tech-status-menu');
+  if (m && m.contains(e.target)) return;   // clicks inside the popup keep it open (textarea, etc.)
+  closeTechStatusMenu();
+}
+export function closeTechStatusMenu() {
+  saveTechNotes();   // guarantee a typed note persists on EVERY close path (Esc, X, Break/Off, outside) — idempotent (readOnly/unchanged → no-op)
+  document.removeEventListener('click', _tsmOutsideClick);
+  document.getElementById('tech-status-menu')?.classList.add('hidden');
+  _techStatusMenuId = null;
+}
+// Build the next staff array with `text` as the matching tech's note, or null when there's nothing worth a
+// synced write (tech not found, or the note is unchanged). Pure + non-mutating → the Option-B staff.patch
+// ships only { id, notes } so a note can never clobber a concurrent payroll/profile edit.
+export function _withTechNotes(staff, id, text) {
+  const arr = staff || [];
+  const i = arr.findIndex(s => s && String(s.id) === String(id));
+  if (i < 0) return null;
+  if ((arr[i].notes || '') === text) return null;   // unchanged → skip the write
+  return arr.map((s, j) => j === i ? { ...s, notes: text } : s);
+}
+export function saveTechNotes() {
+  const nt = document.getElementById('tsm-notes'); if (!nt || nt.readOnly) return;
+  const id = nt.dataset.sid || _techStatusMenuId; if (!id) return;
+  const text = (nt.value || '').trim().slice(0, 300);
+  if (!_withTechNotes(cfg().staff, id, text)) return;   // unchanged/missing → no write
+  dispatch('staff.patch', { id, fields: { notes: text } });   // field-merge op (DO merges by id — never clobbers payroll)
+}
 export function setTechBreak(isBreak) {
   if (!_techStatusMenuId) return;
   const id = _techStatusMenuId;

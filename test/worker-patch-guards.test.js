@@ -109,3 +109,46 @@ test('queue.upsert preserves the entryPatch guard marker so a later stale replay
   assert.equal(res.stale, true, 'stale same-device replay still guarded after the upsert');
   assert.equal((await d.state.storage.get('queue:e1')).txnNote, 'orig');
 });
+
+// ── staff.patch (tech notes) — field-merge, never clobbers a concurrent payroll edit ─────────
+const seedStaff = (d, arr) => d.state.storage.put('config:staff', arr);
+test('staff.patch merges the note onto the right tech, preserving payroll + other techs', async () => {
+  const d = makeDO();
+  await seedStaff(d, [{ id: 's1', name: 'Maria', commission: 55 }, { id: 's2', name: 'Lin', commission: 50 }]);
+  await apply(d, 'staff.patch', { id: 's2', fields: { notes: 'leaves at 5' }, updatedAt: 100, updatedBy: 'devA' });
+  const arr = await d.state.storage.get('config:staff');
+  assert.equal(arr[1].notes, 'leaves at 5');
+  assert.equal(arr[1].commission, 50, 'payroll field untouched by the note patch');
+  assert.equal(arr[0].name, 'Maria', 'other techs untouched');
+});
+test('staff.patch does NOT clobber a concurrent commission change (the whole point of Option B)', async () => {
+  const d = makeDO();
+  await seedStaff(d, [{ id: 's1', name: 'Maria', commission: 55 }]);
+  // manager bumps commission (whole-array config.set) …
+  await apply(d, 'config.set', { key: 'staff', value: [{ id: 's1', name: 'Maria', commission: 60 }], updatedAt: 200 });
+  // … then a note patch lands AFTER it — it must merge into the CURRENT stored array, keeping commission 60
+  await apply(d, 'staff.patch', { id: 's1', fields: { notes: 'no fumes' }, updatedAt: 300, updatedBy: 'devB' });
+  const arr = await d.state.storage.get('config:staff');
+  assert.equal(arr[0].commission, 60, 'the note patch kept the newer commission');
+  assert.equal(arr[0].notes, 'no fumes');
+});
+test('staff.patch rejects a stale SAME-device replay, applies cross-device + newer', async () => {
+  const d = makeDO();
+  await seedStaff(d, [{ id: 's1', name: 'Maria', notes: 'current', _notesAt: 200, _notesBy: 'devA' }]);
+  const stale = await apply(d, 'staff.patch', { id: 's1', fields: { notes: 'old' }, updatedAt: 100, updatedBy: 'devA' });
+  assert.equal(stale.stale, true);
+  assert.equal((await d.state.storage.get('config:staff'))[0].notes, 'current');
+  const cross = await apply(d, 'staff.patch', { id: 's1', fields: { notes: 'other device' }, updatedAt: 100, updatedBy: 'devB' });
+  assert.notEqual(cross.stale, true, 'a different device is never dropped on a timestamp compare');
+  const newer = await apply(d, 'staff.patch', { id: 's1', fields: { notes: 'newest' }, updatedAt: 300, updatedBy: 'devA' });
+  assert.notEqual(newer.stale, true);
+  assert.equal((await d.state.storage.get('config:staff'))[0].notes, 'newest');
+});
+test('staff.patch is a safe no-op when the array/tech is missing', async () => {
+  const d = makeDO();
+  await apply(d, 'staff.patch', { id: 's1', fields: { notes: 'x' }, updatedAt: 1 });   // no config:staff yet
+  assert.equal(await d.state.storage.get('config:staff'), undefined);
+  await seedStaff(d, [{ id: 's1', name: 'Maria' }]);
+  await apply(d, 'staff.patch', { id: 'nope', fields: { notes: 'x' }, updatedAt: 1 });
+  assert.equal((await d.state.storage.get('config:staff'))[0].notes, undefined);
+});
