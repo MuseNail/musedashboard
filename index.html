@@ -2253,6 +2253,29 @@ tailwind.config = {
 </div>
 
 
+<div id="addtask-modal" class="fixed inset-0 z-[70] hidden items-center justify-center bg-on-surface/40 px-4" onclick="if(event.target===this)closeAddTaskModal()">
+  <div class="bg-surface-container-lowest rounded-2xl p-5 w-full max-w-sm shadow-2xl fade-up">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="font-headline font-bold text-on-surface text-lg">New task</h3>
+      <button onclick="closeAddTaskModal()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined" style="font-size:20px">close</span></button>
+    </div>
+    <label class="block text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Task</label>
+    <input id="addtask-title" type="text" placeholder="What needs doing?" onkeydown="if(event.key==='Enter')submitAddTask()"
+      class="w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2.5 text-sm font-body text-on-surface outline-none focus:border-primary mb-3">
+    <label class="block text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Due (optional)</label>
+    <input id="addtask-due" type="date" class="w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2.5 text-sm font-body text-on-surface outline-none focus:border-primary mb-3">
+    <div id="addtask-assignee-wrap" class="hidden">
+      <label class="block text-[11px] font-body font-semibold text-outline uppercase tracking-widest mb-1">Assign to</label>
+      <select id="addtask-assignee" class="w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2.5 text-sm font-body text-on-surface outline-none focus:border-primary mb-4"><option value="">Anyone</option></select>
+    </div>
+    <div class="flex gap-2">
+      <button onclick="closeAddTaskModal()" class="flex-1 py-2.5 rounded-xl border border-surface-container-high text-on-surface font-body font-semibold hover:bg-surface-container transition-colors">Cancel</button>
+      <button onclick="submitAddTask()" class="flex-1 py-2.5 rounded-xl bg-primary text-on-primary font-headline font-bold hover:bg-primary-dim transition-colors active:scale-95">Add task</button>
+    </div>
+  </div>
+</div>
+
+
 <div id="turns-tech-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40">
   <div class="bg-surface-container-lowest rounded-2xl p-6 w-full max-w-md shadow-2xl fade-up mx-4">
     <div class="flex items-center justify-between mb-2">

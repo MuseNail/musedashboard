@@ -305,6 +305,9 @@ export function dispatch(op, payload) {
   // SAME-device replay without dropping a cross-device edit; it merges { id, fields } so it never ships
   // (and so never clobbers) the whole staff array the way a config.set would.
   if (op === 'staff.patch' && payload)                    { payload.updatedAt = Date.now(); payload.updatedBy = DEVICE_ID; }
+  // Task field-merge (assignee / completed) — device-stamped like staff.patch so a stale same-device replay
+  // is rejected; merges { id, fields } so completing a task can't clobber a concurrent manager reassign.
+  if (op === 'task.patch' && payload)                     { payload.updatedAt = Date.now(); payload.updatedBy = DEVICE_ID; }
   if (op === 'record.save'  && payload && payload.record) { payload.record.updatedAt = Date.now(); payload.record.updatedBy = DEVICE_ID; }
   // Stamp config writes too (per-key version) so a stale offline replay or a clobbering concurrent
   // edit of the catalog / turns roster / settings is rejected by the guard instead of last-writer-wins.

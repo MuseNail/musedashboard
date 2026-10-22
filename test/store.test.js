@@ -131,3 +131,27 @@ test('legacy data without timestamps still applies (guard never blocks untimesta
   applyChange('record.save', { record: { id: 'old', totalCost: 12 } });   // no updatedAt either side
   assert.equal(getState().records.find(x => x.id === 'old').totalCost, 12);
 });
+
+// ── task.patch (client applyChange) — mirror of the DO guard, so the two can't silently diverge ──
+test('task.patch: field-merge; completion does not clobber a concurrent reassign; device-scoped stale guard', () => {
+  hydrate({ state: { tasks: [{ id: 't1', title: 'Restock', assignee: 'tech:7', completed: false }] }, seq: 1 });
+  // reassign (manager) → stamps _patchedAt=200/_patchedBy='mgr'
+  applyChange('task.patch', { id: 't1', fields: { assignee: 'tech:9', assigneeName: 'Lin' }, updatedAt: 200, updatedBy: 'mgr' });
+  // a stale SAME-device replay (mgr, older) is rejected — assignee stays tech:9
+  applyChange('task.patch', { id: 't1', fields: { assignee: 'tech:1' }, updatedAt: 100, updatedBy: 'mgr' });
+  assert.equal(getState().tasks.find(x => x.id === 't1').assignee, 'tech:9');
+  // a CROSS-device completion applies even with an older ts (clock-skew safety) and merges — reassign survives
+  applyChange('task.patch', { id: 't1', fields: { completed: true }, updatedAt: 150, updatedBy: 'techphone' });
+  let t = getState().tasks.find(x => x.id === 't1');
+  assert.equal(t.assignee, 'tech:9', 'reassign not clobbered by the completion');
+  assert.equal(t.completed, true);
+  assert.equal(t.title, 'Restock');
+  // a missing task is a no-op
+  applyChange('task.patch', { id: 'gone', fields: { completed: true }, updatedAt: 1 });
+  assert.equal(getState().tasks.length, 1);
+});
+test('task.patch: a patch to a tombstoned task is ignored (no revive)', () => {
+  hydrate({ state: { tasks: [], taskDeletions: ['t9'] }, seq: 1 });
+  applyChange('task.patch', { id: 't9', fields: { completed: true }, updatedAt: 5 });
+  assert.equal(getState().tasks.length, 0);
+});

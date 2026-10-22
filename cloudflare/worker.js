@@ -1397,6 +1397,23 @@ export class MuseSalonDO {
           await this.state.storage.put('taskdeletion:' + payload.id, { id: payload.id, at: new Date().toISOString() });
           break;
         }
+        case 'task.patch': {
+          // Field-merge onto ONE task record (assignee / completed). The DO runs serially, so this
+          // read-modify-write is atomic: completing a task can never clobber a concurrent reassign, and
+          // vice-versa — even when a tech completes from a stale (slept) phone.
+          if (await this.state.storage.get('taskdeletion:' + payload.id)) { stale = true; break; }   // don't revive a deleted task
+          const t = await this.state.storage.get('task:' + payload.id);
+          if (!t) { stale = true; break; }   // task gone — nothing to merge; ack without a wasted broadcast
+          // Device-scoped stale-patch guard (same rule as staff.patch/entryPatch): reject only a stale
+          // SAME-device replay; marker on _patchedAt/_patchedBy, not the task's own updatedAt.
+          if (typeof payload.updatedAt === 'number' && typeof t._patchedAt === 'number' &&
+              payload.updatedBy && payload.updatedBy === t._patchedBy &&
+              payload.updatedAt < t._patchedAt) { stale = true; break; }
+          const merged = { ...t, ...(payload.fields || {}) };
+          if (typeof payload.updatedAt === 'number') { merged._patchedAt = payload.updatedAt; merged._patchedBy = payload.updatedBy || null; }
+          await this.state.storage.put('task:' + payload.id, merged);
+          break;
+        }
         case 'audit.log': {
           // Append-only activity log (who/when/device/action). Each event is its own key
           // so concurrent writes never clobber. Probabilistically prune to the last ~1000.

@@ -13,7 +13,7 @@ import './modal-guard.js';   // global backdrop-close guard (drag-select in a fi
 import { serverLogin } from './apptoken.js';
 import * as store from './store.js';
 import * as sync from './sync.js';
-import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp, escHtml } from './utils.js';
+import { showToast, localDateStr, todayStr, showUpdatePopup, hardReloadApp, escHtml, taskBadgeCount } from './utils.js';
 import { syncBannerModel, syncBannerIcon } from './features/sync-banner.js';
 import { applyAssignmentStatus, isPaidStatus, isTechPriced } from './features/status.js';
 import { VAPID_PUBLIC_KEY, PUSH_PROXY, APP_VERSION } from './config.js';
@@ -160,11 +160,49 @@ function syncChat() {
 function render() {
   syncChat();
   const fd = meFd();
-  if (fd) { renderFdView(fd); maybeNotifPrompt(); return; }
+  if (fd) { renderFdView(fd); updateStaffTasksBtn(); maybeNotifPrompt(); return; }
   const meStaff = me();
   if (!meStaff) return renderLogin();
   renderMain(meStaff);
+  updateStaffTasksBtn();
   maybeNotifPrompt();
+}
+
+// ── My Tasks (technician) ─────────────────────────
+// The header button is static in staff.html (not rebuilt by renderMain), so show/hide + the badge are set
+// explicitly here and re-run from the store.subscribe tick, so a front-desk assignment lands live.
+const _myTechPid = () => (myId ? 'tech:' + myId : '');
+const myTasks = () => (store.getState().tasks || []).filter(t => t && t.assignee === _myTechPid());   // assigned-only (owner Q2)
+function updateStaffTasksBtn() {
+  const btn = document.getElementById('staff-tasks-btn'); if (!btn) return;
+  const isTech = !!me() && !meFd();   // techs only; FD-in-staff-app never sees it
+  btn.classList.toggle('hidden', !isTech);
+  if (!isTech) return;
+  const n = taskBadgeCount(store.getState().tasks, _myTechPid());
+  const badge = document.getElementById('staff-tasks-badge');
+  if (badge) { badge.textContent = String(n); badge.classList.toggle('hidden', n === 0); }
+}
+function _staffTasksOpen() { const m = document.getElementById('staff-tasks-modal'); return m && m.style.display === 'flex'; }
+window.staffOpenTasks = () => { const m = document.getElementById('staff-tasks-modal'); if (!m) return; renderStaffTasksBody(); m.classList.remove('hidden'); m.style.display = 'flex'; };
+window.staffCloseTasks = () => { const m = document.getElementById('staff-tasks-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } };
+window.staffToggleTask = (taskId) => {
+  const t = (store.getState().tasks || []).find(x => String(x.id) === String(taskId)); if (!t) return;
+  // Field-merge so completing can't clobber a concurrent front-desk reassign of the same task.
+  sync.dispatch('task.patch', { id: t.id, fields: { completed: true, completedAt: new Date().toISOString() } });
+  renderStaffTasksBody(); updateStaffTasksBtn();
+};
+function renderStaffTasksBody() {
+  const box = document.getElementById('staff-tasks-body'); if (!box) return;
+  const open = myTasks().filter(t => !t.completed)
+    .sort((a, b) => (a.sortIndex || 0) - (b.sortIndex || 0) || (a.createdAt || 0) - (b.createdAt || 0));
+  if (!open.length) { box.innerHTML = '<div class="text-sm text-on-surface-variant text-center py-8 opacity-70">No tasks assigned to you.</div>'; return; }
+  box.innerHTML = open.map(t => {
+    const due = t.due ? new Date(t.due) : null, dueStr = due && !isNaN(due) ? due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '', overdue = due && !isNaN(due) && due < new Date();
+    return `<div class="flex items-start gap-3 py-2.5 border-b border-surface-container-high last:border-0">
+      <button onclick="staffToggleTask('${escHtml(String(t.id))}')" aria-label="Complete task" class="flex-shrink-0" style="width:24px;height:24px;margin-top:1px;border-radius:7px;border:2px solid #1a5252;background:#fff;display:flex;align-items:center;justify-content:center;padding:0"></button>
+      <div class="min-w-0 flex-1"><div class="font-body font-semibold text-on-surface text-[15px] leading-snug">${escHtml(t.title || '(no title)')}</div>
+        ${dueStr ? `<div class="text-xs font-body mt-0.5 ${overdue ? 'text-error font-semibold' : 'text-on-surface-variant'}">${overdue ? '⚠ ' : ''}Due ${escHtml(dueStr)}</div>` : ''}</div></div>`;
+  }).join('');
 }
 
 // Proactive "Allow notifications" pop-up — auto-shown once per session when someone's
@@ -968,7 +1006,7 @@ async function boot() {
   window.addEventListener('error', e => { try { reporter.reportError('window.error', (e && (e.error || e.message)) || 'error'); } catch (x) {} });
   window.addEventListener('unhandledrejection', e => { try { reporter.reportError('unhandledrejection', (e && e.reason) || 'rejection'); } catch (x) {} });
   await sync.start();   // hydrate from the cache (async — IndexedDB) BEFORE the first render
-  store.subscribe(() => { chat.onChatSync(); renderStaffSyncBanner(); if (priceInputFocused()) return; render(); });   // banner BEFORE the price-focus return, so it updates even while a tech types a price
+  store.subscribe(() => { chat.onChatSync(); renderStaffSyncBanner(); updateStaffTasksBtn(); if (_staffTasksOpen()) renderStaffTasksBody(); if (priceInputFocused()) return; render(); });   // banner + tasks badge/overlay BEFORE the price-focus return, so they update even while a tech types a price
   render();   // instant render from cached state; subscribe re-renders on hydrate
   renderStaffSyncBanner();   // baseline at boot
   chat.onChatSync();   // baseline the chat unread badge from cache on load

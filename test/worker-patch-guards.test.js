@@ -152,3 +152,45 @@ test('staff.patch is a safe no-op when the array/tech is missing', async () => {
   await apply(d, 'staff.patch', { id: 'nope', fields: { notes: 'x' }, updatedAt: 1 });
   assert.equal((await d.state.storage.get('config:staff'))[0].notes, undefined);
 });
+
+// ── task.patch (assignee / completed) — field-merge, complete can't clobber a reassign ───────
+const seedTask = (d, t) => d.state.storage.put('task:' + t.id, t);
+test('task.patch merges only the given fields, preserving the rest of the task', async () => {
+  const d = makeDO();
+  await seedTask(d, { id: 't1', title: 'Restock', due: '2026-06-13', assignee: 'tech:7', completed: false, notes: 'aisle 2' });
+  await apply(d, 'task.patch', { id: 't1', fields: { completed: true, completedAt: 'x' }, updatedAt: 100, updatedBy: 'devA' });
+  const t = await d.state.storage.get('task:t1');
+  assert.equal(t.completed, true);
+  assert.equal(t.assignee, 'tech:7', 'assignee untouched by a completion patch');
+  assert.equal(t.title, 'Restock');
+  assert.equal(t.notes, 'aisle 2');
+});
+test('task.patch: completing from a stale copy does NOT clobber a concurrent reassign (Option B point)', async () => {
+  const d = makeDO();
+  await seedTask(d, { id: 't1', title: 'Call client', assignee: 'tech:7', completed: false });
+  await apply(d, 'task.patch', { id: 't1', fields: { assignee: 'tech:9', assigneeName: 'Lin' }, updatedAt: 200, updatedBy: 'mgr' });
+  // a stale tech phone completes it (separate device) — must NOT revert the reassign
+  await apply(d, 'task.patch', { id: 't1', fields: { completed: true }, updatedAt: 300, updatedBy: 'techphone' });
+  const t = await d.state.storage.get('task:t1');
+  assert.equal(t.assignee, 'tech:9', 'reassign survived the completion');
+  assert.equal(t.completed, true);
+});
+test('task.patch rejects a stale SAME-device replay, applies cross-device', async () => {
+  const d = makeDO();
+  await seedTask(d, { id: 't1', assignee: 'tech:7', _patchedAt: 200, _patchedBy: 'devA' });
+  const stale = await apply(d, 'task.patch', { id: 't1', fields: { assignee: 'tech:1' }, updatedAt: 100, updatedBy: 'devA' });
+  assert.equal(stale.stale, true);
+  assert.equal((await d.state.storage.get('task:t1')).assignee, 'tech:7');
+  const cross = await apply(d, 'task.patch', { id: 't1', fields: { assignee: 'tech:2' }, updatedAt: 100, updatedBy: 'devB' });
+  assert.notEqual(cross.stale, true);
+  assert.equal((await d.state.storage.get('task:t1')).assignee, 'tech:2');
+});
+test('task.patch is a no-op on a missing or deleted task', async () => {
+  const d = makeDO();
+  await apply(d, 'task.patch', { id: 'gone', fields: { completed: true }, updatedAt: 1 });
+  assert.equal(await d.state.storage.get('task:gone'), undefined);
+  await d.state.storage.put('taskdeletion:t1', { id: 't1' });
+  await seedTask(d, { id: 't1', assignee: 'tech:7' });
+  const res = await apply(d, 'task.patch', { id: 't1', fields: { assignee: 'tech:9' }, updatedAt: 1 });
+  assert.equal(res.stale, true, 'a patch to a tombstoned task is rejected');
+});

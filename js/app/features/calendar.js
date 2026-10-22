@@ -1,9 +1,10 @@
 // ── Calendar + Tasks (app-native) ───────────────────────────────────────────
 import { getState, subscribe } from '../store.js';
 import { dispatch } from '../sync.js';
-import { getActiveUser } from '../session.js';
+import { getActiveUser, canDo } from '../session.js';
 import { PUSH_PROXY } from '../config.js';
-import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel, customerColor } from '../utils.js';
+import { showToast, localDateStr, formatPhone, byName, newEntryId, setSwitchVisual, dateBtnLabel, customerColor, taskVisibleTo, assigneeLabel } from '../utils.js';
+import { chatPeople } from './chat.js';
 import { customerDirectory, squareCustomers, squareUpsertCustomer, showEditCustomer, notePhoneKey, customerNote } from './square-customers.js';
 import { breakInstancesForDay, ruleOccurrence } from './breaks.js';
 
@@ -302,9 +303,9 @@ export function initCalendar() { _hookCalFocusRefresh(); _calDate = new Date(); 
 // sync.js → applyChange → notify). Only touch the DOM when the Calendar panel is showing;
 // the Turns strip re-renders itself off apptsForTurns.
 subscribe((state, op) => {
-  if (op !== 'appt.upsert' && op !== 'appt.delete' && op !== 'task.upsert' && op !== 'task.delete' && op !== 'hydrate' && op !== 'config.set') return;
+  if (op !== 'appt.upsert' && op !== 'appt.delete' && op !== 'task.upsert' && op !== 'task.delete' && op !== 'task.patch' && op !== 'hydrate' && op !== 'config.set') return;
   const onCal = document.getElementById('panel-calendar')?.classList.contains('active');
-  if (op === 'task.upsert' || op === 'task.delete') { if (onCal) { try { loadTaskLists(); } catch {} } return; }
+  if (op === 'task.upsert' || op === 'task.delete' || op === 'task.patch') { if (onCal) { try { loadTaskLists(); } catch {} } return; }   // task.patch = a cross-device complete/reassign → keep a peer dashboard live
   if (op === 'config.set') {
     // Staff added/removed/renamed changes the column set — rebuild the grid, but only when it
     // actually changed so an unrelated config write (a settings toggle) doesn't churn the calendar.
@@ -1622,6 +1623,9 @@ export async function deleteAppt(apptIdParam) {
 const DEFAULT_TASK_LIST = 'Tasks';
 let _currentListId = null, _tasksMinimized = false;
 function _allTasks() { return (getState().tasks || []).filter(t => t && t.id != null); }
+// Who's looking (front desk): their chat pid + whether they can assign/delete (managers).
+const _myFdPid = () => { const u = getActiveUser(); return u ? 'fd:' + u.id : ''; };
+const _tasksManager = () => canDo('manageStaff');
 function _taskListNames() {
   const names = [...new Set(_allTasks().map(t => t.list || DEFAULT_TASK_LIST))];
   if (!names.length) names.push(DEFAULT_TASK_LIST);
@@ -1638,15 +1642,28 @@ export async function loadTaskLists() {
 export async function loadTasksForList(listId) {
   _currentListId = listId || _currentListId || DEFAULT_TASK_LIST;
   const list = _currentListId;
+  const myPid = _myFdPid(), mgr = _tasksManager();
   const tasks = _allTasks().filter(t => (t.list || DEFAULT_TASK_LIST) === list)
+    .filter(t => taskVisibleTo(t, myPid, mgr))   // non-managers see only their own + Anyone
     .sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0) || (a.sortIndex || 0) - (b.sortIndex || 0) || (a.createdAt || 0) - (b.createdAt || 0));
   renderTasks(tasks);
 }
 function renderTasks(tasks) {
   const container = document.getElementById('tasks-list'); if (!container) return;
   if (!tasks.length) { container.innerHTML = '<div class="text-xs text-on-surface-variant text-center py-6 opacity-60">No tasks — all caught up!</div>'; return; }
+  const mgr = _tasksManager(), people = chatPeople();
+  // Assignee UI: a compact read-only chip by default (keeps the 260px rail calm). A manager taps the chip to
+  // reveal an inline reassign <select> (reuses chatPeople); reassigning re-renders back to the chip.
+  const assigneeHtml = t => {
+    const who = assigneeLabel(t, people);
+    const chip = `<span class="flex-shrink-0 text-[10px] font-body rounded-full ${t.assignee ? 'bg-primary/10 text-primary' : 'bg-surface-container text-on-surface-variant'} px-2 py-0.5 truncate max-w-[84px] ${mgr ? 'cursor-pointer' : ''}" style="margin-top:1px" title="${mgr ? 'Tap to reassign' : 'Assigned to ' + _escHtml(who)}"${mgr ? ' onclick="this.classList.add(\'hidden\');this.nextElementSibling.classList.remove(\'hidden\');this.nextElementSibling.focus()"' : ''}>${_escHtml(who)}</span>`;
+    if (!mgr) return chip;
+    const opts = `<option value=""${!t.assignee ? ' selected' : ''}>Anyone</option>` +
+      people.map(p => `<option value="${_escAttrJs(p.pid)}"${t.assignee === p.pid ? ' selected' : ''}>${_escHtml(p.name)}</option>`).join('');
+    return chip + `<select onchange="setTaskAssignee('${_escAttrJs(t.id)}', this.value)" class="hidden flex-shrink-0 text-[11px] font-body rounded-lg border border-surface-container-high bg-surface-container text-on-surface px-1 py-1 max-w-[100px]" style="margin-top:1px">${opts}</select>`;
+  };
   container.innerHTML = tasks.map(t => { const done = !!t.completed, due = t.due ? new Date(t.due) : null, dueStr = due && !isNaN(due) ? due.toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '', overdue = due && !isNaN(due) && due < new Date() && !done, lid = _currentListId;
-    return `<div class="flex items-start gap-2 px-2 py-0.5 rounded-lg hover:bg-surface-container transition-colors group"><button onclick="toggleTask('${_escAttrJs(lid)}','${_escAttrJs(t.id)}','${done?'needsAction':'completed'}')" class="flex-shrink-0 transition-colors" style="width:15px;height:15px;min-width:15px;min-height:15px;margin-top:1px;aspect-ratio:1/1;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};background:${done?'#1a5252':'#fff'};display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box">${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;line-height:1;font-variation-settings:\'FILL\' 1">check</span>':''}</button><div class="flex-1 min-w-0" style="line-height:1.25"><div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}" style="line-height:1.3">${_escHtml(t.title||'(no title)')}</div>${t.notes?`<div class="text-[10px] text-on-surface-variant truncate" style="line-height:1.25">${_escHtml(t.notes)}</div>`:''}${dueStr?`<div class="text-[10px] font-semibold ${overdue?'text-error':'text-on-surface-variant'}" style="line-height:1.25">${overdue?'⚠ ':''}${dueStr}</div>`:''}</div><button onclick="deleteTask('${_escAttrJs(lid)}','${_escAttrJs(t.id)}')" class="opacity-0 group-hover:opacity-100 flex-shrink-0 text-outline-variant hover:text-error transition-all" style="margin-top:1px;height:16px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0"><span class="material-symbols-outlined" style="font-size:13px;line-height:1">close</span></button></div>`;
+    return `<div class="flex items-start gap-2 px-2 py-0.5 rounded-lg hover:bg-surface-container transition-colors group"><button onclick="toggleTask('${_escAttrJs(lid)}','${_escAttrJs(t.id)}','${done?'needsAction':'completed'}')" class="flex-shrink-0 transition-colors" style="width:15px;height:15px;min-width:15px;min-height:15px;margin-top:1px;aspect-ratio:1/1;border-radius:50%;border:2px solid ${done?'#1a5252':'#9ca3af'};background:${done?'#1a5252':'#fff'};display:flex;align-items:center;justify-content:center;padding:0;box-sizing:border-box">${done?'<span class="material-symbols-outlined text-on-primary" style="font-size:9px;line-height:1;font-variation-settings:\'FILL\' 1">check</span>':''}</button><div class="flex-1 min-w-0" style="line-height:1.25"><div class="text-xs font-body ${done?'line-through text-on-surface-variant opacity-50':'text-on-surface font-medium'}" style="line-height:1.3">${_escHtml(t.title||'(no title)')}</div>${t.notes?`<div class="text-[10px] text-on-surface-variant truncate" style="line-height:1.25">${_escHtml(t.notes)}</div>`:''}${dueStr?`<div class="text-[10px] font-semibold ${overdue?'text-error':'text-on-surface-variant'}" style="line-height:1.25">${overdue?'⚠ ':''}${dueStr}</div>`:''}</div>${assigneeHtml(t)}${mgr?`<button onclick="deleteTask('${_escAttrJs(lid)}','${_escAttrJs(t.id)}')" title="Delete task" class="flex-shrink-0 text-outline-variant hover:text-error transition-colors" style="margin-top:1px;height:16px;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;opacity:0.5"><span class="material-symbols-outlined" style="font-size:13px;line-height:1">close</span></button>`:''}</div>`;
   }).join('');
 }
 export function toggleTasksPanel() {
@@ -1660,16 +1677,46 @@ export function toggleTasksPanel() {
 export async function toggleTask(listId, taskId, newStatus) {
   const t = _allTasks().find(x => String(x.id) === String(taskId)); if (!t) return;
   const completed = newStatus === 'completed';
-  dispatch('task.upsert', { task: { ...t, completed, completedAt: completed ? new Date().toISOString() : '' } });
+  // Field-merge (not a whole-task upsert) so a completion can't clobber a concurrent manager reassign.
+  dispatch('task.patch', { id: t.id, fields: { completed, completedAt: completed ? new Date().toISOString() : '' } });
   loadTasksForList(_currentListId);
 }
 export async function deleteTask(listId, taskId) {
+  if (!_tasksManager()) { showToast('Only a manager can delete a task'); return; }
   dispatch('task.delete', { id: taskId });
   loadTasksForList(_currentListId);
 }
+// Reassign (managers only): a field-merge so it never clobbers a concurrent completion. Stamps a name
+// snapshot so the label survives the assignee later going inactive/removed.
+export function setTaskAssignee(taskId, pid) {
+  if (!_tasksManager()) return;
+  const name = pid ? (chatPeople().find(p => p.pid === pid)?.name || '') : '';
+  dispatch('task.patch', { id: taskId, fields: { assignee: pid || '', assigneeName: name } });
+  loadTasksForList(_currentListId);
+}
+// Add-task modal (replaces the old prompt()). Managers also pick an assignee; a non-manager's task is Anyone.
 export function showAddTaskModal() {
-  const title = prompt('New task title:'); if (!title?.trim()) return;
+  const m = document.getElementById('addtask-modal'); if (!m) return;
+  document.getElementById('addtask-title').value = '';
+  document.getElementById('addtask-due').value = '';
+  const asgWrap = document.getElementById('addtask-assignee-wrap'), asg = document.getElementById('addtask-assignee');
+  if (_tasksManager() && asgWrap && asg) {
+    asgWrap.classList.remove('hidden');
+    asg.innerHTML = '<option value="">Anyone</option>' + chatPeople().map(p => `<option value="${_escAttrJs(p.pid)}">${_escHtml(p.name)}</option>`).join('');
+    asg.value = '';
+  } else if (asgWrap) { asgWrap.classList.add('hidden'); }
+  m.classList.remove('hidden'); m.style.display = 'flex';
+  setTimeout(() => document.getElementById('addtask-title')?.focus(), 60);
+}
+export function closeAddTaskModal() { const m = document.getElementById('addtask-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } }
+export function submitAddTask() {
+  const title = (document.getElementById('addtask-title')?.value || '').trim();
+  if (!title) { document.getElementById('addtask-title')?.focus(); return; }
+  const due = document.getElementById('addtask-due')?.value || '';
+  const pid = _tasksManager() ? (document.getElementById('addtask-assignee')?.value || '') : '';
+  const name = pid ? (chatPeople().find(p => p.pid === pid)?.name || '') : '';
   const list = _currentListId || DEFAULT_TASK_LIST, now = Date.now();
-  dispatch('task.upsert', { task: { id: 'task_' + now + '_' + Math.random().toString(36).slice(2, 8), title: title.trim(), notes: '', due: '', completed: false, completedAt: '', list, sortIndex: now, createdAt: now } });
+  dispatch('task.upsert', { task: { id: 'task_' + now + '_' + Math.random().toString(36).slice(2, 8), title, notes: '', due, completed: false, completedAt: '', list, sortIndex: now, createdAt: now, assignee: pid, assigneeName: name } });
+  closeAddTaskModal();
   loadTasksForList(list);
 }

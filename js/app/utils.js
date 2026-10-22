@@ -20,6 +20,20 @@ const _wholeDollars = () => !!getState().config?.numpad_whole_dollars;
 export const lineCharge   = a => (a && a.comped) ? 0 : ((a && a.cost) || 0);
 export const compedAmount = a => (a && a.comped) ? ((a && a.cost) || 0) : 0;
 
+// ── Task assignment (Wave 2 #5) — pure helpers shared by the dashboard (calendar.js) and the tech
+// staff app (staff.js). A task's `assignee` is a chat pid ('fd:<id>'/'tech:<id>') or '' = Anyone.
+// FRONT-DESK visibility: a manager sees all; everyone else sees their own + Anyone.
+export const taskVisibleTo = (task, myPid, isManager) => !!isManager || !task || !task.assignee || task.assignee === myPid;
+// Orphan-safe label: live name from the people list, else the name snapshot stamped at assign time
+// (so a deactivated/removed tech still reads sensibly), else 'Unknown'. '' → 'Anyone'.
+export const assigneeLabel = (task, people) => {
+  if (!task || !task.assignee) return 'Anyone';
+  const p = (people || []).find(x => x && x.pid === task.assignee);
+  return p ? p.name : (task.assigneeName || 'Unknown');
+};
+// Technician badge: DIRECTLY-assigned open tasks only — an 'Anyone' task never inflates a tech's badge.
+export const taskBadgeCount = (tasks, myTechPid) => (tasks || []).filter(t => t && t.assignee === myTechPid && !t.completed).length;
+
 export function ticketTotal(r) {
   const svc   = (r.assignments || []).reduce((s, a) => s + lineCharge(a), 0);   // customer charge: comps are $0
   const items = (r.items || []).reduce((s, i) => s + ((i.price || 0) * (i.qty || 0)), 0);

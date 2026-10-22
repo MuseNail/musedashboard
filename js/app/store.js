@@ -295,6 +295,9 @@ export function applyChange(op, payload, seq) {
       if (!state.apptDeletions.includes(String(payload.id))) state.apptDeletions.push(String(payload.id));
       break;
     case 'task.upsert':
+      // Whole-task write — used ONLY to CREATE a task (fresh id). Edits to an EXISTING task (assignee,
+      // completed) go through task.patch so they can't clobber a concurrent field change; if an
+      // edit-existing-task-via-upsert path is ever added, route it through task.patch instead.
       if (state.taskDeletions.includes(String(payload.task && payload.task.id))) return;   // don't revive a deleted task
       if (!upsertByIdGuarded(state.tasks, payload.task)) return;
       break;
@@ -302,6 +305,21 @@ export function applyChange(op, payload, seq) {
       removeById(state.tasks, payload.id);
       if (!state.taskDeletions.includes(String(payload.id))) state.taskDeletions.push(String(payload.id));
       break;
+    case 'task.patch': {
+      // Field-merge onto ONE task by id (assignee / completed), so completing a task can't clobber a
+      // concurrent manager reassign (and vice-versa). Sibling of staff.patch, for a per-record task key.
+      if (state.taskDeletions.includes(String(payload.id))) return;   // don't revive a deleted task
+      const i = state.tasks.findIndex(t => t && String(t.id) === String(payload.id));
+      if (i < 0) return;
+      const cur = state.tasks[i];
+      // Device-scoped stale-patch guard (mirrors staff.patch/entryPatch): reject only a same-device older
+      // replay; marker on _patchedAt/_patchedBy, never the task's own updatedAt (the task.upsert version).
+      if (typeof payload.updatedAt === 'number' && typeof cur._patchedAt === 'number' &&
+          payload.updatedBy && payload.updatedBy === cur._patchedBy && payload.updatedAt < cur._patchedAt) return;
+      state.tasks[i] = { ...cur, ...(payload.fields || {}) };
+      if (typeof payload.updatedAt === 'number') { state.tasks[i]._patchedAt = payload.updatedAt; state.tasks[i]._patchedBy = payload.updatedBy || null; }
+      break;
+    }
     case 'audit.log':       if (payload && payload.event) { const ev = payload.event; if (!(ev.id && state.audit.some(x => x && x.id === ev.id))) { state.audit.unshift(ev); if (state.audit.length > 500) state.audit.length = 500; } } break;   // idempotent by id (outbox replay / echo-safe)
     case 'chat.append': {
       // Append a single staff-chat message (mirrors the DO's atomic append). Idempotent by
