@@ -2,6 +2,8 @@
 // Opens a self-contained, print-friendly document in a new tab; "Print / Save as
 // PDF" produces the PDF. Kept in code (not a committed binary) so it never drifts
 // from the app. Exposed on window via main.js glue for the account-menu buttons.
+import { getState } from '../store.js';
+import { escHtml } from '../utils.js';
 
 const STYLE = `
 *{box-sizing:border-box}
@@ -71,6 +73,13 @@ body{font-family:'Jost',sans-serif;color:#1a1a1a;background:#e9e6df}
 .dots{flex:1;border-bottom:1px dotted #cccccc;transform:translateY(-4px)}
 .pr{font-size:15.5px;font-weight:500;color:#15514f;white-space:nowrap}
 .desc{font-size:12px;color:#1a1a1a;font-style:italic;margin:-2px 0 4px}
+.sec+.desc{margin-top:0}
+.choose{font-size:11px;font-style:italic;color:#8a8a8a;margin:2px 0 1px 0.16in}
+.subrow,.addon{display:flex;align-items:baseline;gap:7px;margin:3px 0 3px 0.16in}
+.subrow .nm,.addon .nm{font-size:13.5px;color:#444444}
+.subrow .pr,.addon .pr{font-size:13.5px;font-weight:500;color:#15514f;white-space:nowrap}
+.subrow .dots,.addon .dots{flex:1;border-bottom:1px dotted #d8d8d8;transform:translateY(-3px)}
+.subrow+.desc,.addon+.desc{margin-left:0.16in}
 .foot{margin-top:0.16in;border-top:1px solid #cccccc;padding-top:0.12in}
 .foot p{margin:6px 0;font-size:12.5px;line-height:1.5;text-align:center;color:#1a1a1a}
 .foot .cash{font-weight:500;color:#15514f}
@@ -78,100 +87,170 @@ body{font-family:'Jost',sans-serif;color:#1a1a1a;background:#e9e6df}
 @media print{.bar{display:none}body{background:#fff}.page{margin:0;box-shadow:none}}
 `;
 
+// ── Price-menu data model + render (Phase 1) ──────────────────────────────────
+// The menu is DATA now (config.price_menu), seeded from DEFAULT_PRICE_MENU. Owner text is stored
+// DECODED (real "&", real non-breaking spaces) and escaped exactly once on render — the doc is
+// document.write-n into a new tab, so escaping is the whole XSS defense. A service can carry
+// pick-one `variants` and/or stackable `addons`, rendered indented. Editor + search come in later
+// phases; this phase keeps the output visually identical to the old hand-coded menu for the default.
+const NB = ' ';   // non-breaking space (the source used &nbsp; for the "set / fill" spacer)
+export const DEFAULT_PRICE_MENU = { v: 1, pages: [
+  { title: 'Hand Services', cols: [
+    [
+      { t: 'sec', label: 'Manicures' },
+      { t: 'row', nm: 'Classic Manicure', pr: '$25', desc: 'regular color included' },
+      { t: 'row', nm: 'Gel Manicure', pr: '$38', desc: 'gel color included' },
+      { t: 'row', nm: 'Deluxe Manicure', pr: '$40', desc: 'sugar scrub, mask, paraffin & hot towel' },
+      { t: 'sec', label: 'Full Sets & Fills', desc: 'set / fill ' + NB + '·' + NB + ' gel color removal included' },
+      { t: 'row', nm: 'Acrylic', pr: '$56 / 46' },
+      { t: 'row', nm: 'Pink & White or Ombré', pr: '$65 / 56' },
+      { t: 'row', nm: 'Builder Gel', pr: '$65 / 56' },
+      { t: 'row', nm: 'Hybrid Gel', pr: '$60 / 50' },
+      { t: 'row', nm: 'Gel-X', pr: '$65 / 56' },
+      { t: 'row', nm: 'Dip Powder', pr: '$50' },
+      { t: 'sec', label: 'Removals' },
+      { t: 'row', nm: 'Gel Removal (only)', pr: '$10' },
+      { t: 'row', nm: 'Extension Removal', pr: '$20', desc: '$10 with a new service' },
+    ],
+    [
+      { t: 'sec', label: 'Color Changes' },
+      { t: 'row', nm: 'Regular Polish', pr: '$15' },
+      { t: 'row', nm: 'Gel Color', pr: '$25' },
+      { t: 'row', nm: 'Gel Extension Color', pr: '$32' },
+      { t: 'sec', label: 'Add-Ons' },
+      { t: 'row', nm: 'Chrome · Gel Ombré · Cat Eye', pr: '$10' },
+      { t: 'row', nm: 'Matte Top Coat', pr: '$5' },
+      { t: 'row', nm: 'French Tip', pr: 'from $7' },
+      { t: 'row', nm: 'Airbrush / Marble', pr: 'from $15' },
+      { t: 'row', nm: 'Hand-Painted & Custom Art', pr: 'from $30' },
+      { t: 'row', nm: 'Gems · Charms · Stones', pr: 'from $3' },
+      { t: 'sec', label: 'Little Ones', desc: 'under 13' },
+      { t: 'row', nm: 'Color Change', pr: '$10' },
+      { t: 'row', nm: 'Gel Color Change', pr: '$15' },
+      { t: 'row', nm: 'Manicure + Flower Design', pr: '$20' },
+    ],
+  ], foot: [
+    { text: "Every service is one of a kind — length, shape & artwork all affect the final price, and it's impossible to list them all. For an exact quote, please ask your technician before your service begins." },
+    { text: 'Fixes within 7 days are complimentary (except regular color); after 7 days, repair pricing applies.', cls: 'fix' },
+    { text: 'All prices reflect our $2 cash discount · Card payments are $2 more per ticket.', cls: 'cash' },
+  ] },
+  { title: 'Foot Services & Waxing', cols: [
+    [
+      { t: 'sec', label: 'Pedicures' },
+      { t: 'row', nm: 'Classic Pedicure', pr: '$33' },
+      { t: 'row', nm: 'Signature Pedicure', pr: '$43' },
+      { t: 'row', nm: 'Volcano Pedicure', pr: '$60' },
+      { t: 'row', nm: 'Muse Deluxe Pedicure', pr: '$65' },
+      { t: 'row', nm: 'The Royal Treatment', pr: '$80' },
+      { t: 'sec', label: 'Pedicure Add-Ons' },
+      { t: 'row', nm: 'Gel Polish', pr: '$13' },
+      { t: 'row', nm: 'Clear Gel', pr: '$13' },
+      { t: 'row', nm: 'French Tip', pr: '$5' },
+      { t: 'row', nm: 'Cat Eye', pr: '$10' },
+      { t: 'row', nm: 'Paraffin Wax', pr: '$12' },
+      { t: 'row', nm: 'Callus Treatment', pr: '$7' },
+      { t: 'row', nm: 'Extra Massage · 10 min', pr: '$15' },
+      { t: 'row', nm: 'Shiny Buff', pr: '$5' },
+      { t: 'sec', label: 'Toe Enhancements' },
+      { t: 'row', nm: 'Full Set · Gel', pr: '$56' },
+      { t: 'row', nm: 'Full Set · Regular', pr: '$50' },
+      { t: 'row', nm: 'Toes Fill', pr: '$40' },
+      { t: 'row', nm: 'Big Toe · each', pr: '$5' },
+      { t: 'row', nm: 'Acrylic Removal · 2 toes', pr: '$5' },
+      { t: 'row', nm: 'Acrylic Removal · full set', pr: '$10 / 20', desc: 'with service $10 · without $20' },
+    ],
+    [
+      { t: 'sec', label: 'Color Changes' },
+      { t: 'row', nm: 'Regular', pr: '$15' },
+      { t: 'row', nm: 'Gel', pr: '$30' },
+      { t: 'sec', label: 'Little Ones' },
+      { t: 'row', nm: 'Pedicure + Flower Design', pr: '$28' },
+      { t: 'row', nm: 'Mani & Pedi Combo', pr: '$48' },
+      { t: 'sec', label: 'Waxing' },
+      { t: 'row', nm: 'Eyebrows', pr: '$15' },
+      { t: 'row', nm: 'Lip · Chin · Sideburns', pr: '$10' },
+      { t: 'row', nm: 'Full Face', pr: 'from $50' },
+      { t: 'row', nm: 'Underarms', pr: '$20' },
+      { t: 'row', nm: 'Half / Full Arm', pr: '$25 / 45' },
+      { t: 'row', nm: 'Half / Full Leg', pr: '$40 / 60' },
+      { t: 'row', nm: 'Chest', pr: 'from $40' },
+      { t: 'row', nm: 'Back', pr: 'from $60' },
+    ],
+  ], foot: [
+    { text: "Every service is one of a kind — length, shape & artwork all affect the final price, and it's impossible to list them all. For an exact quote, please ask your technician before your service begins." },
+    { text: 'All prices reflect our $2 cash discount · Card payments are $2 more per ticket.', cls: 'cash' },
+  ] },
+] };
+
+const _WL_CLS = new Set(['', 'cash', 'fix']);
+let _pmc = 0;
+const _pmUid = () => 'pm' + (++_pmc) + Math.random().toString(36).slice(2, 6);
+const _str = v => String(v == null ? '' : v);
+function _normSub(v) { return (v && typeof v === 'object') ? { id: v.id || _pmUid(), nm: _str(v.nm), pr: _str(v.pr), ...(v.desc != null ? { desc: _str(v.desc) } : {}) } : null; }
+function _normItem(it) {
+  if (!it || typeof it !== 'object') return null;
+  if (it.t === 'sec') return { id: it.id || _pmUid(), t: 'sec', label: _str(it.label), ...(it.desc != null ? { desc: _str(it.desc) } : {}) };
+  if (it.t === 'row') {
+    const row = { id: it.id || _pmUid(), t: 'row', nm: _str(it.nm), pr: _str(it.pr), ...(it.desc != null ? { desc: _str(it.desc) } : {}) };
+    const vs = (Array.isArray(it.variants) ? it.variants : []).map(_normSub).filter(Boolean); if (vs.length) row.variants = vs;
+    const as = (Array.isArray(it.addons) ? it.addons : []).map(_normSub).filter(Boolean); if (as.length) row.addons = as;
+    return row;
+  }
+  return null;   // unknown item type → drop
+}
+function _normPages(pages) {
+  return pages.map(p => ({
+    title: _str(p && p.title),
+    cols: (Array.isArray(p && p.cols) ? p.cols : []).map(col => (Array.isArray(col) ? col : []).map(_normItem).filter(Boolean)),
+    foot: (Array.isArray(p && p.foot) ? p.foot : []).map(f => (f && typeof f === 'object') ? { text: _str(f.text), cls: _WL_CLS.has(f.cls) ? f.cls : '' } : null).filter(Boolean),
+  }));
+}
+// Return a valid, id-stamped menu — NEVER throw and never let a malformed/partial/stale synced
+// config.price_menu blank the customer-facing menu. Falls back to the default for anything that
+// isn't a well-formed { pages: [...] }; coerces junk nodes per-field; backfills missing ids.
+export function normalizePriceMenu(stored) {
+  const src = (stored && Array.isArray(stored.pages) && stored.pages.length) ? stored : DEFAULT_PRICE_MENU;
+  let pages;
+  try { pages = _normPages(src.pages); } catch { pages = _normPages(DEFAULT_PRICE_MENU.pages); }
+  // A structurally-valid but CONTENT-empty config (e.g. {pages:[{cols:[[]]}]}) would render blank
+  // customer-facing pages — the one thing this function promises can't happen. Fall back to the default
+  // whenever nothing renders. (Phase 2's editor can decide separately if an owner-emptied menu is meant.)
+  if (!pages.some(p => (p.cols || []).some(c => c.length))) pages = _normPages(DEFAULT_PRICE_MENU.pages);
+  return { v: 1, pages };
+}
+
+// Pure renderer: data → the menu's page sections (no getState inside; menu + escaper passed in).
+export function priceMenuToHtml(menu, logoTag, esc) {
+  const e = typeof esc === 'function' ? esc : (s => _str(s));
+  const sub = (cls, prefix, v) => `<div class="${cls}"><span class="nm">${prefix}${e(v.nm)}</span><span class="dots"></span><span class="pr">${e(v.pr)}</span></div>` + (v.desc ? `<div class="desc">${e(v.desc)}</div>` : '');
+  const itemHtml = it => {
+    if (!it) return '';                                 // self-safe even if handed un-normalized data
+    if (it.t === 'sec') return `<div class="sec">${e(it.label)}</div>` + (it.desc ? `<div class="desc">${e(it.desc)}</div>` : '');
+    if (it.t !== 'row') return '';                      // unknown node type → render nothing (not "undefined")
+    let h = `<div class="row"><span class="nm">${e(it.nm)}</span><span class="dots"></span><span class="pr">${e(it.pr)}</span></div>` + (it.desc ? `<div class="desc">${e(it.desc)}</div>` : '');
+    if (it.variants && it.variants.length) h += `<div class="choose">choose one</div>` + it.variants.map(v => sub('subrow', '', v)).join('');
+    if (it.addons && it.addons.length) h += it.addons.map(a => sub('addon', '+ ', a)).join('');
+    return h;
+  };
+  const colHtml = col => `<div class="col">${(col || []).map(itemHtml).join('')}</div>`;
+  const footHtml = foot => (foot && foot.length) ? `<div class="foot">${foot.map(f => { const c = _WL_CLS.has(f.cls) ? f.cls : ''; return `<p${c ? ` class="${c}"` : ''}>${e(f.text)}</p>`; }).join('')}</div>` : '';
+  return (menu.pages || []).map(p =>
+    `<section class="page">${logoTag}<hr class="rule"><div class="pagetitle">${e(p.title)}</div><div class="cols">${(p.cols || []).map(colHtml).join('')}</div>${footHtml(p.foot)}</section>`
+  ).join('');
+}
+
 function priceMenuDoc(logoUrl) {
-  const logo = `<img class="logo" src="${logoUrl}" alt="Muse Nails & Spa">`;
+  const logo = `<img class="logo" src="${escHtml(logoUrl)}" alt="${escHtml('Muse Nails & Spa')}">`;
+  let body;
+  try { body = priceMenuToHtml(normalizePriceMenu(getState().config.price_menu), logo, escHtml); }
+  catch { try { body = priceMenuToHtml(normalizePriceMenu(null), logo, escHtml); } catch { body = ''; } }
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">` +
     `<meta name="viewport" content="width=device-width,initial-scale=1"><title>Muse — Price Menu</title>` +
     `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
     `<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">` +
     `<style>${PRICE_MENU_STYLE}</style></head><body>` +
     `<div class="bar"><strong>MUSE NAILS &amp; SPA · PRICE MENU</strong><button onclick="window.print()">Print / Save as PDF</button></div>` +
-
-    `<section class="page">${logo}<hr class="rule"><div class="pagetitle">Hand Services</div><div class="cols">` +
-      `<div class="col">` +
-        `<div class="sec">Manicures</div>` +
-        `<div class="row"><span class="nm">Classic Manicure</span><span class="dots"></span><span class="pr">$25</span></div><div class="desc">regular color included</div>` +
-        `<div class="row"><span class="nm">Gel Manicure</span><span class="dots"></span><span class="pr">$38</span></div><div class="desc">gel color included</div>` +
-        `<div class="row"><span class="nm">Deluxe Manicure</span><span class="dots"></span><span class="pr">$40</span></div><div class="desc">sugar scrub, mask, paraffin &amp; hot towel</div>` +
-        `<div class="sec">Full Sets &amp; Fills</div><div class="desc" style="margin-top:0">set / fill &nbsp;·&nbsp; gel color removal included</div>` +
-        `<div class="row"><span class="nm">Acrylic</span><span class="dots"></span><span class="pr">$56 / 46</span></div>` +
-        `<div class="row"><span class="nm">Pink &amp; White or Ombré</span><span class="dots"></span><span class="pr">$65 / 56</span></div>` +
-        `<div class="row"><span class="nm">Builder Gel</span><span class="dots"></span><span class="pr">$65 / 56</span></div>` +
-        `<div class="row"><span class="nm">Hybrid Gel</span><span class="dots"></span><span class="pr">$60 / 50</span></div>` +
-        `<div class="row"><span class="nm">Gel-X</span><span class="dots"></span><span class="pr">$65 / 56</span></div>` +
-        `<div class="row"><span class="nm">Dip Powder</span><span class="dots"></span><span class="pr">$50</span></div>` +
-        `<div class="sec">Removals</div>` +
-        `<div class="row"><span class="nm">Gel Removal (only)</span><span class="dots"></span><span class="pr">$10</span></div>` +
-        `<div class="row"><span class="nm">Extension Removal</span><span class="dots"></span><span class="pr">$20</span></div><div class="desc">$10 with a new service</div>` +
-      `</div>` +
-      `<div class="col">` +
-        `<div class="sec">Color Changes</div>` +
-        `<div class="row"><span class="nm">Regular Polish</span><span class="dots"></span><span class="pr">$15</span></div>` +
-        `<div class="row"><span class="nm">Gel Color</span><span class="dots"></span><span class="pr">$25</span></div>` +
-        `<div class="row"><span class="nm">Gel Extension Color</span><span class="dots"></span><span class="pr">$32</span></div>` +
-        `<div class="sec">Add-Ons</div>` +
-        `<div class="row"><span class="nm">Chrome · Gel Ombré · Cat Eye</span><span class="dots"></span><span class="pr">$10</span></div>` +
-        `<div class="row"><span class="nm">Matte Top Coat</span><span class="dots"></span><span class="pr">$5</span></div>` +
-        `<div class="row"><span class="nm">French Tip</span><span class="dots"></span><span class="pr">from $7</span></div>` +
-        `<div class="row"><span class="nm">Airbrush / Marble</span><span class="dots"></span><span class="pr">from $15</span></div>` +
-        `<div class="row"><span class="nm">Hand-Painted &amp; Custom Art</span><span class="dots"></span><span class="pr">from $30</span></div>` +
-        `<div class="row"><span class="nm">Gems · Charms · Stones</span><span class="dots"></span><span class="pr">from $3</span></div>` +
-        `<div class="sec">Little Ones</div><div class="desc" style="margin-top:0">under 13</div>` +
-        `<div class="row"><span class="nm">Color Change</span><span class="dots"></span><span class="pr">$10</span></div>` +
-        `<div class="row"><span class="nm">Gel Color Change</span><span class="dots"></span><span class="pr">$15</span></div>` +
-        `<div class="row"><span class="nm">Manicure + Flower Design</span><span class="dots"></span><span class="pr">$20</span></div>` +
-      `</div>` +
-    `</div>` +
-    `<div class="foot"><p>Every service is one of a kind — length, shape &amp; artwork all affect the final price, and it's impossible to list them all. For an exact quote, please ask your technician before your service begins.</p>` +
-    `<p class="fix">Fixes within 7 days are complimentary (except regular color); after 7 days, repair pricing applies.</p>` +
-    `<p class="cash">All prices reflect our $2 cash discount · Card payments are $2 more per ticket.</p></div></section>` +
-
-    `<section class="page">${logo}<hr class="rule"><div class="pagetitle">Foot Services &amp; Waxing</div><div class="cols">` +
-      `<div class="col">` +
-        `<div class="sec">Pedicures</div>` +
-        `<div class="row"><span class="nm">Classic Pedicure</span><span class="dots"></span><span class="pr">$33</span></div>` +
-        `<div class="row"><span class="nm">Signature Pedicure</span><span class="dots"></span><span class="pr">$43</span></div>` +
-        `<div class="row"><span class="nm">Volcano Pedicure</span><span class="dots"></span><span class="pr">$60</span></div>` +
-        `<div class="row"><span class="nm">Muse Deluxe Pedicure</span><span class="dots"></span><span class="pr">$65</span></div>` +
-        `<div class="row"><span class="nm">The Royal Treatment</span><span class="dots"></span><span class="pr">$80</span></div>` +
-        `<div class="sec">Pedicure Add-Ons</div>` +
-        `<div class="row"><span class="nm">Gel Polish</span><span class="dots"></span><span class="pr">$13</span></div>` +
-        `<div class="row"><span class="nm">Clear Gel</span><span class="dots"></span><span class="pr">$13</span></div>` +
-        `<div class="row"><span class="nm">French Tip</span><span class="dots"></span><span class="pr">$5</span></div>` +
-        `<div class="row"><span class="nm">Cat Eye</span><span class="dots"></span><span class="pr">$10</span></div>` +
-        `<div class="row"><span class="nm">Paraffin Wax</span><span class="dots"></span><span class="pr">$12</span></div>` +
-        `<div class="row"><span class="nm">Callus Treatment</span><span class="dots"></span><span class="pr">$7</span></div>` +
-        `<div class="row"><span class="nm">Extra Massage · 10 min</span><span class="dots"></span><span class="pr">$15</span></div>` +
-        `<div class="row"><span class="nm">Shiny Buff</span><span class="dots"></span><span class="pr">$5</span></div>` +
-        `<div class="sec">Toe Enhancements</div>` +
-        `<div class="row"><span class="nm">Full Set · Gel</span><span class="dots"></span><span class="pr">$56</span></div>` +
-        `<div class="row"><span class="nm">Full Set · Regular</span><span class="dots"></span><span class="pr">$50</span></div>` +
-        `<div class="row"><span class="nm">Toes Fill</span><span class="dots"></span><span class="pr">$40</span></div>` +
-        `<div class="row"><span class="nm">Big Toe · each</span><span class="dots"></span><span class="pr">$5</span></div>` +
-        `<div class="row"><span class="nm">Acrylic Removal · 2 toes</span><span class="dots"></span><span class="pr">$5</span></div>` +
-        `<div class="row"><span class="nm">Acrylic Removal · full set</span><span class="dots"></span><span class="pr">$10 / 20</span></div><div class="desc">with service $10 · without $20</div>` +
-      `</div>` +
-      `<div class="col">` +
-        `<div class="sec">Color Changes</div>` +
-        `<div class="row"><span class="nm">Regular</span><span class="dots"></span><span class="pr">$15</span></div>` +
-        `<div class="row"><span class="nm">Gel</span><span class="dots"></span><span class="pr">$30</span></div>` +
-        `<div class="sec">Little Ones</div>` +
-        `<div class="row"><span class="nm">Pedicure + Flower Design</span><span class="dots"></span><span class="pr">$28</span></div>` +
-        `<div class="row"><span class="nm">Mani &amp; Pedi Combo</span><span class="dots"></span><span class="pr">$48</span></div>` +
-        `<div class="sec">Waxing</div>` +
-        `<div class="row"><span class="nm">Eyebrows</span><span class="dots"></span><span class="pr">$15</span></div>` +
-        `<div class="row"><span class="nm">Lip · Chin · Sideburns</span><span class="dots"></span><span class="pr">$10</span></div>` +
-        `<div class="row"><span class="nm">Full Face</span><span class="dots"></span><span class="pr">from $50</span></div>` +
-        `<div class="row"><span class="nm">Underarms</span><span class="dots"></span><span class="pr">$20</span></div>` +
-        `<div class="row"><span class="nm">Half / Full Arm</span><span class="dots"></span><span class="pr">$25 / 45</span></div>` +
-        `<div class="row"><span class="nm">Half / Full Leg</span><span class="dots"></span><span class="pr">$40 / 60</span></div>` +
-        `<div class="row"><span class="nm">Chest</span><span class="dots"></span><span class="pr">from $40</span></div>` +
-        `<div class="row"><span class="nm">Back</span><span class="dots"></span><span class="pr">from $60</span></div>` +
-      `</div>` +
-    `</div>` +
-    `<div class="foot"><p>Every service is one of a kind — length, shape &amp; artwork all affect the final price, and it's impossible to list them all. For an exact quote, please ask your technician before your service begins.</p>` +
-    `<p class="cash">All prices reflect our $2 cash discount · Card payments are $2 more per ticket.</p></div></section>` +
-
+    body +
     `</body></html>`;
 }
 
