@@ -287,7 +287,7 @@ tailwind.config = {
     </div>
   </header>
 
-  <!-- Sub-view switcher for grouped tabs (Floor: Turns|Queue|Floor Plan · Transactions|Gift Cards ·
+  <!-- Sub-view switcher for grouped tabs (Floor: Turns|Floor Plan|Queue · Transactions|Gift Cards ·
        Reports|Payroll · Settings→Customers back-nav). Rendered by main.js renderDashSubnav(). -->
   <div id="dash-subnav" class="hidden"></div>
 
@@ -320,10 +320,10 @@ tailwind.config = {
       </div>
 
       <!-- ── QUEUE PANEL ── -->
-      <div class="dash-panel active" id="panel-queue">
+      <div class="dash-panel" id="panel-queue">
         <!-- Filter tabs + Add + History date -->
         <div class="dash-head flex gap-2 flex-wrap items-center">
-          <!-- View switcher (Turns | Queue | Floor Plan) — far left, consistent across the three tabs -->
+          <!-- View switcher (Turns | Floor Plan | Queue) — far left, consistent across the three tabs -->
           <span class="subnav-slot" id="subnav-slot-queue" style="flex:0 1 auto"></span>
           <!-- History date picker -->
           <div class="flex items-center gap-2 mr-1">
@@ -671,10 +671,10 @@ tailwind.config = {
       </div>
 
       <!-- ── TURNS PANEL ── -->
-      <div class="dash-panel" id="panel-turns">
+      <div class="dash-panel active" id="panel-turns">
         <div class="flex items-center justify-between mb-4">
           <div class="flex items-center gap-3">
-            <!-- View switcher (Turns | Queue | Floor Plan) — far left, consistent across the three tabs -->
+            <!-- View switcher (Turns | Floor Plan | Queue) — far left, consistent across the three tabs -->
             <span class="subnav-slot" id="subnav-slot-turns" style="flex:0 1 auto"></span>
             <!-- Date picker — day history. Shows the relative word + the date. -->
             <button onclick="shiftTurnsDate(-1)" title="Previous day" class="w-9 h-9 flex items-center justify-center rounded-xl border border-surface-container-high bg-surface hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined" style="font-size:20px">chevron_left</span></button>

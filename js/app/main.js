@@ -412,7 +412,7 @@ Object.assign(window, { showWhatsNew, closeWhatsNew, whatsNewNav });
 // (Reports | Payroll) is gated by the viewReports role permission (Settings → Role
 // Permissions) — the tab is hidden and direct opens are blocked.
 const NAV_GROUPS = {
-  floor:      { navId: 'nav-floor',      panels: [['turns','swap_vert','Turns'], ['queue','queue','Queue'], ['floorplan','grid_view','Floor Plan']] },
+  floor:      { navId: 'nav-floor',      panels: [['turns','swap_vert','Turns'], ['floorplan','grid_view','Floor Plan'], ['queue','queue','Queue']] },
   money:      { navId: 'nav-money',      panels: [['transactions','receipt_long','Transactions'], ['giftcards','card_giftcard','Gift Cards']] },
   reportsgrp: { navId: 'nav-reportsgrp', panels: [['reports','bar_chart','Reports'], ['payroll','payments','Payroll']] },
   // Settings isn't a real group (its tab always opens Settings); 'admin' only renders the
