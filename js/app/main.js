@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.65', items: [
+    { icon: 'volunteer_activism', t: 'Comps: the customer pays $0, but the tech still gets paid', d: 'When you mark a service as a Comp, it now works the way you’d expect: the price you enter stays (you can set it in both Assign & Price and the tech app), the customer is charged $0 for that line, but the technician is still paid in full on it (their billed amount and commission include it). The business simply absorbs it as a giveaway. A new “Comped” total on the Reports tab shows how much you gave away over the date range. (Previously, checking Comp wiped the price, so the tech earned nothing on it.)' },
+  ] },
   { v: 'v5.64', items: [
     { icon: 'tune', t: 'A batch of front-desk improvements', d: 'Several quick upgrades: the Floor tab’s buttons are now ordered Turns · Floor Plan · Queue. On the Turns board the turn number is now a bold, easy-to-see badge, and you can drag the technician column wider or narrower (handy when a long name gets cut off — it remembers your size on this device). On the Floor plan, dragging a seated customer to a new station now shows a clean card instead of a stretched see-through strip. In a customer’s visit history you can now see which technician did which service. And on the Calendar, each appointment now shows who booked it and when.' },
   ] },
