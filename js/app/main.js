@@ -133,6 +133,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.70', items: [
+    { icon: 'verified_user', t: 'Signed waivers now show who signed and how', d: 'Opening a customer’s signed waiver (from Reports) now shows a clear record block above it: who signed, when, how (at the kiosk, sent from the front desk, etc.), what they consented to, and a document checksum — for both typed and uploaded-PDF waivers (PDF waivers used to show no signer details at all). If a waiver was bypassed — recorded without a customer signature — it’s now clearly marked as such instead of looking like it was signed.' },
+  ] },
   { v: 'v5.69', items: [
     { icon: 'assignment_ind', t: 'Assign tasks to a person — front desk and technicians', d: 'Tasks can now be given to a specific person. On the dashboard, a manager can assign a task when adding it (there’s a proper add-task box now) or tap a task’s name-tag to reassign it; front-desk staff see their own tasks plus “Anyone” tasks, and only managers can delete. Technicians now have a “Tasks” button in the top corner of their staff app with a count badge — it shows the tasks assigned to them, which they can check off, and it updates on their phone the moment you assign something.' },
   ] },
