@@ -38,6 +38,7 @@ function stationsInRect(x1, y1, x2, y2) {
 }
 
 const GAP = 10;
+const FP_MAX_ROW_GAP = 40;   // cap the tech-column row spacing so a few techs on a tall floor don't splay to the extremes
 // Per-category default tile size + accent color now live in config.station_categories
 // (categoryDef). catDims/catColor read from there with a safe fallback so the floor
 // plan keeps working even for a station whose category was removed.
@@ -256,7 +257,7 @@ function renderFloorStaffRow() {
     const sti = timed ? serviceTimeInfo(timed) : null;
     const timerHtml = sti && sti.live ? `<div style="font-size:9px;font-weight:700;line-height:1.1;color:${sti.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sti.text}</div>` : '';
     const statusChip = `<div style="font-size:10px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${isNext ? 'Next up' : c.label}</div>`;
-    return `<div class="floor-tech flex items-center gap-2 rounded-lg px-1.5 py-1.5 mb-1.5" data-tech-id="${id}" style="border:0.5px solid var(--surface-container-high,#e0e5e7);cursor:grab${isNext ? ';border-left:3px solid #1a5252;background:#eef5f5' : ''}" title="Tap for status · drag onto a station to assign">
+    return `<div class="floor-tech flex items-center gap-2 rounded-lg px-1.5 py-1.5" data-tech-id="${id}" style="border:0.5px solid var(--surface-container-high,#e0e5e7);cursor:grab${isNext ? ';border-left:3px solid #1a5252;background:#eef5f5' : ''}" title="Tap for status · drag onto a station to assign">
       <div style="position:relative;flex-shrink:0">${avatar}${grip}</div>
       <div class="min-w-0" style="flex:1">
         <div class="truncate" style="font-size:13px;font-weight:700;color:var(--md-on-surface)">${escHtml(st.name.split(' ')[0])}</div>
@@ -348,12 +349,18 @@ export function renderFloorPlan() {
     // the top, last to the bottom). If the rows wouldn't fit, don't crush them — stack naturally from the top.
     const staff = document.getElementById('floorplan-staff-row');
     if (staff) {
-      staff.style.display = ''; staff.style.flexDirection = ''; staff.style.height = ''; staff.style.justifyContent = ''; staff.style.marginTop = '';
-      if (stationIds.length && Number.isFinite(minTop)) {
-        const naturalH = staff.scrollHeight;
+      staff.style.height = ''; staff.style.justifyContent = ''; staff.style.marginTop = '';
+      staff.style.display = 'flex'; staff.style.flexDirection = 'column'; staff.style.gap = '0px';   // rows have no own margin now; the column owns the gap
+      if (stationIds.length && Number.isFinite(minTop) && staff.children.length) {
+        const rowsH = staff.scrollHeight;                                      // sum of row heights (gap 0)
+        const N = staff.children.length;
         const floorTop = minTop * s, floorH = (maxBottom - minTop) * s;
         staff.style.marginTop = floorTop + 'px';
-        if (floorH > naturalH + 2) { staff.style.display = 'flex'; staff.style.flexDirection = 'column'; staff.style.height = floorH + 'px'; staff.style.justifyContent = 'space-between'; }
+        // Spread to fill the floor height, but never open a gap wider than FP_MAX_ROW_GAP (few techs cluster near the
+        // top instead of splaying top-to-bottom). When rows already fill/overflow, fall back to a compact 6px gap.
+        staff.style.gap = (N >= 2 && floorH > rowsH) ? Math.min((floorH - rowsH) / (N - 1), FP_MAX_ROW_GAP) + 'px' : '6px';
+      } else {
+        staff.style.gap = '6px';
       }
     }
   }
