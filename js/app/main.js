@@ -119,6 +119,7 @@ function goTo(screenId, param) {
   }
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(screenId)?.classList.add('active');
+  if (screenId !== 'screen-desk') chat.closeChat?.();   // chat is a dashboard overlay — never leave it open over the sign-in/kiosk screens
   window.scrollTo(0, 0);
   if (screenId === 'screen-checkin') {
     session.ui.currentCheckinType = param === 'appointment' ? 'appointment' : 'walkin';
@@ -137,6 +138,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.77', items: [
+    { icon: 'notifications_active', t: 'Chat notifications now work from the front desk', d: 'Front-desk users (including managers/admins, who don’t use the technician app) now get phone/tablet notifications for chat messages sent to them. The first time you sign in, the device asks to allow notifications; after that it just works, and follows whoever’s signed in on that iPad. You can turn it on or off anytime from your account menu (tap your name → “Chat notifications”). Tip: on the front-desk iPad, sign in and tap Allow when prompted so you catch DMs and @mentions. Also: the chat window now closes automatically when you sign out or the app returns to the sign-in screen, instead of staying open.' },
+  ] },
   { v: 'v5.76', items: [
     { icon: 'notifications_active', t: 'A heads-up when a new support ticket comes in', d: 'When a staff member sends a Help & Feedback ticket, managers now get a pop-up notice in the app the moment it arrives — so you don’t have to be watching the Settings tab to catch it. The unread dot on Settings and the optional phone push are still there too. (Email notifications are on the list for later.)' },
     { icon: 'receipt_long', t: 'Printed price menu fits the page better', d: 'Tightened up the printed menu so it fits the sheet without running long: the logo is a bit smaller and now sits on the left with the page title centered beside it, and the top and bottom margins are trimmed for more breathing room before the footer. Tap Preview to see it.' },
@@ -920,6 +924,7 @@ async function boot() {
   pollSupport();
   setInterval(pollSupport, 3 * 60 * 1000);
   registerServiceWorker();
+  chat.chatPushResync?.();   // silently re-tag this device for the signed-in FD user's chat push (never prompts)
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

@@ -50,7 +50,7 @@ export function showPinModal() {
 // Log out the current front-desk user: confirm, clear the session, return to the welcome
 // screen, then prompt for a PIN. (showPinModal also clears activeUser + opens the keypad.)
 export function logout() {
-  const doLogout = () => { setActiveUser(null); window.goTo?.('screen-welcome'); showPinModal(); };
+  const doLogout = () => { window.chatPushOnSignOut?.(); setActiveUser(null); window.goTo?.('screen-welcome'); showPinModal(); };
   if (window.showWarnModal) window.showWarnModal('Log out?', 'You will need to re-enter your PIN.', doLogout);
   else doLogout();
 }
@@ -97,6 +97,9 @@ function _finishPinLogin(user) {
   if (cu && cu.role !== 'admin' && !cfg().cash_drawer) {
     setTimeout(() => window.showWarnModal?.('Open a cash drawer?', 'No cash drawer is open yet. Open one to take cash payments and track the register.', () => window.openCashRegister?.(), 'Open drawer'), 800);
   }
+  // Chat notifications: for a front-desk user, enable push on this device (auto-ask once per device —
+  // the browser only prompts the first time). Delayed so it doesn't stack on the welcome/cash prompts.
+  if (cu && cu.kind === 'fd') setTimeout(() => window.chatPushOnSignIn?.(), 1600);
 }
 
 function _showPinError() {
@@ -351,6 +354,7 @@ export function deleteFdUser(id) {
 export function toggleUserMenu() {
   const m = document.getElementById('user-menu');
   if (!m) return;
+  const st = document.getElementById('chat-notif-state'); if (st) st.textContent = window.chatNotifOn?.() ? 'On' : 'Off';   // reflect this device's chat-notification state
   m.classList.toggle('hidden');
 }
 export function closeUserMenu() {
