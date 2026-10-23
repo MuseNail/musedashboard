@@ -74,6 +74,21 @@ export function pmRelocateItem(draft, id, colId) {
   dst.push(...group);
   return true;
 }
+// Generalized move (for drag-and-drop): relocate a node to targetColId, inserted BEFORE beforeId (or appended
+// when beforeId is null). A section carries its contiguous rows. Dropping a section onto its own group is a no-op.
+export function pmMoveTo(draft, id, targetColId, beforeId) {
+  const f = pmFind(draft, id); if (!f || f.kind !== 'item') return false;
+  const dst = _col(draft, targetColId); if (!dst) return false;
+  let n = 1;
+  if (f.node.t === 'sec') { while (f.arr[f.idx + n] && f.arr[f.idx + n].t === 'row') n++; }
+  const groupIds = new Set(f.arr.slice(f.idx, f.idx + n).map(x => x.id));
+  if (beforeId && groupIds.has(beforeId)) return false;   // dropping onto itself — no change
+  const group = f.arr.splice(f.idx, n);                    // removed first → indices in dst are post-removal
+  let insertIdx = dst.length;
+  if (beforeId) { const bi = dst.findIndex(x => x.id === beforeId); if (bi >= 0) insertIdx = bi; }
+  dst.splice(insertIdx, 0, ...group);
+  return true;
+}
 export function pmAddSub(draft, rowId, which) {
   const f = pmFind(draft, rowId); if (!f || f.kind !== 'item' || f.node.t !== 'row') return null;
   if (which !== 'variants' && which !== 'addons') return null;
@@ -142,6 +157,7 @@ export function renderPriceMenuEditor() {
   host.innerHTML = _editorHtml(_pmDraft);
   _applyFilter();
   _syncDirtyUI();
+  _pmInitDrag();
 }
 function _syncDirtyUI() {
   const dirty = pmEditorHasUnsaved();
@@ -176,7 +192,7 @@ function _subList(rowId, which, list) {
 }
 
 function _itemHtml(it, curColId, draft) {
-  const ctrls = '<div class="pm-ctrls">' + _ctrlBtn('pmUp(' + _q(it.id) + ')', 'keyboard_arrow_up', 'Move up') + _ctrlBtn('pmDn(' + _q(it.id) + ')', 'keyboard_arrow_down', 'Move down')
+  const ctrls = '<div class="pm-ctrls"><span class="pm-drag material-symbols-outlined" title="Drag to move" aria-hidden="true" style="font-size:18px">drag_indicator</span>' + _ctrlBtn('pmUp(' + _q(it.id) + ')', 'keyboard_arrow_up', 'Move up') + _ctrlBtn('pmDn(' + _q(it.id) + ')', 'keyboard_arrow_down', 'Move down')
     + '<select onchange="pmMove(' + _q(it.id) + ',this.value)" title="Move to a column" class="pm-move">' + _moveOpts(draft, curColId) + '</select>'
     + _ctrlBtn('pmDel(' + _q(it.id) + ')', 'delete', 'Remove') + '</div>';
   if (it.t === 'sec') {
@@ -200,7 +216,7 @@ function _colHtml(p, ci, draft) {
   const cid = p.id + ':' + ci;
   const side = p.cols.length === 2 ? (ci === 0 ? 'Left column' : 'Right column') : ('Column ' + (ci + 1));
   const items = (p.cols[ci] || []).map(it => _itemHtml(it, cid, draft)).join('');
-  return '<div class="pm-col"><div class="pm-col-h">' + escHtml(side) + '</div>' + items
+  return '<div class="pm-col" data-pm-col="' + escAttrJs(cid) + '"><div class="pm-col-h">' + escHtml(side) + '</div>' + items
     + '<div class="pm-col-add"><button onclick="pmAdd(' + _q(cid) + ",'sec')\" class=\"pm-add\">+ Section</button><button onclick=\"pmAdd(" + _q(cid) + ",'row')" + '" class="pm-add">+ Service</button></div></div>';
 }
 
@@ -313,3 +329,86 @@ export function pmUnsavedDiscard() {
   if (go) go();
 }
 export function pmUnsavedStay() { _pmPendingLeave = null; _pmCloseUnsaved(); }
+
+// ── Pointer drag-and-drop (2b) — mouse + touch; drag a card to another column/position ─────────────
+// Delegated pointerdown on the persistent host (set up once); drag starts from a card's grip (.pm-drag).
+// A floating ghost follows the pointer; the hovered column is outlined and the card under the pointer gets
+// an insert-before line. On drop, pmMoveTo relocates the node (a section carries its rows) and re-renders.
+let _dragInit = false, _dragId = null, _dragEl = null, _ghost = null, _dragStart = null, _dragging = false;
+function _pmInitDrag() {
+  if (_dragInit) return;
+  const host = document.getElementById('settings-pricemenu-section'); if (!host) return;
+  _dragInit = true;
+  host.addEventListener('pointerdown', _pmDragDown);
+}
+function _pmDragDown(e) {
+  if (e.button) return;
+  const grip = e.target.closest && e.target.closest('.pm-drag'); if (!grip) return;
+  const card = grip.closest('.pm-card'); if (!card || !card.dataset.pmCard) return;
+  e.preventDefault();
+  try { grip.setPointerCapture(e.pointerId); } catch {}   // guarantees pointerup even if released outside the window
+  _dragId = card.dataset.pmCard; _dragEl = card; _dragStart = { x: e.clientX, y: e.clientY }; _dragging = false;
+  document.addEventListener('pointermove', _pmDragMove);
+  document.addEventListener('pointerup', _pmDragUp);
+  document.addEventListener('pointercancel', _pmDragUp);
+}
+function _pmStartDrag() {
+  _dragging = true;
+  const r = _dragEl.getBoundingClientRect();
+  _ghost = _dragEl.cloneNode(true);
+  Object.assign(_ghost.style, { position: 'fixed', zIndex: '2147483500', pointerEvents: 'none', width: r.width + 'px', margin: '0', opacity: '0.9', left: (_dragStart.x + 10) + 'px', top: (_dragStart.y + 10) + 'px', boxShadow: '0 10px 28px rgba(0,0,0,.28)', borderRadius: '8px', background: 'var(--surface-container-lowest,#fff)' });
+  document.body.appendChild(_ghost);
+  _dragEl.style.opacity = '0.4';
+}
+function _pmClearMarks() {
+  const host = document.getElementById('settings-pricemenu-section'); if (!host) return;
+  host.querySelectorAll('.pm-col-drop').forEach(c => c.classList.remove('pm-col-drop'));
+  host.querySelectorAll('.pm-card-dropline, .pm-card-dropline-after').forEach(c => c.classList.remove('pm-card-dropline', 'pm-card-dropline-after'));
+}
+function _pmNextCard(card) { let n = card.nextElementSibling; while (n && !(n.classList && n.classList.contains('pm-card'))) n = n.nextElementSibling; return n; }
+// Resolve the drop under the pointer (ghost hidden so it doesn't occlude): the target column, the card the
+// item would land next to (excluding the dragged card itself), whether it's an insert-BEFORE (top half) or
+// insert-after (bottom half), the resulting beforeId, and the RAW card incl. self (to detect a drop-on-self).
+function _pmDropSpec(x, y) {
+  if (_ghost) _ghost.style.display = 'none';
+  const el = document.elementFromPoint(x, y);
+  if (_ghost) _ghost.style.display = '';
+  const col = el && el.closest && el.closest('#settings-pricemenu-section .pm-col');
+  const rawCard = el && el.closest && el.closest('#settings-pricemenu-section .pm-card');
+  const card = (rawCard && rawCard !== _dragEl) ? rawCard : null;
+  let before = true, beforeId = null;
+  if (card) {
+    const r = card.getBoundingClientRect();
+    before = y < r.top + r.height / 2;
+    if (before) beforeId = card.dataset.pmCard;
+    else { const next = _pmNextCard(card); beforeId = next ? next.dataset.pmCard : null; }
+  }
+  return { col, card, rawCard, before, beforeId };
+}
+function _pmDragMove(e) {
+  if (!_dragging) { if (Math.hypot(e.clientX - _dragStart.x, e.clientY - _dragStart.y) < 6) return; _pmStartDrag(); }
+  e.preventDefault();
+  _ghost.style.left = (e.clientX + 10) + 'px'; _ghost.style.top = (e.clientY + 10) + 'px';
+  _pmClearMarks();
+  const s = _pmDropSpec(e.clientX, e.clientY);
+  if (s.col) s.col.classList.add('pm-col-drop');
+  if (s.card) s.card.classList.add(s.before ? 'pm-card-dropline' : 'pm-card-dropline-after');   // line matches where it lands
+}
+function _pmDragUp(e) {
+  document.removeEventListener('pointermove', _pmDragMove);
+  document.removeEventListener('pointerup', _pmDragUp);
+  document.removeEventListener('pointercancel', _pmDragUp);
+  const wasDragging = _dragging; _dragging = false;
+  const dragId = _dragId;
+  if (_ghost) { _ghost.remove(); _ghost = null; }
+  if (_dragEl) _dragEl.style.opacity = '';
+  if (wasDragging && e.type !== 'pointercancel') {
+    const s = _pmDropSpec(e.clientX, e.clientY);
+    // Dropped on the dragged card itself → no change (don't teleport it to the column bottom).
+    if (s.rawCard !== _dragEl && s.col && s.col.dataset.pmCol && pmMoveTo(_pmDraft, dragId, s.col.dataset.pmCol, s.beforeId)) {
+      _pmClearMarks(); _afterStructural(); _dragId = _dragEl = _dragStart = null; return;
+    }
+  }
+  _pmClearMarks();
+  _dragId = _dragEl = _dragStart = null;
+}

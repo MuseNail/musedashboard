@@ -728,3 +728,10 @@
   .pm-sub, .pm-foot-line { display:flex; align-items:center; gap:4px; margin-bottom:3px; }
   .pm-foot-cls { font-size:11px; border:1px solid var(--surface-container-high,#e2e1e6); border-radius:6px; padding:2px; flex-shrink:0; }
   .pm-foot { border-top:1px solid var(--surface-container-high,#e2e1e6); padding-top:8px; }
+
+  .pm-drag { cursor:grab; color:var(--on-surface-variant,#5b606e); touch-action:none; user-select:none; display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; min-width:34px; border-radius:7px; margin-right:6px; }
+  .pm-drag:hover { background:var(--surface-container,#f1f0f4); }
+  .pm-drag:active { cursor:grabbing; }
+  .pm-col-drop { outline:2px dashed var(--primary,#1a5252); outline-offset:2px; }
+  .pm-card-dropline { box-shadow:inset 0 3px 0 0 var(--primary,#1a5252); }
+  .pm-card-dropline-after { box-shadow:inset 0 -3px 0 0 var(--primary,#1a5252); }

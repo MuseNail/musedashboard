@@ -142,3 +142,43 @@ test('pmRemoveSection deletes a section WITH its contiguous services', async () 
   assert.ok(!col(d, 0, 0).includes(sec));
   assert.equal(pmRemoveSection(d, col(d, 0, 0).find(i => i.t === 'row').id), 0, 'returns 0 on a non-section');
 });
+
+test('pmMoveTo places a node before a target (same or other column), section carries its rows, self-drop is a no-op', async () => {
+  const { pmMoveTo } = await import('../js/app/features/pricemenu-editor.js');
+  // reorder within a column: move the 2nd item before the 1st
+  let d = draft();
+  let c = col(d, 0, 0); const a = c[0], b = c[1];
+  assert.equal(pmMoveTo(d, b.id, _colId(d, 0, 0), a.id), true);
+  assert.equal(col(d, 0, 0)[0], b, 'b inserted before a');
+  assert.equal(col(d, 0, 0)[1], a);
+  // move a row to another column, before a specific card
+  d = draft();
+  const row = col(d, 0, 0).find(i => i.t === 'row');
+  const target = col(d, 0, 1)[1];
+  assert.equal(pmMoveTo(d, row.id, _colId(d, 0, 1), target.id), true);
+  const dst = col(d, 0, 1);
+  assert.equal(dst[dst.indexOf(row) + 1], target, 'row sits right before the target');
+  assert.ok(!col(d, 0, 0).includes(row));
+  // move a SECTION before a target in another column → carries its contiguous rows as a group, in order
+  d = draft();
+  const src = col(d, 0, 0); const sec = src.find(i => i.t === 'sec'); const si = src.indexOf(sec);
+  let n = 1; while (src[si + n] && src[si + n].t === 'row') n++;
+  const groupIds = src.slice(si, si + n).map(i => i.id);
+  const tgt = col(d, 0, 1)[0];
+  assert.equal(pmMoveTo(d, sec.id, _colId(d, 0, 1), tgt.id), true);
+  const d2 = col(d, 0, 1);
+  const at = d2.indexOf(d2.find(i => i.id === groupIds[0]));
+  assert.deepEqual(d2.slice(at, at + n).map(i => i.id), groupIds, 'whole section group moved in order, before the target');
+  // dropping a section onto one of its own rows is a no-op
+  d = draft();
+  const s2 = col(d, 0, 0).find(i => i.t === 'sec');
+  const ownRow = col(d, 0, 0)[col(d, 0, 0).indexOf(s2) + 1];
+  const lenBefore = col(d, 0, 0).length;
+  assert.equal(pmMoveTo(d, s2.id, _colId(d, 0, 0), ownRow.id), false);
+  assert.equal(col(d, 0, 0).length, lenBefore, 'self-drop changed nothing');
+  // append when beforeId is null
+  d = draft();
+  const r2 = col(d, 0, 0).find(i => i.t === 'row');
+  assert.equal(pmMoveTo(d, r2.id, _colId(d, 1, 1), null), true);
+  assert.equal(col(d, 1, 1)[col(d, 1, 1).length - 1], r2, 'appended to the end');
+});
