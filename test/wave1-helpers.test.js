@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { _clampTechColW, _clampTotalColW } from '../js/app/features/turns.js';
 import { _clampFpTechColW } from '../js/app/features/floorplan.js';
+import { _clampPmListColW } from '../js/app/features/pricemenu-editor.js';
 import { _visitLines } from '../js/app/features/reports.js';
 
 // ── _clampTechColW(px) — min 120, max 280, default 155 ──
@@ -33,6 +34,12 @@ test('_clampFpTechColW clamps below the minimum', () => { assert.equal(_clampFpT
 test('_clampFpTechColW clamps above the maximum', () => { assert.equal(_clampFpTechColW(999), 320); });
 test('_clampFpTechColW passes a valid width through (rounded)', () => { assert.equal(_clampFpTechColW(200.4), 200); });
 test('_clampFpTechColW falls back to the default on a non-number', () => { assert.equal(_clampFpTechColW('nope'), 185); });
+
+// ── _clampPmListColW(px) — price-menu editor list column: min 290, max 520, default 300 ──
+test('_clampPmListColW clamps below the minimum', () => { assert.equal(_clampPmListColW(100), 290); });
+test('_clampPmListColW clamps above the maximum', () => { assert.equal(_clampPmListColW(999), 520); });
+test('_clampPmListColW passes a valid width through (rounded)', () => { assert.equal(_clampPmListColW(360.7), 361); });
+test('_clampPmListColW falls back to the default on a non-number', () => { assert.equal(_clampPmListColW('nope'), 300); });
 
 // ── _visitLines(assignments, services, svcLabel, techName, chargeOf) ──
 // Item 3: each line now additively carries `charge` (via injected chargeOf) + `comped`.

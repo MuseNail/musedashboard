@@ -138,6 +138,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.83', items: [
+    { icon: 'price_change', t: 'Price-menu editor: resizable columns + tidier layout', d: 'In the price-menu editor, the “+ Service / + Subheader / + Section” buttons always stay on one line now, and you can drag the divider between the list and the detail panel to make the list column wider or narrower. The “Page settings & footer” row for each page now sits right under the page name — above that page’s services instead of buried at the bottom — and is sized to match the other rows while keeping its white highlight.' },
+  ] },
   { v: 'v5.82', items: [
     { icon: 'view_sidebar', t: 'Floor plan: technicians moved to a resizable left column', d: 'The technicians are now listed in a column down the left side of the floor plan — photo, name, status, turn count and bonus, just like the Turns grid — instead of a row across the bottom, with the floor to the right. Drag the column’s edge to make it wider or narrower. Everything still works: drag a tech onto a chair to assign, tap for the status menu, and the next-up tech is highlighted.' },
   ] },

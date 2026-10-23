@@ -757,9 +757,12 @@
   .pm2-filter { flex:1; min-width:150px; }
   .pm2-bar-btns { display:flex; gap:8px; flex-wrap:wrap; }
   .pm2-hint { font-size:11px; color:var(--on-surface-variant,#5b606e); margin:4px 0 10px; }
-  .pm2-main { display:grid; grid-template-columns:minmax(240px,300px) minmax(0,1fr); gap:14px; align-items:start; }
+  .pm2-main { display:grid; grid-template-columns:var(--pm-listcol-w,300px) minmax(0,1fr); gap:14px; align-items:start; position:relative; }
   .pm2-list { border:1px solid var(--surface-container-high,#e2e1e6); border-radius:12px; overflow:hidden; background:var(--surface-container-lowest,#fff); }
-  .pm2-addbar { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:8px 10px; border-bottom:1px solid var(--surface-container-high,#e2e1e6); background:var(--surface-container-low,#f1f0f4); border-radius:12px 12px 0 0; }
+  .pm2-addbar { display:flex; align-items:center; gap:6px; flex-wrap:nowrap; padding:8px 10px; border-bottom:1px solid var(--surface-container-high,#e2e1e6); background:var(--surface-container-low,#f1f0f4); border-radius:12px 12px 0 0; }
+  .pm2-col-resizer { position:absolute; top:0; bottom:0; width:10px; z-index:6; cursor:col-resize; touch-action:none; }
+  .pm2-col-resizer::after { content:''; position:absolute; top:6px; bottom:6px; left:4px; width:2px; border-radius:2px; background:#cdd8d8; opacity:0; transition:opacity .12s; }
+  .pm2-col-resizer:hover::after, .pm2-col-resizer:active::after { opacity:1; background:#1a5252; }
   .pm2-addlbl { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--outline,#8a8f98); margin-right:2px; }
   .pm2-listscroll { max-height:58vh; overflow-y:auto; }
   .pm2-panel { border:1px solid var(--surface-container-high,#e2e1e6); border-radius:12px; padding:12px 14px; background:var(--surface-container-lowest,#fff); min-height:220px; }
@@ -787,7 +790,7 @@
   .pm2-on:hover { background:rgba(26,82,82,.14); }
   .pm2-on .pm2-nm { font-weight:700; }   /* bold (not teal) so the selected name stays legible in dark mode */
   .pm2-blank .pm2-nm { color:var(--outline,#8a8f98); font-style:italic; }
-  .pm2-pageset { color:var(--on-surface-variant,#5b606e); font-size:12px; }
+  .pm2-pageset { font-size:13px; font-weight:600; color:var(--on-surface,#1a1d27); background:var(--surface-container-lowest,#fff); border-bottom:1px solid var(--surface-container-high,#e2e1e6); }
   .pm2-phead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
   .pm2-ptag { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--primary,#1a5252); }
   .pm2-back { display:none; width:30px; height:30px; align-items:center; justify-content:center; border:0; background:transparent; border-radius:7px; color:var(--on-surface-variant,#5b606e); cursor:pointer; }
@@ -810,4 +813,5 @@
     .pm2-listscroll { max-height:none; }
     .pm2-main[data-stack="detail"] .pm2-back { display:inline-flex; }
     .pm2-list { max-height:none; }
+    .pm2-col-resizer { display:none; }   /* stacked layout — nothing to resize */
   }

@@ -176,6 +176,34 @@ const _live = () => normalizePriceMenu(getState().config.price_menu);
 // The RAW stored config (not re-normalized) — a stable baseline for the "changed on another device" check.
 // (normalize mints random ids on every read, so comparing two normalize() results always differs.)
 const _rawCfg = () => JSON.stringify(getState().config.price_menu ?? null);
+
+// ── Resizable list column (drag the divider between the left list and the detail panel) ──
+const PM_LISTCOL_MIN = 290, PM_LISTCOL_MAX = 520, PM_LISTCOL_DEFAULT = 300;
+export function _clampPmListColW(px) {
+  const n = Math.round(Number(px));
+  return Number.isFinite(n) ? Math.max(PM_LISTCOL_MIN, Math.min(PM_LISTCOL_MAX, n)) : PM_LISTCOL_DEFAULT;
+}
+const pmListColW = () => _clampPmListColW(parseInt(localStorage.getItem('muse_pm_listcol_w'), 10) || PM_LISTCOL_DEFAULT);
+function _applyPmListColW() { document.getElementById('settings-pricemenu-section')?.style.setProperty('--pm-listcol-w', pmListColW() + 'px'); }
+function setPmListColW(px) { localStorage.setItem('muse_pm_listcol_w', String(_clampPmListColW(px))); _applyPmListColW(); }
+function _pmInitColResize() {
+  const main = document.querySelector('#settings-pricemenu-section .pm2-main'); if (!main) return;
+  const h = main.querySelector('.pm2-col-resizer'); if (!h) return;
+  h.style.left = (pmListColW() + 7) + 'px';   // sit in the 14px grid gap, at the list column's edge
+  h.addEventListener('pointerdown', ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    const startX = ev.clientX, startW = pmListColW();
+    try { h.setPointerCapture(ev.pointerId); } catch {}
+    const host = document.getElementById('settings-pricemenu-section');
+    const move = e => { const w = _clampPmListColW(startW + (e.clientX - startX)); host?.style.setProperty('--pm-listcol-w', w + 'px'); h.style.left = (w + 7) + 'px'; };
+    const end = e => {
+      document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', end); document.removeEventListener('pointercancel', end);
+      setPmListColW(startW + (Number(e && e.clientX) ? e.clientX - startX : 0));
+    };
+    document.addEventListener('pointermove', move); document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+  });
+}
+
 // For the click-out guard (2a-guard): is the editor open with unsaved changes?
 export function pmEditorHasUnsaved() { return !!_pmDraft && pmIsDirty(_pmDraft, _pmBaseline); }
 export function pmEditorClearDraft() { _pmDraft = null; _pmBaseline = ''; _pmStack = 'list'; _pmCollapsed.clear(); _setBeforeUnload(false); }
@@ -192,10 +220,12 @@ export function renderPriceMenuEditor() {
   _pmResolveSel();
   const prevScroll = host.querySelector('.pm2-listscroll')?.scrollTop || 0;   // keep the list where it was across a re-render (don't jump to top on select)
   host.innerHTML = _editorHtml(_pmDraft);
+  _applyPmListColW();
   const newList = host.querySelector('.pm2-listscroll'); if (newList) newList.scrollTop = prevScroll;
   _applyFilter();
   _syncDirtyUI();
   _pmInitDrag();
+  _pmInitColResize();
 }
 // Keep the selection valid after any render: a 'page:' sentinel for an existing page stays; a live item id
 // stays; otherwise fall back to the first service (else first node, else null). Prevents the panel stranding
@@ -275,6 +305,9 @@ function _listHtml(draft) {
   let html = '';
   (draft.pages || []).forEach((p, pi) => {
     html += '<div class="pm2-pagediv">' + escHtml(p.title || ('Page ' + (pi + 1))) + '</div>';
+    // Page settings & footer sits ABOVE the services (right under the page title), styled white to stand out.
+    const pon = ('page:' + p.id) === _pmSel ? ' pm2-on' : '';
+    html += '<div class="pm2-item pm2-pageset' + pon + '" onclick="pmSelect(' + _q('page:' + p.id) + ')" role="button" tabindex="0"><span class="material-symbols-outlined" style="font-size:18px">tune</span> Page settings &amp; footer</div>';
     let curSec = '';   // id of the section the following items belong to (collapse grouping); '' before the first
     (p.cols || []).forEach(col => (col || []).forEach(it => {
       const on = it.id === _pmSel ? ' pm2-on' : '';
@@ -297,8 +330,6 @@ function _listHtml(draft) {
           + grip + '<div class="pm2-body"><div class="pm2-top"><span class="pm2-nm">' + escHtml(_rowLbl(it)) + '</span><span class="pm2-pr">' + escHtml(it.pr || '') + '</span></div>' + _rowSubs(it) + '</div></div>';
       }
     }));
-    const pon = ('page:' + p.id) === _pmSel ? ' pm2-on' : '';
-    html += '<div class="pm2-item pm2-pageset' + pon + '" onclick="pmSelect(' + _q('page:' + p.id) + ')" role="button" tabindex="0"><span class="material-symbols-outlined" style="font-size:16px">tune</span> Page settings &amp; footer</div>';
   });
   return html;
 }
@@ -364,6 +395,7 @@ function _editorHtml(draft) {
     + '<div class="pm2-main" data-stack="' + _pmStack + '">'
     + '<div class="pm2-list">' + _addBar() + '<div class="pm2-listscroll">' + _listHtml(draft) + '</div></div>'
     + '<div class="pm2-panel">' + _panelHtml(draft) + '</div>'
+    + '<div class="pm2-col-resizer" title="Drag to resize the list column"></div>'
     + '</div></div>';
 }
 
