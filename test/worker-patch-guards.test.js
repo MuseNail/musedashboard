@@ -153,6 +153,53 @@ test('staff.patch is a safe no-op when the array/tech is missing', async () => {
   assert.equal((await d.state.storage.get('config:staff'))[0].notes, undefined);
 });
 
+// ── staff.notePatch (per-note merge) — two devices adding different notes both survive ──────
+test('staff.notePatch adds a note by id, mirrors to notes, preserves payroll + other techs', async () => {
+  const d = makeDO();
+  await seedStaff(d, [{ id: 's1', name: 'Maria', commission: 55 }, { id: 's2', name: 'Lin', commission: 50 }]);
+  await apply(d, 'staff.notePatch', { id: 's2', action: 'add', note: { id: 'n1', text: 'leaves at 5' } });
+  const arr = await d.state.storage.get('config:staff');
+  assert.deepEqual(arr[1].notesList, [{ id: 'n1', text: 'leaves at 5' }]);
+  assert.equal(arr[1].notes, 'leaves at 5', 'mirror string kept for old clients');
+  assert.equal(arr[1].commission, 50, 'payroll untouched');
+  assert.equal(arr[0].name, 'Maria', 'other techs untouched');
+});
+test('staff.notePatch: two devices adding DIFFERENT notes both survive (the robust-op point)', async () => {
+  const d = makeDO();
+  await seedStaff(d, [{ id: 's1', name: 'Maria' }]);
+  await apply(d, 'staff.notePatch', { id: 's1', action: 'add', note: { id: 'a', text: 'from A' } });
+  await apply(d, 'staff.notePatch', { id: 's1', action: 'add', note: { id: 'b', text: 'from B' } });
+  const arr = await d.state.storage.get('config:staff');
+  assert.deepEqual(arr[0].notesList, [{ id: 'a', text: 'from A' }, { id: 'b', text: 'from B' }]);
+  assert.equal(arr[0].notes, 'from A · from B');
+});
+test('staff.notePatch migrates a legacy notes string on the first op', async () => {
+  const d = makeDO();
+  await seedStaff(d, [{ id: 's1', name: 'Maria', notes: 'old pref' }]);
+  await apply(d, 'staff.notePatch', { id: 's1', action: 'add', note: { id: 'n2', text: 'new pref' } });
+  const arr = await d.state.storage.get('config:staff');
+  assert.deepEqual(arr[0].notesList, [{ id: 'legacy', text: 'old pref' }, { id: 'n2', text: 'new pref' }]);
+  assert.equal(arr[0].notes, 'old pref · new pref');
+});
+test('staff.notePatch edits and removes by id', async () => {
+  const d = makeDO();
+  await seedStaff(d, [{ id: 's1', name: 'Maria', notesList: [{ id: 'n1', text: 'A' }, { id: 'n2', text: 'B' }] }]);
+  await apply(d, 'staff.notePatch', { id: 's1', action: 'edit', note: { id: 'n1', text: 'A2' } });
+  assert.deepEqual((await d.state.storage.get('config:staff'))[0].notesList, [{ id: 'n1', text: 'A2' }, { id: 'n2', text: 'B' }]);
+  await apply(d, 'staff.notePatch', { id: 's1', action: 'remove', note: { id: 'n1' } });
+  const arr = await d.state.storage.get('config:staff');
+  assert.deepEqual(arr[0].notesList, [{ id: 'n2', text: 'B' }]);
+  assert.equal(arr[0].notes, 'B');
+});
+test('staff.notePatch is a safe no-op when the array/tech is missing', async () => {
+  const d = makeDO();
+  await apply(d, 'staff.notePatch', { id: 's1', action: 'add', note: { id: 'n1', text: 'x' } });
+  assert.equal(await d.state.storage.get('config:staff'), undefined);
+  await seedStaff(d, [{ id: 's1', name: 'Maria' }]);
+  await apply(d, 'staff.notePatch', { id: 'nope', action: 'add', note: { id: 'n1', text: 'x' } });
+  assert.equal((await d.state.storage.get('config:staff'))[0].notesList, undefined);
+});
+
 // ── task.patch (assignee / completed) — field-merge, complete can't clobber a reassign ───────
 const seedTask = (d, t) => d.state.storage.put('task:' + t.id, t);
 test('task.patch merges only the given fields, preserving the rest of the task', async () => {

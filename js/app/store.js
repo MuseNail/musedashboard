@@ -7,6 +7,7 @@
 // dispatch writes through sync.js (which calls applyChange + sends the mutation).
 
 import { idbGet, idbSet, idbAvailable } from './idbcache.js';
+import { applyNotePatch, normalizeNotesList, notesMirror } from './staff-notes-util.js';
 
 const CACHE_KEY = 'muse_state_cache';
 
@@ -240,6 +241,19 @@ export function applyChange(op, payload, seq) {
       const fields = payload.fields || {};
       arr[i] = { ...cur, ...fields };
       if (typeof payload.updatedAt === 'number') { arr[i]._notesAt = payload.updatedAt; arr[i]._notesBy = payload.updatedBy || null; }
+      break;
+    }
+    case 'staff.notePatch': {
+      // Per-note merge (add/edit/remove by id) onto ONE staff entry's notesList, so two devices adding
+      // DIFFERENT notes both survive (vs staff.patch's whole-value replace). Mirrors to st.notes for
+      // old-client back-compat. No cfgmeta bump — notes yield to a whole-array profile write, same as staff.patch.
+      const arr = state.config.staff;
+      if (!Array.isArray(arr)) return;
+      const i = arr.findIndex(s => s && String(s.id) === String(payload.id));
+      if (i < 0) return;
+      const cur = arr[i];
+      const list = applyNotePatch(normalizeNotesList(cur), payload.action, payload.note);
+      arr[i] = { ...cur, notesList: list, notes: notesMirror(list) };
       break;
     }
     case 'queue.remove':  removeById(state.queue, payload.id); break;

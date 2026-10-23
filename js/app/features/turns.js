@@ -8,6 +8,7 @@ import { getAssignmentStatus, isPaidStatus, entryStatusSince, applyAssignmentSta
 import { renderQueue, showGroupAssignModal } from './queue.js';
 import { serviceTimeInfo } from './servicetime.js';
 import { cardNotePreview } from './square-customers.js';
+import { normalizeNotesList, NOTE_MAX } from '../staff-notes-util.js';
 
 const cfg = () => getState().config;
 const q   = () => getState().queue;
@@ -801,6 +802,7 @@ export function showTechStatusMenu(event, staffId) {
   const menu = document.getElementById('tech-status-menu');
   if (_techStatusMenuId === staffId && menu && !menu.classList.contains('hidden')) { closeTechStatusMenu(); return; }
   _techStatusMenuId = staffId;
+  _tsmRemovePending = null; _tsmEditingId = null;   // never carry a pending remove/edit from the previous tech
   const st = staffById(staffId);
   if (!menu || !st) return;
   document.getElementById('tech-status-menu-name').textContent = st.name;
@@ -816,13 +818,12 @@ export function showTechStatusMenu(event, staffId) {
   document.getElementById('tsm-break').style.opacity = isBreak ? '1' : '0.4';
   const profileSvcs = (st.services && st.services.length > 0) ? st.services.map(sid => svc(sid)?.label).filter(Boolean) : cfg().services.map(s => s.label);
   document.getElementById('tech-status-menu-services').innerHTML = profileSvcs.length > 0 ? profileSvcs.map(l => `<div>${l}</div>`).join('') : '<div class="italic text-outline">No services configured</div>';
-  // Notes/preferences: editable by managers (canDo manageStaff), read-only for everyone else. The id is
-  // stashed on the field so saveTechNotes never depends on _techStatusMenuId still being set at blur time.
-  const canEditNotes = canDo('manageStaff');
-  const nt = document.getElementById('tsm-notes');
-  if (nt) { nt.value = st.notes || ''; nt.dataset.sid = staffId; nt.readOnly = !canEditNotes; nt.placeholder = canEditNotes ? 'e.g. prefers pedicures · leaves at 5' : (st.notes ? '' : 'No notes yet'); }
+  // Notes/preferences: a per-note list (add/edit/remove), editable by managers, read-only for others.
+  _tsmCanEdit = canDo('manageStaff');
+  renderTechNotesColumn(staffId);
   const rect = event.currentTarget.getBoundingClientRect();
-  menu.style.left = Math.min(rect.left, window.innerWidth - 290) + 'px';
+  // Wider popup (services | notes side-by-side): clamp left to the viewport, floored at 8 so it never pins off-screen.
+  menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 496)) + 'px';
   menu.classList.remove('hidden');
   // Content-aware: flip above the tech if it would overflow the bottom of the viewport.
   const menuH = menu.offsetHeight;
@@ -839,27 +840,78 @@ function _tsmOutsideClick(e) {
   closeTechStatusMenu();
 }
 export function closeTechStatusMenu() {
-  saveTechNotes();   // guarantee a typed note persists on EVERY close path (Esc, X, Break/Off, outside) — idempotent (readOnly/unchanged → no-op)
+  flushTechNoteDraft();   // commit a half-typed add-box / open inline edit on EVERY close path (X, Break/Off, outside)
   document.removeEventListener('click', _tsmOutsideClick);
   document.getElementById('tech-status-menu')?.classList.add('hidden');
   _techStatusMenuId = null;
+  _tsmRemovePending = null;
+  _tsmEditingId = null;
 }
-// Build the next staff array with `text` as the matching tech's note, or null when there's nothing worth a
-// synced write (tech not found, or the note is unchanged). Pure + non-mutating → the Option-B staff.patch
-// ships only { id, notes } so a note can never clobber a concurrent payroll/profile edit.
-export function _withTechNotes(staff, id, text) {
-  const arr = staff || [];
-  const i = arr.findIndex(s => s && String(s.id) === String(id));
-  if (i < 0) return null;
-  if ((arr[i].notes || '') === text) return null;   // unchanged → skip the write
-  return arr.map((s, j) => j === i ? { ...s, notes: text } : s);
+
+// ── Tech notes list (per-note add/edit/remove via the staff.notePatch op) ─────
+let _tsmCanEdit = false;        // manager-only edit controls
+let _tsmRemovePending = null;   // noteId awaiting a 2nd tap to confirm removal
+let _tsmEditingId = null;       // noteId currently being inline-edited
+const _noteUid = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'n-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+
+// Re-reads the tech's current notes from the store and repaints the notes column in place (the popup
+// is built imperatively with no store subscription, so each add/edit/remove calls this).
+export function renderTechNotesColumn(staffId) {
+  const list = document.getElementById('tsm-notes-list'); if (!list) return;
+  const notes = normalizeNotesList(staffById(staffId));
+  const canEdit = _tsmCanEdit;
+  const rows = notes.map(n => `<div class="flex items-start gap-1.5 py-1 border-b border-surface-container-high" data-note-id="${n.id}">
+      <span class="flex-1 text-xs font-body text-on-surface" style="white-space:pre-wrap;word-break:break-word">${escHtml(n.text)}</span>
+      ${canEdit ? `<button onclick="tsmEditNote('${n.id}')" title="Edit" class="text-outline hover:text-primary flex-shrink-0 p-1 -m-0.5"><span class="material-symbols-outlined" style="font-size:15px">edit</span></button><button onclick="tsmRemoveNote('${n.id}', this)" title="Remove" class="text-outline hover:text-error flex-shrink-0 p-1 -m-0.5"><span class="material-symbols-outlined" style="font-size:15px">close</span></button>` : ''}
+    </div>`).join('') || `<div class="text-xs font-body italic text-outline py-1">${canEdit ? 'No notes yet — add one below.' : 'No notes yet.'}</div>`;
+  const addBox = canEdit ? `<div class="flex items-center gap-1.5 mt-2">
+      <input id="tsm-note-input" type="text" maxlength="${NOTE_MAX}" placeholder="Add a note…" onkeydown="if(event.key==='Enter')tsmAddNote()" class="flex-1 min-w-0 border border-surface-container-high rounded-lg px-2 py-1 text-xs font-body text-on-surface bg-transparent outline-none focus:border-primary">
+      <button onclick="tsmAddNote()" class="flex-shrink-0 px-2.5 py-1 rounded-lg text-xs font-body font-semibold" style="background:#2a7a4f;color:#fff">Add</button>
+    </div>` : '';
+  list.innerHTML = rows + addBox;
 }
-export function saveTechNotes() {
-  const nt = document.getElementById('tsm-notes'); if (!nt || nt.readOnly) return;
-  const id = nt.dataset.sid || _techStatusMenuId; if (!id) return;
-  const text = (nt.value || '').trim().slice(0, 300);
-  if (!_withTechNotes(cfg().staff, id, text)) return;   // unchanged/missing → no write
-  dispatch('staff.patch', { id, fields: { notes: text } });   // field-merge op (DO merges by id — never clobbers payroll)
+export function tsmAddNote() {
+  const inp = document.getElementById('tsm-note-input'), id = _techStatusMenuId; if (!inp || !id) return;
+  const text = (inp.value || '').trim(); if (!text) return;
+  dispatch('staff.notePatch', { id, action: 'add', note: { id: _noteUid(), text } });
+  renderTechNotesColumn(id);
+  document.getElementById('tsm-note-input')?.focus();
+}
+export function tsmEditNote(noteId) {
+  const row = document.querySelector(`#tsm-notes-list [data-note-id="${noteId}"]`), id = _techStatusMenuId; if (!row || !id) return;
+  const n = normalizeNotesList(staffById(id)).find(x => x.id === noteId); if (!n) return;
+  _tsmEditingId = noteId;
+  row.innerHTML = `<input id="tsm-edit-input" type="text" maxlength="${NOTE_MAX}" onkeydown="if(event.key==='Enter')tsmEditSave('${noteId}')" class="flex-1 min-w-0 border border-primary rounded-lg px-2 py-1 text-xs font-body text-on-surface bg-transparent outline-none">
+    <button onclick="tsmEditSave('${noteId}')" title="Save" class="text-primary flex-shrink-0"><span class="material-symbols-outlined" style="font-size:16px">check</span></button>`;
+  const inp = row.querySelector('#tsm-edit-input'); if (inp) { inp.value = n.text; inp.focus(); }
+}
+export function tsmEditSave(noteId) {
+  const inp = document.getElementById('tsm-edit-input'), id = _techStatusMenuId; if (!id) return;
+  _tsmEditingId = null;
+  const text = (inp?.value || '').trim();
+  dispatch('staff.notePatch', text
+    ? { id, action: 'edit', note: { id: noteId, text } }
+    : { id, action: 'remove', note: { id: noteId } });   // cleared to empty → remove it
+  renderTechNotesColumn(id);
+}
+export function tsmRemoveNote(noteId, btn) {
+  const id = _techStatusMenuId; if (!id) return;
+  if (_tsmRemovePending === noteId) {   // 2nd tap confirms
+    _tsmRemovePending = null;
+    dispatch('staff.notePatch', { id, action: 'remove', note: { id: noteId } });
+    renderTechNotesColumn(id);
+    return;
+  }
+  _tsmRemovePending = noteId;
+  if (btn) btn.innerHTML = '<span class="text-[10px] font-semibold text-error">Remove?</span>';
+  setTimeout(() => { if (_tsmRemovePending === noteId && _techStatusMenuId === id) { _tsmRemovePending = null; renderTechNotesColumn(id); } }, 3000);
+}
+// On close: commit a pending inline edit, then a non-empty add-box draft, so nothing typed is lost.
+export function flushTechNoteDraft() {
+  const id = _techStatusMenuId; if (!id) return;
+  const draft = (document.getElementById('tsm-note-input')?.value || '').trim();   // snapshot BEFORE edit-save repaints the column
+  if (_tsmEditingId && document.getElementById('tsm-edit-input')) tsmEditSave(_tsmEditingId);
+  if (draft) dispatch('staff.notePatch', { id, action: 'add', note: { id: _noteUid(), text: draft } });
 }
 export function setTechBreak(isBreak) {
   if (!_techStatusMenuId) return;

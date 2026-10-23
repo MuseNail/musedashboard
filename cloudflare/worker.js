@@ -5,6 +5,11 @@ import {
   validateTicketInput, validateReplyInput, ticketKey, newTicketId,
   buildTicket, applyReply, markRead, sanitizeTicket, isAdminRole,
 } from './support-util.js';
+// Deliberate exception to the "worker duplicates small client helpers" convention (see monthOfTs below):
+// this notes core is a genuinely SHARED pure module imported by BOTH the client store and the DO, so the
+// optimistic merge and the authoritative merge can't drift. It's pure ESM (no DOM/node deps), so wrangler
+// bundles it cleanly. The file lives under js/app/ so the client imports it normally + it precaches.
+import { applyNotePatch, normalizeNotesList, notesMirror } from '../js/app/staff-notes-util.js';
 //
 // Routes
 //   GET/POST/PUT /square/*  — CORS proxy → Square API
@@ -1437,6 +1442,21 @@ export class MuseSalonDO {
               payload.updatedAt < cur._notesAt) { stale = true; break; }
           arr[i] = { ...cur, ...(payload.fields || {}) };
           if (typeof payload.updatedAt === 'number') { arr[i]._notesAt = payload.updatedAt; arr[i]._notesBy = payload.updatedBy || null; }
+          await this.state.storage.put('config:staff', arr);
+          break;
+        }
+        case 'staff.notePatch': {
+          // Per-note merge (add/edit/remove by id) onto ONE staff entry's notesList. The DO runs
+          // serially, so this read-modify-write is atomic: two devices adding DIFFERENT notes both
+          // survive (vs staff.patch's whole-value replace). Mirrors to st.notes for old-client
+          // back-compat. Like staff.patch it does NOT bump cfgmeta:staff — notes yield to a profile write.
+          const arr = await this.state.storage.get('config:staff');
+          if (!Array.isArray(arr)) break;
+          const i = arr.findIndex(s => s && String(s.id) === String(payload.id));
+          if (i < 0) break;
+          const cur = arr[i];
+          const list = applyNotePatch(normalizeNotesList(cur), payload.action, payload.note);
+          arr[i] = { ...cur, notesList: list, notes: notesMirror(list) };
           await this.state.storage.put('config:staff', arr);
           break;
         }

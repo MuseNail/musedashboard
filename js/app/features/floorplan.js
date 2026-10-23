@@ -11,8 +11,8 @@ import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap, escHtml } from '../utils.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, applyAssignmentStatus, applyEntryStatus, effectiveServiceStatus } from './status.js';
 import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef, categoryMaxTechs } from './queue.js';
-import { getActiveTurnsOrder, getTechStatusColor, getTechTurns } from './turns.js';
-import { serviceTimeInfo } from './servicetime.js';
+import { getActiveTurnsOrder, getTechStatusColor, getTechTurns, getActiveTechEntries } from './turns.js';
+import { serviceTimeInfo, liveAssignmentMs } from './servicetime.js';
 import { cardNotePreview } from './square-customers.js';
 
 const cfg = () => getState().config;
@@ -168,6 +168,28 @@ function stationHtml(id, entry) {
   </div>`;
 }
 
+// Item 2b: pick which of a tech's in-service services to time on their floor card — the
+// longest-running one (by live elapsed, so a paused/resumed service with banked time wins).
+// Pure + injected (liveMsOf) so it's unit-testable without app state.
+export function pickTechTimingAssignment(entries, techId, liveMsOf) {
+  let best = null, bestMs = -1;
+  for (const e of (entries || [])) {
+    for (const a of (e.assignments || [])) {
+      if (a.techId === techId && a.status === 'inservice') {
+        const ms = liveMsOf ? liveMsOf(a) : 0;
+        if (ms > bestMs) { bestMs = ms; best = a; }
+      }
+    }
+  }
+  return best;
+}
+
+// Tap-chevron scroll for the waiting tray (reliable on touch, where the drag-to-seat bubbles capture a swipe).
+export function floorTrayScroll(dir) {
+  const row = document.querySelector('#floorplan-tray .floor-tray-row');
+  if (row) row.scrollBy({ left: dir * Math.max(140, row.clientWidth * 0.7), behavior: 'smooth' });
+}
+
 // Display-only row of today's staff (active rotation) with their status color code,
 // centered under the floor. Reuses the turns-grid colors so it matches.
 function renderFloorStaffRow() {
@@ -197,10 +219,17 @@ function renderFloorStaffRow() {
     const bonusBadge = techTurns.bonus > 0 ? `<span title="${techTurns.bonus} bonus turn${techTurns.bonus > 1 ? 's' : ''} today" style="position:absolute;bottom:-3px;left:-3px;min-width:25px;height:23px;padding:0 4px;border-radius:12px;background:#a9d2c7;color:#134b3c;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid var(--surface-container-lowest,#fff);box-sizing:border-box">+${techTurns.bonus}</span>` : '';
     const nextBadge = (!floorEditMode && id === nextUpId) ? `<span title="Next up" style="position:absolute;top:-7px;left:50%;transform:translateX(-50%);background:#1a5252;color:#fff;font-size:9px;font-weight:700;padding:1px 7px;border-radius:999px;white-space:nowrap;display:inline-flex;align-items:center;gap:2px;box-shadow:0 1px 3px rgba(0,0,0,.25)"><span class="material-symbols-outlined" style="font-size:11px">arrow_upward</span>Next</span>` : '';
     const grip = floorEditMode ? '' : `<span class="material-symbols-outlined fp-grip" style="position:absolute;top:-2px;left:-6px;background:var(--surface-container-lowest,#fff);border-radius:7px;padding:1px;box-shadow:0 1px 3px rgba(0,0,0,.25)">drag_indicator</span>`;
+    // 2b: current-customer service timer (elapsed ▸ ~avg), reusing the same helper the customer cards use.
+    const timedAssign = floorEditMode ? null : pickTechTimingAssignment(getActiveTechEntries(id), id, liveAssignmentMs);
+    const sti = timedAssign ? serviceTimeInfo(timedAssign) : null;
+    const timerHtml = sti && sti.live ? `<span style="font-size:10px;font-weight:700;line-height:1.15;color:${sti.color};white-space:nowrap;max-width:76px;overflow:hidden;text-overflow:ellipsis;display:block;text-align:center">${sti.text}</span>` : '';
     return `<div class="flex flex-col items-center gap-1 ${drag}" data-tech-id="${id}" style="width:78px${floorEditMode ? '' : ';cursor:grab'}" ${floorEditMode ? '' : 'title="Tap for status · drag onto a station to assign"'}>
       <div style="position:relative">${avatar}${turnsBadge}${bonusBadge}${nextBadge}${grip}</div>
       <span style="font-size:13px;font-weight:700;color:var(--md-on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:76px">${escHtml(st.name.split(' ')[0])}</span>
-      <span style="font-size:10px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
+      <div style="min-height:28px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;line-height:1.15">
+        <span style="font-size:10px;font-weight:700;color:${c.bg === '#f3f4f6' ? '#9ca3af' : c.bg}">${c.label}</span>
+        ${timerHtml}
+      </div>
     </div>`;
   }).join('');
   el.innerHTML = `<div class="flex flex-wrap items-start justify-center gap-3 pt-3 border-t border-surface-container-high">${bubbles}</div>`;
@@ -229,12 +258,24 @@ export function renderFloorPlan() {
   if (tray) {
     // Always render the tray box in live mode (even when empty) so the grid below
     // doesn't jump when guests get added/seated. Only hide it while editing layout.
+    // Constant-height tray (both states share the height so the grid never jumps). Waiting guests
+    // sit on ONE non-wrapping row that scrolls sideways: each bubble is shrink-0 (so the row overflows
+    // instead of squishing) and the row is touch-action:pan-x so an iPad can swipe it (bubbles keep
+    // their own drag-to-seat touch handling).
     if (floorEditMode) tray.innerHTML = '';
-    else if (unplaced.length === 0) tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
+    else if (unplaced.length === 0) tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2" style="height:76px;box-sizing:border-box">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant">All guests seated — drag a guest here to un-seat.</div></div>`;
-    else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2">
+    else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2" style="height:76px;box-sizing:border-box">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not seated — drag onto a station (${unplaced.length})</div>
-      <div class="flex gap-1.5 flex-wrap">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#cfe0e0' : '#ffe9c4'};color:#1f2937;font-size:11px"><span class="material-symbols-outlined fp-grip">drag_indicator</span>${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold">${escHtml(e.name)}</span></div>`).join('')}</div></div>`;
+      <div class="floor-tray-wrap" style="position:relative">
+        <button type="button" onclick="floorTrayScroll(-1)" class="floor-tray-chev floor-tray-chev-l" title="Scroll left"><span class="material-symbols-outlined" style="font-size:18px">chevron_left</span></button>
+        <div class="floor-tray-row flex gap-1.5" style="overflow-x:auto;overflow-y:hidden;touch-action:pan-x;scrollbar-width:thin">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1 flex-shrink-0" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#cfe0e0' : '#ffe9c4'};color:#1f2937;font-size:11px"><span class="material-symbols-outlined fp-grip">drag_indicator</span>${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold" style="white-space:nowrap">${escHtml(e.name)}</span></div>`).join('')}</div>
+        <button type="button" onclick="floorTrayScroll(1)" class="floor-tray-chev floor-tray-chev-r" title="Scroll right"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>
+      </div></div>`;
+    // Reveal the scroll chevrons + right-edge fade only when the waiting row actually overflows (the
+    // iPad hides overlay scrollbars, so this is the "more guests →" affordance / reliable pan handle).
+    const _trow = tray.querySelector('.floor-tray-row');
+    if (_trow && _trow.scrollWidth > _trow.clientWidth + 2) _trow.closest('.floor-tray-wrap')?.classList.add('has-overflow');
   }
 
   grid.style.position = 'relative';

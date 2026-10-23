@@ -278,6 +278,21 @@
     -webkit-touch-callout: none;
     -webkit-user-drag: none;   /* desktop: stop the native image/element drag (ghost img) from hijacking the custom pointer drag */
   }
+  /* Waiting-tray horizontal-scroll affordances — only shown when the single row overflows
+     (the floor bubbles are drag-to-seat, so a touch swipe can't reliably pan; the chevrons do). */
+  .floor-tray-chev {
+    display: none; position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+    width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 50%;
+    background: var(--surface-container-lowest, #fff); color: var(--md-on-surface, #1f2937);
+    box-shadow: 0 1px 4px rgba(0,0,0,.25); cursor: pointer;
+  }
+  .floor-tray-chev-l { left: -4px; }
+  .floor-tray-chev-r { right: -4px; }
+  .floor-tray-wrap.has-overflow .floor-tray-chev { display: flex; }
+  .floor-tray-wrap.has-overflow::after {
+    content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 28px; pointer-events: none;
+    background: linear-gradient(to right, transparent, var(--surface-container, #eceff1));
+  }
   /* Turns bubbles drag via tap-and-hold (see initTurnsDrag), so they MUST still allow
      native panning — otherwise a swipe can't scroll a tech's overflowing turn row or the
      waiting list. The long-press arms the drag while the finger is still (no scroll has
