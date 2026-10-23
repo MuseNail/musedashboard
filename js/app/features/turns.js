@@ -26,21 +26,94 @@ function saveTurnsHistory() { try { localStorage.setItem('muse_turns_history', J
 
 // ── Turn config + classification (formerly in app.js) ─────────────────────────
 export function getTurnConfig() {
-  const defaults = { fullMin: 28, halfMin: 12 };
-  const tc = cfg().turn_config || {};
-  return Object.keys(tc).length ? { ...defaults, ...tc } : defaults;
+  // Defaults reproduce the pre-overhaul (v5.77) behavior EXACTLY: half + bonus on, bonus both by
+  // the always-bonus list and by cost (<halfMin), half by cost, bonus-first precedence. A stored
+  // turn_config overlays these, so old installs (only {fullMin,halfMin}) behave identically.
+  const defaults = {
+    fullMin: 28, halfMin: 12,
+    halfEnabled: true, bonusEnabled: true,
+    halfByCost: true, halfByService: false,
+    bonusByCost: true, bonusByService: true,
+    precedence: 'bonusFirst',
+  };
+  return { ...defaults, ...(cfg().turn_config || {}) };
 }
-export function saveTurnConfig(c) { dispatch('config.set', { key: 'turn_config', value: c }); }
-export function isAlwaysBonusService(serviceId) { return cfg().bonus_services.includes(serviceId); }
+// Merge a partial patch over the stored turn_config so a single-setting save never wipes the other
+// turn keys (the key is stored whole). Pure → unit-tested; every writer must pass a PARTIAL patch.
+export function _mergeTurnConfig(stored, patch) { return { ...(stored || {}), ...patch }; }
+export function saveTurnConfig(patch) { dispatch('config.set', { key: 'turn_config', value: _mergeTurnConfig(cfg().turn_config, patch) }); }
+export function isAlwaysBonusService(serviceId) { return (cfg().bonus_services || []).includes(serviceId); }
 export function saveBonusServices(ids) { dispatch('config.set', { key: 'bonus_services', value: ids }); }
+export function isHalfService(serviceId) { return (cfg().half_services || []).includes(serviceId); }
+export function saveHalfServices(ids) { dispatch('config.set', { key: 'half_services', value: ids }); }
+
+// Pure turn classifier (Item D). Honors the half/bonus on-off toggles, the by-cost / by-service
+// methods (both may be active → OR'd), and the owner-selectable precedence. A service-list match
+// classifies even when UNPRICED (so an always-bonus service reads 'bonus' at $0, as before);
+// amount<=0 with no service match → 'unpriced' (not counted). Flags are injected (isBonusSvc/
+// isHalfSvc) so it's testable without app state.
+export function classifyAmount(amount, serviceId, c, flags) {
+  const isBonusSvc = !!(flags && flags.isBonusSvc);
+  const isHalfSvc  = !!(flags && flags.isHalfSvc);
+  const svcBonus  = c.bonusEnabled && c.bonusByService && isBonusSvc;
+  const svcHalf   = c.halfEnabled  && c.halfByService  && isHalfSvc;
+  const costBonus = c.bonusEnabled && c.bonusByCost && amount > 0 && amount < c.halfMin;
+  const costHalf  = c.halfEnabled  && c.halfByCost  && amount >= c.halfMin && amount < c.fullMin;
+  const costFull  = amount >= c.fullMin;
+  if (amount <= 0 && !svcBonus && !svcHalf) return 'unpriced';
+  const bonus = svcBonus || costBonus;
+  const half  = svcHalf  || costHalf;
+  if (c.precedence === 'highestValue') {
+    if (costFull || (amount > 0 && !half && !bonus)) return 'full';
+    if (half) return 'half';
+    if (bonus) return 'bonus';
+    return 'full';
+  }
+  if (c.precedence === 'costWins') {
+    if (amount > 0) {
+      if (costFull) return 'full';
+      if (costHalf) return 'half';
+      if (costBonus) return 'bonus';
+      return 'full';
+    }
+    if (svcBonus) return 'bonus';
+    if (svcHalf) return 'half';
+    return 'unpriced';
+  }
+  // 'bonusFirst' (default = legacy order: bonus beats half beats full)
+  if (bonus) return 'bonus';
+  if (half) return 'half';
+  return 'full';
+}
 
 export function classifyTurn(cost, serviceId) {
-  if (isAlwaysBonusService(serviceId)) return 'bonus';
-  const c = getTurnConfig();
-  if (!cost || cost <= 0) return 'unpriced';
-  if (cost >= c.fullMin) return 'full';
-  if (cost >= c.halfMin) return 'half';
-  return 'bonus';
+  return classifyAmount(cost || 0, serviceId, getTurnConfig(), {
+    isBonusSvc: isAlwaysBonusService(serviceId),
+    isHalfSvc: isHalfService(serviceId),
+  });
+}
+
+// Status-aware class (Item A): a DONE / awaiting-price service (status 'complete') counts even
+// before it's priced, using the service's EXPECTED price (its baseCost) — reclassifying to the real
+// value once a price is entered. Not-complete-and-unpriced → 'unpriced' (not counted, as before),
+// and a complete service with no expected price also stays 'unpriced' (no "provisional full" guess).
+// A comp keeps its real a.cost, so it classifies by that. This NEVER writes a.cost.
+export function turnClassOf(a) {
+  if (!a) return 'unpriced';
+  const priced = (a.cost || 0) > 0;
+  const expected = priced ? a.cost
+    : (a.status === 'complete' ? (svc(a.serviceId)?.baseCost || 0) : 0);
+  return classifyAmount(expected || 0, a.serviceId || '', getTurnConfig(), {
+    isBonusSvc: isAlwaysBonusService(a.serviceId),
+    isHalfSvc: isHalfService(a.serviceId),
+  });
+}
+
+// The grey "~N" provisional cue applies ONLY to a number-bearing (full/half) turn counted from the
+// expected price on a done/awaiting-price service that isn't priced yet — the number may shift when a
+// real price lands. A 'bonus' shows the word "Bonus" (keeps its teal pill), and 'unpriced' shows '?'.
+export function isEstimatedTurn(a, tt) {
+  return (a.cost || 0) === 0 && a.status === 'complete' && (tt === 'full' || tt === 'half');
 }
 
 // The rotation, excluding any ids that are blank or belong to deactivated staff
@@ -87,7 +160,7 @@ export function removeTurnSkip(skipId) {
 export function getTechTurns(techId) {
   let full = 0, half = 0, bonus = 0;
   getTechAllAssignments(techId).forEach(({ assignment: a }) => {
-    const t = classifyTurn(a.cost || 0, a.serviceId || '');
+    const t = turnClassOf(a);
     if (t === 'full') full++; else if (t === 'half') half += 0.5; else if (t === 'bonus') bonus++;
   });
   full += todaySkips(techId).length;   // each manual skip counts as a full turn
@@ -252,8 +325,9 @@ function setTurnsTechColW(px) { localStorage.setItem('muse_turns_techcol_w', Str
 // Turn-number badge style, shared by the live grid + history so the two can't drift: amber half,
 // light-teal bonus, neutral grey for an unpriced "?" (so it never reads as a counted turn), and a
 // solid teal pill for a real turn number (was a faint opacity:0.75 — easy to miss).
-const turnPillStyle = (tt, label) =>
-    tt === 'half'  ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px'
+const turnPillStyle = (tt, label, estimated) =>
+    estimated      ? 'background:#e3e8ea;color:#5a6b70;padding:0 5px;border-radius:4px'   // provisional (from expected price, not yet real)
+  : tt === 'half'  ? 'background:#f5c870;color:#3a2800;padding:0 4px;border-radius:4px'
   : tt === 'bonus' ? 'background:#a9d2c7;color:#134b3c;padding:0 4px;border-radius:4px'
   : label === '?'  ? 'background:#e3e8ea;color:#5a6b70;padding:0 5px;border-radius:4px'
   :                  'background:#1a5252;color:#fff;padding:0 5px;border-radius:4px';
@@ -452,11 +526,13 @@ export function renderTurnsTechGrid() {
     const turnDisplay = turns.total > 0
       ? `<span class="text-sm font-headline font-bold flex-shrink-0 ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:#1a5252'}">${turns.total}t</span>`
       : `<span class="text-sm font-headline text-outline-variant flex-shrink-0">0t</span>`;
+    // B: the turn count + billed total live in their OWN fixed columns at the far right (below),
+    // so the left column is just the tech's photo, name, and status.
     const techCol = `<div class="flex items-center gap-2 flex-shrink-0 pr-2" style="width:var(--turns-techcol-w,155px)">
       <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
       <div class="min-w-0" style="flex:1">
-        <div class="flex items-center gap-1.5 leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate" style="min-width:0">${st.name}</span>${turnDisplay}<span class="turns-billed text-[10px] font-body font-semibold flex-shrink-0" style="color:#1a5252;margin-left:auto">$${billed.toFixed(0)}</span></div>
-        <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1 flex-shrink-0" style="${avPres.chip}">${avPres.lead}${avPres.label}</span>${turns.bonus > 0 ? `<span class="text-[10px] text-secondary flex-shrink-0">+${turns.bonus}b</span>` : ''}</div>
+        <div class="leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate" style="min-width:0;display:block">${st.name}</span></div>
+        <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1 flex-shrink-0" style="${avPres.chip}">${avPres.lead}${avPres.label}</span></div>
       </div></div>`;
 
     const MIN_SLOTS = 5;
@@ -483,10 +559,11 @@ export function renderTurnsTechGrid() {
       if (item) {
         const { entry: e, assignment: a } = item;
         const cost = a.cost || 0;
-        const tt = classifyTurn(cost, a.serviceId || '');
+        const tt = turnClassOf(a);
+        const estimated = isEstimatedTurn(a, tt);   // grey "~N" only on full/half counted from the expected price
         if (tt === 'full') turnCounter += 1; else if (tt === 'half') turnCounter += 0.5;
         const turnLabelNum = Number.isInteger(turnCounter) ? turnCounter : turnCounter.toFixed(1);
-        const turnLabel = tt === 'bonus' ? 'Bonus' : (cost === 0 ? '?' : '' + turnLabelNum);
+        const turnLabel = tt === 'bonus' ? 'Bonus' : tt === 'unpriced' ? '?' : (estimated ? '~' + turnLabelNum : '' + turnLabelNum);
         // Use the awaiting-price-aware status so a "Done — tech will price" service reads
         // as violet "Awaiting price", not the blue "Done" fill (its raw status is 'complete').
         const ss = effectiveServiceStatus(e, a);
@@ -505,7 +582,7 @@ export function renderTurnsTechGrid() {
         const apptPill = e.isAppointment ? `<span title="Booked appointment" style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;background:#ede7f6;color:#42306b;font-size:8px;font-weight:700;line-height:1;padding:2px 5px;border-radius:999px"><span class="material-symbols-outlined" style="font-size:9px;font-variation-settings:'FILL' 1">event</span>Appt</span>` : '';
         return `<div class="flex-shrink-0 w-[150px] px-1 turns-filled-slot" data-entry-id="${e.id}" data-tech-id="${staffId}" data-slot="${slotIdx}">
           <button onclick="showGroupAssignModal('${e.id}')" class="w-full h-full rounded-xl px-2 py-1.5 text-left active:scale-95 transition-all text-xs font-body" style="background:${bg};color:${fg};min-height:${slotH}px${outline}">
-            <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${turnPillStyle(tt, turnLabel)}">${turnLabel}</span>` : ''}</div>
+            <div class="flex items-center justify-between gap-0.5 mb-0.5"><div class="flex items-center gap-0.5 min-w-0">${groupDot}${splitTag}<span class="font-semibold text-[11px] truncate">${e.name}</span></div>${turnLabel ? `<span class="text-[11px] font-headline font-bold flex-shrink-0 ml-1" style="${turnPillStyle(tt, turnLabel, estimated)}" ${estimated ? 'title="Estimated from the service’s expected price — updates when a real price is entered"' : ''}>${turnLabel}</span>` : ''}</div>
             <div class="text-[10px] opacity-90 leading-tight">${svcLabel}${a.station ? ' · ' + a.station : ''}${costStr ? ' · ' + costStr : ''}</div>
             ${(() => { const sti = serviceTimeInfo(a); return sti ? `<div class="text-[10px] font-bold leading-tight" style="color:${sti.color}">${sti.text}</div>` : ''; })()}
             <div class="flex items-center gap-1"><span class="text-[9px] opacity-60" style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${timeStr} · ${statusTimeHtml(entryStatusSince(e), isPaidStatus(ss))}</span>${apptPill}</div>
@@ -526,7 +603,13 @@ export function renderTurnsTechGrid() {
     const rightSide = sep === 'lane'
       ? `<div class="flex min-w-0" style="flex:1;background:#eef1f2;border:0.5px solid #e0e5e7;border-radius:12px;padding:4px 2px 4px 6px">${slotRow}</div>`
       : `<div class="self-stretch flex-shrink-0" style="width:1px;background:#d3dbdc;margin:6px 0"></div>${slotRow}`;
-    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${rightSide}</div>`;
+    // B: dedicated far-right columns — turn count (always visible) then the billed $ (hidden by
+    // .turns-hide-totals when the device turns totals off). They sit OUTSIDE the scrolling slot row.
+    const turnsCountCol = `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-l border-surface-container-high pl-1" style="width:66px">
+      ${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary leading-none mt-0.5 flex-shrink-0">+${turns.bonus}b</span>` : ''}
+    </div>`;
+    const moneyCol = `<div class="turns-billed flex-shrink-0 flex items-center justify-end self-stretch" style="width:56px"><span class="text-xs font-headline font-bold" style="color:#1a5252">$${billed.toFixed(0)}</span></div>`;
+    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${rightSide}${turnsCountCol}${moneyCol}</div>`;
   }).filter(Boolean).join('');
 
   grid.innerHTML = rows || '<div class="text-sm text-on-surface-variant py-4 text-center">No active technicians.</div>';

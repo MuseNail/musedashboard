@@ -138,6 +138,12 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.78', items: [
+    { icon: 'tune', t: 'Set up how turns are counted — Turn Rules', d: 'New in Settings → Workflow → Turn Rules: you control what counts as a full, half, or bonus turn. Switch half turns and bonus turns on or off; decide each one by price, by specific services, or both; set the dollar cutoffs; and pick which rule wins when a service matches more than one. If you don’t change anything, turns count exactly like they do today. Note: after you change Turn Rules, reload the app on every device (front desk + techs’ phones) so they all count by the new rules.' },
+    { icon: 'schedule', t: 'A finished service counts its turn right away', d: 'When a service is marked Done / “awaiting price,” its turn now shows up immediately using the service’s Base cost as an estimate (shown greyed with a “~”), instead of sitting as a “?” until someone types the price. Once a real price is entered, it updates to the real amount. Services with no Base cost still wait for a price, just like before — so set a Base cost on a service if you want it to count the moment it’s done.' },
+    { icon: 'view_column', t: 'Turns board: turn count in its own column', d: 'Each technician’s turn count now has its own column pinned at the right edge of the Turns board, so it’s easy to read straight down the list, with the money total beside it when totals are turned on.' },
+    { icon: 'add_circle', t: 'Bonus turns shown on the Floor Plan', d: 'Each tech’s card on the Floor Plan now shows their bonus-turn count (a small “+N” badge), matching the Turns board.' },
+  ] },
   { v: 'v5.77', items: [
     { icon: 'notifications_active', t: 'Chat notifications now work from the front desk', d: 'Front-desk users (including managers/admins, who don’t use the technician app) now get phone/tablet notifications for chat messages sent to them. The first time you sign in, the device asks to allow notifications; after that it just works, and follows whoever’s signed in on that iPad. You can turn it on or off anytime from your account menu (tap your name → “Chat notifications”). Tip: on the front-desk iPad, sign in and tap Allow when prompted so you catch DMs and @mentions. Also: the chat window now closes automatically when you sign out or the app returns to the sign-in screen, instead of staying open.' },
   ] },
