@@ -185,23 +185,32 @@ export function getTechStatusColor(staffId) {
 }
 
 // ── Suggestion engine ─────────────────────────────
+// Can this tech perform this service? An empty (or absent) service menu = does everything.
+export function _techDoesService(st, serviceId) {
+  if (!st) return false;
+  const list = st.services;
+  return !list || list.length === 0 || list.includes(serviceId);
+}
 export function suggestTechForService(serviceId) {
   const order = getActiveTurnsOrder();
   if (order.length === 0) return null;
+  const isBonus = isAlwaysBonusService(serviceId);
   const eligible = order.filter(id => {
     const st = staffById(id);
     if (!st) return false;
     if (cfg().turns_break.includes(id) || cfg().turns_off.includes(id)) return false;
-    if (st.services && st.services.length > 0 && !st.services.includes(serviceId)) return false;
+    if (!_techDoesService(st, serviceId)) return false;   // skills checked FIRST — never suggest a tech who can't do it
     return getActiveTechEntries(id).length === 0;
   });
   if (eligible.length === 0) return null;
-  let best = null, bestTurns = Infinity, bestIdx = Infinity;
-  eligible.forEach(id => {
-    const turns = getTechTurns(id).total, idx = order.indexOf(id);
-    if (turns < bestTurns || (turns === bestTurns && idx < bestIdx)) { best = id; bestTurns = turns; bestIdx = idx; }
+  // Fewest turns → (for a bonus service) fewest bonus turns → rotation order.
+  eligible.sort((a, b) => {
+    const ta = getTechTurns(a), tb = getTechTurns(b);
+    if (ta.total !== tb.total) return ta.total - tb.total;
+    if (isBonus && ta.bonus !== tb.bonus) return ta.bonus - tb.bonus;
+    return order.indexOf(a) - order.indexOf(b);
   });
-  if (!best) return null;
+  const best = eligible[0];
   return { techId: best, techName: staffById(best)?.name || '?' };
 }
 // ── Coordinated per-customer suggestions (one tech per service) ───────────────
@@ -238,25 +247,29 @@ export function suggestTechsForEntry(entry) {
   const eligibleBase = order.filter(id =>
     !cfg().turns_break.includes(id) && !cfg().turns_off.includes(id) && getActiveTechEntries(id).length === 0);
   const used = new Set();
-  const canDo = (id, sid) => { const st = staffById(id); return !!st && !(st.services && st.services.length > 0 && !st.services.includes(sid)); };
-  // mode 'specialist' floats limited bonus techs to the front, 'generalist' to the back.
-  const pick = (sid, mode) => {
+  const canDo = (id, sid) => _techDoesService(staffById(id), sid);
+  // kind 'bonus' = pure fairness rotation (fewest turns → fewest bonus → order). kind 'regular'
+  // keeps generalists (empty menu) floated to the front so the limited-menu techs stay free.
+  const pick = (sid, kind) => {
     const cands = eligibleBase.filter(id => !used.has(id) && canDo(id, sid));
     if (!cands.length) return null;
     cands.sort((a, b) => {
-      if (mode) {
+      const ta = getTechTurns(a), tb = getTechTurns(b);
+      if (kind === 'regular') {
         const la = isLimitedBonusTech(a) ? 1 : 0, lb = isLimitedBonusTech(b) ? 1 : 0;
-        if (la !== lb) return mode === 'specialist' ? lb - la : la - lb;
+        if (la !== lb) return la - lb;   // generalist first
+        return ta.total - tb.total || order.indexOf(a) - order.indexOf(b);
       }
-      return getTechTurns(a).total - getTechTurns(b).total || order.indexOf(a) - order.indexOf(b);
+      // bonus: fewest turns → fewest bonus → order
+      return ta.total - tb.total || ta.bonus - tb.bonus || order.indexOf(a) - order.indexOf(b);
     });
     return cands[0];
   };
-  const assign = (sid, mode) => { const id = pick(sid, mode); if (id) { used.add(id); out[sid] = { techId: id, techName: staffById(id)?.name || '?' }; } };
-  need.filter(sid => isAlwaysBonusService(sid)).forEach(sid => assign(sid, 'specialist'));
+  const assign = (sid, kind) => { const id = pick(sid, kind); if (id) { used.add(id); out[sid] = { techId: id, techName: staffById(id)?.name || '?' }; } };
+  need.filter(sid => isAlwaysBonusService(sid)).forEach(sid => assign(sid, 'bonus'));
   need.filter(sid => !isAlwaysBonusService(sid))
     .sort((a, b) => servicePrefRank(a) - servicePrefRank(b))
-    .forEach(sid => assign(sid, 'generalist'));
+    .forEach(sid => assign(sid, 'regular'));
   return out;
 }
 
@@ -626,7 +639,7 @@ export function renderTurnsTechGrid() {
     // tech); the billed $ stays at the far right (hidden by .turns-hide-totals when totals are off).
     // Both columns sit OUTSIDE the scrolling slot row.
     const turnsCountCol = `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-x border-surface-container-high px-1" style="width:var(--turns-totalcol-w,60px)">
-      ${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary leading-none mt-0.5 flex-shrink-0">+${turns.bonus}b</span>` : ''}
+      ${turnDisplay}${turns.bonus > 0 ? `<span class="text-sm font-headline font-bold text-secondary leading-none mt-0.5 flex-shrink-0">+${turns.bonus}b</span>` : ''}
     </div>`;
     const moneyCol = `<div class="turns-billed flex-shrink-0 flex items-center justify-end self-stretch" style="width:56px"><span class="text-xs font-headline font-bold" style="color:#1a5252">$${billed.toFixed(0)}</span></div>`;
     return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${turnsCountCol}${rightSide}${moneyCol}</div>`;
@@ -795,12 +808,13 @@ export function openTurnsAssign(techId, slotIndex) {
     e.services.forEach(sid => {
       const a = (e.assignments || []).find(x => x.serviceId === sid);
       const ss = a ? getAssignmentStatus(e, a) : 'waiting';
-      if (ss !== 'waiting' || (a && a.techId === techId)) return;
+      // Only waiting services this tech can actually DO (skills checked) and isn't already on.
+      if (ss !== 'waiting' || (a && a.techId === techId) || !_techDoesService(tech, sid)) return;
       options.push({ entry: e, serviceId: sid, svcLabel: svc(sid)?.label || sid });
     });
   });
   const list = document.getElementById('turns-assign-list');
-  if (options.length === 0) list.innerHTML = '<div class="text-sm font-body text-on-surface-variant text-center py-4">No waiting services to assign</div>';
+  if (options.length === 0) list.innerHTML = `<div class="text-sm font-body text-on-surface-variant text-center py-4">No waiting services ${tech?.name || 'this tech'} can take</div>`;
   else {
     const byCustomer = {};
     options.forEach(o => { const k = String(o.entry.id); if (!byCustomer[k]) byCustomer[k] = { entry: o.entry, svcs: [] }; byCustomer[k].svcs.push(o); });

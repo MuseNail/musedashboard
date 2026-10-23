@@ -138,6 +138,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.81', items: [
+    { icon: 'balance', t: 'Fairer bonus rotation + skill-aware suggestions', d: 'When the app suggests who takes a bonus service (wax, add-ons, etc.), it now rotates fairly: the tech with the fewest turns is next, ties broken by whoever has the fewest bonus turns, then by rotation order — and only among techs who can actually do that service. Also fixed: tapping a tech’s “next turn” slot no longer offers services that tech doesn’t do.' },
+    { icon: 'format_size', t: 'Bonus count easier to read', d: 'On the Turns board, each tech’s bonus-turn number (+Nb) is now the same size as their turn count.' },
+  ] },
   { v: 'v5.80', items: [
     { icon: 'view_column', t: 'Turns board: the turn count in its own resizable column', d: 'Each tech’s turn count now sits in its own column right next to the tech (just left of the turn bubbles), lined up at the same spot for everyone regardless of name length. Drag its edge to resize it, just like the technician column. The billed total stays at the far right.' },
     { icon: 'tune', t: 'Bonus and half turns: clearer, independent cutoffs', d: 'In Settings → Turn Rules, half turns and bonus turns each now have their own simple “$X or less” cutoff. Bonus is fully independent of half — set “bonus = $X or less” and “half = $Y or less,” and anything above the half cutoff is a full turn. If a price qualifies for both, bonus wins. Your existing thresholds carry over automatically.' },
