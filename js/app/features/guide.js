@@ -60,8 +60,8 @@ body{font-family:'Jost',sans-serif;color:#1a1a1a;background:#e9e6df}
 .bar{position:sticky;top:0;z-index:5;background:#fff;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid #ddd}
 .bar strong{font-size:14px;letter-spacing:1px}
 .bar button{background:#15514f;color:#fff;border:0;border-radius:8px;padding:8px 16px;font-size:14px;cursor:pointer}
-.page{width:8.5in;height:11in;padding:0.5in 0.6in 0.45in;background:#ffffff;margin:18px auto;box-shadow:0 4px 18px rgba(0,0,0,.16);display:flex;flex-direction:column;overflow:hidden}
-.logo{display:block;margin:0 auto;width:2.5in;height:auto}
+.page{width:8.5in;height:11in;padding:0.35in 0.6in 0.45in;background:#ffffff;margin:18px auto;box-shadow:0 4px 18px rgba(0,0,0,.16);display:flex;flex-direction:column;overflow:hidden}
+.logo{display:block;margin:0 auto;width:2.125in;height:auto}
 .rule{border:0;border-top:1px solid #cccccc;width:1.3in;margin:0.12in auto 0}
 .pagetitle{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:25px;color:#1a1a1a;text-align:center;margin:7px 0 0}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:0 0.55in;margin-top:0.16in;flex:1}
@@ -71,8 +71,8 @@ body{font-family:'Jost',sans-serif;color:#1a1a1a;background:#e9e6df}
 .row{display:flex;align-items:baseline;gap:7px;margin:5px 0}
 .nm{font-size:15.5px;font-weight:400;color:#1a1a1a}
 .dots{flex:1;border-bottom:1px dotted #cccccc;transform:translateY(-4px)}
-.pr{font-size:15.5px;font-weight:500;color:#15514f;white-space:nowrap}
-.desc{font-size:12px;color:#1a1a1a;font-style:italic;margin:-2px 0 4px}
+.pr{font-size:13.5px;font-weight:500;color:#15514f;white-space:nowrap}
+.desc{font-size:12px;color:#1a1a1a;font-style:italic;margin:-2px 0 4px;white-space:pre-line}
 .sec+.desc{margin-top:0}
 .subhead{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:14.5px;letter-spacing:1px;color:#2a6d6a;margin:9px 0 3px 0.08in}
 .choose{font-size:11px;font-style:italic;color:#8a8a8a;margin:2px 0 1px 0.16in}

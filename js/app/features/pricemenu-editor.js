@@ -190,9 +190,9 @@ export function renderPriceMenuEditor() {
   const host = document.getElementById('settings-pricemenu-section'); if (!host) return;
   if (!_pmDraft) { _pmDraft = _clone(_live()); _pmBaseline = JSON.stringify(_pmDraft); _pmOpenedFrom = _rawCfg(); }
   _pmResolveSel();
-  const prevScroll = host.querySelector('.pm2-list')?.scrollTop || 0;   // keep the list where it was across a re-render (don't jump to top on select)
+  const prevScroll = host.querySelector('.pm2-listscroll')?.scrollTop || 0;   // keep the list where it was across a re-render (don't jump to top on select)
   host.innerHTML = _editorHtml(_pmDraft);
-  const newList = host.querySelector('.pm2-list'); if (newList) newList.scrollTop = prevScroll;
+  const newList = host.querySelector('.pm2-listscroll'); if (newList) newList.scrollTop = prevScroll;
   _applyFilter();
   _syncDirtyUI();
   _pmInitDrag();
@@ -229,11 +229,14 @@ function _moveOpts(draft, curColId) {
 }
 
 const _inp = (val, oninput, ph, extra) => '<input value="' + escHtml(val) + '" oninput="' + oninput + '" placeholder="' + escHtml(ph || '') + '" aria-label="' + escHtml(ph || 'field') + '" class="pm-f ' + (extra || '') + '" spellcheck="false">';
+// Multi-line field (descriptions / notes) — Enter inserts a line break, which the printed menu keeps
+// (the .desc uses white-space:pre-line), so a description can span two lines.
+const _textarea = (val, oninput, ph, extra) => '<textarea oninput="' + oninput + '" placeholder="' + escHtml(ph || '') + '" aria-label="' + escHtml(ph || 'field') + '" rows="2" class="pm-f ' + (extra || '') + '" spellcheck="false">' + escHtml(val) + '</textarea>';
 const _ctrlBtn = (on, icon, title) => '<button onclick="' + on + '" title="' + escHtml(title) + '" class="pm-ic"><span class="material-symbols-outlined" style="font-size:16px">' + icon + '</span></button>';
 const _q = s => "'" + escAttrJs(s) + "'";
 // Price input: edits like any field, but carries data-pm-price/id so the delegated focusout handler can
 // auto-prepend a "$" when the owner types a bare number (kept off complex values like "from $7" / "56 / 46").
-const _priceInp = (val, id, kind) => '<input value="' + escHtml(val) + '" oninput="' + (kind === 'sub' ? 'pmEditSub' : 'pmEdit') + '(' + _q(id) + ",'pr',this.value)\" data-pm-price=\"" + kind + '" data-pm-id="' + escAttrJs(id) + '" inputmode="decimal" placeholder="$" aria-label="price" class="pm-f ' + (kind === 'sub' ? 'pm-sub-pr' : 'pm-row-pr') + '" spellcheck="false">';
+const _priceInp = (val, id, kind) => '<input value="' + escHtml(val) + '" oninput="' + (kind === 'sub' ? 'pmEditSub' : 'pmEdit') + '(' + _q(id) + ",'pr',this.value)\" data-pm-price=\"" + kind + '" data-pm-id="' + escAttrJs(id) + '" placeholder="$" aria-label="price" class="pm-f ' + (kind === 'sub' ? 'pm-sub-pr' : 'pm-row-pr') + '" spellcheck="false">';
 
 function _subList(rowId, which, list) {
   const label = which === 'variants' ? 'Variants (pick one)' : 'Add-ons (extra)';
@@ -297,9 +300,13 @@ function _listHtml(draft) {
     const pon = ('page:' + p.id) === _pmSel ? ' pm2-on' : '';
     html += '<div class="pm2-item pm2-pageset' + pon + '" onclick="pmSelect(' + _q('page:' + p.id) + ')" role="button" tabindex="0"><span class="material-symbols-outlined" style="font-size:16px">tune</span> Page settings &amp; footer</div>';
   });
-  html += '<div class="pm2-addrow"><button onclick="pmAdd(\'row\')" class="pm-add">+ Service</button><button onclick="pmAdd(\'sub\')" class="pm-add">+ Subheader</button><button onclick="pmAdd(\'sec\')" class="pm-add">+ Section</button></div>';
   return html;
 }
+// Add buttons, docked above the scrolling list so they're always reachable (not at the bottom).
+const _addBar = () => '<div class="pm2-addbar"><span class="pm2-addlbl">Add</span>'
+  + '<button onclick="pmAdd(\'row\')" class="pm-add">+ Service</button>'
+  + '<button onclick="pmAdd(\'sub\')" class="pm-add">+ Subheader</button>'
+  + '<button onclick="pmAdd(\'sec\')" class="pm-add">+ Section</button></div>';
 
 const _backBtn = () => '<button onclick="pmBackToList()" class="pm2-back" title="Back to list" aria-label="Back to list"><span class="material-symbols-outlined" style="font-size:18px">arrow_back</span></button>';
 const _panelEmpty = () => '<div class="pm2-empty">Select a service on the left to edit it.</div>';
@@ -329,7 +336,7 @@ function _panelHtml(draft) {
   if (it.t === 'sec') {
     return head('Section')
       + '<label class="pm2-lab">Heading</label>' + _inp(it.label, 'pmEdit(' + _q(it.id) + ",'label',this.value)", 'Section heading', 'pm-sec-nm')
-      + '<label class="pm2-lab">Note (optional)</label>' + _inp(it.desc || '', 'pmEdit(' + _q(it.id) + ",'desc',this.value)", 'heading note', 'pm-desc')
+      + '<label class="pm2-lab">Note (optional)</label>' + _textarea(it.desc || '', 'pmEdit(' + _q(it.id) + ",'desc',this.value)", 'heading note (press Enter for a 2nd line)', 'pm-desc')
       + del;
   }
   if (it.t === 'sub') {
@@ -339,7 +346,7 @@ function _panelHtml(draft) {
   }
   return head('Service')
     + '<div class="pm2-np">' + _inp(it.nm, 'pmEdit(' + _q(it.id) + ",'nm',this.value)", 'Service name', 'pm-row-nm') + _priceInp(it.pr, it.id, 'main') + '</div>'
-    + '<label class="pm2-lab">Description (optional)</label>' + _inp(it.desc || '', 'pmEdit(' + _q(it.id) + ",'desc',this.value)", 'description', 'pm-desc')
+    + '<label class="pm2-lab">Description (optional)</label>' + _textarea(it.desc || '', 'pmEdit(' + _q(it.id) + ",'desc',this.value)", 'description (press Enter for a 2nd line)', 'pm-desc')
     + _subList(it.id, 'variants', it.variants) + _subList(it.id, 'addons', it.addons)
     + del;
 }
@@ -355,7 +362,7 @@ function _editorHtml(draft) {
     + '</div></div>'
     + '<p class="pm2-hint">Tap <strong>Preview</strong> to see the printed layout. Changes aren’t live until you tap <strong>Save</strong>.</p>'
     + '<div class="pm2-main" data-stack="' + _pmStack + '">'
-    + '<div class="pm2-list">' + _listHtml(draft) + '</div>'
+    + '<div class="pm2-list">' + _addBar() + '<div class="pm2-listscroll">' + _listHtml(draft) + '</div></div>'
     + '<div class="pm2-panel">' + _panelHtml(draft) + '</div>'
     + '</div></div>';
 }
