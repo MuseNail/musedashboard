@@ -1,10 +1,23 @@
 # Live App Priorities (musedashboard)
 
-The build pipeline for the live single-salon app, ordered by impact. Refreshed **2026-09-24 (prod `v5.59`)**. Resolved history is pruned — git log + `AUDIT-2026-06.md` + `ROADMAP.md` + `HELCIM-MIGRATION.md` are the record. Parked/unscheduled ideas live in `IDEABOARD.md`.
+The build pipeline for the live single-salon app, ordered by impact. Refreshed **2026-10-23 (prod `v5.84`)**. Resolved history is pruned — git log + `AUDIT-2026-06.md` + `ROADMAP.md` + `HELCIM-MIGRATION.md` are the record. Parked/unscheduled ideas live in `IDEABOARD.md`.
 
 ---
 
-## ✅ Shipped since the last refresh (v5.22 → v5.59)
+## ✅ Shipped since the last refresh (v5.59 → v5.84)
+- **v5.60–v5.63:** tech-price-decouple (entry decoupled from completion) · phone-wake resync (zombie-OPEN heal + wake watchdog) · payroll "All techs" Total column.
+- **v5.64–v5.72 (17-item feature batch, waves 1–3):** comp redesign (comp keeps price; customer $0, tech paid, "Comped" total) · editable tiered/searchable Price-Menu SYSTEM + editor redesign · in-app staff→manager Support tickets (admin inbox, push) · assorted quick wins.
+- **v5.73 + v5.83:** Price-menu editor hotfixes (master-detail redesign; resizable list column + page-settings row above services + inline add buttons).
+- **v5.78–v5.82 (turn + floor batch):** turn-system overhaul (configurable half/bonus "$X or less" cutoffs, count-at-done via Base cost, turn-count in its own resizable column) · suggestion fairness + skill-gating · floor waiting-bar/tech-timer/customer-breakdown/robust tech-notes (`staff.notePatch`) · floor technicians → resizable left column.
+- **v5.84 (this batch, 2026-10-23):** turns next-up no-shift (inset bar) + billed $ stacked under the bonus · tech-status popup 3 columns (Available ✓ / Not Available ✗ / Notes) + vertical buttons beside the kept 175px avatar · **price-menu section move/delete now carries subheaders+rows** (orphan bug) · floor tech-column top-aligns + spreads to floor height (gap capped 40px) · reminders 700px + max-3-visible scroll (soonest first). Detail: `docs/superpowers/specs/2026-10-23-batch-turns-techbubble-pricemenu-floor-reminders-plan.md`.
+
+### ⭐ Floor plan — bounds + non-overlap + named/saved plans (JOINT design session, owner-deferred 2026-10-23)
+Three entangled items deferred TOGETHER because a **bounded/fixed floor** makes positions absolute and device-independent, which is the clean foundation for the other two:
+- **#5 Dashed working-area bounds** — the floor is currently *unlimited* (auto-sizes to `maxRight+GAP`). Decide: fixed room rectangle (dashed border, can't place outside) vs. dashed outline of current extent.
+- **#6 Station auto-push** — owner wants stations to shove neighbors aside to avoid overlap. Built-now was deferred because on the unbounded/per-device-reflowing canvas it would freeze pushed stations' computed-default x/y into synced `station_layout` at the editing device's width (iPad then shows desktop coords, only a full reset undoes). A bounded floor removes this landmine. Design notes in the v5.84 plan doc (enumerate all `getStations()` via `layoutFor`; geometry-mutators only; pre-commit snapshot + Undo; opt-in toggle).
+- **Named / saved floor plans** (from the 17-item feature batch) — multiple saved layouts the owner can switch between.
+
+### Earlier shipped (v5.22 → v5.59)
 - **v5.56–v5.59 (2026-09-09 → 24):** v5.56 TurnDesk back-ports (hide deactivated staff, staff contact + SSN-last-4, note previews); **v5.57 chat empty-channel freeze fix** (opening an empty conversation looped dispatch → froze the app); **v5.58 outbox OOM self-heal** (`coalesceConfigSets` — a flooded config.set outbox no longer OOMs the tab on boot); **v5.59 parity ports** (turns "Awaiting price" violet cue, Data Recovery restores gift cards + customers, turns long-name truncation + card-name escaping).
 - **Receipt printing (RP327)** — v5.22 LIVE (80mm receipt + tech-ticket totals + re-routable review QR). *Owner hardware TODO remains: install the RP327 Windows driver, live-test a print + QR scan, paste the real Google review link in Settings.*
 - **Check-in service waiver** — R1 + R1.1 LIVE (v5.46): every-visit e-sign, per-visit stamp, PDF/text versioned, non-broadcast `waiver:<id>` storage.
@@ -46,8 +59,16 @@ Helcim is live + default; Square still selectable. When called: stop the Square 
 ## 5 — Cosmetic consistency pass (APPROVED, deferred) — `COSMETIC-PHASE-A.md`
 Pure polish on the teal/amber identity (no re-skin): unify the 3 teals → `--primary` token, fix dead `--md-*` refs, remove lingering `active:scale-95` bounces, systematize report-card tints, stop leaking raw `sq-` IDs in the Calendar list, one radius/elevation scale. Also the broader "sweep 639 hardcoded hex → tokens" (`[[project-ux-functional-audit]]`).
 
+## 5.5 — Remaining from the 17-item feature batch + held items
+- **Named / saved floor plans** → folded into the floor joint session above.
+- **Searchable in-app help docs** — staff-facing help/guide (not yet built).
+- **Chat-review held fixes** (`[[project-chat-review]]`): 1 real data-loss (stale offline daily-clear wipes chat — bump `cfgmeta:chat_log` on append) + 3 trust issues (dark-mode popovers, eager unread-clear on open, no 4 AM notice).
+- **Support email notifications** for new support tickets.
+- **Waiver revisit** (real TD waiver text; any Muse waiver copy tweaks).
+
 ## 6 — TurnDesk cross-pollination (standing rule)
-- ✅ **2026-09-24 full parity round DONE** (both apps live): a complete bidirectional audit + ports. TurnDesk `td-v0.52` got offline-safeguards, waiver-handoff, v5.55 tweaks, calendar-app-native (default now), mid-day-Completed, Price Menu, outbox self-heal. Muse `v5.59` got the TurnDesk items it lacked. Authoritative record: **`turndesk/docs/MUSE-PARITY-BACKLOG.md`** (Muse→TD) + `turndesk/docs/MUSE-PORT-LOG.md` (TD→Muse, all ported).
+- ⭐ **Muse→TurnDesk ports v5.64–v5.84 OWED** (at batch end): comp redesign, support tickets, editable price-menu system + editor, turn-system overhaul + refinements, floor left-column + v5.84 polish, price-menu section-move fix, reminders. Reverse record: `turndesk/docs/MUSE-PORT-LOG.md`.
+- ✅ **2026-09-24 full parity round DONE** (both apps live): a complete bidirectional audit + ports. TurnDesk `td-v0.53` is current. Authoritative record: **`turndesk/docs/MUSE-PARITY-BACKLOG.md`** (Muse→TD) + `turndesk/docs/MUSE-PORT-LOG.md` (TD→Muse, all ported).
 - ⚠️ **Deferred, must-do-before-TurnDesk-card-processing:** port Muse's Helcim refund-safety hardening into TurnDesk (its `confirmRefund` is naive — no processor-truth check / over-refund block / unrecorded-refund detection). Billing-launch gate item.
 - Remaining TD follow-ups (pre-existing): swap real waiver text into TD's generic placeholder; rebase `security/phase2-rbac` onto main.
 
@@ -67,4 +88,4 @@ Pure polish on the teal/amber identity (no re-skin): unify the 3 teals → `--pr
 - Verify in preview — the preview's WebSocket can reach the **prod** DO when online: never dispatch test writes; an offline/not-signed-in preview's dispatches stay local. Prod read/repair = `GET /state/snapshot` / `POST /state/mutate`.
 - TurnDesk is **SUPERSEDED** (future product rebuilds from current Muse). Helcim is an in-repo single-processor replacement — keep it simple, no adapter layer.
 
-_Last refreshed: 2026-09-24 (v5.59)._
+_Last refreshed: 2026-10-23 (v5.84)._
