@@ -74,6 +74,7 @@ body{font-family:'Jost',sans-serif;color:#1a1a1a;background:#e9e6df}
 .pr{font-size:15.5px;font-weight:500;color:#15514f;white-space:nowrap}
 .desc{font-size:12px;color:#1a1a1a;font-style:italic;margin:-2px 0 4px}
 .sec+.desc{margin-top:0}
+.subhead{font-family:'Cormorant Garamond',serif;font-weight:600;font-size:14.5px;letter-spacing:1px;color:#2a6d6a;margin:9px 0 3px 0.08in}
 .choose{font-size:11px;font-style:italic;color:#8a8a8a;margin:2px 0 1px 0.16in}
 .subrow,.addon{display:flex;align-items:baseline;gap:7px;margin:3px 0 3px 0.16in}
 .subrow .nm,.addon .nm{font-size:13.5px;color:#444444}
@@ -190,6 +191,7 @@ function _normSub(v) { return (v && typeof v === 'object') ? { id: v.id || _pmUi
 function _normItem(it) {
   if (!it || typeof it !== 'object') return null;
   if (it.t === 'sec') return { id: it.id || _pmUid(), t: 'sec', label: _str(it.label), ...(it.desc != null ? { desc: _str(it.desc) } : {}) };
+  if (it.t === 'sub') return { id: it.id || _pmUid(), t: 'sub', label: _str(it.label) };   // subheader: a secondary heading under a section
   if (it.t === 'row') {
     const row = { id: it.id || _pmUid(), t: 'row', nm: _str(it.nm), pr: _str(it.pr), ...(it.desc != null ? { desc: _str(it.desc) } : {}) };
     const vs = (Array.isArray(it.variants) ? it.variants : []).map(_normSub).filter(Boolean); if (vs.length) row.variants = vs;
@@ -256,9 +258,10 @@ export function priceMenuToHtml(menu, logoTag, esc) {
   const itemHtml = it => {
     if (!it) return '';                                 // self-safe even if handed un-normalized data
     if (it.t === 'sec') return `<div class="sec">${e(it.label)}</div>` + (it.desc ? `<div class="desc">${e(it.desc)}</div>` : '');
+    if (it.t === 'sub') return `<div class="subhead">${e(it.label)}</div>`;   // secondary heading under a section
     if (it.t !== 'row') return '';                      // unknown node type → render nothing (not "undefined")
     let h = `<div class="row"><span class="nm">${e(it.nm)}</span><span class="dots"></span><span class="pr">${e(it.pr)}</span></div>` + (it.desc ? `<div class="desc">${e(it.desc)}</div>` : '');
-    if (it.variants && it.variants.length) h += `<div class="choose">choose one</div>` + it.variants.map(v => sub('subrow', '', v)).join('');
+    if (it.variants && it.variants.length) h += it.variants.map(v => sub('subrow', '', v)).join('');
     if (it.addons && it.addons.length) h += it.addons.map(a => sub('addon', '+ ', a)).join('');
     return h;
   };

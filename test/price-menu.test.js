@@ -23,9 +23,9 @@ test('a row renders name/dots/price, and a row desc follows the row', () => {
 });
 
 // ── tiers ──
-test('variants render a "choose one" cue + indented .subrow lines', () => {
+test('variants render as indented .subrow lines (no "choose one" cue)', () => {
   const h = render(one([[{ t: 'row', nm: 'Acrylic', pr: '', variants: [{ nm: 'Full set', pr: '$56' }, { nm: 'Fill', pr: '$46' }] }], []]));
-  assert.match(h, /class="choose"/);
+  assert.ok(!/class="choose"/.test(h), 'the "choose one" cue was removed (owner request)');
   assert.match(h, /<div class="subrow"><span class="nm">Full set<\/span>.*<span class="pr">\$56<\/span><\/div>/);
   assert.match(h, /Fill<\/span>.*\$46/);
 });
@@ -138,4 +138,25 @@ test('priceMenuSearch: carries the section for context, and empty query returns 
 test('priceMenuSearch: tolerant of a malformed menu (no throw)', () => {
   assert.doesNotThrow(() => priceMenuSearch(null, 'x'));
   assert.deepEqual(priceMenuSearch({}, 'x'), []);
+});
+
+// ── Subheaders (v5.74): a 3rd node type `t:'sub'` — a secondary heading under a section ──
+test('a subheader normalizes to {t:sub,label} and renders as .subhead (print)', () => {
+  const m = normalizePriceMenu({ v: 1, pages: [{ title: 'T', cols: [[
+    { t: 'sec', label: 'Manicures' },
+    { t: 'sub', label: 'Gel options' },
+    { t: 'row', nm: 'Gel Manicure', pr: '$38' },
+  ], []], foot: [] }] });
+  const sub = m.pages[0].cols[0][1];
+  assert.equal(sub.t, 'sub');
+  assert.equal(sub.label, 'Gel options');
+  assert.ok(sub.id, 'subheader gets an id');
+  const h = render(m);
+  assert.match(h, /<div class="subhead">Gel options<\/div>/);
+  assert.ok(h.indexOf('class="sec"') < h.indexOf('class="subhead"') && h.indexOf('class="subhead"') < h.indexOf('Gel Manicure'), 'section → subhead → row order');
+});
+test('a subheader label is escaped once (print)', () => {
+  const h = render(normalizePriceMenu({ v: 1, pages: [{ title: 'T', cols: [[{ t: 'sub', label: 'Pink & White' }, { t: 'row', nm: 'x', pr: '$1' }], []], foot: [] }] }));
+  assert.match(h, /<div class="subhead">Pink &amp; White<\/div>/);
+  assert.ok(!h.includes('&amp;amp;'));
 });

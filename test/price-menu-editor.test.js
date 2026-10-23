@@ -235,3 +235,14 @@ test('pmDropTarget + pmMoveTo compose: a within-column reorder actually moves th
   pmMoveTo(d, 'r2', t.colId, t.beforeId);
   assert.deepEqual(d.pages[0].cols[0].map(x => x.id), ['s1', 'r2', 'r1']);
 });
+
+// ── Subheaders (v5.74): pmAddItem makes a 'sub' node; pmFlatten tags it kind:'sub' ──
+test('pmAddItem creates a subheader node, and pmFlatten reports it as kind sub', () => {
+  const d = fx();
+  const node = pmAddItem(d, 'p1:0', 'sub', 's1');   // add a subheader right after section s1
+  assert.equal(node.t, 'sub');
+  assert.equal(node.label, '');
+  assert.ok(node.id);
+  assert.equal(d.pages[0].cols[0][1].id, node.id, 'inserted right after s1');
+  assert.equal(pmFlatten(d).find(x => x.id === node.id).kind, 'sub');
+});

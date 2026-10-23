@@ -42,7 +42,9 @@ export function pmSetField(draft, id, field, val) {
 }
 export function pmAddItem(draft, colId, kind, afterId) {
   const col = _col(draft, colId); if (!col) return null;
-  const node = kind === 'sec' ? { id: _uid(), t: 'sec', label: '' } : { id: _uid(), t: 'row', nm: '', pr: '' };
+  const node = kind === 'sec' ? { id: _uid(), t: 'sec', label: '' }
+    : kind === 'sub' ? { id: _uid(), t: 'sub', label: '' }
+    : { id: _uid(), t: 'row', nm: '', pr: '' };
   const idx = afterId ? col.findIndex(i => i.id === afterId) : -1;
   if (idx >= 0) col.splice(idx + 1, 0, node); else col.push(node);
   return node;
@@ -168,6 +170,7 @@ import { escHtml, escAttrJs, showToast } from '../utils.js';
 let _pmDraft = null, _pmBaseline = '', _pmFilter = '', _pmOpenedFrom = '';
 let _pmSel = null;             // selected node id (item | section | 'page:<id>' sentinel) | null
 let _pmStack = 'list';         // narrow-screen master-detail: 'list' | 'detail'
+const _pmCollapsed = new Set(); // section ids whose services are collapsed (hidden) in the left list
 const _clone = o => JSON.parse(JSON.stringify(o));
 const _live = () => normalizePriceMenu(getState().config.price_menu);
 // The RAW stored config (not re-normalized) — a stable baseline for the "changed on another device" check.
@@ -175,7 +178,7 @@ const _live = () => normalizePriceMenu(getState().config.price_menu);
 const _rawCfg = () => JSON.stringify(getState().config.price_menu ?? null);
 // For the click-out guard (2a-guard): is the editor open with unsaved changes?
 export function pmEditorHasUnsaved() { return !!_pmDraft && pmIsDirty(_pmDraft, _pmBaseline); }
-export function pmEditorClearDraft() { _pmDraft = null; _pmBaseline = ''; _pmStack = 'list'; _setBeforeUnload(false); }
+export function pmEditorClearDraft() { _pmDraft = null; _pmBaseline = ''; _pmStack = 'list'; _pmCollapsed.clear(); _setBeforeUnload(false); }
 
 function _setBeforeUnload(on) {
   if (on) window.addEventListener('beforeunload', _pmBeforeUnload);
@@ -187,7 +190,9 @@ export function renderPriceMenuEditor() {
   const host = document.getElementById('settings-pricemenu-section'); if (!host) return;
   if (!_pmDraft) { _pmDraft = _clone(_live()); _pmBaseline = JSON.stringify(_pmDraft); _pmOpenedFrom = _rawCfg(); }
   _pmResolveSel();
+  const prevScroll = host.querySelector('.pm2-list')?.scrollTop || 0;   // keep the list where it was across a re-render (don't jump to top on select)
   host.innerHTML = _editorHtml(_pmDraft);
+  const newList = host.querySelector('.pm2-list'); if (newList) newList.scrollTop = prevScroll;
   _applyFilter();
   _syncDirtyUI();
   _pmInitDrag();
@@ -226,12 +231,15 @@ function _moveOpts(draft, curColId) {
 const _inp = (val, oninput, ph, extra) => '<input value="' + escHtml(val) + '" oninput="' + oninput + '" placeholder="' + escHtml(ph || '') + '" aria-label="' + escHtml(ph || 'field') + '" class="pm-f ' + (extra || '') + '" spellcheck="false">';
 const _ctrlBtn = (on, icon, title) => '<button onclick="' + on + '" title="' + escHtml(title) + '" class="pm-ic"><span class="material-symbols-outlined" style="font-size:16px">' + icon + '</span></button>';
 const _q = s => "'" + escAttrJs(s) + "'";
+// Price input: edits like any field, but carries data-pm-price/id so the delegated focusout handler can
+// auto-prepend a "$" when the owner types a bare number (kept off complex values like "from $7" / "56 / 46").
+const _priceInp = (val, id, kind) => '<input value="' + escHtml(val) + '" oninput="' + (kind === 'sub' ? 'pmEditSub' : 'pmEdit') + '(' + _q(id) + ",'pr',this.value)\" data-pm-price=\"" + kind + '" data-pm-id="' + escAttrJs(id) + '" inputmode="decimal" placeholder="$" aria-label="price" class="pm-f ' + (kind === 'sub' ? 'pm-sub-pr' : 'pm-row-pr') + '" spellcheck="false">';
 
 function _subList(rowId, which, list) {
   const label = which === 'variants' ? 'Variants (pick one)' : 'Add-ons (extra)';
   const rows = (list || []).map(s => '<div class="pm-sub" data-pm-card="' + escAttrJs(s.id) + '">'
     + _inp(s.nm, 'pmEditSub(' + _q(s.id) + ",'nm',this.value)", which === 'variants' ? 'e.g. Full set' : 'e.g. French tip', 'pm-sub-nm')
-    + _inp(s.pr, 'pmEditSub(' + _q(s.id) + ",'pr',this.value)", '$', 'pm-sub-pr')
+    + _priceInp(s.pr, s.id, 'sub')
     + _ctrlBtn('pmSubUp(' + _q(s.id) + ')', 'keyboard_arrow_up', 'Move up') + _ctrlBtn('pmSubDn(' + _q(s.id) + ')', 'keyboard_arrow_down', 'Move down') + _ctrlBtn('pmDelSub(' + _q(s.id) + ')', 'close', 'Remove')
     + '</div>').join('');
   const fn = which === 'variants' ? 'pmAddVar' : 'pmAddAddon';
@@ -240,29 +248,56 @@ function _subList(rowId, which, list) {
 
 const _secLbl = it => (it.label || '').trim() || '(unnamed section)';
 const _rowLbl = it => (it.nm || '').trim() || '(unnamed service)';
+// Richer filter text so the box also matches a service's description / variant / add-on names.
+const _rowText = it => ((it.nm || '') + ' ' + (it.pr || '') + ' ' + (it.desc || '') + ' '
+  + (it.variants || []).map(v => (v && v.nm) || '').join(' ') + ' '
+  + (it.addons || []).map(a => (a && a.nm) || '').join(' ')).toLowerCase();
+// Compact description + variants + add-ons shown UNDER a service in the left list (always present as a
+// container so a live edit can rebuild just this block). A price is rendered slightly darker than its label.
+function _rowSubs(it) {
+  const sp = pr => pr ? ' <span class="pm2-sp">' + escHtml(pr) + '</span>' : '';
+  const parts = [];
+  if ((it.desc || '').trim()) parts.push('<div class="pm2-sub pm2-sdesc">' + escHtml(it.desc) + '</div>');
+  const vs = (it.variants || []).filter(v => v && ((v.nm || '').trim() || (v.pr || '').trim()));
+  if (vs.length) parts.push('<div class="pm2-sub">' + vs.map(v => escHtml((v.nm || '').trim() || '—') + sp(v.pr)).join('  ·  ') + '</div>');
+  const as = (it.addons || []).filter(a => a && ((a.nm || '').trim() || (a.pr || '').trim()));
+  if (as.length) parts.push('<div class="pm2-sub">' + as.map(a => '+ ' + escHtml((a.nm || '').trim() || '—') + sp(a.pr)).join('  ·  ') + '</div>');
+  return '<div class="pm2-subs">' + parts.join('') + '</div>';
+}
 
-// Left master list: section-grouped, document order, with a light page divider (columns hidden).
+// Left master list: section-grouped, document order, with a light page divider (columns hidden). Sections are
+// collapsible (chevron) — their services + subheaders carry data-sec + a pm2-collapsed-row class when hidden.
 function _listHtml(draft) {
+  const grip = '<span class="pm-drag material-symbols-outlined" title="Drag to reorder" aria-hidden="true" style="font-size:17px">drag_indicator</span>';
   let html = '';
   (draft.pages || []).forEach((p, pi) => {
     html += '<div class="pm2-pagediv">' + escHtml(p.title || ('Page ' + (pi + 1))) + '</div>';
+    let curSec = '';   // id of the section the following items belong to (collapse grouping); '' before the first
     (p.cols || []).forEach(col => (col || []).forEach(it => {
       const on = it.id === _pmSel ? ' pm2-on' : '';
-      const grip = '<span class="pm-drag material-symbols-outlined" title="Drag to reorder" aria-hidden="true" style="font-size:17px">drag_indicator</span>';
       if (it.t === 'sec') {
+        curSec = it.id;
         const blank = !(it.label || '').trim();
-        html += '<div class="pm2-item pm2-secrow' + on + (blank ? ' pm2-blank' : '') + '" data-pm-card="' + escAttrJs(it.id) + '" data-pm-text="' + escHtml((it.label || '').toLowerCase()) + '" onclick="pmSelect(' + _q(it.id) + ')" role="button" tabindex="0">'
-          + grip + '<span class="pm2-nm">' + escHtml(_secLbl(it)) + '</span></div>';
+        const collapsed = _pmCollapsed.has(it.id);
+        const chev = '<button class="pm2-chev" onclick="event.stopPropagation();pmToggleSection(' + _q(it.id) + ')" title="' + (collapsed ? 'Expand' : 'Collapse') + '" aria-label="' + (collapsed ? 'Expand section' : 'Collapse section') + '"><span class="material-symbols-outlined" style="font-size:19px">' + (collapsed ? 'chevron_right' : 'expand_more') + '</span></button>';
+        html += '<div class="pm2-item pm2-secrow' + on + (blank ? ' pm2-blank' : '') + '" data-pm-card="' + escAttrJs(it.id) + '" data-sec="' + escAttrJs(it.id) + '" data-pm-text="' + escHtml((it.label || '').toLowerCase()) + '" onclick="pmSelect(' + _q(it.id) + ')" role="button" tabindex="0">'
+          + chev + grip + '<span class="pm2-nm">' + escHtml(_secLbl(it)) + '</span></div>';
+      } else if (it.t === 'sub') {
+        const blank = !(it.label || '').trim();
+        const hide = (curSec && _pmCollapsed.has(curSec)) ? ' pm2-collapsed-row' : '';
+        html += '<div class="pm2-item pm2-subhead' + on + (blank ? ' pm2-blank' : '') + hide + '" data-pm-card="' + escAttrJs(it.id) + '" data-sec="' + escAttrJs(curSec) + '" data-pm-text="' + escHtml((it.label || '').toLowerCase()) + '" onclick="pmSelect(' + _q(it.id) + ')" role="button" tabindex="0">'
+          + grip + '<span class="pm2-nm">' + escHtml((it.label || '').trim() || '(unnamed subheader)') + '</span></div>';
       } else {
         const blank = !(it.nm || '').trim();
-        html += '<div class="pm2-item pm2-row' + on + (blank ? ' pm2-blank' : '') + '" data-pm-card="' + escAttrJs(it.id) + '" data-pm-text="' + escHtml(((it.nm || '') + ' ' + (it.pr || '')).toLowerCase()) + '" onclick="pmSelect(' + _q(it.id) + ')" role="button" tabindex="0">'
-          + grip + '<span class="pm2-nm">' + escHtml(_rowLbl(it)) + '</span><span class="pm2-pr">' + escHtml(it.pr || '') + '</span></div>';
+        const hide = (curSec && _pmCollapsed.has(curSec)) ? ' pm2-collapsed-row' : '';
+        html += '<div class="pm2-item pm2-row' + on + (blank ? ' pm2-blank' : '') + hide + '" data-pm-card="' + escAttrJs(it.id) + '" data-sec="' + escAttrJs(curSec) + '" data-pm-text="' + escHtml(_rowText(it)) + '" onclick="pmSelect(' + _q(it.id) + ')" role="button" tabindex="0">'
+          + grip + '<div class="pm2-body"><div class="pm2-top"><span class="pm2-nm">' + escHtml(_rowLbl(it)) + '</span><span class="pm2-pr">' + escHtml(it.pr || '') + '</span></div>' + _rowSubs(it) + '</div></div>';
       }
     }));
     const pon = ('page:' + p.id) === _pmSel ? ' pm2-on' : '';
     html += '<div class="pm2-item pm2-pageset' + pon + '" onclick="pmSelect(' + _q('page:' + p.id) + ')" role="button" tabindex="0"><span class="material-symbols-outlined" style="font-size:16px">tune</span> Page settings &amp; footer</div>';
   });
-  html += '<div class="pm2-addrow"><button onclick="pmAdd(\'row\')" class="pm-add">+ Service</button><button onclick="pmAdd(\'sec\')" class="pm-add">+ Section</button></div>';
+  html += '<div class="pm2-addrow"><button onclick="pmAdd(\'row\')" class="pm-add">+ Service</button><button onclick="pmAdd(\'sub\')" class="pm-add">+ Subheader</button><button onclick="pmAdd(\'sec\')" class="pm-add">+ Section</button></div>';
   return html;
 }
 
@@ -297,8 +332,13 @@ function _panelHtml(draft) {
       + '<label class="pm2-lab">Note (optional)</label>' + _inp(it.desc || '', 'pmEdit(' + _q(it.id) + ",'desc',this.value)", 'heading note', 'pm-desc')
       + del;
   }
+  if (it.t === 'sub') {
+    return head('Subheader')
+      + '<label class="pm2-lab">Subheader</label>' + _inp(it.label, 'pmEdit(' + _q(it.id) + ",'label',this.value)", 'Subheader text', 'pm-sec-nm')
+      + del;
+  }
   return head('Service')
-    + '<div class="pm2-np">' + _inp(it.nm, 'pmEdit(' + _q(it.id) + ",'nm',this.value)", 'Service name', 'pm-row-nm') + _inp(it.pr, 'pmEdit(' + _q(it.id) + ",'pr',this.value)", '$', 'pm-row-pr') + '</div>'
+    + '<div class="pm2-np">' + _inp(it.nm, 'pmEdit(' + _q(it.id) + ",'nm',this.value)", 'Service name', 'pm-row-nm') + _priceInp(it.pr, it.id, 'main') + '</div>'
     + '<label class="pm2-lab">Description (optional)</label>' + _inp(it.desc || '', 'pmEdit(' + _q(it.id) + ",'desc',this.value)", 'description', 'pm-desc')
     + _subList(it.id, 'variants', it.variants) + _subList(it.id, 'addons', it.addons)
     + del;
@@ -330,14 +370,18 @@ function _applyFilter() {
   // Structural rows (page dividers + the "Page settings" sentinel) aren't search results — hide them while
   // filtering so matches aren't scattered among empty page scaffolding; show them again when the box is cleared.
   const structural = [...list.querySelectorAll('.pm2-pagediv, .pm2-pageset')];
-  if (!q) { items.forEach(el => el.classList.remove('hidden')); structural.forEach(el => el.classList.remove('hidden')); return; }
+  if (!q) {
+    items.forEach(el => { el.classList.remove('hidden'); if (!el.classList.contains('pm2-secrow')) el.classList.toggle('pm2-collapsed-row', _pmCollapsed.has(el.getAttribute('data-sec'))); });   // restore collapse
+    structural.forEach(el => el.classList.remove('hidden'));
+    return;
+  }
   structural.forEach(el => el.classList.add('hidden'));
   let sec = null, secMatch = false, secHit = false;
   const flush = () => { if (sec) sec.classList.toggle('hidden', !(secMatch || secHit)); };
   items.forEach(el => {
     const match = (el.getAttribute('data-pm-text') || '').includes(q);
     if (el.classList.contains('pm2-secrow')) { flush(); sec = el; secMatch = match; secHit = false; }
-    else { el.classList.toggle('hidden', !match); if (match) secHit = true; }
+    else { el.classList.toggle('hidden', !match); if (match) { el.classList.remove('pm2-collapsed-row'); secHit = true; } }   // a match shows even under a collapsed section
   });
   flush();
 }
@@ -353,11 +397,21 @@ export function pmEdit(id, field, v) {
     const row = document.querySelector('#settings-pricemenu-section .pm2-item[data-pm-card="' + esc + '"]');
     if (row) {
       if (field === 'pr') { const pr = row.querySelector('.pm2-pr'); if (pr) pr.textContent = v || ''; }
-      else { const nm = row.querySelector('.pm2-nm'); if (nm) nm.textContent = (v || '').trim() || (field === 'label' ? '(unnamed section)' : '(unnamed service)'); row.classList.toggle('pm2-blank', !(v || '').trim()); }
+      else { const nm = row.querySelector('.pm2-nm'); const ph = field === 'label' ? (row.classList.contains('pm2-subhead') ? '(unnamed subheader)' : '(unnamed section)') : '(unnamed service)'; if (nm) nm.textContent = (v || '').trim() || ph; row.classList.toggle('pm2-blank', !(v || '').trim()); }
     }
   }
+  if (id === _pmSel && field === 'desc') _syncSelRowSubs();   // keep the list's sub-lines in step with a description edit
 }
-export function pmEditSub(id, field, v) { pmSetSubField(_pmDraft, id, field, v); _afterText(); }
+// Rebuild JUST the selected service row's sub-summary (desc/variants/add-ons) in the list — a targeted update
+// that touches a different element than the focused panel input, so the caret is kept and the scroll doesn't move.
+function _syncSelRowSubs() {
+  if (!_pmSel) return;
+  const f = pmFind(_pmDraft, _pmSel); if (!f || f.kind !== 'item' || f.node.t !== 'row') return;
+  const esc = (window.CSS && CSS.escape) ? CSS.escape(String(_pmSel)) : String(_pmSel);
+  const subs = document.querySelector('#settings-pricemenu-section .pm2-item[data-pm-card="' + esc + '"] .pm2-subs');
+  if (subs) subs.outerHTML = _rowSubs(f.node);
+}
+export function pmEditSub(id, field, v) { pmSetSubField(_pmDraft, id, field, v); _afterText(); _syncSelRowSubs(); }
 export function pmEditFoot(id, field, v) { pmSetFoot(_pmDraft, id, field, v); _afterText(); }
 export function pmEditPage(id, v) { pmSetField(_pmDraft, id, 'title', v); _afterStructural(); }   // re-render: list divider + Prints-in labels
 export function pmFilterInput(v) { _pmFilter = v; _applyFilter(); }
@@ -385,9 +439,12 @@ export function pmDel(id) {
     else go();
     return;
   }
-  window.showWarnModal?.('Delete this service?', 'Remove “' + _rowLbl(f.node) + '” from the menu? Nothing is saved until you tap Save.', () => { _pmSel = prev; pmRemoveItem(_pmDraft, id); _afterStructural(); }, 'Delete');
+  const isSub = f.node.t === 'sub';
+  const label = isSub ? ((f.node.label || '').trim() || 'this subheader') : _rowLbl(f.node);
+  window.showWarnModal?.(isSub ? 'Delete this subheader?' : 'Delete this service?', 'Remove “' + label + '” from the menu? Nothing is saved until you tap Save.', () => { _pmSel = prev; pmRemoveItem(_pmDraft, id); _afterStructural(); }, 'Delete');
 }
 export function pmMove(id, colId) { pmRelocateItem(_pmDraft, id, colId); _afterStructural(); }   // "Prints in" — appends to the chosen column
+export function pmToggleSection(id) { if (_pmCollapsed.has(id)) _pmCollapsed.delete(id); else _pmCollapsed.add(id); _afterStructural(); }
 export function pmAddVar(rowId) { pmAddSub(_pmDraft, rowId, 'variants'); _afterStructural(); }
 export function pmAddAddon(rowId) { pmAddSub(_pmDraft, rowId, 'addons'); _afterStructural(); }
 export function pmDelSub(id) { pmRemoveSub(_pmDraft, id); _afterStructural(); }
@@ -410,7 +467,7 @@ export function pmCancel() {
   else leave();
 }
 export function pmReset() {
-  window.showWarnModal?.('Reset to the default menu?', 'This replaces your draft with the built-in default menu (not your last saved version). Nothing is saved until you tap Save.', () => { _pmDraft = _clone(normalizePriceMenu(DEFAULT_PRICE_MENU)); renderPriceMenuEditor(); }, 'Reset');
+  window.showWarnModal?.('Reset to the default menu?', 'This replaces your draft with the built-in default menu (not your last saved version). Nothing is saved until you tap Save.', () => { _pmDraft = _clone(normalizePriceMenu(DEFAULT_PRICE_MENU)); _pmCollapsed.clear(); renderPriceMenuEditor(); }, 'Reset');
 }
 
 // ── Unsaved-changes click-out guard (2a-guard) ──────────────────────────────────────────────────────
@@ -456,6 +513,23 @@ function _pmInitDrag() {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     const row = e.target.closest && e.target.closest('#settings-pricemenu-section .pm2-item');
     if (row) { e.preventDefault(); row.click(); }
+  });
+  // Auto-$ : when a price field loses focus holding a BARE number, prepend "$" (leaves "$38", "from $7",
+  // "56 / 46"→"$56 / 46", and empty alone — only values that START with a digit get the $).
+  host.addEventListener('focusout', e => {
+    const el = e.target; if (!el || !el.dataset || !el.dataset.pmPrice) return;
+    let v = (el.value || '').trim();
+    if (!/^\d/.test(v)) return;
+    v = '$' + v; el.value = v;
+    const id = el.dataset.pmId;
+    if (el.dataset.pmPrice === 'sub') { pmSetSubField(_pmDraft, id, 'pr', v); _syncSelRowSubs(); }
+    else {
+      pmSetField(_pmDraft, id, 'pr', v);
+      const esc = (window.CSS && CSS.escape) ? CSS.escape(String(id)) : String(id);
+      const prEl = document.querySelector('#settings-pricemenu-section .pm2-item[data-pm-card="' + esc + '"] .pm2-pr');
+      if (prEl) prEl.textContent = v;
+    }
+    _syncDirtyUI();
   });
 }
 function _pmDragDown(e) {
