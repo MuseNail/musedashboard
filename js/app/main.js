@@ -138,6 +138,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.80', items: [
+    { icon: 'view_column', t: 'Turns board: the turn count in its own resizable column', d: 'Each tech’s turn count now sits in its own column right next to the tech (just left of the turn bubbles), lined up at the same spot for everyone regardless of name length. Drag its edge to resize it, just like the technician column. The billed total stays at the far right.' },
+    { icon: 'tune', t: 'Bonus and half turns: clearer, independent cutoffs', d: 'In Settings → Turn Rules, half turns and bonus turns each now have their own simple “$X or less” cutoff. Bonus is fully independent of half — set “bonus = $X or less” and “half = $Y or less,” and anything above the half cutoff is a full turn. If a price qualifies for both, bonus wins. Your existing thresholds carry over automatically.' },
+  ] },
   { v: 'v5.79', items: [
     { icon: 'view_week', t: 'Floor plan: steady waiting bar + a timer on each tech', d: 'The “not seated” strip at the top of the Floor Plan is now a fixed height — it no longer grows and pushes the floor down as guests arrive. When there are more waiting guests than fit, they scroll sideways (tap the ‹ › arrows or swipe). And each technician’s card now shows their current service timer — how long the service has been going and the average — the same badge you see on the customer cards.' },
     { icon: 'receipt_long', t: 'Customer history shows a full price breakdown', d: 'In a customer’s profile, each past visit now itemizes what was charged — every service with its price, plus any items, fees, and discount — adding up to that visit’s total.' },

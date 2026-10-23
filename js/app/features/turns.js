@@ -27,17 +27,23 @@ function saveTurnsHistory() { try { localStorage.setItem('muse_turns_history', J
 
 // ── Turn config + classification (formerly in app.js) ─────────────────────────
 export function getTurnConfig() {
-  // Defaults reproduce the pre-overhaul (v5.77) behavior EXACTLY: half + bonus on, bonus both by
-  // the always-bonus list and by cost (<halfMin), half by cost, bonus-first precedence. A stored
-  // turn_config overlays these, so old installs (only {fullMin,halfMin}) behave identically.
+  // Each category is its own independent "$X or less" cutoff: a service is a BONUS turn if its
+  // price ≤ bonusMax, a HALF turn if ≤ halfMax (and above the bonus cutoff), else a FULL turn. Half
+  // and bonus toggle on/off independently; bonus always uses its own cutoff even when half is off.
   const defaults = {
-    fullMin: 28, halfMin: 12,
+    bonusMax: 11, halfMax: 27,
     halfEnabled: true, bonusEnabled: true,
     halfByCost: true, halfByService: false,
     bonusByCost: true, bonusByService: true,
     precedence: 'bonusFirst',
   };
-  return { ...defaults, ...(cfg().turn_config || {}) };
+  const stored = cfg().turn_config || {};
+  const merged = { ...defaults, ...stored };
+  // Migrate pre-v5.80 installs ({fullMin, halfMin}: old bonus was < halfMin, half was [halfMin, fullMin))
+  // to the new "$X or less" cutoffs, unless the new keys were set explicitly.
+  if (stored.bonusMax == null && stored.halfMin != null) merged.bonusMax = Math.max(1, stored.halfMin - 1);
+  if (stored.halfMax == null && stored.fullMin != null) merged.halfMax = Math.max(merged.bonusMax + 1, stored.fullMin - 1);
+  return merged;
 }
 // Merge a partial patch over the stored turn_config so a single-setting save never wipes the other
 // turn keys (the key is stored whole). Pure → unit-tested; every writer must pass a PARTIAL patch.
@@ -58,30 +64,33 @@ export function classifyAmount(amount, serviceId, c, flags) {
   const isHalfSvc  = !!(flags && flags.isHalfSvc);
   const svcBonus  = c.bonusEnabled && c.bonusByService && isBonusSvc;
   const svcHalf   = c.halfEnabled  && c.halfByService  && isHalfSvc;
-  const costBonus = c.bonusEnabled && c.bonusByCost && amount > 0 && amount < c.halfMin;
-  const costHalf  = c.halfEnabled  && c.halfByCost  && amount >= c.halfMin && amount < c.fullMin;
-  const costFull  = amount >= c.fullMin;
+  // "$X or less" cutoffs. The bands are NON-overlapping (half sits strictly above the bonus cutoff),
+  // so bonus always wins the low end and half is "above bonus, up to its own cutoff".
+  const bonusByCostOn = c.bonusEnabled && c.bonusByCost;
+  const costBonus = bonusByCostOn && amount > 0 && amount <= c.bonusMax;
+  const halfLo    = bonusByCostOn ? c.bonusMax : 0;
+  const costHalf  = c.halfEnabled && c.halfByCost && amount > halfLo && amount <= c.halfMax;
+  const costFull  = amount > 0 && !costBonus && !costHalf;   // priced, above the active cutoffs
   if (amount <= 0 && !svcBonus && !svcHalf) return 'unpriced';
   const bonus = svcBonus || costBonus;
   const half  = svcHalf  || costHalf;
   if (c.precedence === 'highestValue') {
-    if (costFull || (amount > 0 && !half && !bonus)) return 'full';
+    if (costFull) return 'full';
     if (half) return 'half';
     if (bonus) return 'bonus';
     return 'full';
   }
   if (c.precedence === 'costWins') {
     if (amount > 0) {
-      if (costFull) return 'full';
-      if (costHalf) return 'half';
       if (costBonus) return 'bonus';
+      if (costHalf) return 'half';
       return 'full';
     }
     if (svcBonus) return 'bonus';
     if (svcHalf) return 'half';
     return 'unpriced';
   }
-  // 'bonusFirst' (default = legacy order: bonus beats half beats full)
+  // 'bonusFirst' (default): bonus beats half beats full
   if (bonus) return 'bonus';
   if (half) return 'half';
   return 'full';
@@ -281,7 +290,7 @@ function acceptBtnHtml(entryId, serviceId, techName) {
 }
 
 // ── Render ────────────────────────────────────────
-export function renderTurns() { _applyTurnsTextSize(); _applyTurnsTotals(); _applyTurnsTechColW(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
+export function renderTurns() { _applyTurnsTextSize(); _applyTurnsTotals(); _applyTurnsTechColW(); _applyTurnsTotalColW(); renderTurnsTechGrid(); renderTurnsQueue(); applyTurnsApptStripVisibility(); startTurnsApptRefresh(); }
 
 // ── Per-device "$ billed" totals show/hide (Turns toolbar) ────────────────────
 // Device-local (like the text size) — hide each tech's billed dollar total on a
@@ -322,6 +331,15 @@ export function _clampTechColW(px) {
 const turnsTechColW = () => _clampTechColW(parseInt(localStorage.getItem('muse_turns_techcol_w'), 10) || TURNS_TECHCOL_DEFAULT);
 function _applyTurnsTechColW() { document.getElementById('panel-turns')?.style.setProperty('--turns-techcol-w', turnsTechColW() + 'px'); }
 function setTurnsTechColW(px) { localStorage.setItem('muse_turns_techcol_w', String(_clampTechColW(px))); _applyTurnsTechColW(); }
+// The turn-count column (its own column just left of the turn bubbles) is resizable the same way.
+const TURNS_TOTALCOL_MIN = 44, TURNS_TOTALCOL_MAX = 140, TURNS_TOTALCOL_DEFAULT = 60;
+export function _clampTotalColW(px) {
+  const n = Math.round(Number(px));
+  return Number.isFinite(n) ? Math.max(TURNS_TOTALCOL_MIN, Math.min(TURNS_TOTALCOL_MAX, n)) : TURNS_TOTALCOL_DEFAULT;
+}
+const turnsTotalColW = () => _clampTotalColW(parseInt(localStorage.getItem('muse_turns_totalcol_w'), 10) || TURNS_TOTALCOL_DEFAULT);
+function _applyTurnsTotalColW() { document.getElementById('panel-turns')?.style.setProperty('--turns-totalcol-w', turnsTotalColW() + 'px'); }
+function setTurnsTotalColW(px) { localStorage.setItem('muse_turns_totalcol_w', String(_clampTotalColW(px))); _applyTurnsTotalColW(); }
 
 // Turn-number badge style, shared by the live grid + history so the two can't drift: amber half,
 // light-teal bonus, neutral grey for an unpriced "?" (so it never reads as a counted turn), and a
@@ -604,13 +622,14 @@ export function renderTurnsTechGrid() {
     const rightSide = sep === 'lane'
       ? `<div class="flex min-w-0" style="flex:1;background:#eef1f2;border:0.5px solid #e0e5e7;border-radius:12px;padding:4px 2px 4px 6px">${slotRow}</div>`
       : `<div class="self-stretch flex-shrink-0" style="width:1px;background:#d3dbdc;margin:6px 0"></div>${slotRow}`;
-    // B: dedicated far-right columns — turn count (always visible) then the billed $ (hidden by
-    // .turns-hide-totals when the device turns totals off). They sit OUTSIDE the scrolling slot row.
-    const turnsCountCol = `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-l border-surface-container-high pl-1" style="width:66px">
+    // Turn count sits in its OWN resizable column just left of the turn bubbles (same spot for every
+    // tech); the billed $ stays at the far right (hidden by .turns-hide-totals when totals are off).
+    // Both columns sit OUTSIDE the scrolling slot row.
+    const turnsCountCol = `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-x border-surface-container-high px-1" style="width:var(--turns-totalcol-w,60px)">
       ${turnDisplay}${turns.bonus > 0 ? `<span class="text-[10px] text-secondary leading-none mt-0.5 flex-shrink-0">+${turns.bonus}b</span>` : ''}
     </div>`;
     const moneyCol = `<div class="turns-billed flex-shrink-0 flex items-center justify-end self-stretch" style="width:56px"><span class="text-xs font-headline font-bold" style="color:#1a5252">$${billed.toFixed(0)}</span></div>`;
-    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${rightSide}${turnsCountCol}${moneyCol}</div>`;
+    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${turnsCountCol}${rightSide}${moneyCol}</div>`;
   }).filter(Boolean).join('');
 
   grid.innerHTML = rows || '<div class="text-sm text-on-surface-variant py-4 text-center">No active technicians.</div>';
@@ -652,6 +671,26 @@ export function renderTurnsTechGrid() {
       document.addEventListener('pointermove', move); document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
     });
     grid.appendChild(handle);
+    // Second handle at the turn-count column's right edge (techCol + gap-2(8px) + totalCol).
+    const thandle = document.createElement('div');
+    thandle.className = 'turns-col-resizer';
+    thandle.title = 'Drag to resize the turn-count column';
+    thandle.style.left = (turnsTechColW() + 8 + turnsTotalColW() - 3) + 'px';
+    thandle.addEventListener('pointerdown', ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      const startX = ev.clientX, startW = turnsTotalColW();
+      try { thandle.setPointerCapture(ev.pointerId); } catch {}
+      const panel = document.getElementById('panel-turns');
+      const move = e => { const w = _clampTotalColW(startW + (e.clientX - startX)); panel?.style.setProperty('--turns-totalcol-w', w + 'px'); thandle.style.left = (turnsTechColW() + 8 + w - 3) + 'px'; };
+      const end = e => {
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', end);
+        document.removeEventListener('pointercancel', end);
+        setTurnsTotalColW(startW + (Number(e && e.clientX) ? e.clientX - startX : 0));
+      };
+      document.addEventListener('pointermove', move); document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
+    });
+    grid.appendChild(thandle);
   }
 }
 

@@ -73,15 +73,15 @@ export function updatePermissionGatedUI() {
 
 // ── Turn thresholds + bonus services ──────────────
 export function saveTurnThresholds() {
-  // Read only the inputs that are shown; fall back to the CURRENT stored value (not a hardcoded
-  // default) so saving while one field is hidden can't silently reset the other threshold.
+  // "$X or less" cutoffs. Read only the inputs that are shown; fall back to the CURRENT stored value
+  // (not a hardcoded default) so saving while one field is hidden can't reset the other.
   const c = getTurnConfig();
-  const fe = document.getElementById('thresh-full'), he = document.getElementById('thresh-half');
-  const fullMin = fe ? (parseInt(fe.value) || c.fullMin) : c.fullMin;
-  const halfMin = he ? (parseInt(he.value) || c.halfMin) : c.halfMin;
-  if (halfMin >= fullMin) { showToast('Half min must be less than full min.'); return; }
-  saveTurnConfig({ fullMin, halfMin });
-  showToast('Turn thresholds saved ✓');
+  const be = document.getElementById('thresh-bonus'), he = document.getElementById('thresh-half');
+  const bonusMax = be ? (parseInt(be.value) || c.bonusMax) : c.bonusMax;
+  const halfMax = he ? (parseInt(he.value) || c.halfMax) : c.halfMax;
+  if (be && he && bonusMax >= halfMax) { showToast('The bonus cutoff must be less than the half cutoff.'); return; }
+  saveTurnConfig({ bonusMax, halfMax });
+  showToast('Cutoffs saved ✓');
 }
 export function renderBonusServicesList() {
   const el = document.getElementById('bonus-services-list');
@@ -123,11 +123,14 @@ export function renderTurnsSettings() {
   const el = document.getElementById('turns-thresh-section');
   if (!el) return;
   const c = getTurnConfig();
-  const showFullMin = c.halfEnabled && c.halfByCost;                                   // the full/half boundary only matters with a half band
-  const showHalfMin = (c.halfEnabled && c.halfByCost) || (c.bonusEnabled && c.bonusByCost);
-  const showThresholds = showFullMin || showHalfMin;
   const noMethodHint = (enabled, byCost, byService, kind) => (enabled && !byCost && !byService)
     ? `<p class="text-[11px] font-body text-error mt-1">Pick at least one method, or nothing will count as a ${kind} turn.</p>` : '';
+  // "$X or less = <kind> turn" cutoff, shown inline right under the category's By-cost checkbox.
+  const cutoffRow = (id, val, kind) => `<div class="flex items-center gap-2 mt-1 mb-1 pl-6">
+      <span class="text-sm font-body text-on-surface-variant">$</span>
+      <input id="${id}" type="number" min="1" step="1" value="${val}" onchange="saveTurnThresholds()" class="w-20 border-2 border-surface-container-high bg-transparent rounded-lg px-2 py-1 text-sm font-headline text-on-surface focus:border-primary outline-none">
+      <span class="text-sm font-body text-on-surface-variant">or less = ${kind} turn</span>
+    </div>`;
   const precOpts = [['bonusFirst', 'Bonus → Half → Full (bonus wins)'], ['highestValue', 'Highest value wins (Full → Half → Bonus)'], ['costWins', 'Price decides (ignore service tags when priced)']];
   el.innerHTML = `
     <div class="mb-3">
@@ -137,7 +140,8 @@ export function renderTurnsSettings() {
       </label>
       ${c.halfEnabled ? `<div class="pl-7">
         <div class="text-[11px] text-on-surface-variant mb-1">Count a half turn by:</div>
-        ${_turnMethodChk('Cost', 'halfByCost', c.halfByCost, '(between the half & full thresholds)')}
+        ${_turnMethodChk('Cost', 'halfByCost', c.halfByCost, '')}
+        ${c.halfByCost ? cutoffRow('thresh-half', c.halfMax, 'half') : ''}
         ${_turnMethodChk('Service', 'halfByService', c.halfByService, '(a chosen list of services)')}
         ${noMethodHint(c.halfEnabled, c.halfByCost, c.halfByService, 'half')}
         ${c.halfByService ? `<div class="mt-2"><div class="text-[11px] font-semibold text-outline uppercase tracking-widest mb-1">Half-Turn Services</div><div id="half-services-list" class="space-y-2"></div></div>` : ''}
@@ -150,27 +154,13 @@ export function renderTurnsSettings() {
       </label>
       ${c.bonusEnabled ? `<div class="pl-7">
         <div class="text-[11px] text-on-surface-variant mb-1">Count a bonus turn by:</div>
-        ${_turnMethodChk('Cost', 'bonusByCost', c.bonusByCost, '(priced under the half threshold)')}
+        ${_turnMethodChk('Cost', 'bonusByCost', c.bonusByCost, '')}
+        ${c.bonusByCost ? cutoffRow('thresh-bonus', c.bonusMax, 'bonus') : ''}
         ${_turnMethodChk('Service', 'bonusByService', c.bonusByService, '(the always-bonus list below)')}
         ${noMethodHint(c.bonusEnabled, c.bonusByCost, c.bonusByService, 'bonus')}
         ${c.bonusByService ? `<div class="mt-2"><div class="text-[11px] font-semibold text-outline uppercase tracking-widest mb-1">Always-Bonus Services</div><p class="text-xs font-body text-on-surface-variant mb-2">Always count as bonus regardless of price (e.g. add-ons).</p><div id="bonus-services-list" class="space-y-2"></div></div>` : ''}
       </div>` : `<p class="pl-7 text-[11px] text-on-surface-variant">Off — these services count as full turns.</p>`}
     </div>
-    ${showThresholds ? `<div class="border-t border-surface-container-high pt-3 mb-3">
-      <div class="grid ${showFullMin && showHalfMin ? 'grid-cols-2' : 'grid-cols-1'} gap-4 mb-3">
-        ${showFullMin ? `<div>
-          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Full Turn minimum ($)</label>
-          <input id="thresh-full" type="number" min="1" step="1" value="${c.fullMin}" onchange="saveTurnThresholds()" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-base font-headline text-on-surface focus:border-primary outline-none" placeholder="28">
-          <p class="text-[11px] font-body text-on-surface-variant mt-1">At or above = 1 full turn</p>
-        </div>` : ''}
-        ${showHalfMin ? `<div>
-          <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Half Turn minimum ($)</label>
-          <input id="thresh-half" type="number" min="1" step="1" value="${c.halfMin}" onchange="saveTurnThresholds()" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-base font-headline text-on-surface focus:border-primary outline-none" placeholder="12">
-          <p class="text-[11px] font-body text-on-surface-variant mt-1">At/above (below full) = half · below = bonus</p>
-        </div>` : ''}
-      </div>
-      <button onclick="saveTurnThresholds()" class="w-full btn-primary">Save Thresholds</button>
-    </div>` : ''}
     <div class="border-t border-surface-container-high pt-3">
       <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">When rules overlap</label>
       <select onchange="setTurnPrecedence(this.value)" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:border-primary outline-none">

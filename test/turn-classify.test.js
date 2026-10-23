@@ -8,7 +8,7 @@ import { classifyAmount, _mergeTurnConfig, getTurnConfig, isHalfService, turnCla
 
 // The full default config — MUST stay in lockstep with getTurnConfig()'s defaults.
 const DEF = {
-  fullMin: 28, halfMin: 12,
+  bonusMax: 11, halfMax: 27,
   halfEnabled: true, bonusEnabled: true,
   halfByCost: true, halfByService: false,
   bonusByCost: true, bonusByService: true,
@@ -16,33 +16,23 @@ const DEF = {
 };
 const f = (isBonusSvc = false, isHalfSvc = false) => ({ isBonusSvc, isHalfSvc });
 
-// Oracle = TODAY's classifyTurn (turns.js:37-44) before the overhaul.
-function legacy(cost, isBonusSvc) {
-  if (isBonusSvc) return 'bonus';          // always-bonus wins FIRST, even at cost 0
-  if (!cost || cost <= 0) return 'unpriced';
-  if (cost >= 28) return 'full';
-  if (cost >= 12) return 'half';
-  return 'bonus';
-}
-
-test('GOLDEN: default config reproduces legacy classifyTurn across the cost sweep + always-bonus', () => {
-  for (const cost of [0, 1, 5, 11, 12, 13, 27, 28, 40, 100]) {
-    for (const isBonusSvc of [false, true]) {
-      assert.equal(
-        classifyAmount(cost, 's', DEF, f(isBonusSvc, false)),
-        legacy(cost, isBonusSvc),
-        `cost=${cost} bonusSvc=${isBonusSvc}`
-      );
-    }
-  }
+test('default bands: ≤ bonusMax = bonus, (bonusMax, halfMax] = half, above = full', () => {
+  const cases = [[0, 'unpriced'], [1, 'bonus'], [11, 'bonus'], [11.5, 'half'], [12, 'half'], [27, 'half'], [27.5, 'full'], [28, 'full'], [100, 'full']];
+  for (const [amt, exp] of cases) assert.equal(classifyAmount(amt, 's', DEF, f()), exp, 'amount ' + amt);
 });
 
-test('half turns OFF: a would-be-half service counts as full', () => {
+test('bonus is INDEPENDENT of half: bonus keeps its own cutoff when half is OFF', () => {
+  const cfg = { ...DEF, halfEnabled: false };
+  assert.equal(classifyAmount(8, 's', cfg, f()), 'bonus');    // ≤ bonusMax → still bonus
+  assert.equal(classifyAmount(20, 's', cfg, f()), 'full');    // above bonus cutoff, half off → full
+});
+
+test('half turns OFF: a mid-priced service counts as full (no half band)', () => {
   assert.equal(classifyAmount(15, 's', { ...DEF, halfEnabled: false }, f()), 'full');
 });
 
-test('bonus turns OFF: a would-be-bonus (cheap) service counts as full', () => {
-  assert.equal(classifyAmount(5, 's', { ...DEF, bonusEnabled: false }, f()), 'full');
+test('bonus turns OFF (half on): a cheap service falls into the half band (≤ halfMax)', () => {
+  assert.equal(classifyAmount(5, 's', { ...DEF, bonusEnabled: false }, f()), 'half');
 });
 
 test('both OFF: every priced service is a full turn', () => {
@@ -60,9 +50,9 @@ test('half BY SERVICE classifies an unpriced service (service rule bypasses the 
   assert.equal(classifyAmount(0, 's', cfg, f(false, true)), 'half');
 });
 
-test('bonus BY COST off: a cheap priced service is not bonus (falls to full)', () => {
+test('bonus BY COST off (half on): a cheap priced service is half, not bonus', () => {
   const cfg = { ...DEF, bonusByCost: false };
-  assert.equal(classifyAmount(5, 's', cfg, f(false)), 'full');
+  assert.equal(classifyAmount(5, 's', cfg, f(false)), 'half');   // no bonus-by-cost band → ≤ halfMax = half
 });
 
 test('unpriced with no service rule is unpriced in every precedence mode', () => {
@@ -102,13 +92,21 @@ test('getTurnConfig returns the full defaults on a fresh (empty) turn_config', (
 });
 
 test('getTurnConfig merges stored values over defaults without dropping keys', () => {
-  getState().config.turn_config = { halfEnabled: false, fullMin: 30 };
+  getState().config.turn_config = { halfEnabled: false, bonusMax: 9 };
   const c = getTurnConfig();
   assert.equal(c.halfEnabled, false);
-  assert.equal(c.fullMin, 30);
-  assert.equal(c.halfMin, 12);              // default kept
+  assert.equal(c.bonusMax, 9);
+  assert.equal(c.halfMax, 27);              // default kept
   assert.equal(c.precedence, 'bonusFirst'); // default kept
   getState().config.turn_config = {};       // reset
+});
+
+test('getTurnConfig migrates an old {fullMin, halfMin} install to the new cutoffs', () => {
+  getState().config.turn_config = { fullMin: 28, halfMin: 12 };
+  const c = getTurnConfig();
+  assert.equal(c.bonusMax, 11);   // halfMin - 1
+  assert.equal(c.halfMax, 27);    // fullMin - 1
+  getState().config.turn_config = {};
 });
 
 test('_mergeTurnConfig never drops existing keys', () => {
