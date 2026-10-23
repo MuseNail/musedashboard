@@ -109,3 +109,33 @@ test('a structurally-valid but content-empty config falls back to the default (n
   const m = normalizePriceMenu({ v: 1, pages: [{ title: 'x', cols: [[], []], foot: [] }] });
   assert.ok(m.pages.some(p => p.cols.some(c => c.length)), 'content-empty config rendered the default instead of a blank menu');
 });
+
+// ── priceMenuSearch(menu, query) — the desk "how much is X?" lookup (Phase 3) ──
+import { priceMenuSearch } from '../js/app/features/guide.js';
+const tieredMenu = () => ({ v: 1, pages: [{ title: 'Hands', cols: [[
+  { t: 'sec', label: 'Full Sets' },
+  { t: 'row', nm: 'Acrylic', pr: '', variants: [{ nm: 'Full set', pr: '$56' }, { nm: 'Fill', pr: '$46' }] },
+  { t: 'row', nm: 'Gel Manicure', pr: '$38', addons: [{ nm: 'French tip', pr: '$7' }, { nm: 'Chrome', pr: '$10' }] },
+], []], foot: [] }] });
+
+test('priceMenuSearch: a matching service returns it plus its variants and add-ons', () => {
+  const r = priceMenuSearch(tieredMenu(), 'acrylic');
+  assert.ok(r.find(x => x.label === 'Acrylic'));
+  assert.ok(r.find(x => /Full set/.test(x.label) && x.price === '$56'));
+  assert.ok(r.find(x => /Fill/.test(x.label) && x.price === '$46'));
+});
+test('priceMenuSearch: an add-on is findable by its own name even if the parent does not match', () => {
+  const r = priceMenuSearch(tieredMenu(), 'french');
+  const hit = r.find(x => /French tip/.test(x.label));
+  assert.ok(hit && hit.price === '$7');
+});
+test('priceMenuSearch: carries the section for context, and empty query returns nothing', () => {
+  assert.deepEqual(priceMenuSearch(tieredMenu(), ''), []);
+  const r = priceMenuSearch(tieredMenu(), 'gel');
+  assert.equal(r[0].section, 'Full Sets');       // Gel Manicure sits under the last-seen section
+  assert.equal(r.find(x => x.label === 'Gel Manicure').price, '$38');
+});
+test('priceMenuSearch: tolerant of a malformed menu (no throw)', () => {
+  assert.doesNotThrow(() => priceMenuSearch(null, 'x'));
+  assert.deepEqual(priceMenuSearch({}, 'x'), []);
+});

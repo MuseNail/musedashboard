@@ -221,6 +221,34 @@ export function normalizePriceMenu(stored, opts) {
   return { v: 1, pages };
 }
 
+// Desk "how much is X?" lookup (Phase 3): flatten the menu into { label, price, section } matches for a
+// query. A matching service returns itself + its variants/add-ons; a variant/add-on is also findable by its
+// own name even when the parent doesn't match. Pure + tolerant of a malformed menu.
+export function priceMenuSearch(menu, query) {
+  const q = String(query == null ? '' : query).trim().toLowerCase(); if (!q) return [];
+  const hit = s => String(s == null ? '' : s).toLowerCase().includes(q);
+  const out = [];
+  for (const p of (menu && menu.pages) || []) {
+    let section = '';
+    for (const col of (p && p.cols) || []) {
+      for (const it of (col || [])) {
+        if (!it) continue;
+        if (it.t === 'sec') { section = it.label || ''; continue; }
+        if (it.t !== 'row') continue;
+        if (hit(it.nm)) {   // service name matches → show it + all its tiers
+          out.push({ label: it.nm || '', price: it.pr || '', section });
+          for (const v of (it.variants || [])) out.push({ label: (it.nm || '') + ' · ' + (v.nm || ''), price: v.pr || '', section });
+          for (const a of (it.addons || [])) out.push({ label: '+ ' + (a.nm || ''), price: a.pr || '', section: it.nm || '' });
+        } else {            // otherwise match a tier by its own name
+          for (const v of (it.variants || [])) if (hit(v.nm)) out.push({ label: (it.nm || '') + ' · ' + (v.nm || ''), price: v.pr || '', section });
+          for (const a of (it.addons || [])) if (hit(a.nm)) out.push({ label: '+ ' + (a.nm || '') + ' (' + (it.nm || '') + ')', price: a.pr || '', section });
+        }
+      }
+    }
+  }
+  return out;
+}
+
 // Pure renderer: data → the menu's page sections (no getState inside; menu + escaper passed in).
 export function priceMenuToHtml(menu, logoTag, esc) {
   const e = typeof esc === 'function' ? esc : (s => _str(s));
