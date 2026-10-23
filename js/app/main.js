@@ -136,6 +136,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.71', items: [
+    { icon: 'receipt_long', t: 'Edit your printed price menu yourself', d: 'The customer price menu is now yours to edit — Settings → Business → Price Menu (managers only). Change any price or name, add or remove services, and rearrange them either with the up/down and “Move to” buttons or by dragging a card to wherever you want it. You can also give a service tiers: pick-one options (like Full set / Fill) and stackable add-ons (like + French tip), and they show indented on the menu. While you’re editing, the Save button only lights up once you’ve actually changed something, there’s a Preview to see the printed menu before you commit, and if you try to leave with unsaved changes the app asks first (Save and leave / Discard / Keep editing) so you can never lose work by accident. Nothing goes live until you tap Save. (This is the printed display menu only — it’s separate from the service prices used at checkout.)' },
+    { icon: 'sell', t: 'Look up any price from the top search', d: 'Type a service name into the search box at the top (the magnifier) and you’ll now get a “Prices” section showing the menu price for it — including a service’s tier options and add-ons — so you can answer “how much is X?” in a second without opening the full menu. Tap a result to open the full printed menu.' },
+  ] },
   { v: 'v5.70', items: [
     { icon: 'verified_user', t: 'Signed waivers now show who signed and how', d: 'Opening a customer’s signed waiver (from Reports) now shows a clear record block above it: who signed, when, how (at the kiosk, sent from the front desk, etc.), what they consented to, and a document checksum — for both typed and uploaded-PDF waivers (PDF waivers used to show no signer details at all). If a waiver was bypassed — recorded without a customer signature — it’s now clearly marked as such instead of looking like it was signed.' },
   ] },
