@@ -375,6 +375,7 @@ const SETTINGS_NAV = [
     { label:'Activity Log', sub:'All users, all devices', content:'settings-audit-section', render:'renderActivityLog', icon:'history' },
     { label:'Data Recovery', sub:'Find & restore lost check-ins', content:'settings-recovery-section', render:'renderRecoveryReport', adminOnly:true, icon:'restore_page' },
     { label:'Diagnostics', sub:'Automatic error log & bug alerts', content:'settings-diagnostics-section', render:'renderDiagnostics', adminOnly:true, icon:'bug_report' },
+    { label:'Support', sub:'Staff help & feedback tickets', content:'settings-support-section', render:'renderSupportInbox', adminOrManager:true, icon:'support_agent' },
     { label:'App Info', sub:'Version & connection status', content:'appinfo-section', render:'renderAppInfo', icon:'info' },
   ]},
 ];
@@ -425,9 +426,10 @@ export function filterSettings(q) {
   if (!query) { if (results) { results.classList.add('hidden'); results.innerHTML = ''; } root?.classList.remove('hidden'); return; }
   _settingsCat = null;   // searching resets category context so Back returns to the root
   const isAdmin = getActiveUser()?.role === 'admin';
+  const isAdminOrMgr = ['admin', 'manager'].includes(getActiveUser()?.role);
   const matches = [];
   SETTINGS_NAV.forEach(g => g.items.forEach(it => {
-    if (it.hidden || (it.adminOnly && !isAdmin) || (it.perm && !canDo(it.perm))) return;
+    if (it.hidden || (it.adminOnly && !isAdmin) || (it.adminOrManager && !isAdminOrMgr) || (it.perm && !canDo(it.perm))) return;
     if ((it.label + ' ' + (it.sub || '') + ' ' + g.title).toLowerCase().includes(query)) matches.push({ ...it, cat: g.title });
   }));
   root?.classList.add('hidden');
@@ -446,8 +448,9 @@ export function settingsOpenCategory(catId) {
   _hideAllSettingsSections();
   document.getElementById('settings-root')?.classList.add('hidden');
   const isAdmin = getActiveUser()?.role === 'admin';
+  const isAdminOrMgr = ['admin', 'manager'].includes(getActiveUser()?.role);
   const list = document.getElementById('settings-category');
-  const items = g.items.filter(it => !it.hidden && (!it.adminOnly || isAdmin) && (!it.perm || canDo(it.perm)));
+  const items = g.items.filter(it => !it.hidden && (!it.adminOnly || isAdmin) && (!it.adminOrManager || isAdminOrMgr) && (!it.perm || canDo(it.perm)));
   list.innerHTML = items.length === 0 ? '<p class="text-sm font-body text-on-surface-variant px-1 py-3">Your role doesn’t have access to these settings.</p>' : items.map(it => _settingsItemRow(it)).join('');
   list.classList.remove('hidden');
   _setSettingsHeader(g.title, g.desc, true);
@@ -457,6 +460,7 @@ export function settingsOpenLeaf(contentId) {
   let item = null;
   SETTINGS_NAV.forEach(g => g.items.forEach(it => { if (it.content === contentId) item = it; }));
   if (item?.adminOnly && getActiveUser()?.role !== 'admin') { showToast('Admin only.'); return; }
+  if (item?.adminOrManager && !['admin', 'manager'].includes(getActiveUser()?.role)) { showToast('Admins & managers only.'); return; }
   if (item?.perm && !canDo(item.perm)) { showToast(`Your role doesn’t have access to ${item.label}.`); return; }
   _settingsView = 'leaf';
   _hideAllSettingsSections();

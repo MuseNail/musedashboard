@@ -1,5 +1,5 @@
 // ── Static constants (not synced state) ─────────────────────────────────────
-export const APP_VERSION = 'v5.71';
+export const APP_VERSION = 'v5.72';
 export const APP_NAME    = 'musedashboard';
 export const STAFF_PIN   = '1234'; // fallback when no front desk users are configured
 export const LOGO_PATH   = '';     // no default logo — upload one in Settings
@@ -12,6 +12,7 @@ export const STATE_PROXY  = ORIGIN + '/state';
 export const AI_PROXY     = ORIGIN + '/ai';
 export const PUSH_PROXY   = ORIGIN + '/push';
 export const REPORT_PROXY = ORIGIN + '/report';
+export const SUPPORT_PROXY = ORIGIN + '/support';
 export const SMS_PROXY    = ORIGIN + '/sms';
 // Fixed URL the printed receipt QR encodes forever. The Worker's /r route
 // redirects it to config.review_url (editable in Settings), so the QR never

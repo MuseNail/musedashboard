@@ -1,5 +1,11 @@
 // ── Cloudflare Worker — musedashboard ─────────────────────────────────────────
 //
+// eslint-disable-next-line
+import {
+  validateTicketInput, validateReplyInput, ticketKey, newTicketId,
+  buildTicket, applyReply, markRead, sanitizeTicket, isAdminRole,
+} from './support-util.js';
+//
 // Routes
 //   GET/POST/PUT /square/*  — CORS proxy → Square API
 //   PUT      /photos/{key}  — Upload binary to R2, returns { url }
@@ -415,6 +421,17 @@ export default {
       return new Response(body, { status: doRes.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
     }
 
+    // ── Support tickets (in-app staff → manager help desk) ──────────────────────
+    // Forwarded to the DO (same pattern as /push); the original request carries the
+    // session token (Authorization/?auth) + CF-Connecting-IP, which the DO reads to
+    // stamp the submitter and gate the admin routes. Already §13-gated by appAuthOk.
+    if (path.startsWith('/support/')) {
+      const stub  = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
+      const doRes = await stub.fetch(request);
+      const body  = await doRes.text();
+      return new Response(body, { status: doRes.status, headers: corsHeaders({ 'Content-Type': 'application/json' }) });
+    }
+
     // ── Automatic error reports (client crash/failure telemetry) ────────────────
     // POST /report submits an error (auth-exempt above, so a broken auth path can still
     // report); GET /report reads the log for the Diagnostics panel (auth-gated);
@@ -778,6 +795,9 @@ export default {
 // snapshot). It shares the backups/ namespace but must NEVER be offered as, or selected
 // for, a state restore — restoring one would rebuild from an empty state and wipe the salon.
 export function isWaiverDump(key) { return (((key || '').split('/').pop()) || '').startsWith('waivers-'); }
+// Support-ticket dumps (backups/tickets-*.json are JSON ARRAYs, not state snapshots). Like waiver
+// dumps they share backups/ but must NEVER be offered as, pruned as, or restored from a state snapshot.
+export function isTicketDump(key) { return (((key || '').split('/').pop()) || '').startsWith('tickets-'); }
 
 export function computeBackupKeepSet(backups, nowMs) {
   const DAY = 86400000;
@@ -880,9 +900,9 @@ export class MuseSalonDO {
     }
 
     if (url.pathname === '/state/backups') {
-      // Recovery UI list: hide waiver dumps so one can never be OFFERED as a restore candidate.
+      // Recovery UI list: hide waiver + ticket dumps so one can never be OFFERED as a restore candidate.
       const l = await this.listBackups();
-      const backups = l.backups.filter(b => !isWaiverDump(b.key));
+      const backups = l.backups.filter(b => !isWaiverDump(b.key) && !isTicketDump(b.key));
       return new Response(JSON.stringify({ backups, count: backups.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
     if (url.pathname === '/state/fleet') {
@@ -938,6 +958,11 @@ export class MuseSalonDO {
       await Promise.all(techIds.map(t => this.sendPushToTech(t, payload).catch(() => {})));
       return new Response(JSON.stringify({ ok: true, sent: techIds.length }), { status: 200, headers: { 'Content-Type': 'application/json' } });
     }
+
+    // ── Support tickets (in-app staff → manager help desk) ──────────────────────
+    // Handled DO-internally (like /push): the DO reads sess:<token> directly, stamps the
+    // submitter, and re-resolves the CURRENT role from fd_users/staff for the admin gate.
+    if (url.pathname.startsWith('/support/')) return this._handleSupport(request, url);
 
     // ── Helcim terminal result fan-out ──────────────────────────────────────────
     // Called server-side by the /terminal/webhook receiver. Pushes the terminal result to
@@ -1035,6 +1060,125 @@ export class MuseSalonDO {
   // ({title, body, tag}) the body is aes128gcm-encrypted so the SW shows that message;
   // without it (or if encryption fails) a payload-less ping falls back to the SW's
   // generic assignment text.
+  // ── Support tickets ──────────────────────────────────────────────────────────
+  // Resolve the request's §13 session, RE-READING the current role from fd_users/staff (never
+  // trusting the 30-day session's stored role — a demoted manager must lose admin powers at once).
+  async _resolveSession(request, url) {
+    const h = request.headers.get('Authorization') || '';
+    const token = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
+    if (!token) return null;
+    const sess = await this.state.storage.get('sess:' + token);
+    if (!sess || sess.expires < Date.now()) return null;
+    if (sess.id === 'fallback') return { kind: 'fd', id: 'fallback', name: 'Manager', role: 'admin' };
+    if (sess.kind === 'fd') {
+      const fd = (await this.state.storage.get('config:fd_users')) || [];
+      const u = fd.find(x => x.id === sess.id);
+      if (!u) return null;
+      return { kind: 'fd', id: u.id, name: u.name || sess.name, role: u.role || 'frontdesk' };
+    }
+    const staff    = (await this.state.storage.get('config:staff')) || [];
+    const inactive = new Set((await this.state.storage.get('config:inactive_staff')) || []);
+    const u = staff.find(s => s.id === sess.id);
+    if (!u || inactive.has(sess.id)) return null;
+    return { kind: 'tech', id: u.id, name: u.name || sess.name, role: 'tech' };
+  }
+
+  async _handleSupport(request, url) {
+    const J = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json' } });
+    const who = await this._resolveSession(request, url);
+    if (!who) return J({ error: 'unauthorized' }, 401);
+    const admin = isAdminRole(who.role);
+    const parts = url.pathname.split('/').filter(Boolean);   // ['support', ...]
+    const method = request.method.toUpperCase();
+    let body = {}; if (method === 'POST') { try { body = await request.json(); } catch {} }
+
+    // GET /support/tickets — the shared list (sanitized, no archived). Admin also gets the unread count.
+    if (parts.length === 2 && parts[1] === 'tickets' && method === 'GET') {
+      const map = await this.state.storage.list({ prefix: 'ticket:' });
+      // The admin inbox needs archived tickets (to show an Archived view + unarchive); staff never do.
+      let all = [...map.values()].filter(Boolean);
+      if (!admin) all = all.filter(t => t.status !== 'archived');
+      all.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      const out = { tickets: all.map(sanitizeTicket) };
+      if (admin) out.unread = all.filter(t => t.unreadForDev && t.status !== 'archived').length;   // admin-only; archived don't count
+      return J(out);
+    }
+    // POST /support/ticket — file a new ticket (submitter stamped from the session, never the body).
+    if (parts.length === 2 && parts[1] === 'ticket' && method === 'POST') {
+      const v = validateTicketInput(body);
+      if (!v.ok) return J({ error: v.error }, 400);
+      const ip = request.headers.get('CF-Connecting-IP') || 'local';
+      const hour = Math.floor(Date.now() / 3600000);
+      const rl = (await this.state.storage.get('suprl:' + ip)) || { hour: 0, n: 0 };
+      if (rl.hour !== hour) { rl.hour = hour; rl.n = 0; }
+      if (rl.n >= 30) return J({ error: 'Too many tickets just now — try again shortly.' }, 429);
+      const map = await this.state.storage.list({ prefix: 'ticket:' });
+      const open = [...map.values()].filter(t => t && t.status !== 'resolved' && t.status !== 'archived').length;
+      if (open >= 100) return J({ error: 'The support inbox is full — ask a manager to resolve or archive open tickets.' }, 429);
+      rl.n++; await this.state.storage.put('suprl:' + ip, rl);
+      const now = Date.now();
+      const id = newTicketId(now, crypto.randomUUID().replace(/-/g, '').slice(0, 8));
+      const t = buildTicket({ id, now, submitter: who, type: v.value.type, subject: v.value.subject, message: v.value.message, appVersion: body.appVersion });
+      // An admin filing their own ticket shouldn't boldface/ping themselves — clear the dev-unread side
+      // and skip the admin push (owner decision: suppress self-notify).
+      if (admin) { markRead(t, 'dev'); await this.state.storage.put(ticketKey(id), t); }
+      else { await this.state.storage.put(ticketKey(id), t); this._notifySupportAdmin().catch(() => {}); }
+      await this.ensureBackupScheduled();
+      return J({ ticket: sanitizeTicket(t) });
+    }
+    // POST /support/ticket/<id>/{reply|dev-reply|status|read}
+    if (parts.length === 4 && parts[1] === 'ticket' && method === 'POST') {
+      const id = parts[2], action = parts[3];
+      const t = await this.state.storage.get(ticketKey(id));
+      if (!t) return J({ error: 'not found' }, 404);
+      if (action === 'reply') {
+        if (t.status === 'archived') return J({ error: 'This ticket is archived.' }, 400);   // no replies to an archived ticket
+        const v = validateReplyInput(body); if (!v.ok) return J({ error: v.error }, 400);
+        applyReply(t, { from: 'salon', author: who.name, text: v.value.message, now: Date.now() });
+        await this.state.storage.put(ticketKey(id), t);
+        this._notifySupportAdmin().catch(() => {});
+        return J({ ticket: sanitizeTicket(t) });
+      }
+      if (action === 'dev-reply') {
+        if (!admin) return J({ error: 'admins only' }, 403);
+        const v = validateReplyInput(body); if (!v.ok) return J({ error: v.error }, 400);
+        applyReply(t, { from: 'dev', author: who.name, text: v.value.message, now: Date.now() });
+        markRead(t, 'dev');
+        await this.state.storage.put(ticketKey(id), t);
+        this._notifySupportSubmitter(t).catch(() => {});
+        return J({ ticket: sanitizeTicket(t) });
+      }
+      if (action === 'status') {
+        if (!admin) return J({ error: 'admins only' }, 403);
+        const status = String(body.status || '');
+        if (!['open', 'replied', 'resolved', 'archived'].includes(status)) return J({ error: 'bad status' }, 400);
+        t.status = status; t.updatedAt = Date.now(); markRead(t, 'dev');
+        if (status === 'archived') markRead(t, 'salon');   // an archived ticket is unread for nobody (it's off every list)
+        await this.state.storage.put(ticketKey(id), t);
+        return J({ ticket: sanitizeTicket(t) });
+      }
+      if (action === 'read') {
+        const asked = body.who === 'dev' ? 'dev' : 'salon';
+        const side = (asked === 'dev' && !admin) ? 'salon' : asked;   // a non-admin may only clear the salon side
+        markRead(t, side);
+        await this.state.storage.put(ticketKey(id), t);
+        return J({ ticket: sanitizeTicket(t) });
+      }
+    }
+    return J({ error: 'not found' }, 404);
+  }
+
+  // Best-effort push to the admin 'support' id (generic body — never user text on a lock screen).
+  async _notifySupportAdmin() {
+    await this.sendPushToTech('support', { title: 'Muse — support', body: 'You have a new support message', tag: 'muse-ticket', url: '/musedashboard/index.html' });
+  }
+  // Best-effort push to the submitter (only fires for a tech on the staff app in v1; dashboard FD has no sub).
+  async _notifySupportSubmitter(ticket) {
+    if (!ticket.submitterPushId) return;
+    const url = ticket.submitterPushId.startsWith('fd:') ? '/musedashboard/index.html' : '/musedashboard/staff.html';
+    await this.sendPushToTech(ticket.submitterPushId, { title: 'Muse — support reply', body: 'The manager replied to your message', tag: 'muse-ticket', url });
+  }
+
   async sendPushToTech(techId, payload) {
     if (!this.env.VAPID_PRIVATE_KEY) return;
     const subs = await this.state.storage.list({ prefix: 'push:' + techId + ':' });
@@ -1632,6 +1776,25 @@ export class MuseSalonDO {
           }
         } catch (e) { console.error('[waiver-backup] failed:', (e && e.message) || String(e)); }
       }
+      // Support tickets are kept OUT of buildSnapshot (not broadcast), so — like waivers — they get
+      // their own R2 copy under `backups/tickets-` (its own try; isTicketDump keeps it out of the
+      // state keep-set and the restore source). We also prune long-resolved/archived tickets from DO
+      // storage here so `ticket:` keys don't grow unbounded over a multi-year single salon.
+      if (this.env.PHOTOS_BUCKET) {
+        try {
+          const tmap = await this.state.storage.list({ prefix: 'ticket:' });
+          if (tmap.size > 0) {
+            await this.env.PHOTOS_BUCKET.put('backups/tickets-' + ts + '.json', JSON.stringify([...tmap.values()]), {
+              httpMetadata: { contentType: 'application/json' },
+            });
+          }
+          const cutoff = Date.now() - 180 * 86400000;
+          const staleTickets = [...tmap.entries()]
+            .filter(([, t]) => t && (t.status === 'resolved' || t.status === 'archived') && (t.updatedAt || 0) < cutoff)
+            .map(([k]) => k);
+          for (let i = 0; i < staleTickets.length; i += 128) await this.state.storage.delete(staleTickets.slice(i, i + 128));
+        } catch (e) { console.error('[ticket-backup] failed:', (e && e.message) || String(e)); }
+      }
       // Retention prune (its own try so a prune failure never blocks the backup/housekeeping).
       try { await this.pruneBackups(); } catch (e) { console.error('[retention] prune failed:', (e && e.message) || String(e)); }
       // Bound the idempotency markers: keep the newest ~2000 by seq.
@@ -1697,11 +1860,13 @@ export class MuseSalonDO {
     // state keep-set: computeBackupKeepSet buckets by time and keeps one key per period, so a
     // waiver dump would compete with a state snapshot for a slot. Partition them out and give
     // them their own retention (each dump is an append-only superset → keep the newest 30).
-    const stateBackups = backups.filter(b => !isWaiverDump(b.key));
+    const stateBackups = backups.filter(b => !isWaiverDump(b.key) && !isTicketDump(b.key));
     const waiverBackups = backups.filter(b => isWaiverDump(b.key));   // already newest-first from listBackups
+    const ticketBackups = backups.filter(b => isTicketDump(b.key));   // ditto — own retention, own slot
     const { keep, del } = computeBackupKeepSet(stateBackups, Date.now());
     const waiverDel = waiverBackups.slice(30).map(b => b.key);        // keep newest 30, prune older
-    const safeDel = [...del, ...waiverDel].filter(k => typeof k === 'string' && k.startsWith('backups/'));
+    const ticketDel = ticketBackups.slice(30).map(b => b.key);        // each dump is an append-only superset → newest 30
+    const safeDel = [...del, ...waiverDel, ...ticketDel].filter(k => typeof k === 'string' && k.startsWith('backups/'));
     const batch = safeDel.slice(0, 1000);   // R2 array-delete cap; steady state ~0-1, one-time cleanup ~470
     console.log(`[retention] total=${backups.length} keep=${keep.size} prune=${safeDel.length}${batch.length < safeDel.length ? ` (capped ${batch.length}/run)` : ''} mode=${live ? 'LIVE' : 'log-only'}`);
     if (live && batch.length) await this.env.PHOTOS_BUCKET.delete(batch);
@@ -1716,9 +1881,10 @@ export class MuseSalonDO {
     let useKey = key;
     // Default-latest must skip legal-record dumps: they share backups/ but are arrays, not
     // state snapshots — restoring one would rebuild from empty state and wipe the salon.
-    if (!useKey) { const l = await this.listBackups(); useKey = (l.backups.find(b => !isWaiverDump(b.key)) || {}).key; }
+    if (!useKey) { const l = await this.listBackups(); useKey = (l.backups.find(b => !isWaiverDump(b.key) && !isTicketDump(b.key)) || {}).key; }
     if (!useKey) return { error: 'no backup found' };
     if (isWaiverDump(useKey)) return { error: 'that is a waiver archive, not a state snapshot — cannot restore from it' };
+    if (isTicketDump(useKey)) return { error: 'that is a support-ticket archive, not a state snapshot — cannot restore from it' };
     const obj = await this.env.PHOTOS_BUCKET.get(useKey);
     if (!obj) return { error: 'backup not found: ' + useKey };
     let snap; try { snap = JSON.parse(await obj.text()); } catch { return { error: 'backup is not valid JSON' }; }
@@ -1746,10 +1912,15 @@ export class MuseSalonDO {
       // (st) has NONE — carry the LIVE waiver: keys through the wipe or a restore permanently
       // erases every acceptance. Merged into `puts` → flushed by the existing 128-key batches.
       const waivers = await this.state.storage.list({ prefix: 'waiver:' });
+      // Support tickets are also OUT of buildSnapshot, so the restore snapshot has none — carry the
+      // LIVE ticket: keys through the wipe (owner decision: a restore PRESERVES tickets; only a
+      // factory reset clears them). Same batched-puts flush as waivers/fleet.
+      const tickets = await this.state.storage.list({ prefix: 'ticket:' });
       await this.state.storage.deleteAll();
       const puts = {};
       for (const [k, v] of fleet) puts[k] = v;
       for (const [k, v] of waivers) puts[k] = v;
+      for (const [k, v] of tickets) puts[k] = v;
       for (const [k, v] of Object.entries(st.config || {}))     puts['config:' + k] = v;
       // cfgmeta must come back too, or every config key's stale-write guard is disarmed
       // after a restore and any stale offline config.set replay clobbers restored state.
@@ -1796,6 +1967,9 @@ export class MuseSalonDO {
       const fleet = await this.state.storage.list({ prefix: 'fleet:' });
       // Legal waivers survive a factory reset too (owner decision — retained by design). The
       // deliberate "Clear signed waivers" action is the ONLY thing that removes them.
+      // Support tickets are DELIBERATELY NOT carried here: a factory reset is a wipe-to-empty and
+      // tickets are operational, not legal records (owner decision). The last backups/tickets-*.json
+      // R2 dump still holds them if recovery is ever needed. Do not add a ticket: carry-through.
       const waivers = await this.state.storage.list({ prefix: 'waiver:' });
       await this.state.storage.deleteAll();
       const keep = {};

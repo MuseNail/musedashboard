@@ -1,7 +1,7 @@
 // ── Service Worker (v4.85 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'muse-v5.71';
+const CACHE_NAME = 'muse-v5.72';
 
 const PRECACHE_URLS = [
   '/musedashboard/',
@@ -61,6 +61,7 @@ const PRECACHE_URLS = [
   '/musedashboard/js/app/features/search.js',
   '/musedashboard/js/app/features/guide.js',
   '/musedashboard/js/app/features/pricemenu-editor.js',
+  '/musedashboard/js/app/features/support.js',
   '/musedashboard/js/app/features/receipt.js',
   '/musedashboard/js/app/features/review-qr.js',
   '/musedashboard/js/app/features/diagnostics.js',
@@ -128,13 +129,14 @@ async function networkFirst(req) {
 // ({title, body, tag} — e.g. new-appointment alerts) override it. Distinct tags
 // keep an appointment alert from replacing an unread assignment alert.
 self.addEventListener('push', event => {
-  let title = 'Muse Staff', body = 'New customer assigned — tap to open', tag = 'muse-assign';
+  let title = 'Muse Staff', body = 'New customer assigned — tap to open', tag = 'muse-assign', url = '';
   try {
     if (event.data) {
       const d = event.data.json();
       if (d && d.title) title = d.title;
       if (d && d.body)  body  = d.body;
       if (d && d.tag)   tag   = d.tag;
+      if (d && d.url)   url   = d.url;   // where notificationclick should land (support tickets carry this)
     }
   } catch {}
   event.waitUntil(self.registration.showNotification(title, {
@@ -143,14 +145,19 @@ self.addEventListener('push', event => {
     badge: '/musedashboard/icons/icon-192.png',
     tag,
     renotify: true,
+    data: { url },   // read back in notificationclick
   }));
 });
 self.addEventListener('notificationclick', event => {
   event.notification.close();
+  // A payload-carried url (e.g. a support-ticket alert → the dashboard) wins; otherwise the legacy
+  // default opens the staff app. Tags alone can't say which app, so the destination rides the payload.
+  const target = (event.notification.data && event.notification.data.url) || '/musedashboard/staff.html';
+  const matchPath = target.includes('/staff') ? '/musedashboard/staff' : '/musedashboard/index';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      for (const c of list) { if (c.url.includes('/musedashboard/staff') && 'focus' in c) return c.focus(); }
-      return clients.openWindow('/musedashboard/staff.html');
+      for (const c of list) { if ((c.url.includes(matchPath) || (matchPath === '/musedashboard/index' && c.url.includes('/musedashboard/') && !c.url.includes('/staff'))) && 'focus' in c) return c.focus(); }
+      return clients.openWindow(target);
     })
   );
 });

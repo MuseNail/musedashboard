@@ -243,6 +243,10 @@ tailwind.config = {
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">chat</span>
         <span id="chat-badge" class="hidden absolute flex items-center justify-center font-bold text-white" style="top:3px;right:3px;min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1">0</span>
       </button>
+      <button onclick="openSupport()" id="support-btn" title="Help &amp; Feedback" class="relative flex items-center justify-center w-11 h-11 rounded-full hover:bg-surface-container transition-colors">
+        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:22px">support_agent</span>
+        <span id="support-badge" class="hidden absolute flex items-center justify-center font-bold text-white" style="top:3px;right:3px;min-width:17px;height:17px;padding:0 4px;border-radius:9999px;background:#d11a2a;font-size:10px;line-height:1">0</span>
+      </button>
       <button onclick="goTo('screen-welcome')" title="Customer Screen" class="flex items-center justify-center w-8 h-8 rounded-full hover:bg-surface-container transition-colors">
         <span class="material-symbols-outlined text-on-surface-variant" style="font-size:20px">tablet</span>
       </button>
@@ -1379,6 +1383,10 @@ tailwind.config = {
           <div id="settings-diagnostics-section" class="hidden px-5 py-4">
             <p class="text-sm font-body text-on-surface-variant mb-3">Errors are captured automatically — even ones you don't see happen — so nothing fails silently. Turn on bug alerts to get a push here the moment something breaks.</p>
             <div id="diagnostics-content" class="max-h-[32rem] overflow-y-auto"></div>
+          </div>
+          <div id="settings-support-section" class="hidden px-5 py-4">
+            <p class="text-sm font-body text-on-surface-variant mb-3">Tickets your staff send from the Help &amp; Feedback button. Reply here and mark them resolved — the staffer sees your reply on their screen.</p>
+            <div id="support-inbox-content" class="max-h-[34rem] overflow-y-auto"></div>
           </div>
         </div>
 

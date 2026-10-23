@@ -46,10 +46,11 @@ import * as receipt from './features/receipt.js';
 import * as diagnostics from './features/diagnostics.js';
 import * as waiver from './features/waiver.js';
 import * as pricemenuEditor from './features/pricemenu-editor.js';
+import * as support from './features/support.js';
 import { syncBannerModel, syncBannerIcon } from './features/sync-banner.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, waiver, pricemenuEditor]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, waiver, pricemenuEditor, support]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -136,6 +137,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.72', items: [
+    { icon: 'support_agent', t: 'Help & Feedback — send the manager a tracked message', d: 'There’s a new “Help & Feedback” button at the top of the dashboard (next to chat). Front-desk staff can tap it to send the manager a Problem, Question, or Request — and it stays as a real back-and-forth thread that’s tracked until it’s resolved, not lost like a chat message at the end of the day. A little red dot on the button tells the staffer when the manager has replied. Managers (and the owner) answer from Settings → Support: there’s an inbox of every ticket with Open / Replied / Resolved / Archived filters, you reply right in the thread, mark it resolved or archive it (archived ones can be brought back), and a red dot on the Settings tab shows when a new one comes in. You can optionally turn on a phone push for new tickets. It’s separate from the automatic error log in Diagnostics — this one is for messages people actually write. Quick guide: Chat is for right-now talk, Tasks are to-dos you check off, and Support is for issues/requests you want tracked and answered.' },
+  ] },
   { v: 'v5.71', items: [
     { icon: 'receipt_long', t: 'Edit your printed price menu yourself', d: 'The customer price menu is now yours to edit — Settings → Business → Price Menu (managers only). Change any price or name, add or remove services, and rearrange them either with the up/down and “Move to” buttons or by dragging a card to wherever you want it. You can also give a service tiers: pick-one options (like Full set / Fill) and stackable add-ons (like + French tip), and they show indented on the menu. While you’re editing, the Save button only lights up once you’ve actually changed something, there’s a Preview to see the printed menu before you commit, and if you try to leave with unsaved changes the app asks first (Save and leave / Discard / Keep editing) so you can never lose work by accident. Nothing goes live until you tap Save. (This is the printed display menu only — it’s separate from the service prices used at checkout.)' },
     { icon: 'sell', t: 'Look up any price from the top search', d: 'Type a service name into the search box at the top (the magnifier) and you’ll now get a “Prices” section showing the menu price for it — including a service’s tier options and add-ons — so you can answer “how much is X?” in a second without opening the full menu. Tap a result to open the full printed menu.' },
@@ -559,7 +563,7 @@ window.addEventListener('storage', e => { if (e.key === 'muse_sq_paid' && e.newV
 // on stale cached config before a resync lands (and could wrongly clear the roster). The resync
 // fired on tab-visible pulls a fresh snapshot whose hydrate runs runDayRolloverIfNeeded with
 // server-confirmed state (see onStateChange 'hydrate').
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); checkAppVersion(); helcim.checkUnfinalizedCharges?.(); } });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { applySquarePaidFlag(); checkSquarePending(); checkAppVersion(); helcim.checkUnfinalizedCharges?.(); if (session.getActiveUser?.()) support.pollSupportUnread?.(); } });
 
 // Installed-PWA fallback for the Square charge. On iOS a Home-Screen app is resumed
 // after the Square hand-off WITHOUT the callback data, so the muse_sq_paid handoff
@@ -897,6 +901,11 @@ async function boot() {
   // launch/visibilitychange) still notices a new deploy and prompts on its own. Skipped while
   // hidden — visibilitychange already covers the return-to-app case.
   setInterval(() => { if (!document.hidden) checkAppVersion(); }, 20 * 60 * 1000);
+  // Support-ticket unread signal: paints the dashboard button badge (replies for the staffer) and
+  // the Settings-nav dot (new tickets, admin only). Poll is the reliable signal; push is a bonus.
+  const pollSupport = () => { if (!document.hidden && session.getActiveUser?.()) support.pollSupportUnread?.(); };
+  pollSupport();
+  setInterval(pollSupport, 3 * 60 * 1000);
   registerServiceWorker();
 }
 
