@@ -60,10 +60,11 @@ body{font-family:'Jost',sans-serif;color:#1a1a1a;background:#e9e6df}
 .bar{position:sticky;top:0;z-index:5;background:#fff;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid #ddd}
 .bar strong{font-size:14px;letter-spacing:1px}
 .bar button{background:#15514f;color:#fff;border:0;border-radius:8px;padding:8px 16px;font-size:14px;cursor:pointer}
-.page{width:8.5in;height:11in;padding:0.35in 0.6in 0.45in;background:#ffffff;margin:18px auto;box-shadow:0 4px 18px rgba(0,0,0,.16);display:flex;flex-direction:column;overflow:hidden}
-.logo{display:block;margin:0 auto;width:2.125in;height:auto}
-.rule{border:0;border-top:1px solid #cccccc;width:1.3in;margin:0.12in auto 0}
-.pagetitle{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:25px;color:#1a1a1a;text-align:center;margin:7px 0 0}
+.page{width:8.5in;height:11in;padding:0.22in 0.6in 0.3in;background:#ffffff;margin:18px auto;box-shadow:0 4px 18px rgba(0,0,0,.16);display:flex;flex-direction:column;overflow:hidden}
+.phead{display:flex;align-items:center;gap:0.2in;border-bottom:1px solid #cccccc;padding-bottom:0.1in}
+.logo{display:block;width:1.7in;height:auto;flex-shrink:0}
+.phead-sp{width:1.7in;flex-shrink:0}
+.pagetitle{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:25px;color:#1a1a1a;text-align:center;margin:0;flex:1}
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:0 0.55in;margin-top:0.16in;flex:1}
 .sec{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:19px;letter-spacing:3px;color:#15514f;text-transform:uppercase;margin:15px 0 7px;display:flex;align-items:center;gap:9px}
 .col>.sec:first-child{margin-top:0}
@@ -268,7 +269,7 @@ export function priceMenuToHtml(menu, logoTag, esc) {
   const colHtml = col => `<div class="col">${(col || []).map(itemHtml).join('')}</div>`;
   const footHtml = foot => (foot && foot.length) ? `<div class="foot">${foot.map(f => { const c = _WL_CLS.has(f.cls) ? f.cls : ''; return `<p${c ? ` class="${c}"` : ''}>${e(f.text)}</p>`; }).join('')}</div>` : '';
   return (menu.pages || []).map(p =>
-    `<section class="page">${logoTag}<hr class="rule"><div class="pagetitle">${e(p.title)}</div><div class="cols">${(p.cols || []).map(colHtml).join('')}</div>${footHtml(p.foot)}</section>`
+    `<section class="page"><div class="phead">${logoTag}<div class="pagetitle">${e(p.title)}</div><div class="phead-sp"></div></div><div class="cols">${(p.cols || []).map(colHtml).join('')}</div>${footHtml(p.foot)}</section>`
   ).join('');
 }
 

@@ -137,6 +137,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.76', items: [
+    { icon: 'notifications_active', t: 'A heads-up when a new support ticket comes in', d: 'When a staff member sends a Help & Feedback ticket, managers now get a pop-up notice in the app the moment it arrives — so you don’t have to be watching the Settings tab to catch it. The unread dot on Settings and the optional phone push are still there too. (Email notifications are on the list for later.)' },
+    { icon: 'receipt_long', t: 'Printed price menu fits the page better', d: 'Tightened up the printed menu so it fits the sheet without running long: the logo is a bit smaller and now sits on the left with the page title centered beside it, and the top and bottom margins are trimmed for more breathing room before the footer. Tap Preview to see it.' },
+  ] },
   { v: 'v5.75', items: [
     { icon: 'receipt_long', t: 'Price menu: polish to the editor and the printed layout', d: 'A handful of refinements to the Price Menu. The Add buttons (Service / Subheader / Section) are now docked at the top of the list, so they’re always within reach no matter how far you’ve scrolled. In a price box you now get the normal keyboard, so you can type plus and minus signs — and typing a plain number still fills in the “$” for you. A description can now run two lines: just press Enter in the box where you want the break. On the printed menu, all prices are now the same size (the main price was a little bigger than the options/add-ons — now they match), the logo is a touch smaller, and the top is tightened up so there’s more breathing room before the footer.' },
   ] },

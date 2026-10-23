@@ -183,8 +183,16 @@ export async function supportReplySend() {
 // ── Unread badges (dashboard button + Settings nav dot) ────────
 // Staff signal = the dashboard button badge (unreadForSalon: a manager reply they haven't read).
 // Admin signal = a dot on the Settings tab (unreadForDev: new tickets / staff replies awaiting them).
+let _lastAdminUnread = null;   // previous admin unread count — toast only on an INCREASE (a genuinely new ticket/reply)
 export async function pollSupportUnread() {
   const res = await loadTickets();
+  // Toast an active admin the instant a new ticket/reply arrives — a reliable in-app alert on top of the
+  // Settings nav dot (persistent) and the opt-in phone push (for when they're away). First poll never toasts.
+  if (res.ok && supportIsAdmin()) {
+    const n = res.unread || 0;
+    if (_lastAdminUnread != null && n > _lastAdminUnread) showToast('New support ticket — open Settings → Support to reply');
+    _lastAdminUnread = n;
+  }
   paintSupportBadges(res.ok ? res.unread : 0);
   if (document.getElementById('support-modal') && !isEditing()) _renderModal();
 }
