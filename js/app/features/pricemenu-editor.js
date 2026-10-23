@@ -285,3 +285,31 @@ export function pmCancel() {
 export function pmReset() {
   window.showWarnModal?.('Reset to the default menu?', 'This replaces your draft with the built-in default menu (not your last saved version). Nothing is saved until you tap Save.', () => { _pmDraft = _clone(normalizePriceMenu(DEFAULT_PRICE_MENU)); renderPriceMenuEditor(); }, 'Reset');
 }
+
+// ── Unsaved-changes click-out guard (2a-guard) ──────────────────────────────────────────────────────
+// Core-nav chokepoints (main.js showDashPanel/goTo, settings.js leaf nav) call pmGuardLeave(onLeave) at
+// their top. Inert unless the editor is open+dirty; otherwise a dedicated 3-button modal (Save/Discard/
+// Keep editing). Save/Discard clear the draft and then run onLeave; Keep editing dismisses.
+let _pmPendingLeave = null;
+function _pmCloseUnsaved() { const m = document.getElementById('pm-unsaved-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } }
+export function pmGuardLeave(onLeave) {
+  // Clean leave (or editor not open): clear the draft too, so a reopen re-reads live config (picks up a
+  // change made on another device meanwhile) instead of reusing a stale clean draft.
+  if (!pmEditorHasUnsaved()) { pmEditorClearDraft(); if (onLeave) onLeave(); return; }
+  const m = document.getElementById('pm-unsaved-modal');
+  if (!m) { if (onLeave) onLeave(); return; }   // no modal available → don't trap the user
+  _pmPendingLeave = onLeave || null;
+  m.classList.remove('hidden'); m.style.display = 'flex';
+}
+export function pmUnsavedSave() {
+  const go = _pmPendingLeave; _pmPendingLeave = null; _pmCloseUnsaved();
+  if (_pmDraft) { dispatch('config.set', { key: 'price_menu', value: _clone(_pmDraft) }); showToast('Price menu saved'); }
+  pmEditorClearDraft();
+  if (go) go();
+}
+export function pmUnsavedDiscard() {
+  const go = _pmPendingLeave; _pmPendingLeave = null; _pmCloseUnsaved();
+  pmEditorClearDraft();
+  if (go) go();
+}
+export function pmUnsavedStay() { _pmPendingLeave = null; _pmCloseUnsaved(); }

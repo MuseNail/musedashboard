@@ -404,6 +404,7 @@ function _settingsItemRow(it, subText) {
 }
 
 export function settingsNavRoot() {
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsNavRoot()); return; }
   _settingsView = 'root'; _settingsCat = null;
   _hideAllSettingsSections();
   document.getElementById('settings-category')?.classList.add('hidden');
@@ -439,6 +440,7 @@ export function filterSettings(q) {
 }
 export function clearSettingsSearch() { const i = document.getElementById('settings-search'); if (i) { i.value = ''; filterSettings(''); i.focus(); } }
 export function settingsOpenCategory(catId) {
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsOpenCategory(catId)); return; }   // defense-in-depth (benign today; unreachable from a leaf view)
   const g = SETTINGS_NAV.find(x => x.id === catId); if (!g) return;
   _settingsView = 'cat'; _settingsCat = catId;
   _hideAllSettingsSections();
@@ -451,6 +453,7 @@ export function settingsOpenCategory(catId) {
   _setSettingsHeader(g.title, g.desc, true);
 }
 export function settingsOpenLeaf(contentId) {
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsOpenLeaf(contentId)); return; }
   let item = null;
   SETTINGS_NAV.forEach(g => g.items.forEach(it => { if (it.content === contentId) item = it; }));
   if (item?.adminOnly && getActiveUser()?.role !== 'admin') { showToast('Admin only.'); return; }
@@ -470,6 +473,7 @@ export function settingsOpenLeaf(contentId) {
   _setSettingsHeader(item?.label || 'Settings', '', true);
 }
 export function settingsBack() {
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => settingsBack()); return; }
   if (_settingsView === 'leaf' && _settingsCat) settingsOpenCategory(_settingsCat);
   else settingsNavRoot();
 }

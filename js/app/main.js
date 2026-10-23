@@ -108,6 +108,8 @@ function setupBackHandler() {
   });
 }
 function goTo(screenId, param) {
+  // Unsaved-changes guard (price-menu editor) — a screen change (incl. the OS back gesture) while editing.
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => goTo(screenId, param)); return; }
   closeAllModals();   // a screen change never leaves a modal orphaned over the new screen
   const prevScreen = document.querySelector('.screen.active')?.id;
   if (prevScreen && prevScreen !== screenId && !_navBack) {
@@ -461,6 +463,8 @@ function renderDashSubnav(grp, activePanel) {
 }
 
 function showDashPanel(panel) {
+  // Unsaved-changes guard (price-menu editor) — intercept a tab switch while editing; re-invoke on Save/Discard.
+  if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => showDashPanel(panel)); return; }
   if ((panel === 'reports' || panel === 'payroll') && !canViewReportsGroup()) { utils.showToast('Your role doesn’t have permission to view Reports & Payroll.'); return; }
   closeAllModals();
   ['queue','reports','transactions','payroll','turns','settings','giftcards','calendar','floorplan','customers'].forEach(p => {
