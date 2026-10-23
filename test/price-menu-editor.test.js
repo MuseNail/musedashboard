@@ -5,8 +5,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePriceMenu, DEFAULT_PRICE_MENU, priceMenuToHtml } from '../js/app/features/guide.js';
 import {
-  pmFind, pmSetField, pmAddItem, pmRemoveItem, pmMoveItem, pmRelocateItem,
+  pmFind, pmSetField, pmAddItem, pmRemoveItem, pmMoveItem, pmRelocateItem, pmMoveTo,
   pmAddSub, pmRemoveSub, pmSetSubField, pmAddFoot, pmRemoveFoot, pmSetFoot, pmIsDirty,
+  pmFlatten, pmDropTarget,
 } from '../js/app/features/pricemenu-editor.js';
 
 const draft = () => normalizePriceMenu(null);   // the default, id-stamped
@@ -181,4 +182,56 @@ test('pmMoveTo places a node before a target (same or other column), section car
   const r2 = col(d, 0, 0).find(i => i.t === 'row');
   assert.equal(pmMoveTo(d, r2.id, _colId(d, 1, 1), null), true);
   assert.equal(col(d, 1, 1)[col(d, 1, 1).length - 1], r2, 'appended to the end');
+});
+
+// ── pmFlatten + pmDropTarget (Option-B redesign: section-grouped list + model-based drag) ──
+const fx = () => ({ v: 1, pages: [
+  { id: 'p1', title: 'Hands', cols: [
+    [ { id: 's1', t: 'sec', label: 'Manicures' }, { id: 'r1', t: 'row', nm: 'Classic', pr: '$25' }, { id: 'r2', t: 'row', nm: 'Gel', pr: '$38' } ],
+    [ { id: 's2', t: 'sec', label: 'Color' }, { id: 'r3', t: 'row', nm: 'Gel Color', pr: '$25' } ],
+  ], foot: [] },
+  { id: 'p2', title: 'Feet', cols: [
+    [ { id: 's3', t: 'sec', label: 'Pedicures' }, { id: 'r4', t: 'row', nm: 'Classic Pedi', pr: '$33' } ],
+    [ { id: 'r5', t: 'row', nm: 'Loose', pr: '$5' } ],
+  ], foot: [] },
+]});
+
+test('pmFlatten walks pages → columns → items in document order with colId + kind', () => {
+  const f = pmFlatten(fx());
+  assert.deepEqual(f.map(x => x.id), ['s1', 'r1', 'r2', 's2', 'r3', 's3', 'r4', 'r5']);
+  assert.deepEqual(f.map(x => x.colId), ['p1:0', 'p1:0', 'p1:0', 'p1:1', 'p1:1', 'p2:0', 'p2:0', 'p2:1']);
+  assert.equal(f.find(x => x.id === 's1').kind, 'sec');
+  assert.equal(f.find(x => x.id === 'r1').kind, 'row');
+  assert.equal(f.find(x => x.id === 'r4').pageId, 'p2');
+});
+
+test('pmDropTarget: reorder within a column (before a row)', () => {
+  assert.deepEqual(pmDropTarget(fx(), 'r2', 'r1', true), { colId: 'p1:0', beforeId: 'r1', crossPage: false });
+});
+test('pmDropTarget: dropping after the last row in a column appends (beforeId null)', () => {
+  assert.deepEqual(pmDropTarget(fx(), 'r1', 'r2', false), { colId: 'p1:0', beforeId: null, crossPage: false });
+});
+test('pmDropTarget: move across the hidden column boundary, same page (not cross-page)', () => {
+  assert.deepEqual(pmDropTarget(fx(), 'r1', 'r3', true), { colId: 'p1:1', beforeId: 'r3', crossPage: false });
+});
+test('pmDropTarget: a cross-PAGE target is flagged', () => {
+  assert.deepEqual(pmDropTarget(fx(), 'r1', 'r4', true), { colId: 'p2:0', beforeId: 'r4', crossPage: true });
+});
+test('pmDropTarget: before a section header lands before the section; after it lands inside (before first row)', () => {
+  assert.deepEqual(pmDropTarget(fx(), 'r3', 's1', true), { colId: 'p1:0', beforeId: 's1', crossPage: false });
+  assert.deepEqual(pmDropTarget(fx(), 'r3', 's1', false), { colId: 'p1:0', beforeId: 'r1', crossPage: false });
+});
+test('pmDropTarget: drop at the end of the last page appends to that column', () => {
+  assert.deepEqual(pmDropTarget(fx(), 'r1', 'r5', false), { colId: 'p2:1', beforeId: null, crossPage: true });
+});
+test('pmDropTarget: self-drop, a zero-row/sentinel over, and an unknown id are defined no-ops (null)', () => {
+  assert.equal(pmDropTarget(fx(), 'r1', 'r1', true), null);       // self
+  assert.equal(pmDropTarget(fx(), 'r1', 'nope', true), null);     // sentinel / unknown over-id
+  assert.equal(pmDropTarget(fx(), null, 'r1', true), null);
+});
+test('pmDropTarget + pmMoveTo compose: a within-column reorder actually moves the node', () => {
+  const d = fx();
+  const t = pmDropTarget(d, 'r2', 'r1', true);   // move r2 before r1
+  pmMoveTo(d, 'r2', t.colId, t.beforeId);
+  assert.deepEqual(d.pages[0].cols[0].map(x => x.id), ['s1', 'r2', 'r1']);
 });

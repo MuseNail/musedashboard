@@ -89,6 +89,36 @@ export function pmMoveTo(draft, id, targetColId, beforeId) {
   dst.splice(insertIdx, 0, ...group);
   return true;
 }
+// Document-order flattening of every item across pages → columns, each tagged with its page/column.
+// Drives the Option-B section-grouped list render AND the model-based drag drop-resolution (the old
+// drag read the .pm-col DOM, which no longer exists once columns are hidden).
+export function pmFlatten(draft) {
+  const out = [];
+  for (const p of (draft && draft.pages) || []) {
+    (p.cols || []).forEach((col, ci) => {
+      for (const it of (col || [])) if (it && it.id) out.push({ id: it.id, kind: it.t, pageId: p.id, colIndex: ci, colId: p.id + ':' + ci });
+    });
+  }
+  return out;
+}
+// Resolve a drag drop (dragged `id` dropped before/after the hovered `overId`) to { colId, beforeId, crossPage }
+// for pmMoveTo — derived from the MODEL, not the DOM. `before` true = land before overId; false = after it
+// (→ before the NEXT item in overId's column, or append when overId is last). crossPage true when the drop
+// lands on a different printed page than the dragged item started on (the handler confirms those). Null =
+// defined no-op (self-drop, unknown/sentinel over-id, missing input).
+export function pmDropTarget(draft, id, overId, before) {
+  if (!id || !overId || id === overId) return null;
+  const flat = pmFlatten(draft);
+  const over = flat.find(x => x.id === overId); if (!over) return null;
+  const dragged = flat.find(x => x.id === id);
+  let beforeId = overId;
+  if (!before) {
+    const colItems = flat.filter(x => x.colId === over.colId);
+    const oi = colItems.findIndex(x => x.id === overId);
+    beforeId = (oi >= 0 && oi + 1 < colItems.length) ? colItems[oi + 1].id : null;
+  }
+  return { colId: over.colId, beforeId, crossPage: !!(dragged && dragged.pageId !== over.pageId) };
+}
 export function pmAddSub(draft, rowId, which) {
   const f = pmFind(draft, rowId); if (!f || f.kind !== 'item' || f.node.t !== 'row') return null;
   if (which !== 'variants' && which !== 'addons') return null;
@@ -136,6 +166,8 @@ import { dispatch } from '../sync.js';
 import { escHtml, escAttrJs, showToast } from '../utils.js';
 
 let _pmDraft = null, _pmBaseline = '', _pmFilter = '', _pmOpenedFrom = '';
+let _pmSel = null;             // selected node id (item | section | 'page:<id>' sentinel) | null
+let _pmStack = 'list';         // narrow-screen master-detail: 'list' | 'detail'
 const _clone = o => JSON.parse(JSON.stringify(o));
 const _live = () => normalizePriceMenu(getState().config.price_menu);
 // The RAW stored config (not re-normalized) — a stable baseline for the "changed on another device" check.
@@ -143,7 +175,7 @@ const _live = () => normalizePriceMenu(getState().config.price_menu);
 const _rawCfg = () => JSON.stringify(getState().config.price_menu ?? null);
 // For the click-out guard (2a-guard): is the editor open with unsaved changes?
 export function pmEditorHasUnsaved() { return !!_pmDraft && pmIsDirty(_pmDraft, _pmBaseline); }
-export function pmEditorClearDraft() { _pmDraft = null; _pmBaseline = ''; _setBeforeUnload(false); }
+export function pmEditorClearDraft() { _pmDraft = null; _pmBaseline = ''; _pmStack = 'list'; _setBeforeUnload(false); }
 
 function _setBeforeUnload(on) {
   if (on) window.addEventListener('beforeunload', _pmBeforeUnload);
@@ -154,10 +186,23 @@ function _pmBeforeUnload(e) { if (pmEditorHasUnsaved()) { e.preventDefault(); e.
 export function renderPriceMenuEditor() {
   const host = document.getElementById('settings-pricemenu-section'); if (!host) return;
   if (!_pmDraft) { _pmDraft = _clone(_live()); _pmBaseline = JSON.stringify(_pmDraft); _pmOpenedFrom = _rawCfg(); }
+  _pmResolveSel();
   host.innerHTML = _editorHtml(_pmDraft);
   _applyFilter();
   _syncDirtyUI();
   _pmInitDrag();
+}
+// Keep the selection valid after any render: a 'page:' sentinel for an existing page stays; a live item id
+// stays; otherwise fall back to the first service (else first node, else null). Prevents the panel stranding
+// on a deleted/reset id (pmFind → null → empty state would show instead of the expected item).
+function _pmResolveSel() {
+  if (_pmSel && String(_pmSel).startsWith('page:')) {
+    const pid = _pmSel.slice(5);
+    if ((_pmDraft.pages || []).some(p => p.id === pid)) return;
+  } else if (_pmSel && pmFind(_pmDraft, _pmSel)) return;
+  const flat = pmFlatten(_pmDraft);
+  const firstRow = flat.find(x => x.kind === 'row') || flat[0];
+  _pmSel = firstRow ? firstRow.id : null;
 }
 function _syncDirtyUI() {
   const dirty = pmEditorHasUnsaved();
@@ -167,12 +212,14 @@ function _syncDirtyUI() {
 function _afterStructural() { renderPriceMenuEditor(); }      // re-render (reorder/add/remove/move)
 function _afterText() { _syncDirtyUI(); }                     // no re-render — keep the caret
 
-// Options for a "Move to" select: every column of every page, labelled by the page's (editable) title.
+// Options for the "Prints in" select: every column of every page. Pages are NUMBERED (titles repeat / can be
+// blank, so "Page 1 (Hand Services) · Left" disambiguates where the plain title would not).
 function _moveOpts(draft, curColId) {
-  return (draft.pages || []).map(p => (p.cols || []).map((c, ci) => {
+  return (draft.pages || []).map((p, pi) => (p.cols || []).map((c, ci) => {
     const cid = p.id + ':' + ci;
     const side = p.cols.length === 2 ? (ci === 0 ? 'Left' : 'Right') : ('Col ' + (ci + 1));
-    return '<option value="' + escHtml(cid) + '"' + (cid === curColId ? ' selected' : '') + '>' + escHtml((p.title || 'Page') + ' · ' + side) + '</option>';
+    const plabel = 'Page ' + (pi + 1) + (p.title ? ' (' + p.title + ')' : '');
+    return '<option value="' + escHtml(cid) + '"' + (cid === curColId ? ' selected' : '') + '>' + escHtml(plabel + ' · ' + side) + '</option>';
   }).join('')).join('');
 }
 
@@ -191,92 +238,156 @@ function _subList(rowId, which, list) {
   return '<div class="pm-subwrap"><div class="pm-sublabel">' + label + '</div>' + rows + '<button onclick="' + fn + '(' + _q(rowId) + ')" class="pm-add-sub">+ ' + (which === 'variants' ? 'variant' : 'add-on') + '</button></div>';
 }
 
-function _itemHtml(it, curColId, draft) {
-  const ctrls = '<div class="pm-ctrls"><span class="pm-drag material-symbols-outlined" title="Drag to move" aria-hidden="true" style="font-size:18px">drag_indicator</span>' + _ctrlBtn('pmUp(' + _q(it.id) + ')', 'keyboard_arrow_up', 'Move up') + _ctrlBtn('pmDn(' + _q(it.id) + ')', 'keyboard_arrow_down', 'Move down')
-    + '<select onchange="pmMove(' + _q(it.id) + ',this.value)" title="Move to a column" class="pm-move">' + _moveOpts(draft, curColId) + '</select>'
-    + _ctrlBtn('pmDel(' + _q(it.id) + ')', 'delete', 'Remove') + '</div>';
-  if (it.t === 'sec') {
-    const blank = !(it.label || '').trim();
-    return '<div class="pm-card pm-sec' + (blank ? ' pm-blank' : '') + '" data-pm-card="' + escAttrJs(it.id) + '" data-pm-text="' + escHtml(((it.label || '') + ' ' + (it.desc || '')).toLowerCase()) + '">'
-      + '<div class="pm-sec-head"><span class="pm-tag">Section</span>' + _inp(it.label, 'pmEdit(' + _q(it.id) + ",'label',this.value)", 'Section heading', 'pm-sec-nm') + '</div>' + ctrls
-      + _inp(it.desc || '', 'pmEdit(' + _q(it.id) + ",'desc',this.value)", 'heading note (optional)', 'pm-desc')
-      + '<div class="pm-ins"><button onclick="pmAddAfter(' + _q(curColId) + ",'sec'," + _q(it.id) + ')" class="pm-add-min">+ section below</button><button onclick="pmAddAfter(' + _q(curColId) + ",'row'," + _q(it.id) + ')" class="pm-add-min">+ service below</button></div>'
-      + '</div>';
+const _secLbl = it => (it.label || '').trim() || '(unnamed section)';
+const _rowLbl = it => (it.nm || '').trim() || '(unnamed service)';
+
+// Left master list: section-grouped, document order, with a light page divider (columns hidden).
+function _listHtml(draft) {
+  let html = '';
+  (draft.pages || []).forEach((p, pi) => {
+    html += '<div class="pm2-pagediv">' + escHtml(p.title || ('Page ' + (pi + 1))) + '</div>';
+    (p.cols || []).forEach(col => (col || []).forEach(it => {
+      const on = it.id === _pmSel ? ' pm2-on' : '';
+      const grip = '<span class="pm-drag material-symbols-outlined" title="Drag to reorder" aria-hidden="true" style="font-size:17px">drag_indicator</span>';
+      if (it.t === 'sec') {
+        const blank = !(it.label || '').trim();
+        html += '<div class="pm2-item pm2-secrow' + on + (blank ? ' pm2-blank' : '') + '" data-pm-card="' + escAttrJs(it.id) + '" data-pm-text="' + escHtml((it.label || '').toLowerCase()) + '" onclick="pmSelect(' + _q(it.id) + ')" role="button" tabindex="0">'
+          + grip + '<span class="pm2-nm">' + escHtml(_secLbl(it)) + '</span></div>';
+      } else {
+        const blank = !(it.nm || '').trim();
+        html += '<div class="pm2-item pm2-row' + on + (blank ? ' pm2-blank' : '') + '" data-pm-card="' + escAttrJs(it.id) + '" data-pm-text="' + escHtml(((it.nm || '') + ' ' + (it.pr || '')).toLowerCase()) + '" onclick="pmSelect(' + _q(it.id) + ')" role="button" tabindex="0">'
+          + grip + '<span class="pm2-nm">' + escHtml(_rowLbl(it)) + '</span><span class="pm2-pr">' + escHtml(it.pr || '') + '</span></div>';
+      }
+    }));
+    const pon = ('page:' + p.id) === _pmSel ? ' pm2-on' : '';
+    html += '<div class="pm2-item pm2-pageset' + pon + '" onclick="pmSelect(' + _q('page:' + p.id) + ')" role="button" tabindex="0"><span class="material-symbols-outlined" style="font-size:16px">tune</span> Page settings &amp; footer</div>';
+  });
+  html += '<div class="pm2-addrow"><button onclick="pmAdd(\'row\')" class="pm-add">+ Service</button><button onclick="pmAdd(\'sec\')" class="pm-add">+ Section</button></div>';
+  return html;
+}
+
+const _backBtn = () => '<button onclick="pmBackToList()" class="pm2-back" title="Back to list" aria-label="Back to list"><span class="material-symbols-outlined" style="font-size:18px">arrow_back</span></button>';
+const _panelEmpty = () => '<div class="pm2-empty">Select a service on the left to edit it.</div>';
+const _footSelect = f => '<select onchange="pmEditFoot(' + _q(f.id) + ",'cls',this.value)\" class=\"pm-foot-cls\"><option value=\"\"" + (!f.cls ? ' selected' : '') + '>Normal</option><option value="cash"' + (f.cls === 'cash' ? ' selected' : '') + '>Discount</option><option value="fix"' + (f.cls === 'fix' ? ' selected' : '') + '>Fine print</option></select>';
+
+// Right detail panel: edits ONLY the selected node (service / section / page-settings), or an empty state.
+function _panelHtml(draft) {
+  const head = label => '<div class="pm2-phead">' + _backBtn() + '<span class="pm2-ptag">' + label + '</span></div>';
+  if (_pmSel && String(_pmSel).startsWith('page:')) {
+    const pid = _pmSel.slice(5), p = (draft.pages || []).find(x => x.id === pid);
+    if (!p) return head('Page') + _panelEmpty();
+    const feet = (p.foot || []).map(f => '<div class="pm2-foot" data-pm-card="' + escAttrJs(f.id) + '">'
+      + _inp(f.text, 'pmEditFoot(' + _q(f.id) + ",'text',this.value)", 'Footer line', 'pm-foot-t') + _footSelect(f)
+      + _ctrlBtn('pmDelFoot(' + _q(f.id) + ')', 'close', 'Remove') + '</div>').join('');
+    return head('Page settings')
+      + '<label class="pm2-lab">Page title</label>'
+      + '<input value="' + escHtml(p.title || '') + '" onchange="pmEditPage(' + _q(p.id) + ',this.value)" placeholder="Page title" aria-label="Page title" class="pm-f" spellcheck="false">'
+      + '<label class="pm2-lab">Footer lines</label>' + feet
+      + '<button onclick="pmAddFootLine(' + _q(p.id) + ')" class="pm-add-sub">+ footer line</button>';
   }
-  const blank = !(it.nm || '').trim();
-  return '<div class="pm-card pm-row' + (blank ? ' pm-blank' : '') + '" data-pm-card="' + escAttrJs(it.id) + '" data-pm-text="' + escHtml(((it.nm || '') + ' ' + (it.pr || '') + ' ' + (it.desc || '')).toLowerCase()) + '">'
-    + '<div class="pm-row-head">' + _inp(it.nm, 'pmEdit(' + _q(it.id) + ",'nm',this.value)", 'Service name', 'pm-row-nm') + _inp(it.pr, 'pmEdit(' + _q(it.id) + ",'pr',this.value)", '$', 'pm-row-pr') + '</div>' + ctrls
-    + _inp(it.desc || '', 'pmEdit(' + _q(it.id) + ",'desc',this.value)", 'description (optional)', 'pm-desc')
-    + _subList(it.id, 'variants', it.variants)
-    + _subList(it.id, 'addons', it.addons)
-    + '</div>';
-}
-
-function _colHtml(p, ci, draft) {
-  const cid = p.id + ':' + ci;
-  const side = p.cols.length === 2 ? (ci === 0 ? 'Left column' : 'Right column') : ('Column ' + (ci + 1));
-  const items = (p.cols[ci] || []).map(it => _itemHtml(it, cid, draft)).join('');
-  return '<div class="pm-col" data-pm-col="' + escAttrJs(cid) + '"><div class="pm-col-h">' + escHtml(side) + '</div>' + items
-    + '<div class="pm-col-add"><button onclick="pmAdd(' + _q(cid) + ",'sec')\" class=\"pm-add\">+ Section</button><button onclick=\"pmAdd(" + _q(cid) + ",'row')" + '" class="pm-add">+ Service</button></div></div>';
-}
-
-function _footHtml(p) {
-  const rows = (p.foot || []).map(f => '<div class="pm-foot-line" data-pm-card="' + escAttrJs(f.id) + '">'
-    + _inp(f.text, 'pmEditFoot(' + _q(f.id) + ",'text',this.value)", 'Footer line', 'pm-foot-t')
-    + '<select onchange="pmEditFoot(' + _q(f.id) + ",'cls',this.value)\" class=\"pm-foot-cls\"><option value=\"\"" + (!f.cls ? ' selected' : '') + '>Normal</option><option value="cash"' + (f.cls === 'cash' ? ' selected' : '') + '>Discount</option><option value="fix"' + (f.cls === 'fix' ? ' selected' : '') + '>Fine print</option></select>'
-    + _ctrlBtn('pmDelFoot(' + _q(f.id) + ')', 'close', 'Remove') + '</div>').join('');
-  return '<div class="pm-foot"><div class="pm-col-h">Footer lines</div>' + rows + '<button onclick="pmAddFootLine(' + _q(p.id) + ')" class="pm-add-min">+ footer line</button></div>';
-}
-
-function _pageHtml(p, draft) {
-  return '<div class="pm-page"><div class="pm-page-h"><input value="' + escHtml(p.title) + '" onchange="pmEditPage(' + _q(p.id) + ',this.value)" placeholder="Page title" aria-label="Page title" class="pm-f pm-page-title" spellcheck="false"></div>'
-    + '<div class="pm-cols" style="grid-template-columns:repeat(' + Math.max(1, (p.cols || []).length) + ',minmax(0,1fr))">' + (p.cols || []).map((c, ci) => _colHtml(p, ci, draft)).join('') + '</div>'
-    + _footHtml(p) + '</div>';
+  const f = _pmSel ? pmFind(draft, _pmSel) : null;
+  if (!f || f.kind !== 'item') return _panelEmpty();
+  const it = f.node;
+  const fl = pmFlatten(draft).find(x => x.id === it.id);
+  const printsIn = '<label class="pm2-lab">Prints in</label><select onchange="pmMove(' + _q(it.id) + ',this.value)" class="pm-move">' + _moveOpts(draft, fl ? fl.colId : '') + '</select>';
+  const del = '<div class="pm2-pfoot">' + printsIn + '<button onclick="pmDel(' + _q(it.id) + ')" class="pm2-del"><span class="material-symbols-outlined" style="font-size:16px">delete</span> Delete</button></div>';
+  if (it.t === 'sec') {
+    return head('Section')
+      + '<label class="pm2-lab">Heading</label>' + _inp(it.label, 'pmEdit(' + _q(it.id) + ",'label',this.value)", 'Section heading', 'pm-sec-nm')
+      + '<label class="pm2-lab">Note (optional)</label>' + _inp(it.desc || '', 'pmEdit(' + _q(it.id) + ",'desc',this.value)", 'heading note', 'pm-desc')
+      + del;
+  }
+  return head('Service')
+    + '<div class="pm2-np">' + _inp(it.nm, 'pmEdit(' + _q(it.id) + ",'nm',this.value)", 'Service name', 'pm-row-nm') + _inp(it.pr, 'pmEdit(' + _q(it.id) + ",'pr',this.value)", '$', 'pm-row-pr') + '</div>'
+    + '<label class="pm2-lab">Description (optional)</label>' + _inp(it.desc || '', 'pmEdit(' + _q(it.id) + ",'desc',this.value)", 'description', 'pm-desc')
+    + _subList(it.id, 'variants', it.variants) + _subList(it.id, 'addons', it.addons)
+    + del;
 }
 
 function _editorHtml(draft) {
-  return '<div class="pm-editor"><div class="pm-bar">'
-    + '<input id="pm-filter" value="' + escHtml(_pmFilter) + '" oninput="pmFilterInput(this.value)" placeholder="Filter services…" class="pm-f pm-filter" spellcheck="false">'
-    + '<div class="pm-bar-btns">'
+  return '<div class="pm2-editor"><div class="pm2-bar">'
+    + '<input id="pm-filter" value="' + escHtml(_pmFilter) + '" oninput="pmFilterInput(this.value)" placeholder="Filter services…" class="pm-f pm2-filter" spellcheck="false">'
+    + '<div class="pm2-bar-btns">'
     + '<button onclick="pmPreview()" class="btn-secondary"><span class="material-symbols-outlined" style="font-size:16px">visibility</span> Preview</button>'
-    + '<button onclick="pmReset()" class="btn-secondary">Reset to default</button>'
+    + '<button onclick="pmReset()" class="btn-secondary" title="Restore the built-in default menu">Reset to default</button>'
     + '<button onclick="pmCancel()" class="btn-secondary">Cancel</button>'
     + '<button id="pm-save-btn" onclick="pmSave()" class="btn-primary" disabled>Save menu</button>'
     + '</div></div>'
-    + '<p class="text-xs font-body text-on-surface-variant mb-3">Edit the customer price menu. Changes aren’t live until you tap <strong>Save</strong>. Use <strong>Preview</strong> to see the printed layout.</p>'
-    + (draft.pages || []).map(p => _pageHtml(p, draft)).join('') + '</div>';
+    + '<p class="pm2-hint">Tap <strong>Preview</strong> to see the printed layout. Changes aren’t live until you tap <strong>Save</strong>.</p>'
+    + '<div class="pm2-main" data-stack="' + _pmStack + '">'
+    + '<div class="pm2-list">' + _listHtml(draft) + '</div>'
+    + '<div class="pm2-panel">' + _panelHtml(draft) + '</div>'
+    + '</div></div>';
 }
 
+// Filter the LEFT list, grouping-aware: hide non-matching services, but keep a section header visible when it
+// (or any service under it) matches — so matched rows never float under a hidden heading. Page dividers +
+// the Page-settings sentinel aren't [data-pm-text] rows, so they're left alone.
 function _applyFilter() {
   const q = (_pmFilter || '').trim().toLowerCase();
-  document.querySelectorAll('#settings-pricemenu-section [data-pm-text]').forEach(el => {
-    el.classList.toggle('hidden', !!q && !(el.getAttribute('data-pm-text') || '').includes(q));
+  const list = document.querySelector('#settings-pricemenu-section .pm2-list'); if (!list) return;
+  const items = [...list.querySelectorAll('.pm2-item[data-pm-text]')];
+  // Structural rows (page dividers + the "Page settings" sentinel) aren't search results — hide them while
+  // filtering so matches aren't scattered among empty page scaffolding; show them again when the box is cleared.
+  const structural = [...list.querySelectorAll('.pm2-pagediv, .pm2-pageset')];
+  if (!q) { items.forEach(el => el.classList.remove('hidden')); structural.forEach(el => el.classList.remove('hidden')); return; }
+  structural.forEach(el => el.classList.add('hidden'));
+  let sec = null, secMatch = false, secHit = false;
+  const flush = () => { if (sec) sec.classList.toggle('hidden', !(secMatch || secHit)); };
+  items.forEach(el => {
+    const match = (el.getAttribute('data-pm-text') || '').includes(q);
+    if (el.classList.contains('pm2-secrow')) { flush(); sec = el; secMatch = match; secHit = false; }
+    else { el.classList.toggle('hidden', !match); if (match) secHit = true; }
   });
+  flush();
 }
 
 // Inline handlers (window-glued via main.js)
-export function pmEdit(id, field, v) { pmSetField(_pmDraft, id, field, v); _afterText(); }
+export function pmSelect(id) { _pmSel = id; _pmStack = 'detail'; _afterStructural(); }
+export function pmBackToList() { _pmStack = 'list'; _afterStructural(); }
+export function pmEdit(id, field, v) {
+  pmSetField(_pmDraft, id, field, v); _afterText();
+  // Live-sync the selected list row's name/price WITHOUT a re-render (keeps the panel input's caret).
+  if (id === _pmSel && (field === 'nm' || field === 'pr' || field === 'label')) {
+    const esc = (window.CSS && CSS.escape) ? CSS.escape(String(id)) : String(id);
+    const row = document.querySelector('#settings-pricemenu-section .pm2-item[data-pm-card="' + esc + '"]');
+    if (row) {
+      if (field === 'pr') { const pr = row.querySelector('.pm2-pr'); if (pr) pr.textContent = v || ''; }
+      else { const nm = row.querySelector('.pm2-nm'); if (nm) nm.textContent = (v || '').trim() || (field === 'label' ? '(unnamed section)' : '(unnamed service)'); row.classList.toggle('pm2-blank', !(v || '').trim()); }
+    }
+  }
+}
 export function pmEditSub(id, field, v) { pmSetSubField(_pmDraft, id, field, v); _afterText(); }
 export function pmEditFoot(id, field, v) { pmSetFoot(_pmDraft, id, field, v); _afterText(); }
-export function pmEditPage(id, v) { pmSetField(_pmDraft, id, 'title', v); _afterStructural(); }   // re-render to relabel Move-to menus
+export function pmEditPage(id, v) { pmSetField(_pmDraft, id, 'title', v); _afterStructural(); }   // re-render: list divider + Prints-in labels
 export function pmFilterInput(v) { _pmFilter = v; _applyFilter(); }
-export function pmAdd(colId, kind) { pmAddItem(_pmDraft, colId, kind); _afterStructural(); }
-export function pmAddAfter(colId, kind, afterId) { pmAddItem(_pmDraft, colId, kind, afterId); _afterStructural(); }
+// Add a new service/section into the selected item's column (right after it), else the end of page 1's first column; auto-select it.
+export function pmAdd(kind) {
+  let colId = null, afterId = null;
+  const fl = _pmSel ? pmFlatten(_pmDraft).find(x => x.id === _pmSel) : null;
+  if (fl) { colId = fl.colId; afterId = _pmSel; }
+  else { const p0 = (_pmDraft.pages || [])[0]; if (p0) colId = p0.id + ':0'; }
+  if (!colId) return;
+  const node = pmAddItem(_pmDraft, colId, kind, afterId);
+  if (node) { _pmSel = node.id; _pmStack = 'detail'; }
+  _afterStructural();
+}
 export function pmDel(id) {
-  const f = pmFind(_pmDraft, id);
-  if (f && f.node && f.node.t === 'sec') {   // a section deletes WITH its services (symmetric with Move) — confirm
+  const f = pmFind(_pmDraft, id); if (!f || f.kind !== 'item') return;
+  // Choose the next selection (the previous row/section) BEFORE removing, so the panel never strands.
+  const flat = pmFlatten(_pmDraft); const i = flat.findIndex(x => x.id === id);
+  const prev = i > 0 ? flat[i - 1].id : null;
+  if (f.node.t === 'sec') {
     let n = 1; while (f.arr[f.idx + n] && f.arr[f.idx + n].t === 'row') n++;
     const svc = n - 1;
-    const go = () => { pmRemoveSection(_pmDraft, id); _afterStructural(); };
-    if (svc > 0) window.showWarnModal?.('Delete this section?', 'This removes the section heading and its ' + svc + ' service' + (svc !== 1 ? 's' : '') + ' below it. Nothing is saved until you tap Save.', go, 'Delete section');
+    const go = () => { _pmSel = prev; pmRemoveSection(_pmDraft, id); _afterStructural(); };
+    if (svc > 0) window.showWarnModal?.('Delete this section?', 'This removes the heading and its ' + svc + ' service' + (svc !== 1 ? 's' : '') + ' below it. Nothing is saved until you tap Save.', go, 'Delete section');
     else go();
     return;
   }
-  pmRemoveItem(_pmDraft, id); _afterStructural();
+  window.showWarnModal?.('Delete this service?', 'Remove “' + _rowLbl(f.node) + '” from the menu? Nothing is saved until you tap Save.', () => { _pmSel = prev; pmRemoveItem(_pmDraft, id); _afterStructural(); }, 'Delete');
 }
-export function pmUp(id) { pmMoveItem(_pmDraft, id, 'up'); _afterStructural(); }
-export function pmDn(id) { pmMoveItem(_pmDraft, id, 'down'); _afterStructural(); }
-export function pmMove(id, colId) { pmRelocateItem(_pmDraft, id, colId); _afterStructural(); }
+export function pmMove(id, colId) { pmRelocateItem(_pmDraft, id, colId); _afterStructural(); }   // "Prints in" — appends to the chosen column
 export function pmAddVar(rowId) { pmAddSub(_pmDraft, rowId, 'variants'); _afterStructural(); }
 export function pmAddAddon(rowId) { pmAddSub(_pmDraft, rowId, 'addons'); _afterStructural(); }
 export function pmDelSub(id) { pmRemoveSub(_pmDraft, id); _afterStructural(); }
@@ -340,12 +451,18 @@ function _pmInitDrag() {
   const host = document.getElementById('settings-pricemenu-section'); if (!host) return;
   _dragInit = true;
   host.addEventListener('pointerdown', _pmDragDown);
+  // Keyboard: the list rows are role=button/tabindex=0; Enter or Space activates the row's select.
+  host.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const row = e.target.closest && e.target.closest('#settings-pricemenu-section .pm2-item');
+    if (row) { e.preventDefault(); row.click(); }
+  });
 }
 function _pmDragDown(e) {
   if (e.button) return;
   const grip = e.target.closest && e.target.closest('.pm-drag'); if (!grip) return;
-  const card = grip.closest('.pm-card'); if (!card || !card.dataset.pmCard) return;
-  e.preventDefault();
+  const card = grip.closest('.pm2-item'); if (!card || !card.dataset.pmCard) return;
+  e.preventDefault(); e.stopPropagation();   // a grip press is a drag, not a row-select
   try { grip.setPointerCapture(e.pointerId); } catch {}   // guarantees pointerup even if released outside the window
   _dragId = card.dataset.pmCard; _dragEl = card; _dragStart = { x: e.clientX, y: e.clientY }; _dragging = false;
   document.addEventListener('pointermove', _pmDragMove);
@@ -362,28 +479,23 @@ function _pmStartDrag() {
 }
 function _pmClearMarks() {
   const host = document.getElementById('settings-pricemenu-section'); if (!host) return;
-  host.querySelectorAll('.pm-col-drop').forEach(c => c.classList.remove('pm-col-drop'));
-  host.querySelectorAll('.pm-card-dropline, .pm-card-dropline-after').forEach(c => c.classList.remove('pm-card-dropline', 'pm-card-dropline-after'));
+  host.querySelectorAll('.pm2-dropline, .pm2-dropline-after').forEach(c => c.classList.remove('pm2-dropline', 'pm2-dropline-after'));
 }
-function _pmNextCard(card) { let n = card.nextElementSibling; while (n && !(n.classList && n.classList.contains('pm-card'))) n = n.nextElementSibling; return n; }
-// Resolve the drop under the pointer (ghost hidden so it doesn't occlude): the target column, the card the
-// item would land next to (excluding the dragged card itself), whether it's an insert-BEFORE (top half) or
-// insert-after (bottom half), the resulting beforeId, and the RAW card incl. self (to detect a drop-on-self).
+// Resolve the row under the pointer (ghost hidden so it doesn't occlude): the hovered list row (if it's a real
+// draggable item, excluding the dragged one), whether the drop is a before (top half) or after (bottom half),
+// and that row's id. The MODEL (pmDropTarget) turns {overId, before} into {colId, beforeId} — no column DOM.
 function _pmDropSpec(x, y) {
   if (_ghost) _ghost.style.display = 'none';
   const el = document.elementFromPoint(x, y);
   if (_ghost) _ghost.style.display = '';
-  const col = el && el.closest && el.closest('#settings-pricemenu-section .pm-col');
-  const rawCard = el && el.closest && el.closest('#settings-pricemenu-section .pm-card');
-  const card = (rawCard && rawCard !== _dragEl) ? rawCard : null;
-  let before = true, beforeId = null;
-  if (card) {
-    const r = card.getBoundingClientRect();
+  const rawRow = el && el.closest && el.closest('#settings-pricemenu-section .pm2-item[data-pm-card]');
+  let before = true, overId = null;
+  if (rawRow && rawRow !== _dragEl) {
+    const r = rawRow.getBoundingClientRect();
     before = y < r.top + r.height / 2;
-    if (before) beforeId = card.dataset.pmCard;
-    else { const next = _pmNextCard(card); beforeId = next ? next.dataset.pmCard : null; }
+    overId = rawRow.dataset.pmCard;
   }
-  return { col, card, rawCard, before, beforeId };
+  return { rawRow, before, overId };
 }
 function _pmDragMove(e) {
   if (!_dragging) { if (Math.hypot(e.clientX - _dragStart.x, e.clientY - _dragStart.y) < 6) return; _pmStartDrag(); }
@@ -391,8 +503,7 @@ function _pmDragMove(e) {
   _ghost.style.left = (e.clientX + 10) + 'px'; _ghost.style.top = (e.clientY + 10) + 'px';
   _pmClearMarks();
   const s = _pmDropSpec(e.clientX, e.clientY);
-  if (s.col) s.col.classList.add('pm-col-drop');
-  if (s.card) s.card.classList.add(s.before ? 'pm-card-dropline' : 'pm-card-dropline-after');   // line matches where it lands
+  if (s.rawRow && s.overId) s.rawRow.classList.add(s.before ? 'pm2-dropline' : 'pm2-dropline-after');   // line matches where it lands
 }
 function _pmDragUp(e) {
   document.removeEventListener('pointermove', _pmDragMove);
@@ -404,9 +515,14 @@ function _pmDragUp(e) {
   if (_dragEl) _dragEl.style.opacity = '';
   if (wasDragging && e.type !== 'pointercancel') {
     const s = _pmDropSpec(e.clientX, e.clientY);
-    // Dropped on the dragged card itself → no change (don't teleport it to the column bottom).
-    if (s.rawCard !== _dragEl && s.col && s.col.dataset.pmCol && pmMoveTo(_pmDraft, dragId, s.col.dataset.pmCol, s.beforeId)) {
-      _pmClearMarks(); _afterStructural(); _dragId = _dragEl = _dragStart = null; return;
+    const t = (s.overId && s.rawRow !== _dragEl) ? pmDropTarget(_pmDraft, dragId, s.overId, s.before) : null;
+    if (t) {
+      _pmClearMarks();
+      const apply = () => { if (pmMoveTo(_pmDraft, dragId, t.colId, t.beforeId)) _pmSel = dragId; _afterStructural(); };
+      // Moving to the OTHER printed page is a bigger deal than a reorder → confirm it; a within-page move is silent.
+      if (t.crossPage) window.showWarnModal?.('Move to the other page?', 'This changes which printed page the item appears on. Nothing is saved until you tap Save.', apply, 'Move it');
+      else apply();
+      _dragId = _dragEl = _dragStart = null; return;
     }
   }
   _pmClearMarks();

@@ -735,3 +735,48 @@
   .pm-col-drop { outline:2px dashed var(--primary,#1a5252); outline-offset:2px; }
   .pm-card-dropline { box-shadow:inset 0 3px 0 0 var(--primary,#1a5252); }
   .pm-card-dropline-after { box-shadow:inset 0 -3px 0 0 var(--primary,#1a5252); }
+
+  /* ── Price menu editor v2 — list + detail panel (v5.72+) ─────────────── */
+  .pm2-bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; position:sticky; top:0; z-index:5; background:var(--surface-container-lowest,#fff); padding:6px 0; }
+  .pm2-filter { flex:1; min-width:150px; }
+  .pm2-bar-btns { display:flex; gap:8px; flex-wrap:wrap; }
+  .pm2-hint { font-size:11px; color:var(--on-surface-variant,#5b606e); margin:4px 0 10px; }
+  .pm2-main { display:grid; grid-template-columns:minmax(240px,300px) minmax(0,1fr); gap:14px; align-items:start; }
+  .pm2-list { border:1px solid var(--surface-container-high,#e2e1e6); border-radius:12px; overflow:hidden auto; background:var(--surface-container-lowest,#fff); max-height:64vh; }
+  .pm2-panel { border:1px solid var(--surface-container-high,#e2e1e6); border-radius:12px; padding:12px 14px; background:var(--surface-container-lowest,#fff); min-height:220px; }
+  .pm2-pagediv { font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--primary,#1a5252); background:var(--surface-container,#f1f0f4); padding:6px 12px; position:sticky; top:0; z-index:1; }
+  .pm2-item { display:flex; align-items:center; gap:6px; padding:7px 10px 7px 12px; border-top:1px solid var(--surface-container,#eceaf0); cursor:pointer; font-size:13px; color:var(--on-surface,#1a1d27); }
+  .pm2-item:hover { background:var(--surface-container,#f6f7f9); }
+  .pm2-secrow { background:var(--surface-container,#f1f0f4); }   /* a faint tint so sections stand out from services when scanning */
+  .pm2-secrow .pm2-nm { font-weight:700; }
+  .pm2-row .pm2-nm { padding-left:4px; }
+  .pm2-nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pm2-pr { color:var(--on-surface-variant,#5b606e); font-variant-numeric:tabular-nums; flex-shrink:0; }
+  .pm2-on { background:rgba(26,82,82,.10); box-shadow:inset 3px 0 0 0 var(--primary,#1a5252); }
+  .pm2-on:hover { background:rgba(26,82,82,.14); }
+  .pm2-on .pm2-nm { font-weight:700; }   /* bold (not teal) so the selected name stays legible in dark mode */
+  .pm2-blank .pm2-nm { color:var(--outline,#8a8f98); font-style:italic; }
+  .pm2-pageset { color:var(--on-surface-variant,#5b606e); font-size:12px; }
+  .pm2-addrow { display:flex; gap:8px; padding:10px 12px; border-top:1px solid var(--surface-container,#eceaf0); }
+  .pm2-phead { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .pm2-ptag { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--primary,#1a5252); }
+  .pm2-back { display:none; width:30px; height:30px; align-items:center; justify-content:center; border:0; background:transparent; border-radius:7px; color:var(--on-surface-variant,#5b606e); cursor:pointer; }
+  .pm2-back:hover { background:var(--surface-container,#f1f0f4); }
+  .pm2-lab { display:block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--outline,#8a8f98); margin:10px 0 3px; }
+  .pm2-np { display:flex; gap:7px; }
+  .pm2-empty { color:var(--on-surface-variant,#5b606e); font-size:13px; padding:28px 6px; text-align:center; }
+  .pm2-foot { display:flex; align-items:center; gap:4px; margin-bottom:4px; }
+  .pm2-pfoot { margin-top:14px; padding-top:12px; border-top:1px solid var(--surface-container-high,#e2e1e6); }
+  .pm2-pfoot .pm-move { max-width:none; width:100%; margin-bottom:4px; }   /* the panel is roomy — don't inherit the old cramped 118px cap */
+  /* a muted red that stays legible in BOTH modes (deliberately not --error, which is darker and never lightens in dark) */
+  .pm2-del { margin-top:10px; border:1px solid var(--surface-container-high,#e2e1e6); background:transparent; color:#993d3d; border-radius:8px; font-size:12px; font-weight:600; padding:6px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:5px; }
+  .pm2-del:hover { background:rgba(180,40,40,.07); }
+  .pm2-dropline { box-shadow:inset 0 3px 0 0 var(--primary,#1a5252); }
+  .pm2-dropline-after { box-shadow:inset 0 -3px 0 0 var(--primary,#1a5252); }
+  @media (max-width:820px) {   /* iPad portrait is 768 — stack there, not just on phones */
+    .pm2-main { grid-template-columns:1fr; }
+    .pm2-main[data-stack="list"] .pm2-panel { display:none; }
+    .pm2-main[data-stack="detail"] .pm2-list { display:none; }
+    .pm2-main[data-stack="detail"] .pm2-back { display:inline-flex; }
+    .pm2-list { max-height:none; }
+  }
