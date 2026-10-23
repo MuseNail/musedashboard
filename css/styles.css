@@ -149,6 +149,12 @@
      toolbar). Turn counts stay visible; only each tech's billed dollar line hides. */
   #panel-turns.turns-hide-totals .turns-billed { display: none !important; }
 
+  /* Tech-status popup: the Available / Not-Available column headers — dark-safe (lighter ramp stops in dark). */
+  .tsm-hdr-yes { color: #0f6e56; }
+  .tsm-hdr-no  { color: #a32d2d; }
+  html[data-appearance="dark"] .tsm-hdr-yes { color: #5dcaa5; }
+  html[data-appearance="dark"] .tsm-hdr-no  { color: #f09595; }
+
   /* Queue filter chips (D13): filters are OUTLINED buttons — visually distinct from the
      color-FILLED status pills they used to mimic. Active = teal outline + light teal wash. */
   .tab-btn { border:1.5px solid #b9c2c7; background:transparent; color:#4a5055; }

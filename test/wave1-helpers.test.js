@@ -23,11 +23,11 @@ test('_clampTechColW falls back to the default on a non-number', () => {
   assert.equal(_clampTechColW('abc'), 155);
 });
 
-// ── _clampTotalColW(px) — resizable turn-count column: min 44, max 140, default 60 ──
+// ── _clampTotalColW(px) — resizable turn-count column: min 44, max 140, default 72 ──
 test('_clampTotalColW clamps below the minimum', () => { assert.equal(_clampTotalColW(10), 44); });
 test('_clampTotalColW clamps above the maximum', () => { assert.equal(_clampTotalColW(999), 140); });
-test('_clampTotalColW passes a valid width through (rounded)', () => { assert.equal(_clampTotalColW(72.6), 73); });
-test('_clampTotalColW falls back to the default on a non-number', () => { assert.equal(_clampTotalColW('xyz'), 60); });
+test('_clampTotalColW passes a valid width through (rounded)', () => { assert.equal(_clampTotalColW(80.6), 81); });
+test('_clampTotalColW falls back to the default on a non-number', () => { assert.equal(_clampTotalColW('xyz'), 72); });
 
 // ── _clampFpTechColW(px) — floor-plan tech column: min 140, max 320, default 185 ──
 test('_clampFpTechColW clamps below the minimum', () => { assert.equal(_clampFpTechColW(50), 140); });

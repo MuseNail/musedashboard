@@ -316,9 +316,9 @@ export function renderFloorPlan() {
   }
 
   grid.style.position = 'relative';
-  let maxRight = 0, maxBottom = 0;
+  let maxRight = 0, maxBottom = 0, minTop = Infinity;
   const stationIds = getStations();
-  stationIds.forEach(id => { const L = layoutFor(id); maxRight = Math.max(maxRight, L.x + L.w); maxBottom = Math.max(maxBottom, L.y + L.h); });
+  stationIds.forEach(id => { const L = layoutFor(id); maxRight = Math.max(maxRight, L.x + L.w); maxBottom = Math.max(maxBottom, L.y + L.h); minTop = Math.min(minTop, L.y); });
   const cw = maxRight + GAP, ch = maxBottom + GAP;
   const stationsHtml = stationIds.map(id => stationHtml(id, byStation[id] || null)).join('');
   if (floorEditMode) {
@@ -343,6 +343,19 @@ export function renderFloorPlan() {
     grid.style.overflow = 'hidden';
     grid.style.height = (ch * s) + 'px';
     grid.innerHTML = `<div id="floorplan-canvas" style="position:relative;width:${cw}px;height:${ch}px;transform-origin:top left;transform:translateX(${offsetX}px) scale(${s})">${stationsHtml}</div>`;
+    // Match the tech column to the DRAWN floor: align its top to the first tile (margin-top) and, when the
+    // rows leave room, spread them down to span the floor's rendered height (space-between → first flush to
+    // the top, last to the bottom). If the rows wouldn't fit, don't crush them — stack naturally from the top.
+    const staff = document.getElementById('floorplan-staff-row');
+    if (staff) {
+      staff.style.display = ''; staff.style.flexDirection = ''; staff.style.height = ''; staff.style.justifyContent = ''; staff.style.marginTop = '';
+      if (stationIds.length && Number.isFinite(minTop)) {
+        const naturalH = staff.scrollHeight;
+        const floorTop = minTop * s, floorH = (maxBottom - minTop) * s;
+        staff.style.marginTop = floorTop + 'px';
+        if (floorH > naturalH + 2) { staff.style.display = 'flex'; staff.style.flexDirection = 'column'; staff.style.height = floorH + 'px'; staff.style.justifyContent = 'space-between'; }
+      }
+    }
   }
 }
 

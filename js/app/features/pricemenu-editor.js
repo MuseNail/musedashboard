@@ -53,11 +53,30 @@ export function pmRemoveItem(draft, id) {
   const f = pmFind(draft, id); if (!f || f.kind !== 'item') return false;
   f.arr.splice(f.idx, 1); return true;
 }
-// Delete a SECTION together with its contiguous services (symmetric with how pmRelocateItem moves a section).
+// How many contiguous nodes move/delete as ONE unit starting at arr[idx]:
+//   sec → the heading + everything up to the next section (its subheaders AND rows — a section owns all of them)
+//   sub → the subheader + its following rows (up to the next subheader or section — a subsection owns its rows)
+//   row/other → just itself
+// (Before v5.84 a section only carried contiguous 'row' nodes, which orphaned a subheader + the rows after it.)
+export function pmGroupSpan(arr, idx) {
+  const node = arr[idx]; if (!node) return 0;
+  let n = 1;
+  if (node.t === 'sec') { while (arr[idx + n] && arr[idx + n].t !== 'sec') n++; }
+  else if (node.t === 'sub') { while (arr[idx + n] && arr[idx + n].t === 'row') n++; }
+  return n;
+}
+// Service-row count inside a section's group (for the delete-confirmation message) — excludes the heading + any subheaders.
+export function pmSectionRowCount(draft, id) {
+  const f = pmFind(draft, id); if (!f || f.node.t !== 'sec') return 0;
+  const n = pmGroupSpan(f.arr, f.idx);
+  let c = 0; for (let k = 1; k < n; k++) if (f.arr[f.idx + k].t === 'row') c++;
+  return c;
+}
+// Delete a SECTION together with its subheaders + services (symmetric with how pmRelocateItem moves a section).
 export function pmRemoveSection(draft, id) {
   const f = pmFind(draft, id); if (!f || f.kind !== 'item' || f.node.t !== 'sec') return 0;
-  let n = 1; while (f.arr[f.idx + n] && f.arr[f.idx + n].t === 'row') n++;
-  f.arr.splice(f.idx, n); return n;   // returns how many nodes were removed (heading + its rows)
+  const n = pmGroupSpan(f.arr, f.idx);
+  f.arr.splice(f.idx, n); return n;   // returns how many nodes were removed (heading + its subheaders + rows)
 }
 export function pmMoveItem(draft, id, dir) {
   const f = pmFind(draft, id); if (!f) return false;
@@ -69,9 +88,8 @@ export function pmMoveItem(draft, id, dir) {
 export function pmRelocateItem(draft, id, colId) {
   const f = pmFind(draft, id); if (!f || f.kind !== 'item') return false;
   const dst = _col(draft, colId); if (!dst || dst === f.arr) return dst === f.arr;   // same column → no-op success
-  // A SECTION carries its contiguous following rows (up to the next section) as a group; a row moves alone.
-  let n = 1;
-  if (f.node.t === 'sec') { while (f.arr[f.idx + n] && f.arr[f.idx + n].t === 'row') n++; }
+  // A section/subheader carries its owned group (subheaders + rows / rows); a row moves alone.
+  const n = pmGroupSpan(f.arr, f.idx);
   const group = f.arr.splice(f.idx, n);
   dst.push(...group);
   return true;
@@ -81,8 +99,7 @@ export function pmRelocateItem(draft, id, colId) {
 export function pmMoveTo(draft, id, targetColId, beforeId) {
   const f = pmFind(draft, id); if (!f || f.kind !== 'item') return false;
   const dst = _col(draft, targetColId); if (!dst) return false;
-  let n = 1;
-  if (f.node.t === 'sec') { while (f.arr[f.idx + n] && f.arr[f.idx + n].t === 'row') n++; }
+  const n = pmGroupSpan(f.arr, f.idx);
   const groupIds = new Set(f.arr.slice(f.idx, f.idx + n).map(x => x.id));
   if (beforeId && groupIds.has(beforeId)) return false;   // dropping onto itself — no change
   const group = f.arr.splice(f.idx, n);                    // removed first → indices in dst are post-removal
@@ -471,10 +488,14 @@ export function pmDel(id) {
   const flat = pmFlatten(_pmDraft); const i = flat.findIndex(x => x.id === id);
   const prev = i > 0 ? flat[i - 1].id : null;
   if (f.node.t === 'sec') {
-    let n = 1; while (f.arr[f.idx + n] && f.arr[f.idx + n].t === 'row') n++;
-    const svc = n - 1;
+    const svc = pmSectionRowCount(_pmDraft, id);
+    const n = pmGroupSpan(f.arr, f.idx); let subs = 0;   // subheaders also deleted with the section → name them in the warning
+    for (let k = 1; k < n; k++) if (f.arr[f.idx + k].t === 'sub') subs++;
     const go = () => { _pmSel = prev; pmRemoveSection(_pmDraft, id); _afterStructural(); };
-    if (svc > 0) window.showWarnModal?.('Delete this section?', 'This removes the heading and its ' + svc + ' service' + (svc !== 1 ? 's' : '') + ' below it. Nothing is saved until you tap Save.', go, 'Delete section');
+    const parts = [];
+    if (svc > 0) parts.push(svc + ' service' + (svc !== 1 ? 's' : ''));
+    if (subs > 0) parts.push(subs + ' subheader' + (subs !== 1 ? 's' : ''));
+    if (parts.length) window.showWarnModal?.('Delete this section?', 'This removes the heading and its ' + parts.join(' and ') + ' below it. Nothing is saved until you tap Save.', go, 'Delete section');
     else go();
     return;
   }

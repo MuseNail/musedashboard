@@ -138,6 +138,13 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.84', items: [
+    { icon: 'contrast', t: 'Turns board: next-up no longer nudges the row, and the $ total sits with the turns', d: 'The highlighted “next up” row keeps its green bar but no longer shifts a few pixels to the right, so every row lines up. Each tech’s billed total now sits right under their bonus count in the turn-count column (the separate column on the far right is gone), and that column is a touch wider so the numbers never crowd.' },
+    { icon: 'badge', t: 'Tech popup: see what each tech can and can’t do', d: 'Tapping a technician now shows three columns — Available (green ✓), Not available (red ✗), and Notes — so you can see at a glance which services they’re set up for. The Available / On break / Off buttons moved to a neat stack beside their photo.' },
+    { icon: 'low_priority', t: 'Price menu: moving or deleting a section keeps its services together', d: 'Fixed: moving a section with a subheading inside it (or deleting one) used to leave some services behind and attach them to the wrong section. Now a section carries all of its subheadings and services with it, and the delete prompt tells you exactly what will be removed.' },
+    { icon: 'view_sidebar', t: 'Floor plan: the technician column lines up with the floor', d: 'The technicians on the left now start at the top of the drawn floor and spread down to match its height, instead of sitting higher and bunched at the top.' },
+    { icon: 'notifications_active', t: 'Appointment reminders: bigger, and never more than three at once', d: 'Reminder pop-ups are wider and easier to read, show the three soonest appointments at a time (scroll for any more), and no longer sit on top of the buttons underneath.' },
+  ] },
   { v: 'v5.83', items: [
     { icon: 'price_change', t: 'Price-menu editor: resizable columns + tidier layout', d: 'In the price-menu editor, the “+ Service / + Subheader / + Section” buttons always stay on one line now, and you can drag the divider between the list and the detail panel to make the list column wider or narrower. The “Page settings & footer” row for each page now sits right under the page name — above that page’s services instead of buried at the bottom — and is sized to match the other rows while keeping its white highlight.' },
   ] },

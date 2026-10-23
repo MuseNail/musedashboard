@@ -191,6 +191,15 @@ export function _techDoesService(st, serviceId) {
   const list = st.services;
   return !list || list.length === 0 || list.includes(serviceId);
 }
+// Split the service catalog into what this tech CAN vs CAN'T do (for the tech-status popup's two columns).
+// Empty/absent menu = does everything, so unavailable is empty. Catalog order is preserved in both lists.
+export function _techServiceSplit(st, catalog) {
+  const all = (catalog || []).filter(s => s && s.id);
+  const list = st && st.services;
+  if (!list || list.length === 0) return { available: all, unavailable: [] };
+  const set = new Set(list);
+  return { available: all.filter(s => set.has(s.id)), unavailable: all.filter(s => !set.has(s.id)) };
+}
 export function suggestTechForService(serviceId) {
   const order = getActiveTurnsOrder();
   if (order.length === 0) return null;
@@ -345,7 +354,7 @@ const turnsTechColW = () => _clampTechColW(parseInt(localStorage.getItem('muse_t
 function _applyTurnsTechColW() { document.getElementById('panel-turns')?.style.setProperty('--turns-techcol-w', turnsTechColW() + 'px'); }
 function setTurnsTechColW(px) { localStorage.setItem('muse_turns_techcol_w', String(_clampTechColW(px))); _applyTurnsTechColW(); }
 // The turn-count column (its own column just left of the turn bubbles) is resizable the same way.
-const TURNS_TOTALCOL_MIN = 44, TURNS_TOTALCOL_MAX = 140, TURNS_TOTALCOL_DEFAULT = 60;
+const TURNS_TOTALCOL_MIN = 44, TURNS_TOTALCOL_MAX = 140, TURNS_TOTALCOL_DEFAULT = 72;   // fits count / +Nb bonus / $billed stacked
 export function _clampTotalColW(px) {
   const n = Math.round(Number(px));
   return Number.isFinite(n) ? Math.max(TURNS_TOTALCOL_MIN, Math.min(TURNS_TOTALCOL_MAX, n)) : TURNS_TOTALCOL_DEFAULT;
@@ -558,8 +567,8 @@ export function renderTurnsTechGrid() {
     const turnDisplay = turns.total > 0
       ? `<span class="text-sm font-headline font-bold flex-shrink-0 ${isHalf ? 'px-1.5 py-0.5 rounded-md' : ''}" style="${isHalf ? 'background:#f5c870;color:#3a2800' : 'color:#1a5252'}">${turns.total}t</span>`
       : `<span class="text-sm font-headline text-outline-variant flex-shrink-0">0t</span>`;
-    // B: the turn count + billed total live in their OWN fixed columns at the far right (below),
-    // so the left column is just the tech's photo, name, and status.
+    // The turn count + billed total live in their own fixed column (turnsCountCol, below); this left
+    // column is just the tech's photo, name, and status.
     const techCol = `<div class="flex items-center gap-2 flex-shrink-0 pr-2" style="width:var(--turns-techcol-w,155px)">
       <button onclick="showTechStatusMenu(event,'${staffId}')" class="focus:outline-none flex-shrink-0">${photo}</button>
       <div class="min-w-0" style="flex:1">
@@ -629,20 +638,20 @@ export function renderTurnsTechGrid() {
     if (nextAppt) { const mins = Math.round((nextAppt.startMs - _nowMs) / 60000); if (mins <= 30) slotArr.splice(filled.length, 0, turnsDueNoteCard(nextAppt, mins, slotH)); }
     const slotHtml = slotArr.join('');
 
-    const rowAccent = isNextUp ? 'border-left:3px solid #1a5252;background:#eef5f5;border-radius:0 8px 8px 0;' : '';
+    // Inset bar (box-shadow, NOT border-left) so the next-up accent never shifts the row's columns right.
+    const rowAccent = isNextUp ? 'box-shadow:inset 3px 0 0 #1a5252;background:#eef5f5;border-radius:0 8px 8px 0;' : '';
     const slotRow = `<div class="turns-slot-row flex gap-1.5 overflow-x-auto pb-0.5" style="min-width:0;flex:1;scrollbar-width:thin">${slotHtml}</div>`;
     // Per-device separation between the tech box and the turn bubbles (see turnsSep()).
     const rightSide = sep === 'lane'
       ? `<div class="flex min-w-0" style="flex:1;background:#eef1f2;border:0.5px solid #e0e5e7;border-radius:12px;padding:4px 2px 4px 6px">${slotRow}</div>`
       : `<div class="self-stretch flex-shrink-0" style="width:1px;background:#d3dbdc;margin:6px 0"></div>${slotRow}`;
-    // Turn count sits in its OWN resizable column just left of the turn bubbles (same spot for every
-    // tech); the billed $ stays at the far right (hidden by .turns-hide-totals when totals are off).
-    // Both columns sit OUTSIDE the scrolling slot row.
-    const turnsCountCol = `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-x border-surface-container-high px-1" style="width:var(--turns-totalcol-w,60px)">
-      ${turnDisplay}${turns.bonus > 0 ? `<span class="text-sm font-headline font-bold text-secondary leading-none mt-0.5 flex-shrink-0">+${turns.bonus}b</span>` : ''}
+    // Turn count sits in its OWN resizable column just left of the turn bubbles (same spot for every tech),
+    // with the tech's billed $ total stacked beneath the bonus (.turns-billed → hidden by .turns-hide-totals
+    // when totals are off). This column sits OUTSIDE the scrolling slot row.
+    const turnsCountCol = `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-x border-surface-container-high px-1" style="width:var(--turns-totalcol-w,72px)">
+      ${turnDisplay}${turns.bonus > 0 ? `<span class="text-sm font-headline font-bold text-secondary leading-none mt-0.5 flex-shrink-0">+${turns.bonus}b</span>` : ''}<span class="turns-billed text-xs font-headline font-bold leading-none mt-0.5 flex-shrink-0" style="color:#1a5252">$${billed.toFixed(0)}</span>
     </div>`;
-    const moneyCol = `<div class="turns-billed flex-shrink-0 flex items-center justify-end self-stretch" style="width:56px"><span class="text-xs font-headline font-bold" style="color:#1a5252">$${billed.toFixed(0)}</span></div>`;
-    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${turnsCountCol}${rightSide}${moneyCol}</div>`;
+    return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${turnsCountCol}${rightSide}</div>`;
   }).filter(Boolean).join('');
 
   grid.innerHTML = rows || '<div class="text-sm text-on-surface-variant py-4 text-center">No active technicians.</div>';
@@ -866,17 +875,22 @@ export function showTechStatusMenu(event, staffId) {
       ? `<img src="${st.photo}" style="width:175px;height:175px;border-radius:50%;object-fit:cover;border:6px solid ${sc.bg}">`
       : `<div style="width:175px;height:175px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:${sc.bg}20;border:6px solid ${sc.bg};color:${sc.bg};font-family:var(--font-headline);font-weight:700;font-size:72px">${(st.name||'?').charAt(0).toUpperCase()}</div>`;
   }
-  const isBreak = cfg().turns_break.includes(staffId);
-  document.getElementById('tsm-available').style.opacity = isBreak ? '0.4' : '1';
-  document.getElementById('tsm-break').style.opacity = isBreak ? '1' : '0.4';
-  const profileSvcs = (st.services && st.services.length > 0) ? st.services.map(sid => svc(sid)?.label).filter(Boolean) : cfg().services.map(s => s.label);
-  document.getElementById('tech-status-menu-services').innerHTML = profileSvcs.length > 0 ? profileSvcs.map(l => `<div>${l}</div>`).join('') : '<div class="italic text-outline">No services configured</div>';
+  // Highlight the tech's CURRENT state (available / on break / off); dim the other two.
+  const cur = cfg().turns_off.includes(staffId) ? 'off' : cfg().turns_break.includes(staffId) ? 'break' : 'available';
+  document.getElementById('tsm-available').style.opacity = cur === 'available' ? '1' : '0.4';
+  document.getElementById('tsm-break').style.opacity = cur === 'break' ? '1' : '0.4';
+  document.getElementById('tsm-off').style.opacity = cur === 'off' ? '1' : '0.4';
+  // Services split into what the tech CAN do (green ✓) and CAN'T (red ✗); empty menu = does everything.
+  const split = _techServiceSplit(st, cfg().services);
+  const svcRow = (s, icon, color) => `<div class="flex items-start gap-1"><span class="material-symbols-outlined" style="font-size:14px;color:${color};flex-shrink:0;line-height:1.35">${icon}</span><span>${escHtml(s.label)}</span></div>`;
+  document.getElementById('tech-status-menu-services').innerHTML = split.available.length ? split.available.map(s => svcRow(s, 'check', '#1d9e75')).join('') : '<div class="italic text-outline">None</div>';
+  const noEl = document.getElementById('tsm-svc-no'); if (noEl) noEl.innerHTML = split.unavailable.length ? split.unavailable.map(s => svcRow(s, 'close', '#e24b4a')).join('') : '<div class="italic text-outline">—</div>';
   // Notes/preferences: a per-note list (add/edit/remove), editable by managers, read-only for others.
   _tsmCanEdit = canDo('manageStaff');
   renderTechNotesColumn(staffId);
   const rect = event.currentTarget.getBoundingClientRect();
-  // Wider popup (services | notes side-by-side): clamp left to the viewport, floored at 8 so it never pins off-screen.
-  menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 496)) + 'px';
+  // Wider popup (available | not-available | notes, 3 columns): clamp left to the viewport, floored at 8 so it never pins off-screen.
+  menu.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 656)) + 'px';
   menu.classList.remove('hidden');
   // Content-aware: flip above the tech if it would overflow the bottom of the viewport.
   const menuH = menu.offsetHeight;

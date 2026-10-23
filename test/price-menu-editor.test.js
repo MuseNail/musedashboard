@@ -7,7 +7,7 @@ import { normalizePriceMenu, DEFAULT_PRICE_MENU, priceMenuToHtml } from '../js/a
 import {
   pmFind, pmSetField, pmAddItem, pmRemoveItem, pmMoveItem, pmRelocateItem, pmMoveTo,
   pmAddSub, pmRemoveSub, pmSetSubField, pmAddFoot, pmRemoveFoot, pmSetFoot, pmIsDirty,
-  pmFlatten, pmDropTarget,
+  pmFlatten, pmDropTarget, pmGroupSpan, pmSectionRowCount, pmRemoveSection,
 } from '../js/app/features/pricemenu-editor.js';
 
 const draft = () => normalizePriceMenu(null);   // the default, id-stamped
@@ -245,4 +245,79 @@ test('pmAddItem creates a subheader node, and pmFlatten reports it as kind sub',
   assert.ok(node.id);
   assert.equal(d.pages[0].cols[0][1].id, node.id, 'inserted right after s1');
   assert.equal(pmFlatten(d).find(x => x.id === node.id).kind, 'sub');
+});
+
+// ── v5.84: move/delete group span must carry a section's SUBHEADERS + their rows, not just contiguous rows ──
+// Fixture: section s1 = [s1, r1, sub u1, r2]  (u1 is a subheader INSIDE the section), then section s2 = [s2, r3].
+const subFx = () => ({ v: 1, pages: [
+  { id: 'p1', title: 'Hands', cols: [
+    [ { id: 's1', t: 'sec', label: 'Manicures' },
+      { id: 'r1', t: 'row', nm: 'Classic', pr: '$25' },
+      { id: 'u1', t: 'sub', label: 'Premium' },
+      { id: 'r2', t: 'row', nm: 'Gel', pr: '$38' },
+      { id: 's2', t: 'sec', label: 'Color' },
+      { id: 'r3', t: 'row', nm: 'Gel Color', pr: '$25' } ],
+    [ { id: 'r9', t: 'row', nm: 'Other', pr: '$5' } ],
+  ], foot: [] },
+]});
+const _p1c0 = d => d.pages[0].cols[0];
+const _p1c1 = d => d.pages[0].cols[1];
+
+test('pmGroupSpan: a section spans to the next section (covers interleaved subheaders + their rows)', () => {
+  const arr = subFx().pages[0].cols[0];
+  assert.equal(pmGroupSpan(arr, 0), 4, 's1 + r1 + u1 + r2 (stops at s2)');
+  assert.equal(pmGroupSpan(arr, 4), 2, 's2 + r3 (to end)');
+});
+test('pmGroupSpan: a subheader spans its following rows (stops at the next sub/sec)', () => {
+  const arr = subFx().pages[0].cols[0];
+  assert.equal(pmGroupSpan(arr, 2), 2, 'u1 + r2 (stops at s2)');
+});
+test('pmGroupSpan: a lone row is a group of 1', () => {
+  assert.equal(pmGroupSpan(subFx().pages[0].cols[1], 0), 1);
+});
+
+test('pmRelocateItem moves a SECTION with its interleaved subheader + rows (not just contiguous rows)', () => {
+  const d = subFx();
+  assert.equal(pmRelocateItem(d, 's1', 'p1:1'), true);
+  assert.deepEqual(_p1c0(d).map(i => i.id), ['s2', 'r3'], 'only the second section is left behind');
+  assert.deepEqual(_p1c1(d).map(i => i.id), ['r9', 's1', 'r1', 'u1', 'r2'], 'whole section block carried in order');
+});
+test('pmMoveTo moves a SECTION with its interleaved subheader + rows, before a target', () => {
+  const d = subFx();
+  assert.equal(pmMoveTo(d, 's1', 'p1:1', 'r9'), true);
+  assert.deepEqual(_p1c1(d).map(i => i.id), ['s1', 'r1', 'u1', 'r2', 'r9'], 'block landed before r9, in order');
+  assert.deepEqual(_p1c0(d).map(i => i.id), ['s2', 'r3']);
+});
+test('pmRelocateItem moves a SUBHEADER with its following rows (carries its group)', () => {
+  const d = subFx();
+  assert.equal(pmRelocateItem(d, 'u1', 'p1:1'), true);
+  assert.deepEqual(_p1c0(d).map(i => i.id), ['s1', 'r1', 's2', 'r3'], 'u1 + r2 left the source');
+  assert.deepEqual(_p1c1(d).map(i => i.id), ['r9', 'u1', 'r2'], 'subheader carried its row');
+});
+test('pmRemoveSection deletes a section WITH its interleaved subheader + rows', () => {
+  const d = subFx();
+  assert.equal(pmRemoveSection(d, 's1'), 4, 'removed s1 + r1 + u1 + r2');
+  assert.deepEqual(_p1c0(d).map(i => i.id), ['s2', 'r3']);
+});
+test('pmSectionRowCount counts only the service rows in a section group (excludes the subheader)', () => {
+  const d = subFx();
+  assert.equal(pmSectionRowCount(d, 's1'), 2, 'r1 + r2, not the u1 subheader heading');
+  assert.equal(pmSectionRowCount(d, 's2'), 1, 'r3');
+  assert.equal(pmSectionRowCount(d, 'r1'), 0, 'non-section → 0');
+});
+test('pmGroupSpan edge cases: multiple subheaders, a trailing sub, and a sub with no rows', () => {
+  // sec s1 owns two subheaders (u1 with rows, u2 trailing at the end, no rows); sub u2 is last.
+  const arr = [
+    { id: 's1', t: 'sec', label: 'A' },
+    { id: 'r1', t: 'row', nm: 'x', pr: '$1' },
+    { id: 'u1', t: 'sub', label: 'U1' },
+    { id: 'r2', t: 'row', nm: 'y', pr: '$2' },
+    { id: 'u2', t: 'sub', label: 'U2' },
+  ];
+  assert.equal(pmGroupSpan(arr, 0), 5, 'section carries BOTH subheaders + all rows to the end');
+  assert.equal(pmGroupSpan(arr, 2), 2, 'u1 + r2 (stops at u2)');
+  assert.equal(pmGroupSpan(arr, 4), 1, 'u2 is last → carries itself alone');
+  // sub immediately followed by a sec → carries zero rows
+  const arr2 = [{ id: 'u', t: 'sub', label: 'U' }, { id: 's', t: 'sec', label: 'S' }];
+  assert.equal(pmGroupSpan(arr2, 0), 1, 'sub directly before a section carries only itself');
 });
