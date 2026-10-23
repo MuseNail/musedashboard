@@ -138,6 +138,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.82', items: [
+    { icon: 'view_sidebar', t: 'Floor plan: technicians moved to a resizable left column', d: 'The technicians are now listed in a column down the left side of the floor plan — photo, name, status, turn count and bonus, just like the Turns grid — instead of a row across the bottom, with the floor to the right. Drag the column’s edge to make it wider or narrower. Everything still works: drag a tech onto a chair to assign, tap for the status menu, and the next-up tech is highlighted.' },
+  ] },
   { v: 'v5.81', items: [
     { icon: 'balance', t: 'Fairer bonus rotation + skill-aware suggestions', d: 'When the app suggests who takes a bonus service (wax, add-ons, etc.), it now rotates fairly: the tech with the fewest turns is next, ties broken by whoever has the fewest bonus turns, then by rotation order — and only among techs who can actually do that service. Also fixed: tapping a tech’s “next turn” slot no longer offers services that tech doesn’t do.' },
     { icon: 'format_size', t: 'Bonus count easier to read', d: 'On the Turns board, each tech’s bonus-turn number (+Nb) is now the same size as their turn count.' },

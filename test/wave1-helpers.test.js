@@ -5,6 +5,7 @@ import './setup-globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { _clampTechColW, _clampTotalColW } from '../js/app/features/turns.js';
+import { _clampFpTechColW } from '../js/app/features/floorplan.js';
 import { _visitLines } from '../js/app/features/reports.js';
 
 // ── _clampTechColW(px) — min 120, max 280, default 155 ──
@@ -26,6 +27,12 @@ test('_clampTotalColW clamps below the minimum', () => { assert.equal(_clampTota
 test('_clampTotalColW clamps above the maximum', () => { assert.equal(_clampTotalColW(999), 140); });
 test('_clampTotalColW passes a valid width through (rounded)', () => { assert.equal(_clampTotalColW(72.6), 73); });
 test('_clampTotalColW falls back to the default on a non-number', () => { assert.equal(_clampTotalColW('xyz'), 60); });
+
+// ── _clampFpTechColW(px) — floor-plan tech column: min 140, max 320, default 185 ──
+test('_clampFpTechColW clamps below the minimum', () => { assert.equal(_clampFpTechColW(50), 140); });
+test('_clampFpTechColW clamps above the maximum', () => { assert.equal(_clampFpTechColW(999), 320); });
+test('_clampFpTechColW passes a valid width through (rounded)', () => { assert.equal(_clampFpTechColW(200.4), 200); });
+test('_clampFpTechColW falls back to the default on a non-number', () => { assert.equal(_clampFpTechColW('nope'), 185); });
 
 // ── _visitLines(assignments, services, svcLabel, techName, chargeOf) ──
 // Item 3: each line now additively carries `charge` (via injected chargeOf) + `comped`.
