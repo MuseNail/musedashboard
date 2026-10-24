@@ -139,6 +139,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.92', items: [
+    { icon: 'tag', t: 'Add-on counters only show for techs who do that service', d: 'The per-service add-on counters now appear on a tech’s row only for the services that tech actually does (based on their service menu). A tech who doesn’t do a service won’t show a counter for it — a tech with no menu set still shows all of them. If a tech is ever assigned an add-on they don’t normally do, it still counts in their “+b” total so nothing is missed.' },
+  ] },
   { v: 'v5.91', items: [
     { icon: 'tag', t: 'Separate counters for your top add-ons', d: 'Give your busiest add-ons (like wax or lashes) their own tally next to each tech’s turn count on the turns board, so you can see at a glance who’s done how many. Turn it on in Settings → Turn Rules → “Separate counters for always-bonus add-ons.” It shows your first 3 always-bonus services; their bonus turns move out of the “+b” total into their own column (the floor plan matches). Your turn counts don’t change, and the printed turn reports still total all bonus the same as before.' },
   ] },

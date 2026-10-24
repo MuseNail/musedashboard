@@ -11,7 +11,7 @@ import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap, escHtml } from '../utils.js';
 import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, applyAssignmentStatus, applyEntryStatus, effectiveServiceStatus } from './status.js';
 import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef, categoryMaxTechs } from './queue.js';
-import { getActiveTurnsOrder, getTechStatusColor, getTechTurns, getActiveTechEntries, _dropHolders, techHasPendingAssignment, getDedicatedBonusServices, getTurnConfig, generalBonusCount } from './turns.js';
+import { getActiveTurnsOrder, getTechStatusColor, getTechTurns, getActiveTechEntries, _dropHolders, techHasPendingAssignment, getDedicatedBonusServices, getTurnConfig, generalBonusCount, _techDoesService } from './turns.js';
 import { serviceTimeInfo, liveAssignmentMs } from './servicetime.js';
 import { cardNotePreview } from './square-customers.js';
 
@@ -305,7 +305,7 @@ function renderFloorStaffRow() {
       </div>
       <div class="flex flex-col items-center flex-shrink-0" style="min-width:34px">
         <span style="font-size:15px;font-weight:800;color:#1a5252">${turnsTxt}t${techTurns.unknown > 0 ? '<span title="Has assigned service(s) with no price yet" style="color:#b0612a">?</span>' : ''}</span>
-        ${(() => { const gb = _dedBonus.length ? generalBonusCount(techTurns, _dedBonus) : techTurns.bonus; return gb > 0 ? `<span style="font-size:11px;font-weight:700;color:#0f6e56">+${gb}b</span>` : ''; })()}
+        ${(() => { const gb = _dedBonus.length ? generalBonusCount(techTurns, _dedBonus.filter(s => _techDoesService(st, s.id))) : techTurns.bonus; return gb > 0 ? `<span style="font-size:11px;font-weight:700;color:#0f6e56">+${gb}b</span>` : ''; })()}
       </div>
     </div>`;
   }).join('');

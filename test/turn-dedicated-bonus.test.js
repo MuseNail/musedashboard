@@ -4,7 +4,7 @@ import './setup-globals.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { getState } from '../js/app/store.js';
-import { getDedicatedBonusServices, getTechTurns, generalBonusCount } from '../js/app/features/turns.js';
+import { getDedicatedBonusServices, getTechTurns, generalBonusCount, _techDoesService } from '../js/app/features/turns.js';
 
 function reset() {
   getState().config.turn_config = {};
@@ -75,6 +75,21 @@ test('getTechTurns().dedicated: a cost-bonus (non-always-bonus) service stays in
   assert.equal(t.bonus - dedSum, 1);                            // the cheap cost-bonus remains in the general +b
   reset();
 });
+// ── per-tech capability filter (only show a service's counter for a tech who does it) ──
+test('a service counter shows only for a tech who does it; the filtered list also drives the +b subtraction (no lost count)', () => {
+  const dedServices = [{ id: 'wax' }, { id: 'lash' }];
+  const waxOnly = { services: ['wax'] };          // does wax, not lash
+  const generalist = { services: [] };            // empty menu = does everything
+  // which counters show
+  assert.deepEqual(dedServices.filter(s => _techDoesService(waxOnly, s.id)).map(s => s.id), ['wax']);
+  assert.deepEqual(dedServices.filter(s => _techDoesService(generalist, s.id)).map(s => s.id), ['wax', 'lash']);
+  // a wax-only tech who was manually assigned a lash (bonus 3 = wax2 + lash1): lash is NOT a column for them,
+  // and because the SAME filtered list feeds generalBonusCount, the lash stays in their general +b (not lost).
+  const tt = { bonus: 3, dedicated: { wax: 2, lash: 1 } };
+  const techDed = dedServices.filter(s => _techDoesService(waxOnly, s.id));   // [wax]
+  assert.equal(generalBonusCount(tt, techDed), 1);   // 3 - 2(wax) = 1 (the lash turn remains visible in +b)
+});
+
 // ── generalBonusCount (the one formula shared by the board + floor roster) ──
 test('generalBonusCount: bonus minus the dedicated add-ons, clamped ≥0', () => {
   const tt = { bonus: 3, dedicated: { wax: 2, lash: 1, cheap: 1 } };

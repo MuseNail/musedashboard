@@ -709,10 +709,12 @@ export function renderTurnsTechGrid() {
     // Turn count sits in its OWN resizable column just left of the turn bubbles (same spot for every tech).
     // The tech's billed $ total now lives under the tech name (in techCol), not here. This column sits
     // OUTSIDE the scrolling slot row.
-    // When dedicated counters are on, the dedicated add-ons leave the general "+Nb" (counted in their
-    // own column instead) — generalBonusCount is the single source shared with the floor roster.
-    const dedCounts = showDedicated ? dedServices.map(s => turns.dedicated[s.id] || 0) : [];
-    const generalBonus = showDedicated ? generalBonusCount(turns, dedServices) : turns.bonus;
+    // Only show a service's counter for a tech who actually does it (empty menu = does everything).
+    // The SAME filtered list drives both the column and the "+Nb" subtraction, so a service the tech
+    // doesn't do can never silently remove a (manually-assigned) bonus turn from their general +Nb.
+    const techDed = showDedicated ? dedServices.filter(s => _techDoesService(st, s.id)) : [];
+    const dedCounts = techDed.map(s => turns.dedicated[s.id] || 0);
+    const generalBonus = showDedicated ? generalBonusCount(turns, techDed) : turns.bonus;
     const turnsCountCol = `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-x border-surface-container-high px-1" style="width:var(--turns-totalcol-w,72px)">
       ${turnDisplay}${generalBonus > 0 ? `<span class="text-sm font-headline font-bold text-secondary leading-none mt-0.5 flex-shrink-0">+${generalBonus}b</span>` : ''}
     </div>`;
@@ -722,7 +724,7 @@ export function renderTurnsTechGrid() {
     // 9px abbr so the "Large" distance-reading mode scales it.
     const bonusDedicatedCol = showDedicated
       ? `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-r border-surface-container-high px-0.5 gap-0.5" style="width:52px">
-          ${dedServices.map((s, i) => `<div class="flex items-baseline justify-center gap-1 leading-none" title="${escHtml(s.label)} — bonus add-on">
+          ${techDed.map((s, i) => `<div class="flex items-baseline justify-center gap-1 leading-none" title="${escHtml(s.label)} — bonus add-on">
             <span class="text-[9px] font-body font-semibold uppercase tracking-wide text-outline-variant truncate" style="max-width:28px">${escHtml(s.abbr)}</span>
             <span class="text-sm font-headline font-bold leading-none ${dedCounts[i] > 0 ? 'text-secondary' : 'text-outline-variant'}">${dedCounts[i]}</span>
           </div>`).join('')}
