@@ -139,6 +139,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.86', items: [
+    { icon: 'contacts', t: 'Front-desk check-in: see each guest’s notes and recent visits', d: 'When you add guests from the dashboard, each guest now gets their own box showing their Customer note, their last 3 visits (date, services, tech, price, and the note from that visit), and a Note for this visit. The box fills in as you type a guest’s phone or pick them from the list — so you can see everyone at a glance. The boxes sit beside the check-in and scroll sideways when you’re checking in a big group (and drop below the form on a narrow screen).' },
+  ] },
   { v: 'v5.85', items: [
     { icon: 'edit_note', t: 'Services: edit everything right in the list, with a Save button', d: 'Services now edit inline like Retail Items — name, abbreviation, base price, and a new Description, all in one tap, no pop-up. When you change something a Save button appears; if you try to switch to another service or leave the page with unsaved edits, you’ll be asked to Save, Discard, or keep editing — so a half-typed change can’t quietly vanish or quietly save. Retail Items got the same Save button and prompt.' },
     { icon: 'badge', t: 'Floor plan: waiting guests show their full card', d: 'Guests in the “Not seated” strip at the top of the floor now show the full bubble — name, how long they’ve waited, and each of their services — instead of just a name, so you can read everyone at a glance. A guest with lots of services shows the first couple plus “+N more”.' },
