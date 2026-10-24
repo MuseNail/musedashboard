@@ -149,6 +149,11 @@
      toolbar). Turn counts stay visible; only each tech's billed dollar line hides. */
   #panel-turns.turns-hide-totals .turns-billed { display: none !important; }
 
+  /* Inline Services / Retail Items editor (Item 1): Save+Revert appear only once a row is dirty. */
+  .cat-save-wrap { display: none; }
+  .cat-row.cat-dirty .cat-save-wrap { display: flex; }
+  .cat-row.cat-dirty { border-color: var(--primary, #1a5252); box-shadow: inset 0 0 0 1px var(--primary, #1a5252); }
+
   /* Tech-status popup: the Available / Not-Available column headers — dark-safe (lighter ramp stops in dark). */
   .tsm-hdr-yes { color: #0f6e56; }
   .tsm-hdr-no  { color: #a32d2d; }

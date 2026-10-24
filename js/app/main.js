@@ -68,7 +68,7 @@ const MODAL_CLOSERS = [
   ['manual-modal', queue.closeManualAdd], ['warn-modal', queue.closeWarnModal],
   ['turns-assign-modal', turns.closeTurnsAssignModal], ['turns-tech-modal', turns.closeTurnsTechModal],
   ['split-merge-modal', queue.closeSplitMergeModal], ['edit-services-modal', queue.closeEditServicesModal],
-  ['service-modal', catalog.closeServiceModal], ['staff-modal', staff.closeStaffModal],
+  ['staff-modal', staff.closeStaffModal],
   ['staff-photo-modal', photos.closeStaffPhotoModal], ['schedule-picker', staff.closeSchedulePicker], ['week-fill-modal', staff.closeWeekFill],
   ['edit-checkin-modal', queue.closeEditCheckin], ['customer-dir-modal', sqCust.closeCustomerDir],
   ['edit-customer-modal', sqCust.closeEditCustomer], ['photo-crop-modal', photos.closePhotoCrop],
@@ -111,6 +111,7 @@ function setupBackHandler() {
 function goTo(screenId, param) {
   // Unsaved-changes guard (price-menu editor) — a screen change (incl. the OS back gesture) while editing.
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => goTo(screenId, param)); return; }
+  if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => goTo(screenId, param)); return; }
   closeAllModals();   // a screen change never leaves a modal orphaned over the new screen
   const prevScreen = document.querySelector('.screen.active')?.id;
   if (prevScreen && prevScreen !== screenId && !_navBack) {
@@ -522,6 +523,7 @@ function renderDashSubnav(grp, activePanel) {
 function showDashPanel(panel) {
   // Unsaved-changes guard (price-menu editor) — intercept a tab switch while editing; re-invoke on Save/Discard.
   if (window.pmEditorHasUnsaved?.() && window.pmGuardLeave) { window.pmGuardLeave(() => showDashPanel(panel)); return; }
+  if (window.catalogHasUnsaved?.() && window.catalogGuardLeave) { window.catalogGuardLeave(() => showDashPanel(panel)); return; }
   if ((panel === 'reports' || panel === 'payroll') && !canViewReportsGroup()) { utils.showToast('Your role doesn’t have permission to view Reports & Payroll.'); return; }
   closeAllModals();
   ['queue','reports','transactions','payroll','turns','settings','giftcards','calendar','floorplan','customers'].forEach(p => {
