@@ -354,7 +354,7 @@ const turnsTechColW = () => _clampTechColW(parseInt(localStorage.getItem('muse_t
 function _applyTurnsTechColW() { document.getElementById('panel-turns')?.style.setProperty('--turns-techcol-w', turnsTechColW() + 'px'); }
 function setTurnsTechColW(px) { localStorage.setItem('muse_turns_techcol_w', String(_clampTechColW(px))); _applyTurnsTechColW(); }
 // The turn-count column (its own column just left of the turn bubbles) is resizable the same way.
-const TURNS_TOTALCOL_MIN = 44, TURNS_TOTALCOL_MAX = 140, TURNS_TOTALCOL_DEFAULT = 72;   // fits count / +Nb bonus / $billed stacked
+const TURNS_TOTALCOL_MIN = 44, TURNS_TOTALCOL_MAX = 140, TURNS_TOTALCOL_DEFAULT = 72;   // fits the turn count + "+Nb" bonus stacked (billed $ now lives under the tech name)
 export function _clampTotalColW(px) {
   const n = Math.round(Number(px));
   return Number.isFinite(n) ? Math.max(TURNS_TOTALCOL_MIN, Math.min(TURNS_TOTALCOL_MAX, n)) : TURNS_TOTALCOL_DEFAULT;
@@ -574,6 +574,7 @@ export function renderTurnsTechGrid() {
       <div class="min-w-0" style="flex:1">
         <div class="leading-tight"><span class="font-headline font-semibold text-on-surface text-sm truncate" style="min-width:0;display:block">${st.name}</span></div>
         <div class="flex items-center gap-1.5 mt-0.5"><span class="text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-none inline-flex items-center gap-1 flex-shrink-0" style="${avPres.chip}">${avPres.lead}${avPres.label}</span></div>
+        <div class="turns-billed text-[11px] font-headline font-bold leading-none mt-0.5" style="color:#1a5252">$${billed.toFixed(0)}</div>
       </div></div>`;
 
     const MIN_SLOTS = 5;
@@ -645,11 +646,11 @@ export function renderTurnsTechGrid() {
     const rightSide = sep === 'lane'
       ? `<div class="flex min-w-0" style="flex:1;background:#eef1f2;border:0.5px solid #e0e5e7;border-radius:12px;padding:4px 2px 4px 6px">${slotRow}</div>`
       : `<div class="self-stretch flex-shrink-0" style="width:1px;background:#d3dbdc;margin:6px 0"></div>${slotRow}`;
-    // Turn count sits in its OWN resizable column just left of the turn bubbles (same spot for every tech),
-    // with the tech's billed $ total stacked beneath the bonus (.turns-billed → hidden by .turns-hide-totals
-    // when totals are off). This column sits OUTSIDE the scrolling slot row.
+    // Turn count sits in its OWN resizable column just left of the turn bubbles (same spot for every tech).
+    // The tech's billed $ total now lives under the tech name (in techCol), not here. This column sits
+    // OUTSIDE the scrolling slot row.
     const turnsCountCol = `<div class="flex-shrink-0 flex flex-col items-center justify-center self-stretch border-x border-surface-container-high px-1" style="width:var(--turns-totalcol-w,72px)">
-      ${turnDisplay}${turns.bonus > 0 ? `<span class="text-sm font-headline font-bold text-secondary leading-none mt-0.5 flex-shrink-0">+${turns.bonus}b</span>` : ''}<span class="turns-billed text-xs font-headline font-bold leading-none mt-0.5 flex-shrink-0" style="color:#1a5252">$${billed.toFixed(0)}</span>
+      ${turnDisplay}${turns.bonus > 0 ? `<span class="text-sm font-headline font-bold text-secondary leading-none mt-0.5 flex-shrink-0">+${turns.bonus}b</span>` : ''}
     </div>`;
     return `<div class="flex items-center border-b border-surface-container-high py-1 gap-2" style="${rowAccent}">${techCol}${turnsCountCol}${rightSide}</div>`;
   }).filter(Boolean).join('');
