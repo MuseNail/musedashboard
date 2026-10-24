@@ -139,6 +139,11 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.90', items: [
+    { icon: 'save', t: 'Edit your whole Services (and Retail Items) list, then Save once', d: 'In Settings → Services and Settings → Retail Items, every row is now editable at the same time. Change names, prices, abbreviations and descriptions across as many as you like, then tap one “Save” button for the whole list instead of saving each row. The button shows how many changes are waiting (e.g. “Save 3 changes”), and if you try to leave with unsaved edits it asks first.' },
+    { icon: 'swap_vert', t: 'Reorder your services and items', d: 'Drag the handle on the right of a row, or use the up/down arrows, to put your services and retail items in whatever order you want — then Save. The order you set is what shows elsewhere in the app.' },
+    { icon: 'delete', t: 'Deleting now asks before it’s permanent', d: 'Removing a service or item holds the change with your other edits until you Save, and the Save step lists exactly what will be permanently removed so nothing disappears by accident.' },
+  ] },
   { v: 'v5.89', items: [
     { icon: 'person_search', t: 'Turn suggestions skip a tech already holding a waiting customer', d: 'When the app suggests who takes the next customer (the "Assign" buttons and the "Next up" highlight), it now skips any tech who already has a customer assigned to them but still waiting (they haven’t started yet) — so work spreads out. If everyone available is already holding someone, it still shows the fewest-turns tech so there’s always a suggestion.' },
     { icon: 'event_upcoming', t: 'Tech app shows your next appointment on the main screen', d: 'On the technician app’s "Now" screen, your next upcoming appointment now shows at the top (time, name, service) — tap it to see your full appointment list.' },
