@@ -550,12 +550,14 @@ function _manualGuestContact(idx) {
   return { first: document.getElementById(`manual-first-${idx}`)?.value.trim() || '', last: document.getElementById(`manual-last-${idx}`)?.value.trim() || '', phone: document.getElementById(`manual-phone-${idx}`)?.value.trim() || '' };
 }
 const _MANUAL_TA = 'w-full bg-surface-container rounded-lg border border-surface-container-high px-2.5 py-1.5 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none';
-const _custNoteEditableHtml = idx => `<textarea id="manual-cust-note-${idx}" oninput="manualCustNoteInput(${idx})" placeholder="Allergies, preferences…" class="${_MANUAL_TA}" style="height:56px"></textarea>`;
+const _NOTE6_H = 'height:134px';   // ~6 visible lines at text-sm (owner wants roomy note boxes)
+const _CLAMP3 = 'display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden';   // let a long visit line wrap to 3 lines instead of "…"
+const _custNoteEditableHtml = idx => `<textarea id="manual-cust-note-${idx}" oninput="manualCustNoteInput(${idx})" placeholder="Allergies, preferences…" class="${_MANUAL_TA}" style="${_NOTE6_H}"></textarea>`;
 // A same-contact guest shares the primary's phone, so the phone-keyed note is the SAME one — show it
 // read-only here (editing happens on the primary) instead of a second editor that would collide.
 function _custNoteSharedHtml(phone) {
   const note = (customerNote(phone) || '').trim();
-  return `<div class="w-full rounded-lg border border-dashed border-surface-container-high px-2.5 py-1.5 text-sm font-body text-on-surface-variant overflow-hidden" style="height:56px">${note ? escHtml(note) : '<span class="italic">Shared with the primary guest</span>'}</div>`;
+  return `<div class="w-full rounded-lg border border-dashed border-surface-container-high px-2.5 py-1.5 text-sm font-body text-on-surface-variant overflow-hidden" style="${_NOTE6_H}">${note ? escHtml(note) : '<span class="italic">Shared with the primary guest</span>'}</div>`;
 }
 // Visit history source = buildCombinedRecords() (reconciled totals + any paid live-queue visit),
 // so the box agrees with Edit Customer / Reports — never a stale cached totalCost. `records` lets a
@@ -569,8 +571,8 @@ function _manualHistoryHtml(phone, name, records) {
     const d = new Date(v.dateMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const amt = (v.isRefund ? '-$' : '$') + Math.abs(v.amount).toFixed(0);
     return `<div class="py-1 border-b border-surface-container-high last:border-0">
-      <div class="text-xs font-body text-on-surface leading-tight truncate"><span class="text-on-surface-variant">${d}</span> · ${escHtml(v.services)}${v.tech ? ' · ' + escHtml(v.tech) : ''} · <span class="font-semibold">${amt}</span>${v.isRefund ? ' · refund' : ''}</div>
-      ${v.note ? `<div class="text-[11px] font-body italic text-on-surface-variant truncate leading-tight">“${escHtml(v.note)}”</div>` : ''}
+      <div class="text-xs font-body text-on-surface leading-tight" style="${_CLAMP3}"><span class="text-on-surface-variant">${d}</span> · ${escHtml(v.services)}${v.tech ? ' · ' + escHtml(v.tech) : ''} · <span class="font-semibold">${amt}</span>${v.isRefund ? ' · refund' : ''}</div>
+      ${v.note ? `<div class="text-[11px] font-body italic text-on-surface-variant leading-tight" style="${_CLAMP3}">“${escHtml(v.note)}”</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -586,7 +588,7 @@ function manualGuestBoxHtml(idx) {
     <label class="${lab}" style="margin-top:11px">Last 3 visits</label>
     <div id="manual-history-${idx}" class="overflow-y-auto" style="height:124px"></div>
     <label class="${lab}" style="margin-top:11px">Note for this visit <span class="text-outline normal-case tracking-normal">· optional</span></label>
-    <textarea id="manual-visit-note-${idx}" placeholder="e.g., design on ring fingers…" class="${_MANUAL_TA}" style="height:56px"></textarea>
+    <textarea id="manual-visit-note-${idx}" placeholder="e.g., design on ring fingers…" class="${_MANUAL_TA}" style="${_NOTE6_H}"></textarea>
   </div>`;
 }
 function appendManualGuestBox(idx) {
