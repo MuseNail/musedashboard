@@ -139,6 +139,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.88', items: [
+    { icon: 'swap_vert', t: 'Turns can count the moment a customer is assigned', d: 'New setting (Settings → Turn Rules → “Count a turn when assigned”, on by default): a turn now counts as soon as you assign a customer to a tech — waiting, in service, or done — using the service’s base price. Turn it off to go back to only counting once a service is marked Done. Either way, a service with no base price and no price typed yet shows a “?” after the tech’s turn count (e.g. 1t?) so you can see there’s still unpriced work — the number isn’t changed.' },
+  ] },
   { v: 'v5.87', items: [
     { icon: 'notes', t: 'Roomier note boxes + fuller visit history', d: 'The customer and visit note boxes in the Assign & Price panel and the front-desk check-in now show about 6 lines, so there’s room to read and write more. And in the check-in box, each past visit can now wrap to a few lines instead of getting cut off with a “…”, so long service lists and notes stay readable.' },
   ] },
