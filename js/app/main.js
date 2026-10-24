@@ -139,6 +139,13 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.85', items: [
+    { icon: 'edit_note', t: 'Services: edit everything right in the list, with a Save button', d: 'Services now edit inline like Retail Items — name, abbreviation, base price, and a new Description, all in one tap, no pop-up. When you change something a Save button appears; if you try to switch to another service or leave the page with unsaved edits, you’ll be asked to Save, Discard, or keep editing — so a half-typed change can’t quietly vanish or quietly save. Retail Items got the same Save button and prompt.' },
+    { icon: 'badge', t: 'Floor plan: waiting guests show their full card', d: 'Guests in the “Not seated” strip at the top of the floor now show the full bubble — name, how long they’ve waited, and each of their services — instead of just a name, so you can read everyone at a glance. A guest with lots of services shows the first couple plus “+N more”.' },
+    { icon: 'search', t: 'Search now finds Settings', d: 'The search box in the header also searches Settings now — type “waiver”, “turn rules”, “receipt”, etc., and tap a result to jump straight to that settings screen.' },
+    { icon: 'width', t: 'Price menu: the list column can be made wider', d: 'In the price-menu editor you can now drag the list column out to a bigger share of the screen (up to 60%), starting at 40%. (This resets any custom width you’d set to the new 40% starting point once.)' },
+    { icon: 'payments', t: 'Turns board: each tech’s $ billed sits under their name', d: 'A technician’s billed-today total now shows right under their name and status, instead of under the turn count.' },
+  ] },
   { v: 'v5.84', items: [
     { icon: 'contrast', t: 'Turns board: next-up no longer nudges the row, and the $ total sits with the turns', d: 'The highlighted “next up” row keeps its green bar but no longer shifts a few pixels to the right, so every row lines up. Each tech’s billed total now sits right under their bonus count in the turn-count column (the separate column on the far right is gone), and that column is a touch wider so the numbers never crowd.' },
     { icon: 'badge', t: 'Tech popup: see what each tech can and can’t do', d: 'Tapping a technician now shows three columns — Available (green ✓), Not available (red ✗), and Notes — so you can see at a glance which services they’re set up for. The Available / On break / Off buttons moved to a neat stack beside their photo.' },
