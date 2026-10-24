@@ -139,6 +139,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.89', items: [
+    { icon: 'person_search', t: 'Turn suggestions skip a tech already holding a waiting customer', d: 'When the app suggests who takes the next customer (the "Assign" buttons and the "Next up" highlight), it now skips any tech who already has a customer assigned to them but still waiting (they haven’t started yet) — so work spreads out. If everyone available is already holding someone, it still shows the fewest-turns tech so there’s always a suggestion.' },
+    { icon: 'event_upcoming', t: 'Tech app shows your next appointment on the main screen', d: 'On the technician app’s "Now" screen, your next upcoming appointment now shows at the top (time, name, service) — tap it to see your full appointment list.' },
+  ] },
   { v: 'v5.88', items: [
     { icon: 'swap_vert', t: 'Turns can count the moment a customer is assigned', d: 'New setting (Settings → Turn Rules → “Count a turn when assigned”, on by default): a turn now counts as soon as you assign a customer to a tech — waiting, in service, or done — using the service’s base price. Turn it off to go back to only counting once a service is marked Done. Either way, a service with no base price and no price typed yet shows a “?” after the tech’s turn count (e.g. 1t?) so you can see there’s still unpriced work — the number isn’t changed.' },
   ] },
