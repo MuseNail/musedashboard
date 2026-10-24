@@ -195,30 +195,71 @@ const _live = () => normalizePriceMenu(getState().config.price_menu);
 const _rawCfg = () => JSON.stringify(getState().config.price_menu ?? null);
 
 // ── Resizable list column (drag the divider between the left list and the detail panel) ──
-const PM_LISTCOL_MIN = 290, PM_LISTCOL_MAX = 520, PM_LISTCOL_DEFAULT = 300;
-export function _clampPmListColW(px) {
-  const n = Math.round(Number(px));
-  return Number.isFinite(n) ? Math.max(PM_LISTCOL_MIN, Math.min(PM_LISTCOL_MAX, n)) : PM_LISTCOL_DEFAULT;
+// Stored as a FRACTION of the editor's content width (so 40% stays 40% across window/orientation
+// changes), not a fixed px. Owner spec: default 40:60, drag the list out to a max of 60:40 — the
+// list never goes below 40% (the add-bar clips narrower). Device-local key; replaces the old px key.
+const PM_MIN_FRAC = 0.40, PM_DEF_FRAC = 0.40, PM_MAX_FRAC = 0.60;
+const PM_GRID_GAP = 14;   // must match .pm2-main `gap` in styles.css
+export function _clampPmListFrac(frac) {
+  const n = Number(frac);
+  return Number.isFinite(n) ? Math.max(PM_MIN_FRAC, Math.min(PM_MAX_FRAC, n)) : PM_DEF_FRAC;
 }
-const pmListColW = () => _clampPmListColW(parseInt(localStorage.getItem('muse_pm_listcol_w'), 10) || PM_LISTCOL_DEFAULT);
-function _applyPmListColW() { document.getElementById('settings-pricemenu-section')?.style.setProperty('--pm-listcol-w', pmListColW() + 'px'); }
-function setPmListColW(px) { localStorage.setItem('muse_pm_listcol_w', String(_clampPmListColW(px))); _applyPmListColW(); }
+const pmListFrac = () => _clampPmListFrac(parseFloat(localStorage.getItem('muse_pm_listcol_frac')));
+function setPmListFrac(frac) { localStorage.setItem('muse_pm_listcol_frac', String(_clampPmListFrac(frac))); _applyPmListColW(); }
+// Content width the two columns share (excludes the grid gap). 0 when the section is hidden
+// (display:none) — the caller then keeps the CSS px fallback and re-applies once visible.
+function _pmMainInnerW() {
+  const main = document.querySelector('#settings-pricemenu-section .pm2-main');
+  const w = main ? main.clientWidth - PM_GRID_GAP : 0;
+  return w > 0 ? w : 0;
+}
+// Set the list-column width var AND the resizer handle position from the stored fraction, both from
+// the SAME live measurement so they never desync. Exported (window-glued) so settings.js can re-apply
+// it right after the price-menu leaf is unhidden (render runs while the section is still display:none).
+export function _applyPmListColW() {
+  const innerW = _pmMainInnerW(); if (!innerW) return;   // hidden → keep the 300px CSS fallback
+  const host = document.getElementById('settings-pricemenu-section');
+  const px = Math.round(pmListFrac() * innerW);
+  host?.style.setProperty('--pm-listcol-w', px + 'px');
+  const h = host?.querySelector('.pm2-col-resizer');
+  if (h) h.style.left = (px + PM_GRID_GAP / 2) + 'px';   // centered in the grid gap at the list's edge
+}
+let _pmResizeBound = false;
 function _pmInitColResize() {
-  const main = document.querySelector('#settings-pricemenu-section .pm2-main'); if (!main) return;
+  const host = document.getElementById('settings-pricemenu-section'); if (!host) return;
+  const main = host.querySelector('.pm2-main'); if (!main) return;
   const h = main.querySelector('.pm2-col-resizer'); if (!h) return;
-  h.style.left = (pmListColW() + 7) + 'px';   // sit in the 14px grid gap, at the list column's edge
+  _applyPmListColW();
+  // width was 0 at render time (section just unhidden) → re-apply after layout settles
+  if (!_pmMainInnerW()) requestAnimationFrame(() => _applyPmListColW());
   h.addEventListener('pointerdown', ev => {
     ev.preventDefault(); ev.stopPropagation();
-    const startX = ev.clientX, startW = pmListColW();
+    const innerW = _pmMainInnerW() || main.clientWidth - PM_GRID_GAP;
+    if (innerW <= 0) return;
+    const startX = ev.clientX, startFrac = pmListFrac();
     try { h.setPointerCapture(ev.pointerId); } catch {}
-    const host = document.getElementById('settings-pricemenu-section');
-    const move = e => { const w = _clampPmListColW(startW + (e.clientX - startX)); host?.style.setProperty('--pm-listcol-w', w + 'px'); h.style.left = (w + 7) + 'px'; };
+    const move = e => {
+      const frac = _clampPmListFrac(startFrac + (e.clientX - startX) / innerW);
+      const px = Math.round(frac * innerW);
+      host.style.setProperty('--pm-listcol-w', px + 'px'); h.style.left = (px + PM_GRID_GAP / 2) + 'px';
+    };
     const end = e => {
       document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', end); document.removeEventListener('pointercancel', end);
-      setPmListColW(startW + (Number(e && e.clientX) ? e.clientX - startX : 0));
+      const dx = Number(e && e.clientX) ? e.clientX - startX : 0;
+      setPmListFrac(startFrac + dx / innerW);
     };
     document.addEventListener('pointermove', move); document.addEventListener('pointerup', end); document.addEventListener('pointercancel', end);
   });
+  // Keep 40% = 40% when the window/orientation changes (the px behind the fraction shifts). Bound once;
+  // no-ops while the section is hidden or stacked (≤820px the resizer is display:none, innerW guards it).
+  if (!_pmResizeBound) {
+    _pmResizeBound = true;
+    let t = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(t);
+      t = setTimeout(() => { if (document.getElementById('settings-pricemenu-section')?.offsetParent) _applyPmListColW(); }, 120);
+    });
+  }
 }
 
 // For the click-out guard (2a-guard): is the editor open with unsaved changes?
