@@ -50,7 +50,7 @@ export function showPinModal() {
 // Log out the current front-desk user: confirm, clear the session, return to the welcome
 // screen, then prompt for a PIN. (showPinModal also clears activeUser + opens the keypad.)
 export function logout() {
-  const doLogout = () => { window.chatPushOnSignOut?.(); setActiveUser(null); window.goTo?.('screen-welcome'); showPinModal(); };
+  const doLogout = () => { window.chatPushOnSignOut?.(); window.clearApptReminders?.(); setActiveUser(null); window.goTo?.('screen-welcome'); showPinModal(); };
   if (window.showWarnModal) window.showWarnModal('Log out?', 'You will need to re-enter your PIN.', doLogout);
   else doLogout();
 }

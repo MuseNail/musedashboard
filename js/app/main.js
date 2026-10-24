@@ -139,6 +139,12 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.93', items: [
+    { icon: 'palette', t: 'Color key moved to your account menu', d: 'The color legend that used to sit at the top of the Turns board is gone, giving the board more room. You can still look up what every color and badge means anytime: tap your name (top-right) → “Color key.”' },
+    { icon: 'receipt_long', t: 'Transactions: filters & totals stay pinned', d: 'On the Transactions screen, the date/controls row and the “Showing… tickets · Net Total” bar now stay fixed at the top while only the list of sales scrolls — so you never lose the filters or the running total as you scroll.' },
+    { icon: 'person_add', t: 'Check-in: the Add to Queue button stays put', d: 'When you’re adding a big group, the “Add Guest” title and the “Add to Queue” button now stay fixed while the list of guests scrolls between them — the button is always one tap away. (The “no signed waiver” warning moved up next to the button so it can’t scroll out of view.)' },
+    { icon: 'notifications_off', t: 'No appointment reminders on the kiosk screen', d: 'Appointment reminders no longer linger on the public check-in screen after you sign out, and a device set as your dedicated kiosk won’t show staff reminders at all.' },
+  ] },
   { v: 'v5.92', items: [
     { icon: 'tag', t: 'Add-on counters only show for techs who do that service', d: 'The per-service add-on counters now appear on a tech’s row only for the services that tech actually does (based on their service menu). A tech who doesn’t do a service won’t show a counter for it — a tech with no menu set still shows all of them. If a tech is ever assigned an add-on they don’t normally do, it still counts in their “+b” total so nothing is missed.' },
   ] },
@@ -519,7 +525,9 @@ function closeWhatsNew() {
   try { localStorage.setItem('muse_whatsnew_seen', APP_VERSION); } catch {}
   const m = document.getElementById('whatsnew-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; }
 }
-Object.assign(window, { showWhatsNew, closeWhatsNew, whatsNewNav });
+function openColorKey() { const m = document.getElementById('color-key-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; } }
+function closeColorKey() { const m = document.getElementById('color-key-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } }
+Object.assign(window, { showWhatsNew, closeWhatsNew, whatsNewNav, openColorKey, closeColorKey });
 // ── Grouped top nav (v4.74) ──────────────────────
 // 5 tabs; grouped panels switch via the subnav segments under the header. The Reports group
 // (Reports | Payroll) is gated by the viewReports role permission (Settings → Role
@@ -716,10 +724,14 @@ function renderSyncBanner(state) {
 }
 function applySyncBanner(model) {
   const el = document.getElementById('sync-banner'); if (!el) return;
-  if (model.kind === 'hidden') { el.className = 'sync-banner hidden'; el.innerHTML = ''; return; }
+  // Publish the banner's height so fixed-height panels (e.g. Transactions) can subtract it — the banner
+  // sits in normal flow above the sticky nav, so when it shows it pushes everything down.
+  const setH = px => document.documentElement.style.setProperty('--sync-banner-h', px);
+  if (model.kind === 'hidden') { el.className = 'sync-banner hidden'; el.innerHTML = ''; setH('0px'); return; }
   el.className = `sync-banner sync-banner--${model.tone}${model.pulse ? ' sync-banner--pulse' : ''}`;
   el.innerHTML = `<span class="sync-banner__icon material-symbols-outlined" aria-hidden="true">${syncBannerIcon(model.kind)}</span><div class="sync-banner__text"><div class="sync-banner__title">${utils.escHtml(model.title)}</div><div class="sync-banner__sub">${utils.escHtml(model.sub)}</div></div>`;
   if (model.action) { const b = document.createElement('button'); b.className = 'sync-banner__btn'; b.textContent = model.actionLabel; b.onclick = () => syncBannerDo(model.action); el.appendChild(b); }
+  requestAnimationFrame(() => setH((el.offsetHeight || 0) + 'px'));
 }
 function syncBannerDo(action) {
   if (action === 'retry' || action === 'pin') { window.forceSyncNow?.(); return; }
