@@ -108,11 +108,11 @@ function _techAvatar(tech, fs) {
 }
 // ALL of the customer's services (this seat's + others + still-waiting), each as a row:
 // status dot + tech avatar + service · tech · $ , with the elapsed▸avg badge on the line below.
-function custLines(e, stationId, fs = 1) {
+function custLines(e, stationId, fs = 1, maxLines = Infinity, noTiming = false) {
   const assigns = e.assignments || [];
   const sids = [...new Set([...(e.services || []), ...assigns.map(a => a.serviceId)])];
   const dotPx = Math.round(9 * fs);
-  return sids.map(sid => {
+  const lines = sids.map(sid => {
     const a = assigns.find(x => x.serviceId === sid);
     const status = a ? getAssignmentStatus(e, a) : 'waiting';
     if (a && isPaidStatus(status)) return '';   // drop a paid line (whole entry leaves the floor when all paid)
@@ -122,10 +122,44 @@ function custLines(e, stationId, fs = 1) {
     const main = `<div style="display:flex;align-items:center;gap:${Math.round(3 * fs)}px;font-size:${Math.round(10.5 * fs)}px;color:#374151;min-width:0">
       ${dot}${_techAvatar(t, fs)}<span class="truncate" style="min-width:0">${s ? escHtml(s.label) : 'Service'}${t ? ' · ' + escHtml(t.name.split(' ')[0]) : ''}${a && a.comped ? ' · Comp' : (a && a.cost ? ' · $' + Number(a.cost).toFixed(0) : '')}${t ? '' : ' · Wait'}</span>
     </div>`;
-    const sti = a ? serviceTimeInfo(a) : null;
+    // Tray cards pass noTiming so each service is one compact line (the elapsed▸avg sub-row would push a
+    // busy card past its fixed height and clip the "+N more" chip).
+    const sti = (!noTiming && a) ? serviceTimeInfo(a) : null;
     const stiHtml = sti ? `<div style="font-size:${Math.round(9 * fs)}px;font-weight:700;color:${sti.color};padding-left:${Math.round(20 * fs)}px">${sti.text}</div>` : '';
     return main + stiHtml;
-  }).filter(Boolean).join('');
+  }).filter(Boolean);
+  // maxLines caps the tray's fixed-height cards (seated tiles pass no cap). Overflow collapses to "+N more".
+  if (lines.length > maxLines) {
+    const shown = lines.slice(0, maxLines);
+    shown.push(`<div style="font-size:${Math.round(9.5 * fs)}px;font-weight:700;color:#52606d;padding-left:${Math.round(3 * fs)}px">+${lines.length - maxLines} more</div>`);
+    return shown.join('');
+  }
+  return lines.join('');
+}
+
+// Waiting-guest tray card (Item 2): the FULL bubble — name + wait time + each service + tech/Wait — so
+// the not-seated strip reads like a seated tile at a glance. Fixed size + overflow:hidden keeps the tray
+// a constant height (the floor below never jumps); 3+ services collapse to "+N more". Keeps .floor-bubble
+// + data-entry-id + .fp-grip so the drag-to-seat pointer handling is UNCHANGED. The header markup is
+// duplicated from stationHtml on purpose (not shared) so the live seated card can't be regressed by it.
+// Fixed heights (card + the tray box that holds the label + the row). Single-line name + no per-service
+// timing row (custLines noTiming) keep worst-case content — a long name + 2 services + "+N more" — inside
+// the card so the "+N more" chip is never the thing that gets clipped.
+const TRAY_CARD_H = 72, TRAY_BOX_H = 104;
+function trayBubbleHtml(e) {
+  const inserv = entryInservice(e);
+  const bg = inserv ? '#cfe0e0' : '#ffe9c4', border = inserv ? '#2a7a4f' : '#d4860a';
+  const letter = e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:9px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : '';
+  return `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1.5 flex-shrink-0" data-entry-id="${e.id}" style="width:162px;height:${TRAY_CARD_H}px;box-sizing:border-box;overflow:hidden;background:${bg};border:1px solid ${border};color:#1f2937">
+    <div class="flex items-center gap-1" style="min-width:0">
+      <span class="material-symbols-outlined fp-grip" style="font-size:15px">drag_indicator</span>
+      ${letter}
+      <div class="font-semibold truncate" style="font-size:11px;flex:1;min-width:0;line-height:1.2">${escHtml(e.name)}</div>
+      <span class="flex-shrink-0" style="font-size:9px;color:#52606d" data-checkin-ts="${entryStatusSince(e)}">${formatElapsed(entryStatusSince(e))}</span>
+      ${cardNotePreview(e.phone, e.txnNote, { iconOnly: true, visitOnly: true, fontSize: 10 })}
+    </div>
+    <div class="overflow-hidden leading-tight" style="margin-top:3px">${custLines(e, null, 1, 2, true)}</div>
+  </div>`;
 }
 
 function stationHtml(id, entry) {
@@ -301,13 +335,13 @@ export function renderFloorPlan() {
     // instead of squishing) and the row is touch-action:pan-x so an iPad can swipe it (bubbles keep
     // their own drag-to-seat touch handling).
     if (floorEditMode) tray.innerHTML = '';
-    else if (unplaced.length === 0) tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2" style="height:76px;box-sizing:border-box">
+    else if (unplaced.length === 0) tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2" style="height:${TRAY_BOX_H}px;box-sizing:border-box;display:flex;align-items:center">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant">All guests seated — drag a guest here to un-seat.</div></div>`;
-    else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2" style="height:76px;box-sizing:border-box">
+    else tray.innerHTML = `<div class="bg-surface-container rounded-xl p-2" style="height:${TRAY_BOX_H}px;box-sizing:border-box">
       <div class="text-[11px] font-body font-semibold text-on-surface-variant mb-1">Not seated — drag onto a station (${unplaced.length})</div>
       <div class="floor-tray-wrap" style="position:relative">
         <button type="button" onclick="floorTrayScroll(-1)" class="floor-tray-chev floor-tray-chev-l" title="Scroll left"><span class="material-symbols-outlined" style="font-size:18px">chevron_left</span></button>
-        <div class="floor-tray-row flex gap-1.5" style="overflow-x:auto;overflow-y:hidden;touch-action:pan-x;scrollbar-width:thin">${unplaced.map(e => `<div class="floor-bubble cursor-pointer rounded-lg px-2 py-1 flex items-center gap-1 flex-shrink-0" data-entry-id="${e.id}" style="background:${entryInservice(e) ? '#cfe0e0' : '#ffe9c4'};color:#1f2937;font-size:11px"><span class="material-symbols-outlined fp-grip">drag_indicator</span>${e.groupId ? `<span style="display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border-radius:4px;background:${e.groupColor||'#888'};color:#fff;font-size:8px;font-weight:800;flex-shrink:0">${_fpLetters.get(e.groupId)||'•'}</span>` : ''}<span class="font-semibold" style="white-space:nowrap">${escHtml(e.name)}</span></div>`).join('')}</div>
+        <div class="floor-tray-row flex gap-1.5" style="overflow-x:auto;overflow-y:hidden;touch-action:pan-x;scrollbar-width:thin">${unplaced.map(trayBubbleHtml).join('')}</div>
         <button type="button" onclick="floorTrayScroll(1)" class="floor-tray-chev floor-tray-chev-r" title="Scroll right"><span class="material-symbols-outlined" style="font-size:18px">chevron_right</span></button>
       </div></div>`;
     // Reveal the scroll chevrons + right-edge fade only when the waiting row actually overflows (the
