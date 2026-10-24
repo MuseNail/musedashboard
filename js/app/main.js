@@ -139,6 +139,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.91', items: [
+    { icon: 'tag', t: 'Separate counters for your top add-ons', d: 'Give your busiest add-ons (like wax or lashes) their own tally next to each tech’s turn count on the turns board, so you can see at a glance who’s done how many. Turn it on in Settings → Turn Rules → “Separate counters for always-bonus add-ons.” It shows your first 3 always-bonus services; their bonus turns move out of the “+b” total into their own column (the floor plan matches). Your turn counts don’t change, and the printed turn reports still total all bonus the same as before.' },
+  ] },
   { v: 'v5.90', items: [
     { icon: 'save', t: 'Edit your whole Services (and Retail Items) list, then Save once', d: 'In Settings → Services and Settings → Retail Items, every row is now editable at the same time. Change names, prices, abbreviations and descriptions across as many as you like, then tap one “Save” button for the whole list instead of saving each row. The button shows how many changes are waiting (e.g. “Save 3 changes”), and if you try to leave with unsaved edits it asks first.' },
     { icon: 'swap_vert', t: 'Reorder your services and items', d: 'Drag the handle on the right of a row, or use the up/down arrows, to put your services and retail items in whatever order you want — then Save. The order you set is what shows elsewhere in the app.' },
