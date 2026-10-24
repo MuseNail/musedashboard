@@ -139,6 +139,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v5.87', items: [
+    { icon: 'notes', t: 'Roomier note boxes + fuller visit history', d: 'The customer and visit note boxes in the Assign & Price panel and the front-desk check-in now show about 6 lines, so there’s room to read and write more. And in the check-in box, each past visit can now wrap to a few lines instead of getting cut off with a “…”, so long service lists and notes stay readable.' },
+  ] },
   { v: 'v5.86', items: [
     { icon: 'contacts', t: 'Front-desk check-in: see each guest’s notes and recent visits', d: 'When you add guests from the dashboard, each guest now gets their own box showing their Customer note, their last 3 visits (date, services, tech, price, and the note from that visit), and a Note for this visit. The box fills in as you type a guest’s phone or pick them from the list — so you can see everyone at a glance. The boxes sit beside the check-in and scroll sideways when you’re checking in a big group (and drop below the form on a narrow screen).' },
   ] },
