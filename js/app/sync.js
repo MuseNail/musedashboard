@@ -56,6 +56,15 @@ let _outbox = loadOutbox();
 // rather than just an HTTP refresh; that's the main thing to weigh when retuning.
 const STALE_MS = 30000;
 
+// WS reconnect cadence. Normally retry fast (a brief blip should heal in seconds). But once the app
+// believes it needs sign-in (_authNeeded), retry SLOWLY instead of hammering every 3s: a revoked
+// device then stops pinging the server ~10× per minute, while a VALID device that was wrongly 401'd
+// by a transient fail-closed backend (worker.js appAuthOk returns 401, not 503, when the DO is
+// briefly unreachable) STILL self-heals on the next slow attempt. We must keep retrying — never
+// fully stop — precisely because a 401 can't be trusted to mean "truly revoked". (Caveat #2 fix.)
+const RECONNECT_MS = 3000;
+const AUTH_RETRY_MS = 30000;
+
 // Reconnect the WS on a wake? No socket / non-OPEN → yes (as before); an OPEN socket
 // silent past STALE_MS is a zombie → yes. A live, recently-heard-from socket → no.
 export function _shouldReconnect(now, lastRecv, isOpen) {
@@ -67,6 +76,14 @@ export function _shouldReconnect(now, lastRecv, isOpen) {
 export function _shouldResync(now, lastRecv, visible, authNeeded) {
   return visible && !authNeeded && lastRecv > 0 && (now - lastRecv > STALE_MS);
 }
+// How long before the next WS reconnect — fast normally, slow once we need sign-in (why: the const
+// block above). Pure + exported for tests.
+export function _reconnectDelay(authNeeded) { return authNeeded ? AUTH_RETRY_MS : RECONNECT_MS; }
+// May resync() drop this call to its 1.5s double-fetch throttle? Only while signed IN. While
+// auth-needed a resync IS the recovery attempt (PIN login calls resync), so it must never be
+// throttled away — otherwise a sign-in landing within 1.5s of a wake/focus resync gets swallowed
+// and the board stays stuck on "Sign in needed". Pure + exported for tests.
+export function _shouldThrottleResync(timerPending, authNeeded) { return timerPending && !authNeeded; }
 // Keep the store indicator and the watchdog's local gate in lockstep — _shouldResync reads
 // _authNeeded, not the store, so every auth flip must go through here or the two can drift.
 function markAuthNeeded(v) { setAuthNeeded(v); _authNeeded = v; }
@@ -189,7 +206,8 @@ function wakeCheck() {
 // Force the connection healthy and pull a fresh snapshot to catch any broadcasts missed while
 // the socket was dead/asleep. Throttled so visibility+focus firing together don't double-fetch.
 export function resync() {
-  if (_resyncTimer) return;
+  // Never throttle a signed-out resync — it's the sign-in recovery attempt (why: _shouldThrottleResync).
+  if (_shouldThrottleResync(!!_resyncTimer, _authNeeded)) return;
   _resyncTimer = setTimeout(() => { _resyncTimer = null; }, 1500);
   // Don't trust readyState alone: a socket silent past STALE_MS is dead even when it still reports
   // OPEN (iOS zombie-OPEN after sleep) — _shouldReconnect tears that down too, not just a non-OPEN
@@ -262,7 +280,7 @@ function connect() {
 
 function scheduleReconnect() {
   if (_reconnect) return;
-  _reconnect = setTimeout(() => { _reconnect = null; connect(); }, 3000);
+  _reconnect = setTimeout(() => { _reconnect = null; connect(); }, _reconnectDelay(_authNeeded));
 }
 
 function send(obj) {
