@@ -141,6 +141,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.02', items: [
+    { icon: 'lock_person', t: 'Removing staff now fully cuts off their access', d: 'When you deactivate or remove a technician, or delete a front-desk user, their access is severed immediately: their phone stops getting chat and assignment notifications, their sign-in is revoked, and if the app is open on their device its live feed is cut off right away. Before, a removed person could keep receiving message notifications and, if their app stayed open, keep seeing live updates until it happened to disconnect. Their device now simply shows “Sign in needed.”' },
+  ] },
   { v: 'v6.01', items: [
     { icon: 'spellcheck', t: 'Consistent wording: finished services say “Done”', d: 'A finished service now reads “Done” everywhere — the Queue group, the Assign & Price status, the Turns board, the tech app, and the Calendar — instead of saying “Complete” in some places and “Done” in others. Same status, just one word for it. (Appointments still say “Completed,” and the check-in waiver button is unchanged.)' },
   ] },

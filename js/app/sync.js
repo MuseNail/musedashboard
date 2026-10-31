@@ -39,6 +39,9 @@ export const DEVICE_ID = (() => {
 
 let _ws = null, _connected = false, _reconnect = null, _ping = null, _mutCounter = 0;
 let _lastRecv = 0, _resyncTimer = null;   // heartbeat watchdog + resync throttle
+// WS close code the Worker/DO sends when it revokes THIS device (§13: user removed/deactivated or
+// session expired). Cross-file contract — must match WS_CLOSE_REVOKED in cloudflare/worker.js.
+const WS_CLOSE_REVOKED = 4001;
 let _authNeeded = false, _snapshotInFlight = false;   // mirror the auth gate for the watchdog; serialize snapshots
 let _outbox = loadOutbox();
 
@@ -240,14 +243,21 @@ function connect() {
     }, 20000);
   };
   ws.onmessage = ({ data }) => { if (_ws !== ws) return; _lastRecv = Date.now(); let msg; try { msg = JSON.parse(data); } catch { return; } handle(msg); };
-  ws.onclose = ws.onerror = () => {
+  const onDown = (code) => {
     clearTimeout(openTimer);
     if (_ws !== ws) return;   // a stale/abandoned socket firing late — must not clobber the live one
     _connected = false;
     setConnection(false, _outbox.length);
     clearInterval(_ping); _ping = null;
+    // 4001 = the server revoked THIS device (§13: this user was removed/deactivated, or the
+    // session expired). A browser can't read a WS-handshake 401, so the DO sends this explicit
+    // code. Don't reconnect-loop silently — surface "Sign in needed" and stop; a PIN sign-in
+    // calls resync() → connect() with the fresh token to recover. Any other close → reconnect.
+    if (code === WS_CLOSE_REVOKED) { notifyUnauthorized(); return; }
     scheduleReconnect();
   };
+  ws.onclose = (ev) => onDown(ev && ev.code);
+  ws.onerror = () => onDown();
 }
 
 function scheduleReconnect() {

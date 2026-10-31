@@ -94,6 +94,61 @@ async function verifyHelcimWebhook(request, rawBody, verifierToken) {
 function _isStaleWrite(prev, next) {
   return !!(prev && next && typeof prev.updatedAt === 'number' && typeof next.updatedAt === 'number' && prev.updatedAt > next.updatedAt);
 }
+
+// ── Departed-staff purge (D1 push-sub purge + D4 session/socket revoke) ──────────
+// When a config.set removes/deactivates a person, we sever them completely: delete their
+// push subscriptions, delete their sessions, and close their live socket. These three pure
+// helpers are the brains (unit-tested); the DO wires them into applyMutation + handleSession.
+
+// WebSocket close code the DO sends when it revokes a device (removed/deactivated/expired).
+// Cross-file contract: js/app/sync.js reads this exact code to show "Sign in needed" (a browser
+// can't read a WS-handshake 401). App range is 3000-4999 — keep the two sides in sync.
+const WS_CLOSE_REVOKED = 4001;
+
+// Which tech/FD ids just DEPARTED on this config.set write, by diffing old vs new.
+// inactive_staff is an id array; staff/fd_users are object arrays keyed by .id. Any other
+// key departs no one. Tolerant of missing/non-array values (treat as []). Ids stringified.
+export function departedFromConfigSet(key, oldVal, newVal) {
+  const none = { techIds: [], fdIds: [] };
+  // A departure is inferred from what the NEW array drops vs the old; a missing/malformed new
+  // value must depart NO ONE (never read an absent write as "everyone left" and purge all staff).
+  if (!Array.isArray(newVal)) return none;
+  const ids = v => (Array.isArray(v) ? v : []);
+  const objIds = v => ids(v).filter(x => x && x.id != null).map(x => String(x.id));
+  if (key === 'inactive_staff') {
+    const was = new Set(ids(oldVal).map(String));
+    return { techIds: ids(newVal).map(String).filter(id => !was.has(id)), fdIds: [] };   // newly-inactive
+  }
+  if (key === 'staff') {
+    const now = new Set(objIds(newVal));
+    return { techIds: objIds(oldVal).filter(id => !now.has(id)), fdIds: [] };             // removed techs
+  }
+  if (key === 'fd_users') {
+    const now = new Set(objIds(newVal));
+    return { techIds: [], fdIds: objIds(oldVal).filter(id => !now.has(id)) };             // removed FD users
+  }
+  return none;
+}
+
+// Storage key prefixes to list+delete for the departed people. A tech device registers under
+// BOTH the raw id (assignment/price pushes) and 'tech:<id>' (chat); an FD user under 'fd:<id>'.
+// The trailing ':' keeps 'push:t1:' from also matching 'push:t10:'.
+export function pushPrefixesForDeparted(techIds, fdIds) {
+  const out = [];
+  for (const id of (techIds || [])) { const s = String(id); out.push('push:' + s + ':', 'push:tech:' + s + ':'); }
+  for (const id of (fdIds   || [])) { out.push('push:fd:' + String(id) + ':'); }
+  return out;
+}
+
+// True when a stored session (or a socket's tagged identity) belongs to a departed person.
+// Used for BOTH the sess: delete and the live-socket close. The 'fallback' Manager never departs.
+export function sessionIsDeparted(sess, techIdSet, fdIdSet) {
+  if (!sess || sess.id == null || sess.id === 'fallback') return false;
+  const id = String(sess.id);
+  if (sess.kind === 'tech') return techIdSet.has(id);
+  if (sess.kind === 'fd')   return fdIdSet.has(id);
+  return false;
+}
 // Recompute entry.status from its assignments + stamp statusSince on change (mirrors client
 // status.js deriveEntryStatus/applyEntryStatus). Used after a per-assignment merge/patch.
 function _deriveEntryStatus(entry) {
@@ -846,7 +901,14 @@ export class MuseSalonDO {
     if (upgrade && upgrade.toLowerCase() === 'websocket') {
       const pair             = new WebSocketPair();
       const [client, server] = Object.values(pair);
-      this.handleSession(server);
+      // §13 + D4: re-resolve the session IN the DO (reads sess: live, bypassing the worker's
+      // ~60s isolate auth cache) and tag the socket. A departed/expired token is refused here
+      // even inside that cache window; handleSession closes an unauthorized socket with 4001.
+      // A clean null = genuinely departed/expired → reject. A THROW is a transient storage blip:
+      // fail OPEN (don't sign out an active device over a hiccup) — the outer gate already vetted it.
+      let who = null, resolveFailed = false;
+      try { who = await this._resolveSession(request, url); } catch { resolveFailed = true; }
+      this.handleSession(server, who, resolveFailed);
       return new Response(null, { status: 101, webSocket: client });
     }
 
@@ -1263,8 +1325,18 @@ export class MuseSalonDO {
     } catch {}
   }
 
-  handleSession(ws) {
+  handleSession(ws, who = null, resolveFailed = false) {
     ws.accept();
+    // D4 Leg 1: with §13 enforced, a socket that CLEANLY resolves to no current active person
+    // (departed/expired/warm-cache-deleted token) is closed at once with 4001 — before any snapshot
+    // — so the live feed never resumes for them and the client shows "Sign in needed". A transient
+    // resolve error (resolveFailed) is NOT a departure, so we allow the socket rather than lock out
+    // an active device. Migration mode (AUTH_ENFORCED≠true) has no auth to enforce → allow.
+    if (!resolveFailed && String(this.env.AUTH_ENFORCED).toLowerCase() === 'true' && !who) {
+      try { ws.close(WS_CLOSE_REVOKED, 'revoked'); } catch {}
+      return;
+    }
+    ws._who = who || null;   // {kind,id,…} — lets purgeDeparted force-close this socket if the person leaves
     this.sockets.add(ws);
 
     ws.addEventListener('message', async ({ data }) => {
@@ -1344,6 +1416,38 @@ export class MuseSalonDO {
     return { devices };
   }
 
+  // D1 + D4: sever every person this staff/fd_users/inactive_staff write just removed —
+  // close their live socket (before the broadcast), delete their push subscriptions, delete
+  // their sessions. Called from case 'config.set' AFTER the put, best-effort (never fails the
+  // mutation). A departure is inferred by diffing the pre-write array against the new one.
+  async purgeDeparted(key, oldVal, newVal, fromWs) {
+    const { techIds, fdIds } = departedFromConfigSet(key, oldVal, newVal);
+    if (!techIds.length && !fdIds.length) return;
+    const techSet = new Set(techIds.map(String)), fdSet = new Set(fdIds.map(String));
+    // Close any open socket belonging to a departed person FIRST — before applyMutation's
+    // broadcast — so the very change that removed them is never sent down their pipe. Snapshot
+    // the Set (the close listener mutates it) and never cut the actor's own socket (self-removal).
+    for (const ws of [...this.sockets]) {
+      if (ws === fromWs) continue;
+      if (sessionIsDeparted(ws._who, techSet, fdSet)) { try { ws.close(WS_CLOSE_REVOKED, 'revoked'); } catch {} }
+    }
+    // Delete push subscriptions under each scoped prefix (chunked — storage.delete caps at 128).
+    for (const prefix of pushPrefixesForDeparted(techIds, fdIds)) {
+      const m = await this.state.storage.list({ prefix });
+      await this._deleteKeys([...m.keys()]);
+    }
+    // Delete their sessions so a warm-cache reconnect resolves null and Leg 1 refuses it.
+    const sess = await this.state.storage.list({ prefix: 'sess:' });
+    const gone = [];
+    for (const [k, v] of sess) if (sessionIsDeparted(v, techSet, fdSet)) gone.push(k);
+    await this._deleteKeys(gone);
+  }
+  async _deleteKeys(keys) {
+    for (let i = 0; i < keys.length; i += 128) {
+      try { await this.state.storage.delete(keys.slice(i, i + 128)); } catch {}
+    }
+  }
+
   // Apply a mutation to storage, stamp a seq, dedupe by mutationId, broadcast.
   async applyMutation(msg, fromWs) {
     const { op, payload, mutationId } = msg || {};
@@ -1363,12 +1467,19 @@ export class MuseSalonDO {
           // the stored value for this key, so a stale offline-outbox replay can't revert the catalog /
           // turns roster / settings and re-broadcast the regression. Unstamped/equal writes apply.
           const cts = (typeof payload.updatedAt === 'number') ? payload.updatedAt : null;
+          // D1/D4: read the pre-write array ONLY for the keys a departure can come from (so the
+          // post-write diff can tell who just left) — avoids a storage.get on every config write.
+          const departKey = payload.key === 'staff' || payload.key === 'inactive_staff' || payload.key === 'fd_users';
+          const departOld = departKey ? await this.state.storage.get('config:' + payload.key) : null;
           if (cts != null) {
             const prevMeta = await this.state.storage.get('cfgmeta:' + payload.key);
             if (prevMeta && typeof prevMeta.updatedAt === 'number' && cts < prevMeta.updatedAt) { stale = true; break; }
           }
           await this.state.storage.put('config:' + payload.key, payload.value);
           if (cts != null) await this.state.storage.put('cfgmeta:' + payload.key, { updatedAt: cts, updatedBy: payload.updatedBy || null });
+          // Sever anyone this write removed/deactivated (push + session + live socket). Best-effort:
+          // awaited so the socket is closed before the broadcast below, but never fails the mutation.
+          if (departKey) { try { await this.purgeDeparted(payload.key, departOld, payload.value, fromWs); } catch {} }
           break;
         }
         case 'queue.upsert': {
