@@ -560,10 +560,17 @@ function applyTurnsApptStripVisibility() {
 // DIRECTLY — the three localStorage flags have different default rules, so a uniform
 // re-parse would mis-show Totals as hidden on a fresh device.
 export function renderTurnsMoreMenu() {
-  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-  set('tmore-appts-state',  _turnsApptShow   ? 'Shown'  : 'Hidden');
-  set('tmore-totals-state', _turnsTotalsShow ? 'Shown'  : 'Hidden');
-  set('tmore-off-state',    _turnsHideOff    ? 'Hidden' : 'Shown');   // _turnsHideOff true = off-techs HIDDEN
+  // "Shown" reads emphasized (teal, semibold), "Hidden" stays muted — the state must be glanceable
+  // since the on-bar button highlight is hidden on tablet. Off-techs are "Shown" when NOT hiding.
+  const set = (id, on) => {
+    const el = document.getElementById(id); if (!el) return;
+    el.textContent = on ? 'Shown' : 'Hidden';
+    el.style.color = on ? 'var(--primary)' : '';
+    el.style.fontWeight = on ? '600' : '';
+  };
+  set('tmore-appts-state',  _turnsApptShow);
+  set('tmore-totals-state', _turnsTotalsShow);
+  set('tmore-off-state',    !_turnsHideOff);
 }
 export function toggleTurnsMoreMenu() {
   const m = document.getElementById('turns-more-menu');
