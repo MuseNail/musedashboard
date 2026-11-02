@@ -554,6 +554,22 @@ function applyTurnsApptStripVisibility() {
   if (panel) { const extra = (!hide && strip) ? strip.offsetHeight + 12 : 0; panel.style.setProperty('--turns-offset', (186 + extra) + 'px'); }
 }
 
+// ── Active-list show/hide (iPad side panel, per device) ───────────────────────
+// Hiding the Active column shrinks the side panel so the tech board grows. The
+// EFFECT is CSS-scoped to ≤1194 (via .turns-hide-active on #turns-side-panel), so
+// the persisted preference can never alter the desktop layout.
+let _turnsHideActive = localStorage.getItem('muse_turns_hide_active') === '1';
+function applyTurnsHideActive() {
+  document.getElementById('turns-side-panel')?.classList.toggle('turns-hide-active', _turnsHideActive);
+}
+export function toggleTurnsActive() {
+  _turnsHideActive = !_turnsHideActive;
+  localStorage.setItem('muse_turns_hide_active', _turnsHideActive ? '1' : '0');
+  applyTurnsHideActive();
+  showToast(_turnsHideActive ? 'Active list hidden (this device) ✓' : 'Active list shown (this device) ✓');
+}
+document.addEventListener('DOMContentLoaded', applyTurnsHideActive); applyTurnsHideActive();
+
 // ── Turns toolbar "⋯ More" overflow (iPad ≤1194px) ────────────────────────────
 // On tablet the secondary toolbar controls collapse into one menu that reuses the
 // existing toggle/export handlers. It mirrors live state by reading the module vars
@@ -571,6 +587,7 @@ export function renderTurnsMoreMenu() {
   set('tmore-appts-state',  _turnsApptShow);
   set('tmore-totals-state', _turnsTotalsShow);
   set('tmore-off-state',    !_turnsHideOff);
+  set('tmore-active-state', !_turnsHideActive);
 }
 export function toggleTurnsMoreMenu() {
   const m = document.getElementById('turns-more-menu');

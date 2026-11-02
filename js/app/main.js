@@ -142,6 +142,7 @@ function goTo(screenId, param) {
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
   { v: 'v6.07', items: [
+    { icon: 'view_sidebar', t: 'Hide the Active list on iPad for a bigger board', d: 'The Turns “⋯ More” menu now has an “Active list” toggle. Hide it and the side panel shrinks so the technician board gets more room; show it to bring the in-service list back. Per device, iPad only.' },
     { icon: 'more_horiz', t: 'Clearer settings in the Turns “⋯ More” menu', d: 'The Appointments / Totals / Off-techs options in the iPad Turns “⋯ More” menu now show their “Shown” setting in bold teal so you can tell at a glance what’s on, and the menu scrolls if it ever runs past the screen on a small window.' },
   ] },
   { v: 'v6.06', items: [
