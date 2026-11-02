@@ -141,6 +141,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.04', items: [
+    { icon: 'sync', t: 'A device that truly needs sign-in now stops cleanly', d: 'Building on the last update: the server can now tell the difference between a real sign-out (a staffer was removed, or a sign-in expired) and a brief connection hiccup on our end. When it’s a real sign-out, the device stops its reconnect loop and shows “Sign in needed” — no more quiet retrying in the background — and reconnects the instant you enter your PIN. When it’s just a hiccup, the device keeps trying and heals itself on its own, so a working device is never wrongly signed out over a momentary blip.' },
+  ] },
   { v: 'v6.03', items: [
     { icon: 'sync', t: 'Signed-out devices stop hammering the connection', d: 'When a device needs sign-in — a staffer was removed, or the connection dropped — it no longer keeps retrying every few seconds without end. It settles into a quiet background check, recovers on its own if it was only a short hiccup, and reconnects instantly the moment you enter your PIN.' },
   ] },

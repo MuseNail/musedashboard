@@ -324,31 +324,58 @@ function originAllowed(request, env) {
 // where headers are impossible (the WebSocket).
 // Validation round-trips to the DO's /auth/check with a short per-isolate cache —
 // so deactivating/removing a user kills their sessions within ~a minute.
-const _sessCache = new Map();   // token → { ok, exp }
-async function appAuthOk(request, url, env, salonId) {
-  if (String(env.AUTH_ENFORCED || '').toLowerCase() !== 'true') return true;   // migration mode
+//
+// Caveat #2b: the result is 'ok' | 'revoked' | 'transient', NOT a bare boolean. A GENUINE revoke
+// (no token, or a clean DO verdict of {ok:false}) → 'revoked' → 401. A TRANSIENT backend blip (the DO
+// stub threw / returned a non-2xx — authCheck's un-caught storage.get propagates a throw, so a clean
+// 200 {ok:false} is ALWAYS genuine) → 'transient' → 503, and is NEVER cached as a negative. That lets
+// the client fully STOP its reconnect loop on a trustworthy 401 while a 503 keeps it fast-retrying — a
+// transient can no longer sign out a valid device.
+const _sessCache = new Map();   // token → { outcome: 'ok'|'revoked', exp }   (transient is never cached)
+
+// A THROW (DO unreachable / authCheck storage blip) or a non-2xx is TRANSIENT — "try again", never
+// "signed out". Only a clean 200 whose body says ok:true/false is a genuine ok/revoke. Pure (tested).
+export function classifyAuthCheck(fetchThrew, httpOk, bodyOk) {
+  if (fetchThrew || !httpOk) return 'transient';
+  return bodyOk === true ? 'ok' : 'revoked';
+}
+// How long to cache each outcome (ms). transient → 0 = never cache a blip, so the next request re-probes
+// and a recovered DO self-heals at once. Pure (tested).
+export function authCacheMs(outcome) { return outcome === 'ok' ? 60000 : outcome === 'revoked' ? 10000 : 0; }
+// HTTP status for a non-ok outcome: genuine revoke = 401 (client may fully stop); transient = 503 (client
+// treats as offline, keeps fast-retrying). 'ok' → 0 (caller proceeds). Pure (tested).
+export function authOutcomeStatus(outcome) { return outcome === 'revoked' ? 401 : outcome === 'transient' ? 503 : 0; }
+
+export async function appAuthOk(request, url, env, salonId) {
+  if (String(env.AUTH_ENFORCED || '').toLowerCase() !== 'true') return 'ok';   // migration mode
   const path = url.pathname;
-  if (path === '/auth/login' || path === '/auth/logout') return true;          // the way IN
-  if (path === '/terminal/webhook') return true;                // Helcim → HMAC-verified instead
-  if (path === '/r')                return true;                // public review-QR redirect (customers scan it)
-  if (path.startsWith('/photos/') && request.method.toUpperCase() === 'GET') return true; // <img> src loads
-  if (path === '/report' && request.method.toUpperCase() === 'POST') return true;         // client error reports must reach us even if auth itself is what broke (GET /report stays gated)
+  if (path === '/auth/login' || path === '/auth/logout') return 'ok';          // the way IN
+  if (path === '/terminal/webhook') return 'ok';                // Helcim → HMAC-verified instead
+  if (path === '/r')                return 'ok';                // public review-QR redirect (customers scan it)
+  if (path.startsWith('/photos/') && request.method.toUpperCase() === 'GET') return 'ok'; // <img> src loads
+  if (path === '/report' && request.method.toUpperCase() === 'POST') return 'ok';         // client error reports must reach us even if auth itself is what broke (GET /report stays gated)
+  // WS auth is delegated to the DO (handleSession): it re-resolves the session LIVE and closes a revoked
+  // socket with a browser-readable 4001, telling transient (fail-open) from genuine — which this
+  // isolate-cache gate structurally cannot do over a handshake the browser reads only as 1006.
+  if (path === '/ws') return 'ok';
   const h = request.headers.get('Authorization') || '';
   const token = h.startsWith('Bearer ') ? h.slice(7).trim() : (url.searchParams.get('auth') || '');
-  if (!token) return false;
+  if (!token) return 'revoked';                                 // no credential = genuine (→ 401, as before)
   const hit = _sessCache.get(token);
-  if (hit && hit.exp > Date.now()) return hit.ok;
-  let ok = false;
+  if (hit && hit.exp > Date.now()) return hit.outcome;
+  let outcome;
   try {
     const stub = env.SALON_DO.get(env.SALON_DO.idFromName(salonId));
     const r = await stub.fetch(new Request('https://do/auth/check', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }),
     }));
-    ok = r.ok && (await r.json()).ok === true;
-  } catch { ok = false; }   // DO unreachable → fail closed; the client retries
-  _sessCache.set(token, { ok, exp: Date.now() + (ok ? 60000 : 10000) });
-  if (_sessCache.size > 2000) _sessCache.clear();
-  return ok;
+    let bodyOk = false, parsed = true;
+    try { bodyOk = (await r.json()).ok === true; } catch { parsed = false; }   // a non-JSON body is not a clean verdict
+    outcome = classifyAuthCheck(false, r.ok && parsed, bodyOk);                 // 2xx + unparseable body → transient (safe: never a wrong logout)
+  } catch { outcome = classifyAuthCheck(true, false, false); }  // DO unreachable/threw → transient (NOT a lockout)
+  const ms = authCacheMs(outcome);
+  if (ms > 0) { _sessCache.set(token, { outcome, exp: Date.now() + ms }); if (_sessCache.size > 2000) _sessCache.clear(); }
+  return outcome;
 }
 
 export default {
@@ -383,8 +410,11 @@ export default {
 
     // App auth (§13): every route needs a PIN-login session once AUTH_ENFORCED is
     // "true" (exemptions documented on appAuthOk). Sits before all routing so a new
-    // route added later is gated by default.
-    if (!(await appAuthOk(request, url, env, salonId))) return json({ error: 'unauthorized' }, 401);
+    // route added later is gated by default. A genuine revoke → 401 (the client may fully
+    // stop reconnecting); a transient backend blip → 503 (the client treats it as offline
+    // and keeps fast-retrying), so a hiccup can't sign out a valid device.
+    const auth = await appAuthOk(request, url, env, salonId);
+    if (auth !== 'ok') return json({ error: auth === 'transient' ? 'backend unavailable' : 'unauthorized' }, authOutcomeStatus(auth));
 
     // ── Review-QR redirect (public) ───────────────────────────────────────────
     // The printed receipt QR encodes …/r forever; this looks up the current
@@ -901,11 +931,14 @@ export class MuseSalonDO {
     if (upgrade && upgrade.toLowerCase() === 'websocket') {
       const pair             = new WebSocketPair();
       const [client, server] = Object.values(pair);
-      // §13 + D4: re-resolve the session IN the DO (reads sess: live, bypassing the worker's
-      // ~60s isolate auth cache) and tag the socket. A departed/expired token is refused here
-      // even inside that cache window; handleSession closes an unauthorized socket with 4001.
-      // A clean null = genuinely departed/expired → reject. A THROW is a transient storage blip:
-      // fail OPEN (don't sign out an active device over a hiccup) — the outer gate already vetted it.
+      // §13 + D4: the DO is the SOLE auth gate for /ws — the outer appAuthOk exempts /ws (returns
+      // 'ok') precisely so a revoked reconnect reaches here instead of an unreadable outer 401→1006.
+      // Re-resolve the session live (reads sess: directly, no isolate cache) and tag the socket.
+      // A clean null = genuinely departed/expired → handleSession closes it with 4001 (browser-readable,
+      // so the client stops; the outer gate's HTTP 401 could not say this over a handshake). A THROW is
+      // a transient storage blip → fail OPEN (don't sign out an active device over a hiccup). There is
+      // no outer backstop now, so fail-open relies on this classification alone — the deliberate stance:
+      // a valid device is never cut over a blip (caveat #2b R2; a clean revoke with a reachable DO → 4001).
       let who = null, resolveFailed = false;
       try { who = await this._resolveSession(request, url); } catch { resolveFailed = true; }
       this.handleSession(server, who, resolveFailed);

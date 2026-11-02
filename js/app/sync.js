@@ -56,14 +56,12 @@ let _outbox = loadOutbox();
 // rather than just an HTTP refresh; that's the main thing to weigh when retuning.
 const STALE_MS = 30000;
 
-// WS reconnect cadence. Normally retry fast (a brief blip should heal in seconds). But once the app
-// believes it needs sign-in (_authNeeded), retry SLOWLY instead of hammering every 3s: a revoked
-// device then stops pinging the server ~10× per minute, while a VALID device that was wrongly 401'd
-// by a transient fail-closed backend (worker.js appAuthOk returns 401, not 503, when the DO is
-// briefly unreachable) STILL self-heals on the next slow attempt. We must keep retrying — never
-// fully stop — precisely because a 401 can't be trusted to mean "truly revoked". (Caveat #2 fix.)
+// WS reconnect cadence. Retry fast — a brief blip should heal in seconds. Once the app knows it needs
+// sign-in (_authNeeded), STOP the loop entirely: a 401/4001 is now trustworthy (the Worker returns 503,
+// not 401, for a transient backend blip — worker.js appAuthOk), so _authNeeded means a GENUINE revoke/
+// expiry, whose session is destroyed server-side and whose only recovery is a PIN sign-in. Stopping the
+// loop can't strand a valid device the way it would have before the Worker split. (Caveat #2b fix, v6.04.)
 const RECONNECT_MS = 3000;
-const AUTH_RETRY_MS = 30000;
 
 // Reconnect the WS on a wake? No socket / non-OPEN → yes (as before); an OPEN socket
 // silent past STALE_MS is a zombie → yes. A live, recently-heard-from socket → no.
@@ -76,9 +74,11 @@ export function _shouldReconnect(now, lastRecv, isOpen) {
 export function _shouldResync(now, lastRecv, visible, authNeeded) {
   return visible && !authNeeded && lastRecv > 0 && (now - lastRecv > STALE_MS);
 }
-// How long before the next WS reconnect — fast normally, slow once we need sign-in (why: the const
-// block above). Pure + exported for tests.
-export function _reconnectDelay(authNeeded) { return authNeeded ? AUTH_RETRY_MS : RECONNECT_MS; }
+// Keep the fast reconnect loop running after a close? No once a genuine revoke/expiry is known
+// (_authNeeded, set only by a trustworthy 4001 close or HTTP 401): the session is gone, recovery is a
+// PIN sign-in, and a transient blip is a 503 that never sets _authNeeded — so stopping the loop can't
+// strand a valid device. Pure + exported for tests. (why: the const block above).
+export function _shouldKeepReconnecting(authNeeded) { return !authNeeded; }
 // May resync() drop this call to its 1.5s double-fetch throttle? Only while signed IN. While
 // auth-needed a resync IS the recovery attempt (PIN login calls resync), so it must never be
 // throttled away — otherwise a sign-in landing within 1.5s of a wake/focus resync gets swallowed
@@ -279,8 +279,9 @@ function connect() {
 }
 
 function scheduleReconnect() {
+  if (!_shouldKeepReconnecting(_authNeeded)) return;   // genuine revoke → stop the loop (recovery = PIN sign-in → resync → connect)
   if (_reconnect) return;
-  _reconnect = setTimeout(() => { _reconnect = null; connect(); }, _reconnectDelay(_authNeeded));
+  _reconnect = setTimeout(() => { _reconnect = null; connect(); }, RECONNECT_MS);
 }
 
 function send(obj) {
@@ -358,15 +359,15 @@ export function dispatch(op, payload) {
 }
 
 // ── HTTP fallbacks (used when the WebSocket is unavailable) ─────────────────────
-// A 401 means the Worker is enforcing §13 auth and this browser has no valid
-// session (never signed in here, expired, or the user was removed). Without
-// this signal the device just looks "offline" forever — surface it so whoever's
-// holding it knows to enter their PIN, not chase the wifi. Throttled: resync
-// fires on every focus/visibility change.
+// A 401 means a GENUINE missing/invalid §13 session (never signed in here, expired, or the user was
+// removed) — the Worker now returns 503 (not 401) for a transient backend blip, so a 401 is trustworthy.
+// Without this signal the device just looks "offline" forever — surface it so whoever's holding it knows
+// to enter their PIN, not chase the wifi. Throttled: resync fires on every focus/visibility change.
 let _lastAuthToast = 0;
 function notifyUnauthorized() {
-  console.warn('[sync] 401 — no valid sign-in session on this browser');
-  markAuthNeeded(true);   // flips the indicator to "Sign in needed" (not a plain "Offline"); also stops the watchdog polling a 401 every 5s
+  console.warn('[sync] 401/4001 — no valid sign-in session on this browser');
+  if (_reconnect) { clearTimeout(_reconnect); _reconnect = null; }   // cancel a pending fast reconnect so the stop is strictly clean (one close, no loop)
+  markAuthNeeded(true);   // flips the indicator to "Sign in needed" (not a plain "Offline"); also stops the watchdog polling every 5s
   if (Date.now() - _lastAuthToast < 60000) return;
   _lastAuthToast = Date.now();
   try { window.showToast?.('Sign in needed — enter your PIN to reconnect this device.'); } catch {}
@@ -382,8 +383,8 @@ async function httpSnapshot() {
   const killer = ctrl ? setTimeout(() => { try { ctrl.abort(); } catch {} }, 10000) : null;
   try {
     const res = await fetch(STATE + '/snapshot', { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined });
-    if (res.status === 401) { notifyUnauthorized(); return; }
-    if (!res.ok) return;
+    if (res.status === 401) { notifyUnauthorized(); return; }   // trustworthy now → genuine revoke → "Sign in needed", stop
+    if (!res.ok) return;   // 503 (transient backend blip) or other non-200 → stay offline, keep fast-retrying; never flips to "Sign in needed"
     markAuthNeeded(false);   // a 200 means the session is valid again
     hydrate(await res.json());
     markServerHydrated();
@@ -398,7 +399,8 @@ async function httpMutate(msg) {
     const res = await fetch(STATE + '/mutate', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(msg),
     });
-    if (res.status === 401) { notifyUnauthorized(); return; }   // not a data rejection — stays queued
+    if (res.status === 401) { notifyUnauthorized(); return; }   // genuine revoke (trustworthy) — not a data rejection, stays queued
+    // a 503 (transient backend blip) or network error falls through → the write stays in the outbox for WS replay on reconnect
     if (res.ok) { const d = await res.json(); if (d.applied) ackOutbox(msg.mutationId); }
   } catch (e) { /* stays in outbox for WebSocket replay on reconnect */ }
 }
