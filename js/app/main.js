@@ -141,6 +141,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.05', items: [
+    { icon: 'tablet', t: 'A cleaner, shorter header on iPad', d: 'On tablets the top bar is now slimmer and less crowded, so the main tabs no longer get cut off. Chat, Help, and the Customer-screen button moved into the menu behind your profile photo — and if you have unread chats or help replies, a small red number shows on your photo so you never miss them. Search, your tabs, the sync dot, and the version/reload badge all stay right where they were. Nothing changes on a desktop or laptop.' },
+  ] },
   { v: 'v6.04', items: [
     { icon: 'sync', t: 'A device that truly needs sign-in now stops cleanly', d: 'Building on the last update: the server can now tell the difference between a real sign-out (a staffer was removed, or a sign-in expired) and a brief connection hiccup on our end. When it’s a real sign-out, the device stops its reconnect loop and shows “Sign in needed” — no more quiet retrying in the background — and reconnects the instant you enter your PIN. When it’s just a hiccup, the device keeps trying and heals itself on its own, so a working device is never wrongly signed out over a momentary blip.' },
   ] },
@@ -649,6 +652,37 @@ function showStaffListView() {
 }
 Object.assign(window, { goTo, showDashPanel, showDashGroup, toggleStaffScheduleView, showStaffListView });
 
+// ── iPad account-avatar unread badge ────────
+// On tablet (≤1194px) the chat + support buttons collapse into the account menu, so their
+// unread counts are summed onto one badge on the avatar (plus per-row badges in the menu).
+// A main.js local (not auto-glued), so it's attached to window explicitly and the feature
+// modules call window.refreshAccountUnread?.() — avoids a main.js↔feature import cycle.
+// The avatar badge is display:none on desktop via CSS, so this is a visual no-op there.
+function refreshAccountUnread() {
+  const chatN = chat.chatUnreadCount?.() || 0;
+  const supN  = support.supportUnreadCount?.() || 0;
+  const txt = utils.accountUnreadText(chatN, supN);
+  const badge = document.getElementById('acct-unread-badge');
+  if (badge) { badge.textContent = txt; badge.classList.toggle('hidden', txt === ''); }
+  const cb = document.getElementById('menu-chat-badge');
+  if (cb) { cb.textContent = chatN > 9 ? '9+' : String(chatN); cb.classList.toggle('hidden', chatN <= 0); }
+  const sb = document.getElementById('menu-support-badge');
+  if (sb) { sb.textContent = supN > 9 ? '9+' : String(supN); sb.classList.toggle('hidden', supN <= 0); }
+  const btn = document.getElementById('logged-in-user-btn');
+  // Announce the combined count only where the avatar badge is actually shown (tablet ≤1194px).
+  // On desktop the unread lives on the separate chat/support buttons, so attributing it to the
+  // account button would mislead a screen-reader user.
+  const onTablet = !!window.matchMedia?.('(max-width: 1194px)')?.matches;
+  if (btn) {
+    if (onTablet) btn.setAttribute('aria-label', txt ? `Account, ${chatN + supN} unread` : 'Account');
+    else btn.removeAttribute('aria-label');   // desktop: unchanged — the button keeps announcing the staff name + its title
+  }
+}
+Object.assign(window, { refreshAccountUnread });
+// Keep the account-button aria-label correct when a desktop window is dragged across the 1194px
+// boundary with no new chat/support event (the visible badge already tracks it via CSS media query).
+window.matchMedia?.('(max-width: 1194px)')?.addEventListener?.('change', refreshAccountUnread);
+
 // Let a mouse wheel scroll the top nav horizontally when it overflows a narrow desktop window
 // (touch already pans it; the scrollbar is hidden via .no-scroll). justify-content:safe center
 // keeps both ends reachable when it overflows.
@@ -1030,6 +1064,7 @@ async function boot() {
   wireKeyboard();
   armMidnightRollover();
   utils.initAmountFieldCalc();   // desktop: evaluate "40+5" typed into an amount field on blur
+  refreshAccountUnread();        // iPad: paint the account-avatar unread badge from the initial counts
   checkAppVersion();
   // Also poll periodically so an always-open front-desk iPad (which never fires a fresh
   // launch/visibilitychange) still notices a new deploy and prompts on its own. Skipped while

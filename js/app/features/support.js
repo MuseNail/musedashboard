@@ -204,7 +204,12 @@ export function paintSupportBadges(adminUnread) {
     const n = adminUnread == null ? _tickets.filter(t => t.unreadForDev && t.status !== 'archived').length : adminUnread;
     _paintSettingsDot(n > 0);
   } else { _paintSettingsDot(false); }
+  window.refreshAccountUnread?.();   // iPad: Help collapses into the account menu → mirror onto the avatar badge
 }
+
+// Combined-unread source for the iPad account-avatar badge (main.js refreshAccountUnread).
+// Salon-side unread tickets (same filter paintSupportBadges uses for #support-badge).
+export function supportUnreadCount() { return _tickets.filter(t => t.unreadForSalon && t.status !== 'archived').length; }
 function _paintSettingsDot(on) {
   const nav = document.getElementById('nav-settings'); if (!nav) return;
   let dot = document.getElementById('settings-support-dot');
