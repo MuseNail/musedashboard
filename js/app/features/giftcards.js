@@ -1,15 +1,13 @@
 // ── Gift cards + backup/restore utilities ───────────────────────────────────
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
-import { showToast, todayStr, localDateStr } from '../utils.js';
+import { showToast, todayStr, newEntryId } from '../utils.js';
 import { APP_NAME, APP_VERSION } from '../config.js';
 import { customerDirectory, ensureCustomerInStore } from './square-customers.js';
-import { chargeOnTerminal, recordCashPayment, recordExternalPayment } from './square-pos.js';
-import { chargeOnHelcim, helcimActive } from './helcim.js';
 import { getActiveUser } from '../session.js';
+import { giftSaleAction, giftCardFromSale, partitionGiftReverse } from '../giftcard-sale-util.js';
 
 const giftCards = () => getState().giftcards;
-const cfg = () => getState().config;
 
 // A card's redemptions = explicit [{date,amount}] array, or a legacy single
 // dateUsed/amountUsed migrated to one entry. gcTotalUsed = sum of all redemptions.
@@ -64,20 +62,19 @@ export function gcCreateSalesFromTicket(ticketId, sales) {
     if (!(+s.amount > 0)) return;
     const id = `gc-tkt-${ticketId}-${i}`;
     if (giftCards().some(g => g.id === id)) return;   // idempotent — already created for this ticket
-    const raw = String(s.serial || '').trim();
-    const serial = /^\d+$/.test(raw) ? raw.padStart(8, '0') : raw;
-    dispatch('giftcard.save', { card: {
-      id, datePurchased: todayStr(), serial, amount: +s.amount,
-      phone: s.phone || '', from: s.from || '', to: s.to || '', notes: '',
-      redemptions: [], amountUsed: 0, dateUsed: '',
-      saleTicketId: String(ticketId), createdAt: new Date().toISOString(),
-    } });
+    dispatch('giftcard.save', { card: { ...giftCardFromSale(ticketId, s, i, todayStr()), createdAt: new Date().toISOString() } });
     if (s.to && s.phone) { try { ensureCustomerInStore({ name: s.to, phone: s.phone }); } catch {} }
   });
 }
+// Reverse the cards SOLD on a ticket (on reopen or a full refund). Guarded: a card that has ALREADY
+// been redeemed is KEPT (deleting it would lose its ledger + strand redemptions on other tickets);
+// only unredeemed cards are voided. Returns which were voided vs kept so the caller can warn.
 export function gcReverseSalesForTicket(ticketId) {
-  if (!ticketId) return;
-  giftCards().filter(g => g.saleTicketId === String(ticketId)).forEach(g => dispatch('giftcard.delete', { id: g.id }));
+  if (!ticketId) return { voided: [], keptRedeemed: [] };
+  const cards = giftCards().filter(g => g.saleTicketId === String(ticketId));
+  const { voidIds, keepIds } = partitionGiftReverse(cards, gcTotalUsed);
+  voidIds.forEach(id => dispatch('giftcard.delete', { id }));
+  return { voided: voidIds, keptRedeemed: keepIds };
 }
 
 let _gcSortField = 'datePurchased', _gcSortDir = 'desc', _gcHideZero = false;
@@ -93,6 +90,7 @@ export function showAddGiftCard() {
   document.getElementById('gc-paymethod-row')?.classList.remove('hidden');         // payment offered on NEW only
   document.getElementById('gc-to-ac')?.classList.add('hidden');
   const m = document.getElementById('gc-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
+  updateGcTotals();   // set the initial button label + sale-mode UI (new + no payment → 'Save Gift Card')
   setTimeout(() => document.getElementById('gc-serial').focus(), 100);
 }
 export function showEditGiftCard(id) {
@@ -114,6 +112,7 @@ export function showEditGiftCard(id) {
   document.getElementById('gc-paymethod-row')?.classList.add('hidden');   // no re-charge when editing an existing card
   document.getElementById('gc-to-ac')?.classList.add('hidden');
   const m = document.getElementById('gc-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
+  updateGcTotals();   // set the initial button label (editing → 'Save Gift Card')
 }
 export function closeGcModal() { const m = document.getElementById('gc-modal'); m.classList.add('hidden'); m.style.display = ''; }
 
@@ -140,6 +139,24 @@ export function updateGcTotals() {
   const amount = parseFloat(document.getElementById('gc-amount')?.value) || 0;
   const u = document.getElementById('gc-used-modal'); if (u) u.textContent = '$' + used.toFixed(2);
   const b = document.getElementById('gc-balance-modal'); if (b) b.textContent = '$' + (amount - used).toFixed(2);
+  _gcApplyModeUI();
+}
+// SALE mode = a NEW card with a payment method selected → the button hands off to Confirm Payment and
+// the date + redemptions rows are hidden (a sale is dated today and a new card has no redemptions).
+// Called from updateGcTotals (amount oninput + paymethod onchange) and when the modal opens.
+function _gcApplyModeUI() {
+  const editId = document.getElementById('gc-edit-id')?.value || '';
+  const payMethod = editId ? 'none' : (document.getElementById('gc-paymethod')?.value || 'none');
+  const sale = giftSaleAction({ editId, payMethod }) === 'pay';
+  const amount = parseFloat(document.getElementById('gc-amount')?.value) || 0;
+  const btn = document.getElementById('gc-save-btn');
+  if (btn) {
+    btn.textContent = sale ? `Continue to Pay · $${amount.toFixed(2)}` : 'Save Gift Card';
+    btn.disabled = sale && !(amount > 0);
+    btn.style.opacity = btn.disabled ? '0.5' : '';
+  }
+  document.getElementById('gc-date-row')?.classList.toggle('hidden', sale);
+  document.getElementById('gc-redemptions-row')?.classList.toggle('hidden', sale);
 }
 
 // ── Recipient autocomplete (customer directory) ───────────────────────────────
@@ -160,64 +177,53 @@ export function gcPickRecipient(i) {
 }
 export function gcHideRecipientAc() { setTimeout(() => document.getElementById('gc-to-ac')?.classList.add('hidden'), 150); }
 
-export async function saveGiftCard() {
+export function saveGiftCard() {
   const editId = document.getElementById('gc-edit-id').value;
   const existing = editId ? giftCards().find(g => g.id === editId) : null;
   const rawSerial = document.getElementById('gc-serial').value.trim();
   const serial = /^\d+$/.test(rawSerial) ? rawSerial.padStart(8, '0') : rawSerial;   // 29 → 00000029
-  const redemptions = _gcRedeem.filter(r => (r.amount || 0) > 0 || r.date).map(r => ({ date: r.date || '', amount: parseFloat(r.amount) || 0, ...(r.ticketId ? { ticketId: r.ticketId } : {}) }));
-  const amountUsed = redemptions.reduce((s, r) => s + (r.amount || 0), 0);
-  const lastDate = redemptions.map(r => r.date).filter(Boolean).sort().pop() || '';
   const amount = parseFloat(document.getElementById('gc-amount').value) || 0;
-  const datePurchased = document.getElementById('gc-date').value;
   const phone = document.getElementById('gc-phone').value.trim();
   const from = document.getElementById('gc-from').value.trim();
   const to = document.getElementById('gc-to').value.trim();
   const notes = document.getElementById('gc-notes').value.trim();
-  // A card can never be redeemed for more than its value — reject so a typo can't drive a
-  // negative balance / wrong outstanding-liability figure.
-  if (amountUsed > amount + 0.005) { showToast(`Redemptions ($${amountUsed.toFixed(2)}) exceed the card value ($${amount.toFixed(2)}).`); return; }
-
-  // NEW card sold with a payment method → charge the purchase amount through Square FIRST, and
-  // only register the card if it succeeds (so the registry never shows a card that wasn't paid).
-  let squarePaymentIds = existing?.squarePaymentIds || null, salePaidBy = existing?.salePaidBy || null;
   const payMethod = editId ? 'none' : (document.getElementById('gc-paymethod')?.value || 'none');
-  if (!editId && payMethod !== 'none') {
-    if (!(amount > 0)) { showToast('Enter a purchase amount to charge.'); return; }
-    const cents = Math.round(amount * 100);
-    const loc = cfg().square_config?.locationId;
-    const note = `Gift card${serial ? ' #' + serial : ''}${to ? ' · ' + to : ''}`;
-    const idem = `gcsale-${(serial || from || to || 'x')}-${cents}-${datePurchased}-${payMethod}`;   // stable so a retry can't double-charge
-    const btn = document.querySelector('#gc-modal button[onclick="saveGiftCard()"]'); if (btn) { btn.disabled = true; btn.textContent = 'Charging…'; }
-    let res;
-    if (helcimActive()) {
-      // Card → charge on the Helcim terminal; cash/Zelle → app-only (collected manually, no processor record).
-      if (payMethod === 'card') { const hr = await chargeOnHelcim(amount, idem); res = hr.ok ? { ok: true, paymentId: hr.transactionId } : { ok: false, error: hr.error }; }
-      else res = { ok: true, paymentId: null };
-    } else {
-      if (payMethod === 'card') res = await chargeOnTerminal(cents, note, idem);
-      else if (!loc) res = { ok: false, error: 'Add your Square Location ID in Settings → Square first.' };
-      else if (payMethod === 'cash') { const id = await recordCashPayment(cents, cents, loc, idem, null, note); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square cash record failed.' }; }
-      else { const id = await recordExternalPayment(cents, 'Zelle', loc, idem, null, note); res = id ? { ok: true, paymentId: id } : { ok: false, error: 'Square Zelle record failed.' }; }
-    }
-    if (btn) { btn.disabled = false; btn.textContent = 'Save Gift Card'; }
-    if (!res.ok) { showToast('Gift-card payment failed: ' + (res.error || 'error') + ' — card not created.'); return; }
-    squarePaymentIds = res.paymentId ? [res.paymentId] : null;
-    salePaidBy = payMethod;
-    showToast(`Gift card charged $${amount.toFixed(2)} (${payMethod}) ✓`);
+
+  // A NEW card WITH a payment method is a SALE → route it through the SAME Confirm Payment screen
+  // Quick Sale uses, so the money becomes a real transaction (cash lands in the drawer, card
+  // reconciles against Helcim, Zelle is recorded) and the card is created on paid by
+  // queue.js → gcCreateSalesFromTicket. No more silent, uncounted direct charge.
+  if (giftSaleAction({ editId, payMethod }) === 'pay') {
+    if (!(amount > 0)) { showToast('Enter a gift card amount.'); return; }   // guard FIRST — never strand a $0 entry in the queue
+    const entry = {
+      id: newEntryId(), name: from || to || 'Gift Card', phone: '', services: [], assignments: [],
+      items: [], fees: [], discount: 0,
+      giftcardSales: [{ amount, serial, to, from, phone, notes }],   // date = ring-up day; redemptions start empty
+      status: 'waiting', quickSale: true, soldBy: getActiveUser()?.name || '',
+      checkinTime: new Date().toISOString(), isNew: true, skipSquare: true,
+    };
+    closeGcModal();
+    dispatch('queue.upsert', { entry });
+    window.openSquarePOS?.(String(entry.id));   // hand off to Confirm Payment (same as Quick Sale)
+    return;
   }
 
+  // Edit an existing card, OR record a NEW card with NO payment (comp / giveaway / pre-existing) — a
+  // direct save, no transaction. This is the only path that may carry pre-entered redemptions.
+  const redemptions = _gcRedeem.filter(r => (r.amount || 0) > 0 || r.date).map(r => ({ date: r.date || '', amount: parseFloat(r.amount) || 0, ...(r.ticketId ? { ticketId: r.ticketId } : {}) }));
+  const amountUsed = redemptions.reduce((s, r) => s + (r.amount || 0), 0);
+  const lastDate = redemptions.map(r => r.date).filter(Boolean).sort().pop() || '';
+  const datePurchased = document.getElementById('gc-date').value;
+  // A card can never be redeemed for more than its value — reject so a typo can't drive a negative balance.
+  if (amountUsed > amount + 0.005) { showToast(`Redemptions ($${amountUsed.toFixed(2)}) exceed the card value ($${amount.toFixed(2)}).`); return; }
   const card = {
     id: editId || 'gc-' + Date.now(),
     datePurchased, serial, amount, phone, from, to,
-    redemptions,
-    amountUsed,          // running total — kept for display + report/back-compat
-    dateUsed: lastDate,  // last redemption date — legacy compat
-    notes,
+    redemptions, amountUsed, dateUsed: lastDate, notes,
     createdAt: existing?.createdAt || new Date().toISOString(),
     // updatedAt/updatedBy are stamped numerically in dispatch() so the stale-write guard can compare them.
-    ...(squarePaymentIds ? { squarePaymentIds } : {}),
-    ...(salePaidBy ? { salePaidBy } : {}),
+    ...(existing?.squarePaymentIds ? { squarePaymentIds: existing.squarePaymentIds } : {}),
+    ...(existing?.salePaidBy ? { salePaidBy: existing.salePaidBy } : {}),
   };
   dispatch('giftcard.save', { card });
   closeGcModal();

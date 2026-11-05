@@ -141,6 +141,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.16', items: [
+    { icon: 'redeem', t: 'Gift-card sales from the Gift Cards page now get counted', d: 'When you sell a gift card from the Gift Cards page and take payment (cash, card, or Zelle), it now goes through the normal checkout — so the money lands in the cash drawer, shows on your sales reports, and card payments reconcile. Before, a gift-card sale made this way wasn’t being recorded. (Quick Sale already worked correctly.)' },
+  ] },
   { v: 'v6.15', items: [
     { icon: 'sticky_note_2', t: 'Fixed editing & deleting technician notes', d: 'On a technician’s Notes / Preferences, tapping the edit (pencil) or remove (✕) button would just close the popup without saving. Those buttons now work — you can edit a note in place or remove it.' },
   ] },
