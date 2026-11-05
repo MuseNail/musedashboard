@@ -857,45 +857,53 @@ window.staffCalcOk = () => {
 };
 window.staffCalcClose = () => { const m = document.getElementById('staff-calc-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } };
 
+// §13 server sign-in — the AUTHORITY on the PIN. Used for a fresh browser (no cached roster) AND as
+// the fallback when the local roster misses: a device with a stale/behind cache (e.g. an Android
+// device whose session lapsed so it couldn't pull a fresh roster) must never lock out a valid PIN.
+// On success it mints the session, resyncs (which refreshes the stale roster) and subscribes for push.
+async function _serverSignIn(pin) {
+  if (!/^\d{4,8}$/.test(pin)) { renderLogin('Connecting… try again in a moment'); return; }
+  renderLogin('Signing in…');
+  const res = await serverLogin({ pin, device: 'staff-app' });
+  const input = document.getElementById('staff-pin-entry'); if (input) input.value = '';
+  if (res.ok) {
+    if (res.user.kind === 'tech') { myId = res.user.id; myFdId = null; localStorage.setItem(MY_KEY, myId); localStorage.removeItem(MY_FD_KEY); }
+    else { myFdId = res.user.id; myId = null; localStorage.setItem(MY_FD_KEY, myFdId); localStorage.removeItem(MY_KEY); }
+    sync.resync();                                   // reconnect with the session → fresh snapshot (refreshes any stale roster)
+    render();
+    registerPush();   // tech OR front-desk → subscribe for assignment + chat pushes
+    return;
+  }
+  renderLogin(res.error === 'slow_down' || res.retryInSec ? `Too many tries — wait ${res.retryInSec || 5}s`
+    : res.error === 'offline' ? 'Connecting… try again in a moment' : 'Incorrect PIN');
+}
+
 window.staffPinSubmit = async () => {
   const input = document.getElementById('staff-pin-entry');
   const pin = (input?.value || '').trim();
-  if ((cfg().staff || []).length === 0 && (cfg().fd_users || []).length === 0) {
-    // Fresh browser (no synced data yet): the server owns the PIN check (§13) —
-    // it returns who this is AND mints the session that unlocks the snapshot.
-    if (!/^\d{4,8}$/.test(pin)) { renderLogin('Connecting… try again in a moment'); return; }
-    renderLogin('Signing in…');
-    const res = await serverLogin({ pin, device: 'staff-app' });
-    if (input) input.value = '';
-    if (res.ok) {
-      if (res.user.kind === 'tech') { myId = res.user.id; myFdId = null; localStorage.setItem(MY_KEY, myId); localStorage.removeItem(MY_FD_KEY); }
-      else { myFdId = res.user.id; myId = null; localStorage.setItem(MY_FD_KEY, myFdId); localStorage.removeItem(MY_KEY); }
-      sync.resync();                                   // reconnect with the session → snapshot arrives
-      render();
-      registerPush();   // tech OR front-desk → subscribe for assignment + chat pushes
-      return;
-    }
-    renderLogin(res.error === 'slow_down' || res.retryInSec ? `Too many tries — wait ${res.retryInSec || 5}s`
-      : res.error === 'offline' ? 'Connecting… try again in a moment' : 'Incorrect PIN');
-    return;
-  }
+  // Fresh browser (no cached roster): the server owns the PIN check (§13) — it returns who this is
+  // AND mints the session that unlocks the snapshot.
+  if ((cfg().staff || []).length === 0 && (cfg().fd_users || []).length === 0) { await _serverSignIn(pin); return; }
   const match = staffByPin(cfg().staff, cfg().inactive_staff, pin);
   if (match) {
     myId = match.id; myFdId = null; localStorage.setItem(MY_KEY, myId); localStorage.removeItem(MY_FD_KEY);
     if (input) input.value = ''; render();
-    registerPush();   // re-tag this device's push subscription to the signed-in tech (no-op if alerts off)
-    serverLogin({ pin, userId: match.id, device: 'staff-app' }).then(r => { if (r.ok) sync.resync(); });   // §13 session mint/refresh
+    // Mint/refresh the §13 session FIRST, THEN register push — /push/subscribe is auth-gated, so a
+    // stale token makes the subscription silently fail to save (→ the tech gets no notifications).
+    serverLogin({ pin, userId: match.id, device: 'staff-app' }).then(r => { if (r.ok) { sync.resync(); registerPush(); } });
     return;
   }
   const fd = fdByPin(pin);   // front-desk user → read-only schedule/hours view
   if (fd) {
     myFdId = fd.id; myId = null; localStorage.setItem(MY_FD_KEY, myFdId); localStorage.removeItem(MY_KEY);
     if (input) input.value = ''; render();
-    registerPush();   // subscribe this device for the fd user's chat pushes (no-op if alerts off)
-    serverLogin({ pin, userId: fd.id, device: 'staff-app' }).then(r => { if (r.ok) sync.resync(); });   // §13 session mint/refresh
+    serverLogin({ pin, userId: fd.id, device: 'staff-app' }).then(r => { if (r.ok) { sync.resync(); registerPush(); } });   // mint session first, then push
     return;
   }
-  if (input) input.value = ''; renderLogin('Incorrect PIN');
+  // The local roster didn't match — but it may be STALE/behind (the real Android lockout: a lapsed
+  // session means no fresh roster). Ask the server (the §13 authority) before rejecting, so an
+  // out-of-date cache can't lock out a valid PIN.
+  await _serverSignIn(pin);
 };
 window.staffPinKey = (ev) => { if (ev.key === 'Enter') window.staffPinSubmit(); };
 // Auto-login as soon as a correct PIN is fully entered (no Enter needed) — but wait if

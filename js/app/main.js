@@ -141,6 +141,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.10', items: [
+    { icon: 'lock_open', t: 'Fixed staff-app sign-in (especially on Android)', d: 'Some devices could get stuck on “Incorrect PIN” even with the right PIN, when the device’s saved staff list had fallen out of date. Sign-in now always double-checks with the server, so a valid PIN always gets in.' },
+    { icon: 'notifications_active', t: 'Technician notifications register more reliably', d: 'When a technician signs in, the app now sets up push notifications after their session is confirmed — so assignment and chat alerts reliably turn on instead of silently failing to register on some phones.' },
+  ] },
   { v: 'v6.09', items: [
     { icon: 'confirmation_number', t: 'Support tickets now have a number', d: 'Every Help & Feedback ticket now shows a number like #261105-01 in the ticket list, the conversation, and the manager’s Support inbox — so a ticket is easy to recognize, even after a reply bumps it to the top of the list.' },
     { icon: 'done_all', t: 'No more duplicate support tickets', d: 'Sending a help ticket can no longer accidentally create two if the Send button gets tapped twice or the connection is slow — each ticket is filed once. (Replying to a ticket never created a new one; a duplicate that already existed was just being bumped to the top with today’s date, which looked new.)' },
