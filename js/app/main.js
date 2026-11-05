@@ -141,8 +141,8 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
-  { v: 'v6.13', items: [
-    { icon: 'notifications', t: 'Fixed the notification icon on Android', d: 'Push notifications were showing a blank white box on some Android phones instead of a recognizable icon. The small notification icon now displays correctly.' },
+  { v: 'v6.14', items: [
+    { icon: 'notifications', t: 'Fixed the notification icon on Android', d: 'Push notifications were showing a blank white box on some Android phones. The small notification icon is now a clear Muse badge — an “M” on a green badge.' },
   ] },
   { v: 'v6.11', items: [
     { icon: 'help', t: 'Help screen for turning on notifications', d: 'When notifications are blocked on a phone, the staff app now pops up clear step-by-step instructions for switching them back on — tailored to whether it’s installed as an app or opened in Chrome, and it flags the Android/Samsung “remove permissions if unused” setting that silently turns alerts off for apps that haven’t been opened in a while.' },
