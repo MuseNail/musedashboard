@@ -1,7 +1,7 @@
 // ── Service Worker (v4.85 — modular ES-module client) ───────────────────────
 // CACHE_NAME must match APP_VERSION (js/app/config.js + version.json). Bump all
 // three together on deploy so old caches purge on activation.
-const CACHE_NAME = 'muse-v6.12';
+const CACHE_NAME = 'muse-v6.13';
 
 const PRECACHE_URLS = [
   '/musedashboard/',
@@ -12,6 +12,8 @@ const PRECACHE_URLS = [
   '/musedashboard/manifest.json',
   '/musedashboard/manifest-staff.json',
   '/musedashboard/manifest-reports.json',
+  '/musedashboard/icons/icon-192.png',
+  '/musedashboard/icons/icon-badge.png',
   // App core
   '/musedashboard/js/app/main.js',
   '/musedashboard/js/app/staff.js',
@@ -144,7 +146,7 @@ self.addEventListener('push', event => {
   event.waitUntil(self.registration.showNotification(title, {
     body,
     icon: '/musedashboard/icons/icon-192.png',
-    badge: '/musedashboard/icons/icon-192.png',
+    badge: '/musedashboard/icons/icon-badge.png',   // monochrome + transparent — Android renders the small icon from its alpha (a color icon shows a white box)
     tag,
     renotify: true,
     data: { url },   // read back in notificationclick
