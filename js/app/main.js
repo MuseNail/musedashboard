@@ -141,6 +141,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.17', items: [
+    { icon: 'point_of_sale', t: 'Quick Sale is now on every board view', d: 'The Quick Sale button (for selling a retail item or gift card with no service) used to live only on the Queue view. It now also sits on the Turns and Floor Plan views — next to “New Entry” / “Check in” — so you can ring up a retail sale from whichever board you’re on.' },
+  ] },
   { v: 'v6.16', items: [
     { icon: 'redeem', t: 'Gift-card sales from the Gift Cards page now get counted', d: 'When you sell a gift card from the Gift Cards page and take payment (cash, card, or Zelle), it now goes through the normal checkout — so the money lands in the cash drawer, shows on your sales reports, and card payments reconcile. Before, a gift-card sale made this way wasn’t being recorded. (Quick Sale already worked correctly.)' },
   ] },
