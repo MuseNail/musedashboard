@@ -141,6 +141,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.11', items: [
+    { icon: 'help', t: 'Help screen for turning on notifications', d: 'When notifications are blocked on a phone, the staff app now pops up clear step-by-step instructions for switching them back on — tailored to whether it’s installed as an app or opened in Chrome, and it flags the Android/Samsung “remove permissions if unused” setting that silently turns alerts off for apps that haven’t been opened in a while.' },
+  ] },
   { v: 'v6.10', items: [
     { icon: 'lock_open', t: 'Fixed staff-app sign-in (especially on Android)', d: 'Some devices could get stuck on “Incorrect PIN” even with the right PIN, when the device’s saved staff list had fallen out of date. Sign-in now always double-checks with the server, so a valid PIN always gets in.' },
     { icon: 'notifications_active', t: 'Technician notifications register more reliably', d: 'When a technician signs in, the app now sets up push notifications after their session is confirmed — so assignment and chat alerts reliably turn on instead of silently failing to register on some phones.' },

@@ -954,15 +954,59 @@ function urlB64ToBytes(b64) {
   for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
   return arr;
 }
+// Step-by-step help shown when notifications are BLOCKED at the phone level (the app can't
+// re-prompt once that happens — the OS just returns 'denied'). Tailored to how the app is
+// opened (installed app vs a Chrome tab) and, for Samsung/Android, warns about the
+// "remove permissions if unused" setting that silently switches alerts back off.
+function showNotifHelp() {
+  document.getElementById('notif-help-modal')?.remove();
+  const installed = isStandalone();
+  const li = (n, html) => `<li class="flex gap-2.5"><span class="flex-shrink-0 w-5 h-5 rounded-full bg-primary text-white text-[11px] font-bold flex items-center justify-center">${n}</span><span class="flex-1">${html}</span></li>`;
+  const appSteps = [
+    'Open your phone’s <b>Settings → Apps</b> and tap <b>Muse</b> (the salon app).',
+    'Tap <b>Notifications</b> and turn <b>Allow notifications</b> on. Also check <b>Permissions → Notifications → Allow</b>.',
+    'Still on that screen, tap <b>⋮ (top-right) → Remove permissions if unused</b> and turn it <b>OFF</b> — otherwise Android quietly switches alerts back off when the app sits unused for a while.',
+    'Come back here and tap <b>Turn on alerts</b> again.',
+  ];
+  const tabSteps = [
+    'In Chrome, tap the <b>lock icon</b> just left of the web address at the top.',
+    'Tap <b>Permissions → Notifications</b> and set it to <b>Allow</b>.',
+    'Make sure Chrome can notify too: phone <b>Settings → Apps → Chrome → Notifications → On</b>.',
+    'Come back here and tap <b>Turn on alerts</b> again.',
+  ];
+  const steps = installed ? appSteps : tabSteps;
+  const m = document.createElement('div');
+  m.id = 'notif-help-modal';
+  m.className = 'fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4';
+  m.onclick = e => { if (e.target === m) m.remove(); };
+  m.innerHTML = `<div class="bg-surface-container-lowest rounded-2xl shadow-2xl w-full max-w-sm fade-up overflow-hidden" style="max-height:88vh">
+    <div class="px-5 py-4 border-b border-surface-container-high flex items-center gap-2">
+      <span class="material-symbols-outlined text-primary">notifications_active</span>
+      <span class="font-headline font-bold text-on-surface flex-1">Turn on notifications</span>
+    </div>
+    <div class="p-5 overflow-y-auto text-sm font-body text-on-surface" style="max-height:62vh">
+      <p class="text-on-surface-variant mb-3">Alerts are turned off for this app on your phone, so the app can’t switch them on for you${installed ? ' — this often happens when Android turns off permissions for an app you haven’t opened in a while' : ''}. Here’s how to turn them back on:</p>
+      <ol class="space-y-3">${steps.map((s, i) => li(i + 1, s)).join('')}</ol>
+      ${installed ? '' : '<p class="text-[12px] text-on-surface-variant mt-3">Tip: for the most reliable alerts, install this as an app — Chrome <b>⋮ → Install app</b> (or <b>Add to Home screen</b>) — then turn on alerts from the installed app.</p>'}
+    </div>
+    <div class="p-3 border-t border-surface-container-high">
+      <button onclick="document.getElementById('notif-help-modal')?.remove()" class="w-full py-2.5 rounded-xl bg-primary text-white font-body font-semibold text-sm">Got it</button>
+    </div>
+  </div>`;
+  document.body.appendChild(m);
+}
+window.showNotifHelp = showNotifHelp;
+
 window.enableStaffPush = async () => {
   if (!pushSupported()) { showToast("This device/browser can't do notifications"); return; }
   if (isIOS() && !isStandalone()) { showToast('iPhone: tap Share → “Add to Home Screen”, open that app, then turn on alerts'); return; }
-  // Already blocked → the OS won't re-prompt; the only fix is the phone/browser settings.
-  if (Notification.permission === 'denied') { showToast('Notifications are blocked for this app — turn them on in your phone’s Settings, then try again'); return; }
+  // Already blocked → the OS won't re-prompt; the only fix is the phone/browser settings → show the guide.
+  if (Notification.permission === 'denied') { showNotifHelp(); return; }
   let perm;
   try { perm = await Notification.requestPermission(); }
   catch (e) { showToast('Couldn’t ask for permission — reopen the app and try again'); return; }
-  if (perm !== 'granted') { showToast(perm === 'denied' ? 'You tapped Don’t Allow — enable it in Settings to get alerts' : 'Notifications not turned on'); return; }
+  // 'denied' here means the OS refused without a real prompt (previously blocked / auto-revoked) → guide.
+  if (perm !== 'granted') { if (perm === 'denied') { showNotifHelp(); } else { showToast('Notifications not turned on'); } return; }
   try { const ok = await registerPush(); showToast(ok ? 'Notifications on ✓' : 'Allowed — but couldn’t reach the server to finish. Check the connection and try again.'); if (ok) render(); }
   catch (e) { showToast('Allowed, but couldn’t finish setup — try once more'); }
 };
