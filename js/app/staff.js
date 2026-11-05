@@ -969,9 +969,9 @@ function showNotifHelp() {
     'Come back here and tap <b>Turn on alerts</b> again.',
   ];
   const tabSteps = [
-    'In Chrome, tap the <b>lock icon</b> just left of the web address at the top.',
-    'Tap <b>Permissions → Notifications</b> and set it to <b>Allow</b>.',
-    'Make sure Chrome can notify too: phone <b>Settings → Apps → Chrome → Notifications → On</b>.',
+    'In Chrome, tap <b>⋮</b> (top-right) → <b>Settings</b> → <b>Site settings</b> → <b>Notifications</b>.',
+    'Find <b>musenail.github.io</b> in the list — if it’s under <b>Blocked</b>, tap it and switch to <b>Allow</b>.',
+    'Also make sure Chrome itself can notify: phone <b>Settings → Apps → Chrome → Notifications → On</b>.',
     'Come back here and tap <b>Turn on alerts</b> again.',
   ];
   const steps = installed ? appSteps : tabSteps;
@@ -987,7 +987,7 @@ function showNotifHelp() {
     <div class="p-5 overflow-y-auto text-sm font-body text-on-surface" style="max-height:62vh">
       <p class="text-on-surface-variant mb-3">Alerts are turned off for this app on your phone, so the app can’t switch them on for you${installed ? ' — this often happens when Android turns off permissions for an app you haven’t opened in a while' : ''}. Here’s how to turn them back on:</p>
       <ol class="space-y-3">${steps.map((s, i) => li(i + 1, s)).join('')}</ol>
-      ${installed ? '' : '<p class="text-[12px] text-on-surface-variant mt-3">Tip: for the most reliable alerts, install this as an app — Chrome <b>⋮ → Install app</b> (or <b>Add to Home screen</b>) — then turn on alerts from the installed app.</p>'}
+      ${installed ? '' : '<p class="text-[12px] text-on-surface-variant mt-3">You don’t need to install anything — alerts work right here in Chrome once they’re allowed above.</p>'}
     </div>
     <div class="p-3 border-t border-surface-container-high">
       <button onclick="document.getElementById('notif-help-modal')?.remove()" class="w-full py-2.5 rounded-xl bg-primary text-white font-body font-semibold text-sm">Got it</button>
