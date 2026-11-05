@@ -146,7 +146,7 @@ self.addEventListener('push', event => {
   event.waitUntil(self.registration.showNotification(title, {
     body,
     icon: '/musedashboard/icons/icon-192.png',
-    badge: '/musedashboard/icons/icon-badge.png',   // monochrome + transparent — Android renders the small icon from its alpha (a color icon shows a white box)
+    badge: '/musedashboard/icons/icon-badge.png',   // monochrome + transparent — Android renders the small icon from its alpha (a color icon shows a white box). Alt glyph ready: icon-badge-bell.png (filled bell) — to switch, point here + add it to PRECACHE below + bump the version.
     tag,
     renotify: true,
     data: { url },   // read back in notificationclick
