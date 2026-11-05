@@ -141,6 +141,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.15', items: [
+    { icon: 'sticky_note_2', t: 'Fixed editing & deleting technician notes', d: 'On a technician’s Notes / Preferences, tapping the edit (pencil) or remove (✕) button would just close the popup without saving. Those buttons now work — you can edit a note in place or remove it.' },
+  ] },
   { v: 'v6.14', items: [
     { icon: 'notifications', t: 'Fixed the notification icon on Android', d: 'Push notifications were showing a blank white box on some Android phones. The small notification icon is now a clear Muse badge — an “M” on a green badge.' },
   ] },

@@ -1239,7 +1239,12 @@ export function showTechStatusMenu(event, staffId) {
   // Named outside-click handler (not {once:true}) that IGNORES clicks inside the popup, so the notes
   // textarea can be focused/typed without dismissing. addEventListener dedupes the same reference, so
   // re-opening never stacks it; closeTechStatusMenu removes it (the single close path → no leak).
-  setTimeout(() => document.addEventListener('click', _tsmOutsideClick), 10);
+  // CAPTURE phase is REQUIRED: a note edit/remove/add button re-renders the notes column (replaces
+  // innerHTML) in its own click handler, detaching the clicked element. In the bubble phase this
+  // handler would then see e.target already removed from the DOM → m.contains(e.target) is false →
+  // it would wrongly close the popup (edit/remove "silently failed"). Capturing runs the containment
+  // check BEFORE the button handler mutates the DOM, so an in-popup click is correctly kept open.
+  setTimeout(() => document.addEventListener('click', _tsmOutsideClick, true), 10);
 }
 function _tsmOutsideClick(e) {
   const m = document.getElementById('tech-status-menu');
@@ -1248,7 +1253,7 @@ function _tsmOutsideClick(e) {
 }
 export function closeTechStatusMenu() {
   flushTechNoteDraft();   // commit a half-typed add-box / open inline edit on EVERY close path (X, Break/Off, outside)
-  document.removeEventListener('click', _tsmOutsideClick);
+  document.removeEventListener('click', _tsmOutsideClick, true);   // must match the capture flag used to add it
   document.getElementById('tech-status-menu')?.classList.add('hidden');
   _techStatusMenuId = null;
   _tsmRemovePending = null;
