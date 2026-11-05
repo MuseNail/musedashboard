@@ -5,6 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MuseSalonDO, isTicketDump } from '../cloudflare/worker.js';
+import { ticketDayCode } from '../cloudflare/support-util.js';
 
 function makeGate() { return { active: false, entered: 0 }; }
 function makeStorage(gate = makeGate()) {
@@ -192,6 +193,81 @@ test('an admin filing their own ticket does not self-notify (dev-unread pre-clea
   const { doInst } = await seedDO();
   const { j } = await fileTicket(doInst, 'MGR');   // the admin files
   assert.equal(j.ticket.unreadForDev, false, 'the admin’s own ticket is not unread for the admin');
+});
+
+// ── double-submit idempotency (the real duplicate bug) ───────
+test('an identical re-file within the window returns the SAME ticket — no duplicate record', async () => {
+  const { doInst, s } = await seedDO();
+  const a = await fileTicket(doInst, 'DESK', { subject: 'Clock in', message: 'cannot clock in' });
+  const b = await fileTicket(doInst, 'DESK', { subject: 'Clock in', message: 'cannot clock in' });   // double-tap
+  assert.equal(b.j.ticket.id, a.j.ticket.id, 'the second submit resolves to the first ticket');
+  const keys = [...(await s.list({ prefix: 'ticket:' })).keys()];
+  assert.equal(keys.length, 1, 'only ONE ticket:<id> exists');
+});
+
+test('a DIFFERENT message (or submitter) files a genuinely new ticket', async () => {
+  const { doInst, s } = await seedDO();
+  await fileTicket(doInst, 'DESK', { subject: 'Clock in', message: 'cannot clock in' });
+  await fileTicket(doInst, 'DESK', { subject: 'Clock in', message: 'a different problem' });   // different text
+  await fileTicket(doInst, 'MGR',  { subject: 'Clock in', message: 'cannot clock in' });         // different submitter
+  assert.equal([...(await s.list({ prefix: 'ticket:' })).keys()].length, 3);
+});
+
+// ── numeric ticket ID #YYMMDD-NN ─────────────────────────────
+test('create stamps #YYMMDD-NN; distinct same-day tickets increment the sequence', async () => {
+  const { doInst } = await seedDO();
+  const day = ticketDayCode(Date.now(), 'America/Los_Angeles');
+  const a = await fileTicket(doInst, 'DESK', { subject: 'A', message: 'one' });
+  const b = await fileTicket(doInst, 'DESK', { subject: 'B', message: 'two' });
+  assert.equal(a.j.ticket.num, day + '-01');
+  assert.equal(b.j.ticket.num, day + '-02');
+});
+
+test('replying does NOT change the ticket num or create a record', async () => {
+  const { doInst, s } = await seedDO();
+  const { j } = await fileTicket(doInst, 'DESK');
+  const id = j.ticket.id, num = j.ticket.num;
+  await doInst.fetch(req('/support/ticket/' + id + '/reply', { token: 'DESK', method: 'POST', body: { message: 'still broken' } }));
+  await doInst.fetch(req('/support/ticket/' + id + '/dev-reply', { token: 'MGR', method: 'POST', body: { message: 'on it' } }));
+  const t = await s.get('ticket:' + id);
+  assert.equal(t.num, num, 'num is stable across replies');
+  assert.equal(t.messages.length, 3);
+  assert.equal([...(await s.list({ prefix: 'ticket:' })).keys()].length, 1, 'replies never make a new ticket');
+});
+
+test('_backfillTicketNumbers numbers legacy tickets per salon-day, is idempotent, and is clobber-safe', async () => {
+  const { doInst, s } = await seedDO();
+  const base = Date.UTC(2026, 10, 5, 20, 0, 0);   // 12:00 PST, Nov 5 2026
+  await s.put('ticket:leg-a', { id: 'leg-a', subject: 'a', createdAt: base + 0,    status: 'open', messages: [{ from: 'salon', text: 'a', at: base }] });
+  await s.put('ticket:leg-b', { id: 'leg-b', subject: 'b', createdAt: base + 1000, status: 'open', messages: [{ from: 'salon', text: 'b', at: base }] });
+  await s.put('ticket:leg-c', { id: 'leg-c', subject: 'c', createdAt: Date.UTC(2026, 10, 6, 20, 0, 0), status: 'open', messages: [] });
+  await doInst._backfillTicketNumbers();
+  assert.equal((await s.get('ticket:leg-a')).num, '261105-01');
+  assert.equal((await s.get('ticket:leg-b')).num, '261105-02');
+  assert.equal((await s.get('ticket:leg-c')).num, '261106-01');
+  // idempotent: a second pass makes no change
+  (await s.get('ticket:leg-b')).num;
+  await doInst._backfillTicketNumbers();
+  assert.equal((await s.get('ticket:leg-a')).num, '261105-01');
+  assert.equal((await s.get('ticket:leg-b')).num, '261105-02');
+});
+
+test('the first GET /tickets numbers any legacy tickets (prompt first-load backfill kick)', async () => {
+  const { doInst, s } = await seedDO();
+  const base = Date.UTC(2026, 10, 5, 20, 0, 0);
+  await s.put('ticket:leg', { id: 'leg', subject: 's', createdAt: base, status: 'open', messages: [{ from: 'salon', text: 'm', at: base }] });
+  const j = await jsonOf(await doInst.fetch(req('/support/tickets', { token: 'MGR' })));
+  assert.equal(j.tickets.find(x => x.id === 'leg').num, '261105-01', 'the legacy ticket is numbered on first load');
+});
+
+test('a restored ticket keeps its num', async () => {
+  const { doInst, s, bucket } = await seedDO();
+  const { j } = await fileTicket(doInst, 'DESK');
+  const id = j.ticket.id, num = j.ticket.num;
+  const snap = await doInst.buildSnapshot();
+  await bucket.put('backups/state-n.json', JSON.stringify(snap));
+  await doInst.restoreFromBackup('backups/state-n.json');
+  assert.equal((await s.get('ticket:' + id)).num, num);
 });
 
 // ── data-safety: backup dump + restore carries + reset clears ─

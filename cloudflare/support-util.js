@@ -52,10 +52,75 @@ export function canonicalPushId(user) {
 // disagree about who may answer tickets.
 export function isAdminRole(role) { return role === 'admin' || role === 'manager'; }
 
-export function buildTicket({ id, now, submitter, type, subject, message, appVersion }) {
+// ── Numeric ticket ID helpers (#YYMMDD-NN) ────────────────────────────────────
+// The visible ID is salon-local-date based: a stable per-day sequence the owner can
+// say out loud. ticketDayCode mirrors monthOfTs (worker.js/utils.js) but to the DAY —
+// a client copy lives in js/app/utils.js and is pinned to this one by test. Bucketing
+// is ALWAYS by config.salon_tz, never device/server local time.
+const _dayFmt = new Map();
+export function ticketDayCode(ts, tz) {
+  let f = _dayFmt.get(tz);
+  if (!f) { f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }); _dayFmt.set(tz, f); }
+  return f.format(new Date(ts)).slice(2).replace(/-/g, '');   // "2026-11-05" → "261105"
+}
+
+// The create-path sequence: 1 + the count of existing tickets filed the SAME salon-day
+// (resolved/archived included so a number is never reused within a day). Zero-padded to
+// 2, widening past 99. Must agree with planTicketNumbers' running count for the same set.
+export function nextTicketSeq(existingTickets, dayCode, tz) {
+  let n = 0;
+  for (const t of existingTickets || []) {
+    if (t && t.createdAt != null && ticketDayCode(t.createdAt, tz) === dayCode) n++;
+  }
+  return String(n + 1).padStart(2, '0');
+}
+
+// The backfill plan: walk all tickets oldest-first, run a per-salon-day counter over
+// EVERY same-day ticket (so an already-numbered ticket still consumes its slot and the
+// sequence stays in step with the create path), and emit {id, num} ONLY for tickets that
+// are missing a num. Pure → the DO applies it with a re-get-before-put so a concurrent
+// reply is never clobbered.
+export function planTicketNumbers(tickets, tz) {
+  const sorted = [...(tickets || [])]
+    .filter(t => t && t.createdAt != null)
+    .sort((a, b) => (a.createdAt - b.createdAt) || String(a.id).localeCompare(String(b.id)));
+  const perDay = Object.create(null);
+  const out = [];
+  for (const t of sorted) {
+    const day = ticketDayCode(t.createdAt, tz);
+    perDay[day] = (perDay[day] || 0) + 1;
+    if (!t.num) out.push({ id: t.id, num: day + '-' + String(perDay[day]).padStart(2, '0') });
+  }
+  return out;
+}
+
+// Double-submit safety net: an existing NON-archived ticket from the SAME submitter with
+// the SAME subject + first-message text, created within windowMs (default 60s). A second
+// identical file (double-tap, or a network retry) resolves to this one instead of a twin.
+// submitterKey = canonicalPushId(who) when present, else the stamped name (admins have no
+// push id) — matched against the stored submitterPushId, falling back to submittedBy.
+export function findRecentDuplicate(existingTickets, { submitterKey, subject, message, now, windowMs = 60000 }) {
+  const subj = String(subject || '').trim();
+  const msg = String(message || '').trim();
+  const key = submitterKey || '';
+  for (const t of existingTickets || []) {
+    if (!t || t.status === 'archived') continue;
+    const created = t.createdAt || 0;
+    if (now < created || (now - created) > windowMs) continue;
+    if ((t.submitterPushId || t.submittedBy || '') !== key) continue;
+    if (String(t.subject || '').trim() !== subj) continue;
+    const first = (t.messages && t.messages[0] && t.messages[0].text) || '';
+    if (String(first).trim() !== msg) continue;
+    return t;
+  }
+  return null;
+}
+
+export function buildTicket({ id, now, submitter, type, subject, message, appVersion, num }) {
   const author = (submitter && submitter.name) || 'Staff';
   return {
     id,
+    num: num || null,
     submittedBy: author,
     submitterRole: (submitter && submitter.role) || '',
     submitterPushId: canonicalPushId(submitter),

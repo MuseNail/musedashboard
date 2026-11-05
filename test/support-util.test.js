@@ -10,6 +10,7 @@ import {
   validateTicketInput, validateReplyInput,
   ticketKey, newTicketId, canonicalPushId, isAdminRole,
   buildTicket, applyReply, markRead, sanitizeTicket,
+  ticketDayCode, nextTicketSeq, planTicketNumbers, findRecentDuplicate,
 } from '../cloudflare/support-util.js';
 
 const submitter = { kind: 'fd', id: '7', name: 'Rosa', role: 'manager' };
@@ -156,4 +157,76 @@ test('sanitizeTicket drops submitterPushId, keeps the rest', () => {
   assert.equal(s.id, 'tk-1');
   assert.equal(s.messages.length, 1);
   assert.equal(s.unreadForSalon, false);
+});
+
+// ── ticketDayCode — salon-local YYMMDD (the ID date segment) ──
+const TZ = 'America/Los_Angeles';
+test('ticketDayCode returns the salon-local YYMMDD', () => {
+  // 2026-11-05 20:00 UTC = 12:00 PST on Nov 5 (PST, DST ended Nov 1)
+  assert.equal(ticketDayCode(Date.UTC(2026, 10, 5, 20, 0, 0), TZ), '261105');
+});
+test('ticketDayCode buckets by salon tz across the UTC day boundary', () => {
+  // 2026-11-05 06:30 UTC = 2026-11-04 22:30 PST, but 2026-11-05 01:30 EST
+  assert.equal(ticketDayCode(Date.UTC(2026, 10, 5, 6, 30, 0), TZ), '261104');
+  assert.equal(ticketDayCode(Date.UTC(2026, 10, 5, 6, 30, 0), 'America/New_York'), '261105');
+});
+
+// ── nextTicketSeq — the create-path number ───────────────────
+test('nextTicketSeq counts same-day tickets (incl. resolved/archived) and zero-pads', () => {
+  const day = '261105';
+  const t = (ms, over = {}) => ({ createdAt: Date.UTC(2026, 10, 5, 20, 0, 0) + ms, ...over });
+  assert.equal(nextTicketSeq([], day, TZ), '01');
+  assert.equal(nextTicketSeq([t(0), t(1, { status: 'resolved' }), t(2, { status: 'archived' })], day, TZ), '04');
+  assert.equal(nextTicketSeq([{ createdAt: Date.UTC(2026, 10, 4, 20, 0, 0) }], day, TZ), '01', 'a different-day ticket does not count');
+});
+test('nextTicketSeq widens past 99', () => {
+  const many = Array.from({ length: 120 }, () => ({ createdAt: Date.UTC(2026, 10, 5, 20, 0, 0) }));
+  assert.equal(nextTicketSeq(many, '261105', TZ), '121');
+});
+
+// ── planTicketNumbers — the backfill, agreeing with create count+1 ─
+test('planTicketNumbers assigns a per-day running sequence to tickets missing num, skipping numbered ones', () => {
+  const base = Date.UTC(2026, 10, 5, 20, 0, 0);
+  const tickets = [
+    { id: 'c', createdAt: base + 2000 },                       // same day, 3rd
+    { id: 'a', createdAt: base + 0 },                          // same day, 1st
+    { id: 'b', createdAt: base + 1000, num: '261105-02' },     // same day, 2nd, ALREADY numbered
+    { id: 'd', createdAt: Date.UTC(2026, 10, 6, 20, 0, 0) },   // next day, 1st
+  ];
+  assert.deepEqual(planTicketNumbers(tickets, TZ), [
+    { id: 'a', num: '261105-01' },
+    { id: 'c', num: '261105-03' },   // b consumed slot 02 though it already had its num
+    { id: 'd', num: '261106-01' },
+  ]);
+});
+test('planTicketNumbers is a no-op when every ticket already has a num', () => {
+  assert.deepEqual(planTicketNumbers([{ id: 'a', createdAt: 1, num: 'x' }], TZ), []);
+});
+
+// ── findRecentDuplicate — the double-submit safety net ───────
+test('findRecentDuplicate matches same submitter+subject+first-message within the window', () => {
+  const now = 1_000_000;
+  const existing = [{ id: 't1', createdAt: now - 5000, status: 'open', submitterPushId: 'fd:7', submittedBy: 'Hien', subject: 'Clock in', messages: [{ text: 'cannot clock in' }] }];
+  assert.equal(findRecentDuplicate(existing, { submitterKey: 'fd:7', subject: 'Clock in', message: 'cannot clock in', now, windowMs: 60000 })?.id, 't1');
+});
+test('findRecentDuplicate rejects different content, submitter, archived, or out-of-window', () => {
+  const now = 1_000_000;
+  const base = { id: 't1', createdAt: now - 5000, status: 'open', submitterPushId: 'fd:7', submittedBy: 'Hien', subject: 'Clock in', messages: [{ text: 'cannot clock in' }] };
+  const call = (over = {}, q = {}) => findRecentDuplicate([{ ...base, ...over }], { submitterKey: 'fd:7', subject: 'Clock in', message: 'cannot clock in', now, windowMs: 60000, ...q });
+  assert.equal(call({ subject: 'Something else' }), null);
+  assert.equal(call({ messages: [{ text: 'different' }] }), null);
+  assert.equal(call({}, { submitterKey: 'fd:9' }), null);
+  assert.equal(call({ status: 'archived' }), null);
+  assert.equal(call({ createdAt: now - 120000 }), null, 'older than the 60s window');
+});
+test('findRecentDuplicate falls back to submittedBy when there is no push id (admin submitter)', () => {
+  const now = 1_000_000;
+  const existing = [{ id: 't1', createdAt: now - 1000, status: 'open', submitterPushId: null, submittedBy: 'Carlos', subject: 'S', messages: [{ text: 'm' }] }];
+  assert.equal(findRecentDuplicate(existing, { submitterKey: 'Carlos', subject: 'S', message: 'm', now })?.id, 't1');
+});
+
+// ── buildTicket num ──────────────────────────────────────────
+test('buildTicket stores num when provided, null otherwise', () => {
+  assert.equal(mk({ num: '261105-01' }).num, '261105-01');
+  assert.equal(mk().num, null);
 });

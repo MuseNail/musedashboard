@@ -5,8 +5,9 @@
 import './setup-globals.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { monthOfTs, isValidTz } from '../js/app/utils.js';
+import { monthOfTs, isValidTz, ticketDayCode } from '../js/app/utils.js';
 import { monthOfTs as workerMonthOfTs } from '../cloudflare/worker.js';
+import { ticketDayCode as utilTicketDayCode } from '../cloudflare/support-util.js';
 
 const LA = 'America/Los_Angeles', NY = 'America/New_York';
 
@@ -39,6 +40,18 @@ test('monthOfTs: client and worker copies agree on every boundary fixture', () =
   ];
   for (const [iso, tz] of fixtures) {
     assert.equal(monthOfTs(Date.parse(iso), tz), workerMonthOfTs(Date.parse(iso), tz), `${iso} @ ${tz}`);
+  }
+});
+
+test('ticketDayCode: salon-local YYMMDD, and the client (utils.js) + worker (support-util.js) copies agree', () => {
+  const fixtures = [
+    ['2026-11-05T20:00:00Z', LA], ['2026-11-05T06:30:00Z', LA], ['2026-11-05T06:30:00Z', NY],
+    ['2026-03-01T07:59:00Z', LA], ['2026-01-01T00:00:00Z', LA], ['2026-06-15T12:00:00Z', 'Pacific/Honolulu'],
+  ];
+  assert.equal(ticketDayCode(Date.parse('2026-11-05T20:00:00Z'), LA), '261105');
+  assert.equal(ticketDayCode(Date.parse('2026-11-05T06:30:00Z'), LA), '261104');   // salon-local day, not UTC
+  for (const [iso, tz] of fixtures) {
+    assert.equal(ticketDayCode(Date.parse(iso), tz), utilTicketDayCode(Date.parse(iso), tz), `${iso} @ ${tz}`);
   }
 });
 

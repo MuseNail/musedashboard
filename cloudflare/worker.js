@@ -4,6 +4,7 @@
 import {
   validateTicketInput, validateReplyInput, ticketKey, newTicketId,
   buildTicket, applyReply, markRead, sanitizeTicket, isAdminRole,
+  canonicalPushId, ticketDayCode, nextTicketSeq, planTicketNumbers, findRecentDuplicate,
 } from './support-util.js';
 // Deliberate exception to the "worker duplicates small client helpers" convention (see monthOfTs below):
 // this notes core is a genuinely SHARED pure module imported by BOTH the client store and the DO, so the
@@ -1194,6 +1195,11 @@ export class MuseSalonDO {
 
     // GET /support/tickets — the shared list (sanitized, no archived). Admin also gets the unread count.
     if (parts.length === 2 && parts[1] === 'tickets' && method === 'GET') {
+      // Number any legacy tickets ONCE per DO lifetime on the first support load, so the list comes
+      // back numbered immediately instead of showing the date-only fallback until the next 6h alarm.
+      // The flag is set synchronously BEFORE the await so two concurrent first-loads can't both run it;
+      // _backfillTicketNumbers is idempotent + clobber-safe regardless, and alarm() remains the backstop.
+      if (!this._ticketNumKicked) { this._ticketNumKicked = true; try { await this._backfillTicketNumbers(); } catch (e) {} }
       const map = await this.state.storage.list({ prefix: 'ticket:' });
       // The admin inbox needs archived tickets (to show an Archived view + unarchive); staff never do.
       let all = [...map.values()].filter(Boolean);
@@ -1212,19 +1218,32 @@ export class MuseSalonDO {
       const rl = (await this.state.storage.get('suprl:' + ip)) || { hour: 0, n: 0 };
       if (rl.hour !== hour) { rl.hour = hour; rl.n = 0; }
       if (rl.n >= 30) return J({ error: 'Too many tickets just now — try again shortly.' }, 429);
-      const map = await this.state.storage.list({ prefix: 'ticket:' });
-      const open = [...map.values()].filter(t => t && t.status !== 'resolved' && t.status !== 'archived').length;
-      if (open >= 100) return J({ error: 'The support inbox is full — ask a manager to resolve or archive open tickets.' }, 429);
-      rl.n++; await this.state.storage.put('suprl:' + ip, rl);
-      const now = Date.now();
-      const id = newTicketId(now, crypto.randomUUID().replace(/-/g, '').slice(0, 8));
-      const t = buildTicket({ id, now, submitter: who, type: v.value.type, subject: v.value.subject, message: v.value.message, appVersion: body.appVersion });
-      // An admin filing their own ticket shouldn't boldface/ping themselves — clear the dev-unread side
-      // and skip the admin push (owner decision: suppress self-notify).
-      if (admin) { markRead(t, 'dev'); await this.state.storage.put(ticketKey(id), t); }
-      else { await this.state.storage.put(ticketKey(id), t); this._notifySupportAdmin().catch(() => {}); }
-      await this.ensureBackupScheduled();
-      return J({ ticket: sanitizeTicket(t) });
+      const tz = (await this.state.storage.get('config:salon_tz')) || 'America/Los_Angeles';
+      const submitterKey = canonicalPushId(who) || who.name || '';
+      // Serialize dedup-check → number → write so a double-submit (the real duplicate cause —
+      // two taps, or a network retry) resolves to ONE ticket and the #YYMMDD-NN stays unique,
+      // even for two truly-concurrent creates.
+      const result = await this.state.blockConcurrencyWhile(async () => {
+        const all = [...(await this.state.storage.list({ prefix: 'ticket:' })).values()].filter(Boolean);
+        const dup = findRecentDuplicate(all, { submitterKey, subject: v.value.subject, message: v.value.message, now: Date.now(), windowMs: 60000 });
+        if (dup) return { ticket: dup, created: false };
+        if (all.filter(t => t.status !== 'resolved' && t.status !== 'archived').length >= 100) return { full: true };
+        const now = Date.now();
+        const day = ticketDayCode(now, tz);
+        const num = day + '-' + nextTicketSeq(all, day, tz);
+        const id = newTicketId(now, crypto.randomUUID().replace(/-/g, '').slice(0, 8));
+        const t = buildTicket({ id, now, submitter: who, type: v.value.type, subject: v.value.subject, message: v.value.message, appVersion: body.appVersion, num });
+        if (admin) markRead(t, 'dev');   // an admin filing their own ticket shouldn't boldface/ping themselves
+        await this.state.storage.put(ticketKey(id), t);
+        return { ticket: t, created: true };
+      });
+      if (result.full) return J({ error: 'The support inbox is full — ask a manager to resolve or archive open tickets.' }, 429);
+      if (result.created) {
+        rl.n++; await this.state.storage.put('suprl:' + ip, rl);   // only a genuinely-new ticket counts against the limit
+        if (!admin) this._notifySupportAdmin(result.ticket.num).catch(() => {});   // suppress self-notify for an admin's own ticket
+        await this.ensureBackupScheduled();
+      }
+      return J({ ticket: sanitizeTicket(result.ticket) });
     }
     // POST /support/ticket/<id>/{reply|dev-reply|status|read}
     if (parts.length === 4 && parts[1] === 'ticket' && method === 'POST') {
@@ -1236,7 +1255,7 @@ export class MuseSalonDO {
         const v = validateReplyInput(body); if (!v.ok) return J({ error: v.error }, 400);
         applyReply(t, { from: 'salon', author: who.name, text: v.value.message, now: Date.now() });
         await this.state.storage.put(ticketKey(id), t);
-        this._notifySupportAdmin().catch(() => {});
+        this._notifySupportAdmin(t.num).catch(() => {});
         return J({ ticket: sanitizeTicket(t) });
       }
       if (action === 'dev-reply') {
@@ -1268,15 +1287,34 @@ export class MuseSalonDO {
     return J({ error: 'not found' }, 404);
   }
 
-  // Best-effort push to the admin 'support' id (generic body — never user text on a lock screen).
-  async _notifySupportAdmin() {
-    await this.sendPushToTech('support', { title: 'Muse — support', body: 'You have a new support message', tag: 'muse-ticket', url: '/musedashboard/index.html' });
+  // Best-effort push to the admin 'support' id (generic body — never user text on a lock screen;
+  // the ticket number is not sensitive and helps the admin know which ticket moved).
+  async _notifySupportAdmin(num) {
+    const body = 'New support message' + (num ? ' #' + num : '');
+    await this.sendPushToTech('support', { title: 'Muse — support', body, tag: 'muse-ticket', url: '/musedashboard/index.html' });
   }
   // Best-effort push to the submitter (only fires for a tech on the staff app in v1; dashboard FD has no sub).
   async _notifySupportSubmitter(ticket) {
     if (!ticket.submitterPushId) return;
     const url = ticket.submitterPushId.startsWith('fd:') ? '/musedashboard/index.html' : '/musedashboard/staff.html';
-    await this.sendPushToTech(ticket.submitterPushId, { title: 'Muse — support reply', body: 'The manager replied to your message', tag: 'muse-ticket', url });
+    const body = 'The manager replied to your message' + (ticket.num ? ' #' + ticket.num : '');
+    await this.sendPushToTech(ticket.submitterPushId, { title: 'Muse — support reply', body, tag: 'muse-ticket', url });
+  }
+
+  // Backfill #YYMMDD-NN for any ticket filed before numbering existed (or created during a
+  // rollback window). Opportunistic + idempotent (fills only tickets missing `num`) and
+  // clobber-safe: re-reads each ticket immediately before writing so a reply/status that landed
+  // since the list snapshot is never overwritten. Runs from alarm() inside its own try.
+  async _backfillTicketNumbers() {
+    const all = [...(await this.state.storage.list({ prefix: 'ticket:' })).values()].filter(Boolean);
+    if (!all.some(t => !t.num)) return;
+    const tz = (await this.state.storage.get('config:salon_tz')) || 'America/Los_Angeles';
+    for (const { id, num } of planTicketNumbers(all, tz)) {
+      const t = await this.state.storage.get(ticketKey(id));
+      if (!t || t.num) continue;
+      t.num = num;
+      await this.state.storage.put(ticketKey(id), t);
+    }
   }
 
   async sendPushToTech(techId, payload) {
@@ -1959,6 +1997,9 @@ export class MuseSalonDO {
           for (let i = 0; i < staleTickets.length; i += 128) await this.state.storage.delete(staleTickets.slice(i, i + 128));
         } catch (e) { console.error('[ticket-backup] failed:', (e && e.message) || String(e)); }
       }
+      // Number any tickets still missing a #YYMMDD-NN (its own try so a failure can't break the
+      // backup/housekeeping pass). New tickets are numbered at create; this catches legacy ones.
+      try { await this._backfillTicketNumbers(); } catch (e) { console.error('[ticket-num] backfill failed:', (e && e.message) || String(e)); }
       // Retention prune (its own try so a prune failure never blocks the backup/housekeeping).
       try { await this.pruneBackups(); } catch (e) { console.error('[retention] prune failed:', (e && e.message) || String(e)); }
       // Bound the idempotency markers: keep the newest ~2000 by seq.

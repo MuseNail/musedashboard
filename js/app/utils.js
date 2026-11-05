@@ -242,6 +242,14 @@ export function monthOfTs(ts, tz) {
   if (!f) { f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit' }); _tzFmt.set(tz, f); }
   return f.format(new Date(ts));
 }
+// Salon-local YYMMDD for the support-ticket ID (#YYMMDD-NN). MUST stay byte-identical to
+// the worker's ticketDayCode in cloudflare/support-util.js — pinned by test/stage0-tz.test.js.
+const _dayFmt = new Map();
+export function ticketDayCode(ts, tz) {
+  let f = _dayFmt.get(tz);
+  if (!f) { f = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }); _dayFmt.set(tz, f); }
+  return f.format(new Date(ts)).slice(2).replace(/-/g, '');
+}
 export function isValidTz(tz) {
   if (!tz || typeof tz !== 'string') return false;
   try { new Intl.DateTimeFormat('en', { timeZone: tz }); return true; } catch { return false; }

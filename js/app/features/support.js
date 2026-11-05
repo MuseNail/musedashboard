@@ -6,11 +6,25 @@
 // on demand + polled; nothing lives in the synced state blob. The server stamps the submitter and
 // gates the admin routes (see cloudflare/support-util.js + worker.js _handleSupport).
 import { SUPPORT_PROXY, PUSH_PROXY, VAPID_PUBLIC_KEY, APP_VERSION } from '../config.js';
-import { escHtml, escAttrJs, showToast } from '../utils.js';
+import { escHtml, escAttrJs, showToast, ticketDayCode } from '../utils.js';
 import { getActiveUser } from '../session.js';
+import { getState } from '../store.js';
 
 const TYPE_LABEL = { problem: 'Problem', question: 'Question', request: 'Request' };
 const MAX_SUBJECT = 120, MAX_MESSAGE = 5000;
+
+// A single re-entrancy guard across all three send paths: a second tap while a send is in
+// flight is a no-op (the demonstrated duplicate cause was a double-tapped "New message").
+let _sending = false;
+
+// The visible ticket number (#YYMMDD-NN). Server-stamped `num` when present; otherwise a
+// date-only fallback (same YYMMDD shape) until the alarm backfill fills it in.
+const _salonTz = () => { try { return getState().config?.salon_tz || 'America/Los_Angeles'; } catch (e) { return 'America/Los_Angeles'; } };
+function _ticketNo(t) {
+  if (!t) return '';
+  if (t.num) return '#' + t.num;
+  try { return t.createdAt ? '#' + ticketDayCode(t.createdAt, _salonTz()) : ''; } catch (e) { return ''; }
+}
 
 // The admin gate MUST match the server's hardcoded admin||manager (support-util.js isAdminRole) —
 // deliberately NOT canDo(), which is owner-editable and could drift from the server.
@@ -95,7 +109,7 @@ function _listHtml() {
     <button onclick="supportOpenThread('${escAttrJs(t.id)}')" class="w-full flex items-center gap-3 px-4 py-3 border-b border-surface-container hover:bg-surface-container-low text-left">
       <span class="min-w-0 flex-1">
         <span class="flex items-center gap-2"><span class="font-body font-semibold text-sm text-on-surface truncate">${escHtml(t.subject)}</span>${t.unreadForSalon ? '<span class="w-2 h-2 rounded-full bg-[#d11a2a] flex-shrink-0"></span>' : ''}</span>
-        <span class="block text-[11px] font-body text-on-surface-variant mt-0.5">${escHtml(TYPE_LABEL[t.type] || t.type)} · ${_fmt(t.updatedAt)}</span>
+        <span class="block text-[11px] font-body text-on-surface-variant mt-0.5">${_ticketNo(t)} · ${escHtml(TYPE_LABEL[t.type] || t.type)} · ${_fmt(t.updatedAt)}</span>
       </span>
       ${_statusPill(t.status)}
     </button>`).join('')
@@ -119,7 +133,7 @@ function _composeHtml() {
         class="w-full px-3 py-2.5 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface outline-none focus:border-primary resize-none"></textarea>
     </div>
     <div class="p-3 border-t border-surface-container-high flex-shrink-0">
-      <button onclick="supportSend()" class="w-full py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm">Send</button>
+      <button id="sup-send-btn" onclick="supportSend()" class="w-full py-2.5 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm disabled:opacity-60">Send</button>
     </div>`;
 }
 
@@ -136,11 +150,11 @@ function _threadHtml() {
   if (!t) { _view = 'list'; return _listHtml(); }
   const msgs = (t.messages || []).map(_bubble).join('');
   return _header(escHtml(t.subject), true) + `
-    <div class="px-3 py-1.5 border-b border-surface-container-high flex items-center gap-2 flex-shrink-0">${_statusPill(t.status)}<span class="text-[11px] font-body text-on-surface-variant">${escHtml(TYPE_LABEL[t.type] || t.type)}</span></div>
+    <div class="px-3 py-1.5 border-b border-surface-container-high flex items-center gap-2 flex-shrink-0">${_statusPill(t.status)}<span class="text-[11px] font-body text-on-surface-variant">${_ticketNo(t)} · ${escHtml(TYPE_LABEL[t.type] || t.type)}</span></div>
     <div id="sup-thread-scroll" class="p-3 space-y-2 overflow-y-auto no-scroll" style="flex:1 1 auto">${msgs}</div>
     ${t.status === 'resolved' || t.status === 'archived' ? '' : `<div class="p-3 border-t border-surface-container-high flex items-end gap-2 flex-shrink-0">
       <textarea id="sup-reply" rows="2" maxlength="${MAX_MESSAGE}" placeholder="Reply…" class="flex-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface outline-none focus:border-primary resize-none"></textarea>
-      <button onclick="supportReplySend()" class="px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm flex-shrink-0">Send</button>
+      <button id="sup-reply-btn" onclick="supportReplySend()" class="px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm flex-shrink-0 disabled:opacity-60">Send</button>
     </div>`}`;
 }
 
@@ -156,28 +170,36 @@ export function supportOpenThread(id) {
 }
 
 export async function supportSend() {
+  if (_sending) return;   // in-flight guard — a second tap must not file a second ticket
   const type = document.querySelector('input[name=sup-type]:checked')?.value || 'problem';
   const subject = document.getElementById('sup-subject')?.value.trim() || '';
   const message = document.getElementById('sup-message')?.value.trim() || '';
   if (!subject) { showToast('Enter a subject'); return; }
   if (!message) { showToast('Enter a message'); return; }
+  const btn = document.getElementById('sup-send-btn');
+  _sending = true; if (btn) btn.disabled = true;
   try {
     const r = await fetch(SUPPORT_PROXY + '/ticket', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, subject, message, appVersion: APP_VERSION }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { showToast(j.error || 'Couldn’t send — try again'); return; }
     await loadTickets(); _openId = j.ticket?.id || null; _view = _openId ? 'thread' : 'list'; _renderModal(); paintSupportBadges();
-    showToast('Sent ✓');
+    showToast('Sent ✓' + (j.ticket && _ticketNo(j.ticket) ? ' — ' + _ticketNo(j.ticket) : ''));
   } catch (e) { showToast('You’re offline — try again when connected'); }
+  finally { _sending = false; const b = document.getElementById('sup-send-btn'); if (b) b.disabled = false; }
 }
 export async function supportReplySend() {
+  if (_sending) return;
   const ta = document.getElementById('sup-reply'); const message = ta?.value.trim() || '';
   if (!message) return;
+  const btn = document.getElementById('sup-reply-btn');
+  _sending = true; if (btn) btn.disabled = true;
   try {
     const r = await fetch(SUPPORT_PROXY + '/ticket/' + encodeURIComponent(_openId) + '/reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { showToast(j.error || 'Couldn’t send — try again'); return; }
     await loadTickets(); _renderModal(); paintSupportBadges();
   } catch (e) { showToast('You’re offline — try again when connected'); }
+  finally { _sending = false; const b = document.getElementById('sup-reply-btn'); if (b) b.disabled = false; }
 }
 
 // ── Unread badges (dashboard button + Settings nav dot) ────────
@@ -190,7 +212,10 @@ export async function pollSupportUnread() {
   // Settings nav dot (persistent) and the opt-in phone push (for when they're away). First poll never toasts.
   if (res.ok && supportIsAdmin()) {
     const n = res.unread || 0;
-    if (_lastAdminUnread != null && n > _lastAdminUnread) showToast('New support ticket — open Settings → Support to reply');
+    if (_lastAdminUnread != null && n > _lastAdminUnread) {
+      const newest = _tickets.filter(t => t.unreadForDev && t.status !== 'archived').sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0];
+      showToast('New support ticket' + (newest ? ' ' + _ticketNo(newest) : '') + ' — open Settings → Support to reply');
+    }
     _lastAdminUnread = n;
   }
   paintSupportBadges(res.ok ? res.unread : 0);
@@ -255,7 +280,7 @@ function _inboxListHtml() {
     <button onclick="supportInboxOpen('${escAttrJs(t.id)}')" class="w-full flex items-center gap-3 px-3 py-3 border-b border-surface-container hover:bg-surface-container-low text-left">
       <span class="min-w-0 flex-1">
         <span class="flex items-center gap-2"><span class="font-body font-semibold text-sm text-on-surface truncate">${escHtml(t.subject)}</span>${t.unreadForDev ? '<span class="w-2 h-2 rounded-full bg-[#d11a2a] flex-shrink-0"></span>' : ''}</span>
-        <span class="block text-[11px] font-body text-on-surface-variant mt-0.5">${escHtml(TYPE_LABEL[t.type] || t.type)} · ${escHtml(t.submittedBy || 'Staff')} · ${_fmt(t.updatedAt)}</span>
+        <span class="block text-[11px] font-body text-on-surface-variant mt-0.5">${_ticketNo(t)} · ${escHtml(TYPE_LABEL[t.type] || t.type)} · ${escHtml(t.submittedBy || 'Staff')} · ${_fmt(t.updatedAt)}</span>
       </span>
       ${_statusPill(t.status)}
     </button>`).join('')
@@ -279,11 +304,11 @@ function _inboxThreadHtml() {
   const canReply = t.status !== 'resolved' && t.status !== 'archived';
   return `<button onclick="supportInboxBack()" class="flex items-center gap-1 text-sm font-body text-on-surface-variant mb-2"><span class="material-symbols-outlined" style="font-size:18px">arrow_back</span>All tickets</button>
     <div class="flex items-center gap-2 mb-2"><span class="font-headline font-bold text-on-surface flex-1 truncate">${escHtml(t.subject)}</span>${_statusPill(t.status)}</div>
-    <div class="text-[11px] font-body text-on-surface-variant mb-3">${escHtml(TYPE_LABEL[t.type] || t.type)} · from ${escHtml(t.submittedBy || 'Staff')}${t.appVersion ? ' · ' + escHtml(t.appVersion) : ''}</div>
+    <div class="text-[11px] font-body text-on-surface-variant mb-3">${_ticketNo(t)} · ${escHtml(TYPE_LABEL[t.type] || t.type)} · from ${escHtml(t.submittedBy || 'Staff')}${t.appVersion ? ' · ' + escHtml(t.appVersion) : ''}</div>
     <div id="sup-inbox-scroll" class="space-y-2 mb-3 max-h-80 overflow-y-auto no-scroll">${msgs}</div>
     ${canReply ? `<div class="flex items-end gap-2 mb-2">
       <textarea id="sup-inbox-reply" rows="2" maxlength="${MAX_MESSAGE}" placeholder="Reply to the staffer…" class="flex-1 px-3 py-2 rounded-xl border border-surface-container-high bg-surface-container-lowest text-sm font-body text-on-surface outline-none focus:border-primary resize-none"></textarea>
-      <button onclick="supportInboxReply('${escAttrJs(t.id)}')" class="px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm flex-shrink-0">Reply</button>
+      <button id="sup-inbox-reply-btn" onclick="supportInboxReply('${escAttrJs(t.id)}')" class="px-4 py-2 rounded-xl bg-primary text-on-primary font-body font-semibold text-sm flex-shrink-0 disabled:opacity-60">Reply</button>
     </div>` : ''}
     <div class="flex gap-1.5">${statusBtns}</div>`;
 }
@@ -300,14 +325,18 @@ export function supportInboxOpen(id) {
   renderSupportInbox();
 }
 export async function supportInboxReply(id) {
+  if (_sending) return;
   const ta = document.getElementById('sup-inbox-reply'); const message = ta?.value.trim() || '';
   if (!message) return;
+  const btn = document.getElementById('sup-inbox-reply-btn');
+  _sending = true; if (btn) btn.disabled = true;
   try {
     const r = await fetch(SUPPORT_PROXY + '/ticket/' + encodeURIComponent(id) + '/dev-reply', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { showToast(j.error || 'Couldn’t send'); return; }
     renderSupportInbox();
   } catch (e) { showToast('Couldn’t send — try again'); }
+  finally { _sending = false; const b = document.getElementById('sup-inbox-reply-btn'); if (b) b.disabled = false; }
 }
 export async function supportInboxStatus(id, status) {
   try {

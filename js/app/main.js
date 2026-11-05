@@ -141,6 +141,10 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.09', items: [
+    { icon: 'confirmation_number', t: 'Support tickets now have a number', d: 'Every Help & Feedback ticket now shows a number like #261105-01 in the ticket list, the conversation, and the manager’s Support inbox — so a ticket is easy to recognize, even after a reply bumps it to the top of the list.' },
+    { icon: 'done_all', t: 'No more duplicate support tickets', d: 'Sending a help ticket can no longer accidentally create two if the Send button gets tapped twice or the connection is slow — each ticket is filed once. (Replying to a ticket never created a new one; a duplicate that already existed was just being bumped to the top with today’s date, which looked new.)' },
+  ] },
   { v: 'v6.08', items: [
     { icon: 'view_sidebar', t: 'Tidier turn counters on iPad', d: 'On tablets, each technician’s per-service turn counter now sits inside the main turn box instead of a separate column, and only the first one is shown to save space. The other services are still counted — they roll into the “+Nb” bonus number so your turn totals stay accurate — and the full per-service breakdown still shows on a desktop or laptop.' },
   ] },
