@@ -225,27 +225,23 @@ export function paintSupportBadges(adminUnread) {
   const mine = _tickets.filter(t => t.unreadForSalon && t.status !== 'archived').length;   // archived are off the staff list, so never count them
   const badge = document.getElementById('support-badge');
   if (badge) { badge.textContent = String(mine); badge.classList.toggle('hidden', mine === 0); }
-  if (supportIsAdmin()) {
-    const n = adminUnread == null ? _tickets.filter(t => t.unreadForDev && t.status !== 'archived').length : adminUnread;
-    _paintSettingsDot(n > 0);
-  } else { _paintSettingsDot(false); }
+  _paintSettingsDot();   // support unread now lives in the notification bell; this just clears any legacy dot
   window.refreshAccountUnread?.();   // iPad: Help collapses into the account menu → mirror onto the avatar badge
+  window.refreshNotifBell?.();       // the bell aggregates support unread (admin new-tickets + salon replies)
 }
 
 // Combined-unread source for the iPad account-avatar badge (main.js refreshAccountUnread).
 // Salon-side unread tickets (same filter paintSupportBadges uses for #support-badge).
 export function supportUnreadCount() { return _tickets.filter(t => t.unreadForSalon && t.status !== 'archived').length; }
-function _paintSettingsDot(on) {
-  const nav = document.getElementById('nav-settings'); if (!nav) return;
-  let dot = document.getElementById('settings-support-dot');
-  if (on && !dot) {
-    nav.style.position = nav.style.position || 'relative';
-    dot = document.createElement('span');
-    dot.id = 'settings-support-dot';
-    dot.style.cssText = 'position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:9999px;background:#d11a2a';
-    nav.appendChild(dot);
-  } else if (!on && dot) dot.remove();
-}
+// Admin/manager side: new tickets + staff replies awaiting the manager (the old Settings-dot signal).
+export function supportAdminUnreadCount() { return _tickets.filter(t => t.unreadForDev && t.status !== 'archived').length; }
+export { supportIsAdmin };
+// Per-ticket rows for the bell so tapping a row deep-links into that thread and clears its unread.
+export function supportAdminUnreadList() { return _tickets.filter(t => t.unreadForDev && t.status !== 'archived').map(t => ({ id: t.id, subject: t.subject, no: _ticketNo(t) })); }
+export function supportSalonUnreadList() { return _tickets.filter(t => t.unreadForSalon && t.status !== 'archived').map(t => ({ id: t.id, subject: t.subject, no: _ticketNo(t) })); }
+// The Settings-nav support dot is retired (folded into the bell). Keep a no-op that removes any dot
+// a stale cached build may have left, so paintSupportBadges' call sites never throw during rollout.
+function _paintSettingsDot() { document.getElementById('settings-support-dot')?.remove(); }
 
 // ── Admin inbox (Settings → Support) ───────────────────────────
 let _inbox = [];
@@ -317,11 +313,15 @@ export function supportInboxFilter(f) { _inboxFilter = f; renderSupportInbox(); 
 export function supportInboxBack() { _inboxOpenId = null; renderSupportInbox(); }
 export function supportInboxOpen(id) {
   _inboxOpenId = id;
-  const t = _inbox.find(x => x.id === id);
-  if (t && t.unreadForDev) {   // opening to read clears the admin-unread side
-    t.unreadForDev = false; paintSupportBadges();
-    fetch(SUPPORT_PROXY + '/ticket/' + encodeURIComponent(id) + '/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ who: 'dev' }) }).catch(() => {});
-  }
+  // Clear the admin-unread flag on BOTH caches the app keeps — _inbox (this inbox view) AND _tickets
+  // (what the notification bell counts) — and tell the server, UNCONDITIONALLY. This matters when the
+  // bell deep-links here with a cold _inbox: the read-clear + server POST must still fire on the first
+  // tap (the id is enough), and the bell's supportAdminUnreadCount() reads _tickets, so it must drop too.
+  // The /read POST is idempotent, so re-opening an already-read ticket is harmless.
+  const ci = _inbox.find(x => x.id === id);   if (ci) ci.unreadForDev = false;
+  const ct = _tickets.find(x => x.id === id); if (ct) ct.unreadForDev = false;
+  fetch(SUPPORT_PROXY + '/ticket/' + encodeURIComponent(id) + '/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ who: 'dev' }) }).catch(() => {});
+  paintSupportBadges();   // repaints #support-badge + the notification bell (count drops now, not in 3 min)
   renderSupportInbox();
 }
 export async function supportInboxReply(id) {

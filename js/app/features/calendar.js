@@ -1674,6 +1674,14 @@ export function toggleTasksPanel() {
   if (panel) { panel.style.flex = _tasksMinimized ? '0 0 auto' : '1 1 0'; if (body) body.style.display = _tasksMinimized ? 'none' : ''; if (selWrap) selWrap.style.display = _tasksMinimized ? 'none' : ''; }
   if (btn) { btn.querySelector('.material-symbols-outlined').textContent = _tasksMinimized ? 'expand_less' : 'expand_more'; btn.title = _tasksMinimized ? 'Show Tasks' : 'Hide Tasks'; }
 }
+// Idempotent EXPAND (never a toggle) — the notification bell's "overdue tasks" row drills here, so it
+// must always land on an open rail, not re-minimize one that was already open.
+export function openTasksPanel() {
+  _tasksMinimized = false;
+  const panel = document.getElementById('cal-tasks-panel'), btn = document.getElementById('tasks-minimize-btn'), body = document.getElementById('tasks-list'), selWrap = document.getElementById('tasks-list-select')?.parentElement;
+  if (panel) { panel.style.flex = '1 1 0'; if (body) body.style.display = ''; if (selWrap) selWrap.style.display = ''; }
+  if (btn) { btn.querySelector('.material-symbols-outlined').textContent = 'expand_more'; btn.title = 'Hide Tasks'; }
+}
 export async function toggleTask(listId, taskId, newStatus) {
   const t = _allTasks().find(x => String(x.id) === String(taskId)); if (!t) return;
   const completed = newStatus === 'completed';

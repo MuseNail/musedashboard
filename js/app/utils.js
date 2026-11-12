@@ -43,6 +43,13 @@ export const assigneeLabel = (task, people) => {
 };
 // Technician badge: DIRECTLY-assigned open tasks only — an 'Anyone' task never inflates a tech's badge.
 export const taskBadgeCount = (tasks, myTechPid) => (tasks || []).filter(t => t && t.assignee === myTechPid && !t.completed).length;
+// Notification bell: OVERDUE tasks visible to the viewer (past-due date, not completed). `now` is a ms
+// timestamp (passed in so the helper stays pure/testable). Managers see all; others see own + Anyone.
+export const tasksOverdueCount = (tasks, myPid, isManager, now) => (tasks || []).filter(t => {
+  if (!t || t.completed || !taskVisibleTo(t, myPid, isManager)) return false;
+  const d = t.due ? new Date(t.due) : null;
+  return d && !isNaN(d) && d.getTime() < now;
+}).length;
 
 export function ticketTotal(r) {
   const svc   = (r.assignments || []).reduce((s, a) => s + lineCharge(a), 0);   // customer charge: comps are $0
