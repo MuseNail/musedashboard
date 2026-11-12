@@ -49,10 +49,11 @@ import * as pricemenuEditor from './features/pricemenu-editor.js';
 import * as support from './features/support.js';
 import * as bubblePrefs from './features/bubble-prefs.js';
 import * as notifications from './features/notifications.js';
+import * as rebook from './features/rebook.js';
 import { syncBannerModel, syncBannerIcon } from './features/sync-banner.js';
 
 // Expose every module's exports for inline onclick= handlers + cross-module glue.
-[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, waiver, pricemenuEditor, support, bubblePrefs, notifications]
+[utils, auth, photos, catalog, sqCust, sqCat, sqPos, staff, checkin, statusMod, queue, turns, reports, giftcards, settings, calendar, floorplan, appearance, servicetime, chat, apptReminders, recovery, audit, cashdrawer, sms, timeclock, fdSchedule, helcim, quicksale, search, boSync, guide, receipt, diagnostics, waiver, pricemenuEditor, support, bubblePrefs, notifications, rebook]
   .forEach(ns => Object.assign(window, ns));
 window.dispatch     = sync.dispatch;
 window.calEventsFor = calendar.getCalEvents;
@@ -142,6 +143,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.19', items: [
+    { icon: 'event_upcoming', t: 'Book the next appointment right at checkout', d: 'After a service is paid, a prompt now offers to book that customer’s next visit while they’re still at the desk. Tap “Book next appointment” and it jumps to the Calendar with a banner showing who you’re booking — click any open time and the New Appointment form opens with their name and phone already filled in; you just pick the service and time. The banner stays until you save the booking or close it (if they changed their mind). Gift-card, retail, and Quick Sales never prompt. You can turn the prompt off in Settings → Workflow → Checkout Rebooking.' },
+  ] },
   { v: 'v6.18', items: [
     { icon: 'notifications', t: 'One notification bell for everything', d: 'A new bell in the top bar gathers every pending thing in one place — new support tickets, replies to your tickets, unread chat, overdue tasks, a time-clock heads-up, and app updates — each in plain language and tappable straight to where it lives. It also surfaces two things that used to be silent: overdue tasks, and a red alert if a sale or change didn’t save to the cloud (so it never slips by). The old mystery red dot on Settings is gone — the bell explains itself. Managers now also see the “didn’t save” alert and can open Data Recovery.' },
   ] },

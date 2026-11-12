@@ -849,6 +849,12 @@ tailwind.config = {
            CALENDAR PANEL
       ═══════════════════════════════════════ -->
       <div class="dash-panel" id="panel-calendar">
+        <!-- Rebook banner: shown while booking a customer's next visit from checkout -->
+        <div id="rebook-banner" class="hidden flex items-center gap-2 mb-3 px-4 py-2.5 rounded-xl bg-primary/10 border border-primary/30" aria-live="polite">
+          <span class="material-symbols-outlined text-primary" style="font-size:20px" aria-hidden="true">event_upcoming</span>
+          <span class="text-sm font-body text-on-surface">Booking next visit for <span id="rebook-banner-name" class="font-headline font-bold text-primary"></span> — tap an open time</span>
+          <button onclick="cancelRebook()" aria-label="Cancel rebooking" class="ml-auto w-7 h-7 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:18px" aria-hidden="true">close</span></button>
+        </div>
         <!-- Header -->
         <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
           <div class="flex items-center gap-2">
@@ -1078,6 +1084,11 @@ tailwind.config = {
         <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
           <div id="settings-commission-section" class="hidden px-5 py-4"></div>
           <div id="settings-numpad-section" class="hidden px-5 py-4"></div>
+        </div>
+
+        <!-- Leaf: Checkout rebooking -->
+        <div class="bg-surface-container-lowest rounded-xl border border-surface-container-high mb-3 overflow-hidden">
+          <div id="settings-rebook-section" class="hidden px-5 py-4"></div>
         </div>
 
         <!-- Leaf: Appearance -->
@@ -2843,6 +2854,10 @@ tailwind.config = {
       <button onclick="closeApptModal()" class="w-9 h-9 rounded-full hover:bg-surface-container flex items-center justify-center">
         <span class="material-symbols-outlined text-on-surface-variant">close</span>
       </button>
+    </div>
+    <div id="appt-rebook-chip" class="hidden -mt-2 mb-4 flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 text-primary text-sm font-body">
+      <span class="material-symbols-outlined" style="font-size:16px" aria-hidden="true">event_upcoming</span>
+      <span>Booking next visit for <span id="appt-rebook-chip-name" class="font-semibold"></span> — pick the service and time</span>
     </div>
     <div class="space-y-4">
       <!-- Primary contact (required) -->
