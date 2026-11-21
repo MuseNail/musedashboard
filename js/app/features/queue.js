@@ -396,6 +396,7 @@ function buildQueueRow(e) {
       </div>
       <div class="flex items-stretch gap-1 flex-shrink-0">
         <button onclick="showEditCheckin('${id}')" title="Edit check-in info" class="${btnCls}" style="${sTool}"><span class="material-symbols-outlined" style="font-size:19px">edit_note</span></button>
+        ${e.name ? `<button onclick="rebookFromQueue('${id}')" title="Book next appointment" class="${btnCls}" style="${sTool}"><span class="material-symbols-outlined" style="font-size:19px">event_upcoming</span></button>` : ''}
         ${e.groupId
           ? `<button onclick="showSplitMergeModal('${id}')" title="Split/Merge" class="${btnCls}" style="${sTool}"><span class="material-symbols-outlined" style="font-size:19px">call_split</span></button>`
           : `<button onclick="showMergeSelectModal('${id}')" title="Merge" class="${btnCls}" style="${sTool}"><span class="material-symbols-outlined" style="font-size:19px">merge</span></button>`}

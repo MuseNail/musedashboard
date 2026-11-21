@@ -37,23 +37,27 @@ function _onCardKey(e) { if (e.key === 'Escape') rebookDismiss(); }
 function _showCard({ name }) {
   document.getElementById('rebook-card')?.remove();   // a new sale replaces any lingering card
   const first = splitName(name).first || 'this customer';
+  // Centered modal-style prompt over a soft backdrop so it's impossible to miss. It does NOT hard-block:
+  // tapping the backdrop (or Not now / Escape) dismisses it, so the next checkout is one tap away.
   const card = document.createElement('div');
   card.id = 'rebook-card';
-  card.setAttribute('role', 'region');
+  card.setAttribute('role', 'dialog');
+  card.setAttribute('aria-modal', 'true');
   card.setAttribute('aria-label', 'Book next appointment');
-  card.setAttribute('aria-live', 'polite');
-  // Non-blocking: fixed, no full-screen backdrop — never blocks starting the next checkout.
-  // Sits ABOVE the bottom-6 "Paid ✓" toast so the two don't overlap.
-  card.className = 'fixed left-1/2 -translate-x-1/2 bottom-24 z-[70] w-80 max-w-[calc(100vw-24px)] bg-surface-container-lowest rounded-2xl shadow-2xl border border-surface-container-high p-4';
+  card.className = 'fixed inset-0 z-[80] flex items-center justify-center bg-black/30 p-4';
   card.innerHTML = `
-    <div class="flex items-center gap-2 mb-1">
-      <span class="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center"><span class="material-symbols-outlined text-primary" style="font-size:18px" aria-hidden="true">event_upcoming</span></span>
-      <span class="font-headline font-bold text-on-surface text-base">Book next visit?</span>
-      <button onclick="rebookDismiss()" aria-label="Dismiss" class="ml-auto w-7 h-7 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:18px" aria-hidden="true">close</span></button>
-    </div>
-    <div class="text-sm font-body text-on-surface-variant mb-3">${escHtml(first)} is all set — book their next appointment while they're here?</div>
-    <button onclick="rebookBookNow()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-2.5 rounded-xl font-headline font-bold text-sm flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:18px" aria-hidden="true">event_upcoming</span>Book next appointment</button>
-    <button onclick="rebookDismiss()" class="w-full mt-1.5 py-2 rounded-xl text-on-surface-variant font-headline font-semibold text-sm hover:bg-surface-container transition-colors">Not now</button>`;
+    <div class="w-full max-w-md bg-surface-container-lowest rounded-3xl shadow-2xl border border-surface-container-high p-6" aria-live="polite">
+      <div class="flex items-center gap-3 mb-2">
+        <span class="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0"><span class="material-symbols-outlined text-primary" style="font-size:26px" aria-hidden="true">event_upcoming</span></span>
+        <span class="font-headline font-bold text-on-surface text-xl">Book next visit?</span>
+        <button onclick="rebookDismiss()" aria-label="Dismiss" class="ml-auto w-9 h-9 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container transition-colors"><span class="material-symbols-outlined" style="font-size:22px" aria-hidden="true">close</span></button>
+      </div>
+      <div class="text-base font-body text-on-surface-variant mb-5">${escHtml(first)} is all set — book their next appointment while they're here?</div>
+      <button onclick="rebookBookNow()" class="w-full bg-primary hover:bg-primary-dim text-on-primary py-3.5 rounded-2xl font-headline font-bold text-base flex items-center justify-center gap-2"><span class="material-symbols-outlined" style="font-size:22px" aria-hidden="true">event_upcoming</span>Book next appointment</button>
+      <button onclick="rebookDismiss()" class="w-full mt-2 py-3 rounded-2xl text-on-surface-variant font-headline font-semibold text-base hover:bg-surface-container transition-colors">Not now</button>
+    </div>`;
+  // Outside-tap (on the backdrop itself, not the inner card) dismisses.
+  card.addEventListener('click', (ev) => { if (ev.target === card) rebookDismiss(); });
   document.body.appendChild(card);
   document.addEventListener('keydown', _onCardKey);
 }
@@ -75,6 +79,14 @@ export function startRebook({ name, phone }) {
   _pending = { name, phone: phone || '' };
   window.showDashPanel?.('calendar');
   renderRebookBanner();
+}
+
+// Start a rebook straight from a queue customer card (independent of the post-checkout prompt).
+// Looks the entry up by id so the inline onclick stays a simple string; needs a name to prefill.
+export function rebookFromQueue(entryId) {
+  const e = (getState().queue || []).find(x => String(x.id) === String(entryId));
+  if (!e || !String(e.name || '').trim()) return;
+  startRebook({ name: e.name, phone: e.phone || '' });
 }
 
 export function cancelRebook() { _pending = null; renderRebookBanner(); }

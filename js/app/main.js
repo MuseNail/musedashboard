@@ -143,6 +143,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.21', items: [
+    { icon: 'event_upcoming', t: 'Book next appointment — bigger prompt + a button on every queue card', d: 'The “Book next appointment” prompt at checkout now appears large and centered on the screen (over a dimmed background) so it’s easy to see — tap “Not now” or anywhere outside it to dismiss. You can also start a booking any time: every customer card in the Queue now has a calendar button that jumps straight to the Calendar to book that customer’s next visit, with their name and phone filled in.' },
+  ] },
   { v: 'v6.20', items: [
     { icon: 'edit_calendar', t: 'Front-desk schedule: build it, then publish when it’s ready', d: 'The front-desk schedule now works like a draft. You can edit next week (and the week after — you see two weeks at once) without staff seeing it change; a “N unpublished changes” badge shows what’s pending, and your edits only go live to staff when you tap “Publish changes.” Tap “What staff see” to preview the published version any time, or “Discard” to throw away the draft. Staff now see the next 4 weeks of their schedule on their phone. Heads-up: the old “Every week” button is now “Repeat next 4 weeks” — instead of setting a permanent repeating pattern, it fills in the next four weeks, so re-run it when you want to extend further. If you ever leave edits unpublished, the notification bell reminds you.' },
   ] },
