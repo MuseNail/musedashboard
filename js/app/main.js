@@ -143,6 +143,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.20', items: [
+    { icon: 'edit_calendar', t: 'Front-desk schedule: build it, then publish when it’s ready', d: 'The front-desk schedule now works like a draft. You can edit next week (and the week after — you see two weeks at once) without staff seeing it change; a “N unpublished changes” badge shows what’s pending, and your edits only go live to staff when you tap “Publish changes.” Tap “What staff see” to preview the published version any time, or “Discard” to throw away the draft. Staff now see the next 4 weeks of their schedule on their phone. Heads-up: the old “Every week” button is now “Repeat next 4 weeks” — instead of setting a permanent repeating pattern, it fills in the next four weeks, so re-run it when you want to extend further. If you ever leave edits unpublished, the notification bell reminds you.' },
+  ] },
   { v: 'v6.19', items: [
     { icon: 'event_upcoming', t: 'Book the next appointment right at checkout', d: 'After a service is paid, a prompt now offers to book that customer’s next visit while they’re still at the desk. Tap “Book next appointment” and it jumps to the Calendar with a banner showing who you’re booking — click any open time and the New Appointment form opens with their name and phone already filled in; you just pick the service and time. The banner stays until you save the booking or close it (if they changed their mind). Gift-card, retail, and Quick Sales never prompt. You can turn the prompt off in Settings → Workflow → Checkout Rebooking.' },
   ] },
