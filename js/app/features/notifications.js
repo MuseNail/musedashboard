@@ -49,11 +49,10 @@ export function openNotifTarget(kind, id) {
     case 'tasks':  window.showDashPanel?.('calendar'); setTimeout(() => window.openTasksPanel?.(), 30); break;
     case 'fdSchedule':
       window.showDashPanel?.('settings');
-      setTimeout(() => {
+      setTimeout(() => {   // settingsOpenLeaf renders the leaf synchronously, so the schedule view's hidden state is settled before we toggle
         window.settingsOpenLeaf?.('fdusers-merged-section');
-        // ensure the Schedule view is showing (toggle only if currently on the user list)
-        setTimeout(() => { if (document.getElementById('fdusers-schedule-view')?.classList.contains('hidden')) window.toggleFdScheduleView?.(); }, 50);
-      }, 40); break;
+        if (document.getElementById('fdusers-schedule-view')?.classList.contains('hidden')) window.toggleFdScheduleView?.();   // show Schedule, not the user list
+      }, 60); break;
     case 'clock':  window.onClockBtn?.(); break;
     case 'update': showUpdatePopup?.(typeof window.updateAvailableVersion === 'function' ? window.updateAvailableVersion() : ''); break;
   }

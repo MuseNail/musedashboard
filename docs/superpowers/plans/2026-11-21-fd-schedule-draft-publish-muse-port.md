@@ -6,7 +6,7 @@
 
 ## DECISIONS (settled with owner, 2026-11-21)
 - **D1 = A — bounded model.** Owner does NOT use "Every week". Ship the bounded "Repeat next 4 weeks"; NO migration, NO weekly-pattern editor. Legacy `_repeats` fallback stays in `resolveFdShift` purely defensively (renders read-only if any stray pattern ever exists); there is no UI to author it, which is fine since it's unused.
-- **D2 = A — wire the forgot-to-publish safety net into the v6.18 notification bell** (managers only, read-only check of `structuralChangeCount(fd_schedule, fd_schedule_draft) > 0`). In scope.
+- **D2 = A — wire the forgot-to-publish safety net into the v6.18 notification bell** (read-only check of `structuralChangeCount(fd_schedule, fd_schedule_draft) > 0`). **Gated admin-only** (not "managers") — the FD-schedule builder leaf is `adminOnly`, so only an admin can create or clear a draft; nudging a non-admin would dead-end. In scope.
 - **D3 = A — document single-editor assumption; no concurrency code.** Matches TurnDesk; the draft's shared-key last-write-wins is the same model `fd_schedule` has today.
 
 ## Goal
