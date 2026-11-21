@@ -364,7 +364,9 @@ function compareLabel() { return (COMPARE_OPTS.find(o => o[0] === reportRange.co
 
 // Current pay period from config.pay_period: weekly/biweekly anchored at startDate,
 // or bimonthly (1st–15th, 16th–end). Returns { from, to }.
-function payPeriodDates(now = new Date()) {
+// Exported so test/fd-schedule-payperiod-parity.test.js can assert the FD-schedule util's
+// payPeriodForDate (a parallel copy) agrees with this payroll source and can't silently drift.
+export function payPeriodDates(now = new Date()) {
   const pp = cfg().pay_period || {};
   const type = pp.type || 'weekly';
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
