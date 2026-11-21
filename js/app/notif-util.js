@@ -15,6 +15,7 @@ const NOTIF_SPEC = [
   { id: 'supportReply', danger: false, gate: () => true },
   { id: 'chat',         danger: false, gate: () => true },
   { id: 'tasks',        danger: false, gate: () => true },
+  { id: 'fdDraft',      danger: false, gate: c => c.isAdmin },   // unpublished FD schedule — admin-only (the builder is admin-gated)
   { id: 'clock',        danger: false, gate: c => c.isAdmin },
   { id: 'update',       danger: false, gate: () => true },
 ];

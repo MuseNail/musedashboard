@@ -10,6 +10,7 @@ import { chatUnreadCount } from './chat.js';
 import { supportAdminUnreadCount, supportUnreadCount, supportAdminUnreadList, supportSalonUnreadList } from './support.js';
 import { clockNeedsAttention } from './timeclock.js';
 import { buildNotifItems } from '../notif-util.js';
+import { structuralChangeCount } from '../fd-schedule-util.js';
 
 // ── Live source read ──────────────────────────────────────────────────────────
 function gather() {
@@ -18,12 +19,14 @@ function gather() {
   const role = u.role;
   const caps = { isAdmin: role === 'admin', isManager: role === 'admin' || role === 'manager' };
   const myPid = 'fd:' + u.id;
+  const cfg = getState().config || {};
   const counts = {
     failedWrites: failedOps().length,
     supportNew:   supportAdminUnreadCount(),
     supportReply: supportUnreadCount(),
     chat:         chatUnreadCount(),
     tasks:        tasksOverdueCount(getState().tasks, myPid, canDo('manageStaff'), Date.now()),
+    fdDraft:      structuralChangeCount(cfg.fd_schedule, cfg.fd_schedule_draft) > 0 ? 1 : 0,   // one nudge, not the raw change count
     clock:        clockNeedsAttention() ? 1 : 0,
     update:       (typeof window.updateAvailableVersion === 'function' && window.updateAvailableVersion()) ? 1 : 0,
   };
@@ -44,6 +47,13 @@ export function openNotifTarget(kind, id) {
       window.openSupport?.(); window.supportOpenThread?.(id); break;
     case 'chat':   window.toggleChat?.(); break;
     case 'tasks':  window.showDashPanel?.('calendar'); setTimeout(() => window.openTasksPanel?.(), 30); break;
+    case 'fdSchedule':
+      window.showDashPanel?.('settings');
+      setTimeout(() => {
+        window.settingsOpenLeaf?.('fdusers-merged-section');
+        // ensure the Schedule view is showing (toggle only if currently on the user list)
+        setTimeout(() => { if (document.getElementById('fdusers-schedule-view')?.classList.contains('hidden')) window.toggleFdScheduleView?.(); }, 50);
+      }, 40); break;
     case 'clock':  window.onClockBtn?.(); break;
     case 'update': showUpdatePopup?.(typeof window.updateAvailableVersion === 'function' ? window.updateAvailableVersion() : ''); break;
   }
@@ -61,6 +71,7 @@ function rowsFor(item) {
     case 'supportReply': return supportSalonUnreadList().map(t => ({ icon: 'forum', cls: 'support', title: `Reply on your ticket ${t.no}`, sub: t.subject || 'Help & Feedback', kind: 'supportSalon', id: t.id }));
     case 'chat': return [{ icon: 'chat', cls: 'chat', title: item.count === 1 ? '1 unread message' : `${item.count} unread messages`, sub: 'Team chat', kind: 'chat' }];
     case 'tasks': return [{ icon: 'task_alt', cls: 'task', title: item.count === 1 ? '1 overdue task' : `${item.count} overdue tasks`, sub: 'Tasks \u00b7 past due', kind: 'tasks' }];
+    case 'fdDraft': return [{ icon: 'edit_calendar', cls: 'task', title: 'Unpublished front-desk schedule', sub: 'Tap to review \u00b7 staff don\u2019t see it until you publish', kind: 'fdSchedule' }];
     case 'clock': return [{ icon: 'schedule', cls: 'task', title: 'Time-clock station changed', sub: 'Tap to review', kind: 'clock' }];
     case 'update': return [{ icon: 'system_update', cls: 'update', title: 'New version ready', sub: 'Tap to update the app', kind: 'update' }];
     default: return [];

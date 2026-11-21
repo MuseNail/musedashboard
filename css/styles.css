@@ -903,3 +903,10 @@
     .pm2-list { max-height:none; }
     .pm2-col-resizer { display:none; }   /* stacked layout — nothing to resize */
   }
+
+  /* ── FD schedule draft diff ──────────────────────────────────────
+     A draft cell that differs from the published schedule gets the amber "changed" ring
+     (distinct from the teal "repeats weekly" dot). .fd-cell-old shows the struck-out published time. */
+  .fd-cell-changed { box-shadow: 0 0 0 2px #e08a00 !important; }
+  .fd-cell-old { position: absolute; top: 1px; left: 4px; font-size: 8px; line-height: 1; font-weight: 700; color: #9a6a1a; text-decoration: line-through; }
+  html[data-appearance="dark"] .fd-cell-old { color: #d9a94a; }

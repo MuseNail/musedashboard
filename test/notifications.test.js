@@ -43,6 +43,16 @@ test('buildNotifItems: badge is non-danger when only non-failed items are presen
   assert.equal(r.total, 3);
 });
 
+test('buildNotifItems: fdDraft (unpublished FD schedule) is admin-only and non-danger', () => {
+  const admin = buildNotifItems({ fdDraft: 1 }, { isAdmin: true, isManager: true });
+  assert.ok(admin.items.some(i => i.id === 'fdDraft'), 'admin sees the unpublished-schedule nudge');
+  assert.equal(admin.hasDanger, false, 'an unpublished draft is not a danger');
+  const mgr = buildNotifItems({ fdDraft: 1 }, { isAdmin: false, isManager: true });
+  assert.ok(!mgr.items.some(i => i.id === 'fdDraft'), 'a non-admin manager (no access to the FD builder) does not see it');
+  const staff = buildNotifItems({ fdDraft: 1 }, { isAdmin: false, isManager: false });
+  assert.ok(!staff.items.some(i => i.id === 'fdDraft'), 'a plain staffer does not see it');
+});
+
 // ── clockStateNeedsAttention: only the actionable 'warn' state ───────────────
 test('clockStateNeedsAttention: only warn is actionable (notice is a permanent, non-clearable state)', () => {
   assert.equal(clockStateNeedsAttention('warn'), true);
