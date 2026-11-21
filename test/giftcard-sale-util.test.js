@@ -1,7 +1,7 @@
 // Pure helpers for the unified gift-card sale path (js/app/giftcard-sale-util.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { giftSaleAction, giftCardFromSale, partitionGiftReverse } from '../js/app/giftcard-sale-util.js';
+import { giftSaleAction, giftCardFromSale, partitionGiftReverse, resolveGiftDiscount, giftLineNet, giftSalesNet, giftSalesDiscountTotal } from '../js/app/giftcard-sale-util.js';
 
 // ── giftSaleAction ───────────────────────────────────────────
 test('giftSaleAction: edit always wins; new+none = record; new+payment = pay', () => {
@@ -34,6 +34,64 @@ test('giftCardFromSale keeps a non-numeric serial as-is and defaults missing fie
   assert.equal(c.serial, 'ABC-7');
   assert.equal(c.notes, '');
   assert.equal(c.phone, '');
+});
+
+// ── resolveGiftDiscount: $/% → a clamped, 2dp dollar discount ─────────────────
+test('resolveGiftDiscount: $ mode clamps to [0, amount] and rounds to cents', () => {
+  assert.equal(resolveGiftDiscount(100, '$', 10), 10);
+  assert.equal(resolveGiftDiscount(100, '$', 150), 100, 'cannot exceed the card amount');
+  assert.equal(resolveGiftDiscount(100, '$', -5), 0, 'never negative');
+  assert.equal(resolveGiftDiscount(100, '$', 10.005), 10.01, 'rounds the $ branch too (cent-exact)');
+});
+test('resolveGiftDiscount: % mode is amount*pct/100, clamped + rounded', () => {
+  assert.equal(resolveGiftDiscount(100, '%', 10), 10);
+  assert.equal(resolveGiftDiscount(38, '%', 10), 3.8);
+  assert.equal(resolveGiftDiscount(33.33, '%', 10), 3.33, 'round2');
+  assert.equal(resolveGiftDiscount(100, '%', 150), 100, '>100% clamps to the full amount');
+  assert.equal(resolveGiftDiscount(100, '%', -10), 0);
+});
+test('resolveGiftDiscount: coerces NaN/empty/garbage inputs to 0 (never poisons the charge)', () => {
+  assert.equal(resolveGiftDiscount(100, '$', ''), 0);
+  assert.equal(resolveGiftDiscount(100, '$', NaN), 0);
+  assert.equal(resolveGiftDiscount(100, '%', 'abc'), 0);
+  assert.equal(resolveGiftDiscount('bad', '$', 10), 0, 'a non-numeric amount clamps the discount to 0');
+  assert.equal(resolveGiftDiscount(undefined, '%', 10), 0);
+});
+
+// ── giftLineNet / giftSalesNet / giftSalesDiscountTotal ───────────────────────
+test('giftLineNet: amount − discount, never below 0, missing discount = 0', () => {
+  assert.equal(giftLineNet({ amount: 100, discount: 10 }), 90);
+  assert.equal(giftLineNet({ amount: 100 }), 100, 'no discount → full amount');
+  assert.equal(giftLineNet({ amount: 100, discount: 200 }), 0, 'clamped at 0');
+  assert.equal(giftLineNet({}), 0);
+});
+test('giftSalesNet: sums the net of each line (customer-paid gift total)', () => {
+  assert.equal(giftSalesNet([{ amount: 100, discount: 10 }, { amount: 50 }]), 140);
+  assert.equal(giftSalesNet([]), 0);
+  assert.equal(giftSalesNet(null), 0);
+  assert.equal(giftSalesNet(undefined), 0);
+});
+test('giftSalesNet: a line with no discount is byte-identical to the old Σ amount (back-compat)', () => {
+  const lines = [{ amount: 25 }, { amount: 75 }];
+  assert.equal(giftSalesNet(lines), 100);
+});
+test('giftSalesDiscountTotal: sums the clamped per-line discounts (promo cost)', () => {
+  assert.equal(giftSalesDiscountTotal([{ amount: 100, discount: 10 }, { amount: 50, discount: 5 }]), 15);
+  assert.equal(giftSalesDiscountTotal([{ amount: 100, discount: 200 }]), 100, 'clamped to amount');
+  assert.equal(giftSalesDiscountTotal([{ amount: 100 }]), 0);
+  assert.equal(giftSalesDiscountTotal(null), 0);
+});
+
+// ── giftCardFromSale: now records saleDiscount; card value stays FULL face ─────
+test('giftCardFromSale: records saleDiscount but the card amount is the FULL face (INVARIANT)', () => {
+  const c = giftCardFromSale('tk-1', { amount: 100, serial: '7', discount: 10 }, 0, '2026-11-21');
+  assert.equal(c.amount, 100, 'card loads full value regardless of discount');
+  assert.equal(c.saleDiscount, 10);
+});
+test('giftCardFromSale: saleDiscount defaults to 0, is clamped to the amount, and 2dp', () => {
+  assert.equal(giftCardFromSale('t', { amount: 50 }, 0, '2026-01-01').saleDiscount, 0);
+  assert.equal(giftCardFromSale('t', { amount: 50, discount: 80 }, 0, '2026-01-01').saleDiscount, 50);
+  assert.equal(giftCardFromSale('t', { amount: 50, discount: 10.005 }, 0, '2026-01-01').saleDiscount, 10.01);
 });
 
 // ── partitionGiftReverse ─────────────────────────────────────

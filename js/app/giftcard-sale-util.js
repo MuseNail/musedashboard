@@ -4,6 +4,32 @@
 // pay flow as Quick Sale (so cash lands in the drawer, card reconciles, Zelle is recorded),
 // and so reversing a sale on reopen can never destroy a redeemed card.
 
+const _round2 = n => Math.round((+n || 0) * 100) / 100;
+const _clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+
+// ── Gift-sale DISCOUNT (promo: card loads full face, customer pays amount − discount) ─────────
+// A discount is stored in DOLLARS on each giftcardSales[] line; '%' is only an input convenience.
+// Resolve a $/% input to a clamped, 2dp dollar discount. Coerces garbage/empty/NaN → 0 so a bad
+// field can never poison the charge. The card's loaded value is NEVER reduced by this (see giftCardFromSale).
+export function resolveGiftDiscount(amount, mode, value) {
+  const amt = +amount || 0, val = +value || 0;
+  if (amt <= 0) return 0;
+  const raw = mode === '%' ? amt * val / 100 : val;
+  return _round2(_clamp(raw, 0, amt));
+}
+// The customer-paid amount for ONE gift-sale line (= what they're charged for this card).
+export function giftLineNet(sale) {
+  return Math.max(0, (+(sale && sale.amount) || 0) - (+(sale && sale.discount) || 0));
+}
+// A ticket's discounted gift total (customer-paid side). Replaces the old raw Σ amount in the pay flow.
+export function giftSalesNet(lines) {
+  return (lines || []).reduce((s, g) => s + giftLineNet(g), 0);
+}
+// A ticket's total gift-discount (promo cost), each line clamped to its amount.
+export function giftSalesDiscountTotal(lines) {
+  return (lines || []).reduce((s, g) => s + _clamp(+(g && g.discount) || 0, 0, +(g && g.amount) || 0), 0);
+}
+
 // Which action the Gift Cards modal's primary button performs:
 //   'edit'   — editing an existing card → direct save (no money)
 //   'record' — a NEW card with NO payment → direct save (comp / giveaway / pre-existing; the only
@@ -25,7 +51,8 @@ export function giftCardFromSale(ticketId, s, i, todayStr) {
     id: `gc-tkt-${ticketId}-${i}`,
     datePurchased: todayStr,
     serial,
-    amount: +(s && s.amount) || 0,
+    amount: +(s && s.amount) || 0,   // FULL face value — the discount NEVER reduces the card's loaded value
+    saleDiscount: _round2(_clamp(+(s && s.discount) || 0, 0, +(s && s.amount) || 0)),   // promo metadata only (books use it; value above stays full)
     phone: (s && s.phone) || '',
     from: (s && s.from) || '',
     to: (s && s.to) || '',

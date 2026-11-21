@@ -7,6 +7,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { ticketTotal, lineCharge, escHtml, showToast } from '../utils.js';
+import { giftSalesNet } from '../giftcard-sale-util.js';
 import { REVIEW_REDIRECT } from '../config.js';
 import { REVIEW_QR_DATAURL } from './review-qr.js';
 
@@ -106,13 +107,19 @@ export function printCustomerReceipt(recordId) {
   (r.fees || []).filter(f => (f.amount || 0) > 0).forEach(f => {
     body += row(escHtml(f.name || 'Fee'), money(f.amount));
   });
+  // Gift cards SOLD on this ticket (liability, not service income): show the card at full face, then
+  // its promo discount, so the printed Total matches what the customer actually paid.
+  (r.giftcardSales || []).forEach(g => {
+    body += row('Gift Card' + (g.serial ? ' #' + escHtml(g.serial) : ''), money(+g.amount || 0));
+    if (+g.discount > 0) body += row('Gift card discount', '-' + money(+g.discount || 0), 'sub');
+  });
 
   // Money — same source of truth as the rest of the app.
   const svcTot   = (r.assignments || []).reduce((s, a) => s + lineCharge(a), 0);   // customer subtotal: comps are $0
   const itemsTot = (r.items || []).reduce((s, i) => s + ((i.price || 0) * (i.qty || 0)), 0);
   const feesTot  = (r.fees || []).reduce((s, f) => s + (f.amount || 0), 0);
   const subtotal = svcTot + itemsTot + feesTot;
-  const total    = ticketTotal(r);
+  const total    = ticketTotal(r) + giftSalesNet(r.giftcardSales);   // bill + gift sold (net of its discount) = what was charged
   const tip      = r.tip || 0;
 
   let totals = '';

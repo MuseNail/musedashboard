@@ -5,7 +5,7 @@ import { showToast, todayStr, newEntryId } from '../utils.js';
 import { APP_NAME, APP_VERSION } from '../config.js';
 import { customerDirectory, ensureCustomerInStore } from './square-customers.js';
 import { getActiveUser } from '../session.js';
-import { giftSaleAction, giftCardFromSale, partitionGiftReverse } from '../giftcard-sale-util.js';
+import { giftSaleAction, giftCardFromSale, partitionGiftReverse, resolveGiftDiscount } from '../giftcard-sale-util.js';
 
 const giftCards = () => getState().giftcards;
 
@@ -80,11 +80,27 @@ export function gcReverseSalesForTicket(ticketId) {
 let _gcSortField = 'datePurchased', _gcSortDir = 'desc', _gcHideZero = false;
 let _gcRedeem = [];      // working redemption list while the modal is open
 let _gcAcMatches = [];   // recipient autocomplete matches
+let _gcDiscMode = '$';   // gift-SALE discount input mode: '$' flat or '%' of the amount (promo — card still loads full value)
+
+// The $ discount currently entered in the modal (resolved from the $/% toggle; clamped to the amount).
+function _gcCurrentDiscount() {
+  const amount = parseFloat(document.getElementById('gc-amount')?.value) || 0;
+  const val = parseFloat(document.getElementById('gc-discount')?.value) || 0;
+  return resolveGiftDiscount(amount, _gcDiscMode, val);
+}
+function _gcRenderDiscMode() {
+  const on = 'background:var(--primary);color:var(--on-primary)', off = 'background:transparent;color:var(--on-surface-variant)';
+  const d = document.getElementById('gc-disc-mode-dollar'), p = document.getElementById('gc-disc-mode-pct');
+  if (d) d.style.cssText = _gcDiscMode === '$' ? on : off;
+  if (p) p.style.cssText = _gcDiscMode === '%' ? on : off;
+}
+export function gcSetDiscMode(mode) { _gcDiscMode = mode === '%' ? '%' : '$'; _gcRenderDiscMode(); updateGcTotals(); }
 
 export function showAddGiftCard() {
   document.getElementById('gc-modal-title').textContent = 'New Gift Card';
-  ['gc-edit-id','gc-serial','gc-amount','gc-phone','gc-from','gc-to','gc-notes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['gc-edit-id','gc-serial','gc-amount','gc-phone','gc-from','gc-to','gc-notes','gc-discount'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('gc-date').value = todayStr();
+  _gcDiscMode = '$'; _gcRenderDiscMode();
   _gcRedeem = []; renderGcRedemptions(); _gcShowDelete(false);
   const pm = document.getElementById('gc-paymethod'); if (pm) pm.value = 'none';   // default: no charge
   document.getElementById('gc-paymethod-row')?.classList.remove('hidden');         // payment offered on NEW only
@@ -149,12 +165,18 @@ function _gcApplyModeUI() {
   const payMethod = editId ? 'none' : (document.getElementById('gc-paymethod')?.value || 'none');
   const sale = giftSaleAction({ editId, payMethod }) === 'pay';
   const amount = parseFloat(document.getElementById('gc-amount')?.value) || 0;
+  const discount = sale ? _gcCurrentDiscount() : 0;   // promo: customer pays amount − discount; card still loads full amount
+  const net = Math.max(0, amount - discount);
   const btn = document.getElementById('gc-save-btn');
   if (btn) {
-    btn.textContent = sale ? `Continue to Pay · $${amount.toFixed(2)}` : 'Save Gift Card';
-    btn.disabled = sale && !(amount > 0);
+    btn.textContent = sale ? `Continue to Pay · $${net.toFixed(2)}` : 'Save Gift Card';
+    btn.disabled = sale && !(net > 0);   // a $0-net sale (100% off) belongs on the no-charge path, not here
     btn.style.opacity = btn.disabled ? '0.5' : '';
   }
+  // Discount row shows only on a sale; the readout spells out the promo so it's never a surprise.
+  document.getElementById('gc-discount-row')?.classList.toggle('hidden', !sale);
+  const net$ = document.getElementById('gc-discount-net');
+  if (net$) net$.textContent = (sale && discount > 0) ? `Customer pays $${net.toFixed(2)} · card loads $${amount.toFixed(2)}` : '';
   document.getElementById('gc-date-row')?.classList.toggle('hidden', sale);
   document.getElementById('gc-redemptions-row')?.classList.toggle('hidden', sale);
 }
@@ -195,10 +217,12 @@ export function saveGiftCard() {
   // queue.js → gcCreateSalesFromTicket. No more silent, uncounted direct charge.
   if (giftSaleAction({ editId, payMethod }) === 'pay') {
     if (!(amount > 0)) { showToast('Enter a gift card amount.'); return; }   // guard FIRST — never strand a $0 entry in the queue
+    const gcDiscount = _gcCurrentDiscount();   // promo: card loads full amount, customer pays amount − discount
+    if (!(amount - gcDiscount > 0)) { showToast('Discount must be less than the amount. For a free card, use “No charge — just register the card”.'); return; }   // D2: net>0 (a free card uses the no-charge path)
     const entry = {
       id: newEntryId(), name: from || to || 'Gift Card', phone: '', services: [], assignments: [],
       items: [], fees: [], discount: 0,
-      giftcardSales: [{ amount, serial, to, from, phone, notes }],   // date = ring-up day; redemptions start empty
+      giftcardSales: [{ amount, serial, to, from, phone, notes, ...(gcDiscount > 0 ? { discount: gcDiscount } : {}) }],   // date = ring-up day; redemptions start empty
       status: 'waiting', quickSale: true, soldBy: getActiveUser()?.name || '',
       checkinTime: new Date().toISOString(), isNew: true, skipSquare: true,
     };

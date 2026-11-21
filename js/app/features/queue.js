@@ -2286,7 +2286,7 @@ export function updateGroupTotal() {
   const discountAmt = discountType === 'percent' ? Math.round(partySvc * discountInput / 100 * 100) / 100 : discountInput;
   // Gift cards sold on any party member ride the charge (liability, not service income — they post to the Gift Cards ledger on paid).
   let gcSaleTotal = 0; const _seenGc = new Set();
-  groupAssignEntries.forEach(id => { if (_seenGc.has(id)) return; _seenGc.add(id); const e = q().find(x => String(x.id) === id); (e?.giftcardSales || []).forEach(g => { gcSaleTotal += (+g.amount || 0); }); });
+  groupAssignEntries.forEach(id => { if (_seenGc.has(id)) return; _seenGc.add(id); const e = q().find(x => String(x.id) === id); (e?.giftcardSales || []).forEach(g => { gcSaleTotal += Math.max(0, (+g.amount || 0) - (+g.discount || 0)); }); });   // net of any gift-sale promo discount (charge side)
   const partyTotal = Math.max(0, partySvc + itemTotal + feeTotal - discountAmt) + gcSaleTotal;
   const isParty = groupAssignEntries.length > 1;
   // Solo: the one line shows the full ticket. Party: it shows just THIS guest's services

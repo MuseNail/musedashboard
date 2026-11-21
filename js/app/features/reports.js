@@ -12,6 +12,7 @@ import { avgServiceTime, fmtDur } from './servicetime.js';
 import { LOGO_PATH, PHOTOS_PROXY, AI_PROXY, GROUP_COLORS, SQUARE_PROXY, HELCIM_PROXY } from '../config.js';
 import { helcimActive, refundOnHelcim, fetchHelcimRefunds } from './helcim.js';
 import { gcRedemptions, gcTotalUsed } from './giftcards.js';
+import { giftSalesNet } from '../giftcard-sale-util.js';
 import { fdPaidHours, fdPunches, fdSetPunches, roundQuarterHours, fdPunchSuspect } from './timeclock.js';
 import { printTechReceipts80 } from './receipt.js';
 import { drawerReportHtml } from './cashdrawer.js';
@@ -721,13 +722,14 @@ export function runReport() {
   // by datePurchased / dateUsed; outstanding balance is point-in-time (all cards).
   const inPeriod = ds => ds && ds >= localDateStr(from) && ds <= localDateStr(to);
   const gcSold = giftCards().filter(g => inPeriod(g.datePurchased));
-  const gcSoldValue = gcSold.reduce((s,g)=>s+(g.amount||0),0);
+  const gcSoldValue = gcSold.reduce((s,g)=>s+(g.amount||0),0);   // FULL face = the liability created (KPI) — never netted
+  const gcSoldDiscount = gcSold.reduce((s,g)=>s+(g.saleDiscount||0),0);   // promo cost given on gift sales (nets the cash side, NOT the liability)
   const gcRedeemed = giftCards().reduce((s,g)=> s + gcRedemptions(g).reduce((a,r)=> a + (inPeriod(r.date) ? (r.amount||0) : 0), 0), 0);
   const gcOutstanding = giftCards().reduce((s,g)=>s+Math.max(0,(g.amount||0)-gcTotalUsed(g)),0);   // authoritative redemption sum, floored at 0
   // Gross income = true new cash collected: billed work + new gift-card cash, minus
   // redemptions (those tickets are already in totalBilled but were paid from cards
   // sold earlier, so the redeemed portion isn't new cash this period).
-  const grossIncome = totalIncome + gcSoldValue - gcRedeemed + tipsTotal;   // "Total Money Collected"
+  const grossIncome = totalIncome + gcSoldValue - gcSoldDiscount - gcRedeemed + tipsTotal;   // "Total Money Collected" — gift cash is net of its promo discount
   set('rpt-gross-income', `$${grossIncome.toFixed(2)}`);
   set('rpt-gc-sold', `$${gcSoldValue.toFixed(2)}`);
   set('rpt-gc-redeemed', `$${gcRedeemed.toFixed(2)}`);
@@ -737,6 +739,7 @@ export function runReport() {
     const row = (label, value, sub, onclick) => `<div class="bg-surface-container-lowest rounded-xl px-5 py-3 border border-surface-container-high flex items-center justify-between${onclick?' cursor-pointer hover:bg-surface-container transition-colors':''}"${onclick?` onclick="${onclick}"`:''}><div><div class="font-headline font-semibold text-on-surface text-sm">${label}</div><div class="text-xs font-body text-on-surface-variant">${sub}</div></div><div class="flex items-center gap-3"><div class="font-headline font-bold text-on-surface">${value}</div>${onclick?'<span class="material-symbols-outlined text-on-surface-variant" style="font-size:18px">chevron_right</span>':''}</div></div>`;
     gcBreakdown.innerHTML =
       row('Gift Cards Sold', `$${gcSoldValue.toFixed(2)}`, `${gcSold.length} card${gcSold.length!==1?'s':''} sold this period · tap for details`, "drillDownGiftcards('sold')") +
+      (gcSoldDiscount > 0 ? row('Gift discounts given', `−$${gcSoldDiscount.toFixed(2)}`, 'Promo discounts on gift-card sales this period') : '') +
       row('Redeemed', `$${gcRedeemed.toFixed(2)}`, 'Used this period · tap for details', "drillDownGiftcards('redeemed')") +
       row('Outstanding Balance', `$${gcOutstanding.toFixed(2)}`, 'Unredeemed value across all gift cards');
   }
@@ -744,7 +747,7 @@ export function runReport() {
   renderDeltas({ totalIncome, grossIncome, guestCount, avgTicket, shopKeeps: totalIncome - totalComm, commission: totalComm, svcTotal, itemsTotal, feesTotal, discountTotal, compedTotal, gcSold: gcSoldValue, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix });
   renderPerformance(filtered, from, to);
   updateDateButtons();
-  window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcRedeemed, gcOutstanding, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix };
+  window._currentReportData = { filtered, from, to, totalIncome, guestCount, avgTicket, staffMap, svcMap, gcSoldValue, gcSoldDiscount, gcRedeemed, gcOutstanding, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix };
 }
 
 // ── AI analytics: aggregate builder + ask/bridge ──────────────────────────
@@ -817,11 +820,13 @@ export function computeMetrics(from, to) {
   if (cfg().commission_includes_refunds) filtered.filter(r=>r.status==='refund').forEach(r => (r.refundTechBilled||[]).forEach(x => { if (x.techId) staffInc[x.techId] = (staffInc[x.techId]||0) + (x.billed||0); }));
   const commission = Object.entries(staffInc).reduce((s,[id,inc])=>{ const t = staffById(id); return t?.commission != null ? s + inc*t.commission/100 : s; }, 0);
   const inPeriod = ds => ds && ds >= localDateStr(from) && ds <= localDateStr(to);
-  const gcSold = giftCards().filter(g => inPeriod(g.datePurchased)).reduce((s,g)=>s+(g.amount||0),0);
+  const gcSoldCards = giftCards().filter(g => inPeriod(g.datePurchased));
+  const gcSold = gcSoldCards.reduce((s,g)=>s+(g.amount||0),0);                 // full face = liability (unchanged)
+  const gcSoldDiscount = gcSoldCards.reduce((s,g)=>s+(g.saleDiscount||0),0);    // promo cost — nets the cash side
   const gcRedeemed = giftCards().reduce((s,g)=> s + gcRedemptions(g).reduce((a,r)=> a + (inPeriod(r.date) ? (r.amount||0) : 0), 0), 0);
   const tipsTotal = sum(filtered, r => r.tip||0);
   const { cardMix, cashMix, giftMix, zelleMix, otherMix } = paymentMix(filtered, tipsTotal);
-  return { totalIncome, grossIncome: totalIncome + gcSold - gcRedeemed + tipsTotal, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, compedTotal, gcSold, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix };
+  return { totalIncome, grossIncome: totalIncome + gcSold - gcSoldDiscount - gcRedeemed + tipsTotal, guestCount, avgTicket, shopKeeps: totalIncome - commission, commission, svcTotal, itemsTotal, feesTotal, discountTotal, compedTotal, gcSold, gcSoldDiscount, gcRedeemed, tipsTotal, cardMix, cashMix, giftMix, zelleMix, otherMix };
 }
 const _DELTA_CARDS = [
   ['rpt-gross-income-delta','grossIncome'], ['rpt-total-tips-delta','tipsTotal'], ['rpt-total-guests-delta','guestCount'], ['rpt-avg-ticket-delta','avgTicket'],
@@ -1185,7 +1190,7 @@ export function openReconcile() {
     const charged = Math.round(((t.card||0)+(t.cash||0)+(t.gift||0)+(t.zelle||0))*100)/100;
     // Gift cards SOLD are charged on top of the bill (liability, not in totalCost) — count them on the
     // recorded side too, so a gift-card sale doesn't read as a mismatch.
-    const recorded = Math.round(members.reduce((s,m)=>s+(m.totalCost||0)+(m.giftcardSales||[]).reduce((a,g)=>a+(+g.amount||0),0),0)*100)/100;
+    const recorded = Math.round(members.reduce((s,m)=>s+(m.totalCost||0)+giftSalesNet(m.giftcardSales),0)*100)/100;   // gift sale counts at NET (what was charged) so a discounted sale isn't a false mismatch
     const diff = Math.round((charged - recorded)*100)/100;
     if (Math.abs(diff) >= 0.01) rows.push({ id: String(withT.id), names: members.map(m=>m.name).join(' & '), time: new Date(withT.completedAt||withT.checkinTime), recorded, charged, diff });
   });
@@ -2654,7 +2659,7 @@ export function exportReportExcel() {
   const rows = [
     ['Muse Nails & Spa — Report'], [`Period: ${d.from.toLocaleDateString()} – ${d.to.toLocaleDateString()}`],
     [`Total Billed: $${d.totalIncome.toFixed(2)}`, `Guests Served: ${d.guestCount}`, `Avg Ticket: $${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}`],
-    [`Total Money Collected: $${(d.totalIncome+(d.gcSoldValue||0)-(d.gcRedeemed||0)+(d.tipsTotal||0)).toFixed(2)}`, `Total Tips: $${(d.tipsTotal||0).toFixed(2)}`],
+    [`Total Money Collected: $${(d.totalIncome+(d.gcSoldValue||0)-(d.gcSoldDiscount||0)-(d.gcRedeemed||0)+(d.tipsTotal||0)).toFixed(2)}`, `Total Tips: $${(d.tipsTotal||0).toFixed(2)}`],
     [`Payment Mix — Card (incl. tips): $${(d.cardMix||0).toFixed(2)}`, `Cash: $${(d.cashMix||0).toFixed(2)}`, `Gift: $${(d.giftMix||0).toFixed(2)}`, `Zelle: $${(d.zelleMix||0).toFixed(2)}`, `Other: $${(d.otherMix||0).toFixed(2)}`], [],
     ['DAILY TOTALS'], ['Date','Guests','Billed','Tips','Card','Cash','Zelle','Gift','Other'],
     ..._dailyRows, [],
@@ -2663,7 +2668,9 @@ export function exportReportExcel() {
     [], ['STAFF BREAKDOWN'], ['Technician','Services','Turns','Bonus Turns','Total Billed','Commission %','Commission Earned','Salon Keeps'],
     ...Object.entries(d.staffMap).map(([techId,data])=>{ const tech = staffById(techId); const commPct = tech?.commission!=null?tech.commission:null; const commAmt = commPct!=null?data.income*commPct/100:0; return [tech?.name||'Unknown', data.count, data.fullTurns+data.halfTurns, data.bonusTurns, `$${data.income.toFixed(2)}`, commPct!=null?`${commPct}%`:'N/A', `$${commAmt.toFixed(2)}`, `$${(data.income-commAmt).toFixed(2)}`]; }),
     [], ['GIFT CARDS (separate ledger — not in service income)'],
-    ['Sold this period', `$${(d.gcSoldValue||0).toFixed(2)}`], ['Redeemed this period', `$${(d.gcRedeemed||0).toFixed(2)}`], ['Outstanding balance (all cards)', `$${(d.gcOutstanding||0).toFixed(2)}`],
+    ['Sold this period', `$${(d.gcSoldValue||0).toFixed(2)}`],
+    ...((d.gcSoldDiscount||0) > 0 ? [['Gift discounts given (promo cost)', `-$${(d.gcSoldDiscount||0).toFixed(2)}`]] : []),
+    ['Redeemed this period', `$${(d.gcRedeemed||0).toFixed(2)}`], ['Outstanding balance (all cards)', `$${(d.gcOutstanding||0).toFixed(2)}`],
   ];
   const csv = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
@@ -2690,7 +2697,7 @@ function buildReportHtml(d) {
     table{width:100%;border-collapse:collapse;margin-bottom:16px}th{background:#1a5252;color:#fff;padding:6px 8px;text-align:left;font-size:11px}td{padding:5px 8px;border-bottom:1px solid #e0e0e0;font-size:11px}tr:nth-child(even) td{background:#fafafa}.footer{margin-top:24px;font-size:10px;color:#999;text-align:center}
   </style></head><body>
     <div class="report-header">${logo?`<img src="${logo}" class="report-logo" onerror="this.style.display='none'">`:''}<div><h1>Muse Nails &amp; Spa — Daily Report</h1><p style="color:#666;margin:0">${period}</p></div></div>
-    <div class="summary"><div class="card"><div class="val">$${(d.totalIncome+(d.gcSoldValue||0)-(d.gcRedeemed||0)+(d.tipsTotal||0)).toFixed(2)}</div><div class="lbl">Total Money Collected</div></div><div class="card"><div class="val">$${d.totalIncome.toFixed(2)}</div><div class="lbl">Total Billed</div></div><div class="card"><div class="val">${d.guestCount}</div><div class="lbl">Guests Served</div></div><div class="card"><div class="val">$${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}</div><div class="lbl">Avg Ticket</div></div><div class="card"><div class="val">$${(d.tipsTotal||0).toFixed(2)}</div><div class="lbl">Total Tips</div></div><div class="card"><div class="val">$${shopKeeps.toFixed(2)}</div><div class="lbl">Shop Keeps</div></div><div class="card amber"><div class="val">$${totalComm.toFixed(2)}</div><div class="lbl">Commission Owed</div></div></div>
+    <div class="summary"><div class="card"><div class="val">$${(d.totalIncome+(d.gcSoldValue||0)-(d.gcSoldDiscount||0)-(d.gcRedeemed||0)+(d.tipsTotal||0)).toFixed(2)}</div><div class="lbl">Total Money Collected</div></div><div class="card"><div class="val">$${d.totalIncome.toFixed(2)}</div><div class="lbl">Total Billed</div></div><div class="card"><div class="val">${d.guestCount}</div><div class="lbl">Guests Served</div></div><div class="card"><div class="val">$${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}</div><div class="lbl">Avg Ticket</div></div><div class="card"><div class="val">$${(d.tipsTotal||0).toFixed(2)}</div><div class="lbl">Total Tips</div></div><div class="card"><div class="val">$${shopKeeps.toFixed(2)}</div><div class="lbl">Shop Keeps</div></div><div class="card amber"><div class="val">$${totalComm.toFixed(2)}</div><div class="lbl">Commission Owed</div></div></div>
     <h2>Staff Breakdown</h2><table><thead><tr><th>Technician</th><th>Services</th><th>Turns</th><th>Billed</th><th>Comm %</th><th>Commission</th><th>Shop Keeps</th></tr></thead><tbody>${staffRows}</tbody></table>
     <h2>Transactions (${d.filtered.length})</h2><table><thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Services</th><th>Staff</th><th>Total</th><th>Status</th></tr></thead><tbody>${txRows}</tbody></table>
     <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;

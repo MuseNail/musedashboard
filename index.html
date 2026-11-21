@@ -1601,6 +1601,17 @@ tailwind.config = {
           <option value="zelle">Zelle</option>
         </select>
       </div>
+      <div id="gc-discount-row" class="hidden">
+        <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Discount <span class="text-on-surface-variant normal-case tracking-normal">(optional — card keeps full value)</span></label>
+        <div class="flex gap-2">
+          <div class="flex rounded-xl border-2 border-surface-container-high overflow-hidden flex-shrink-0">
+            <button type="button" id="gc-disc-mode-dollar" onclick="gcSetDiscMode('$')" class="px-4 py-2 text-sm font-headline font-bold">$</button>
+            <button type="button" id="gc-disc-mode-pct" onclick="gcSetDiscMode('%')" class="px-4 py-2 text-sm font-headline font-bold">%</button>
+          </div>
+          <input type="text" inputmode="decimal" id="gc-discount" placeholder="0" class="flex-grow min-w-0 border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none" onfocus="openNumpad(this,'Discount')" oninput="updateGcTotals()">
+        </div>
+        <div id="gc-discount-net" class="text-[11px] font-body font-semibold text-primary mt-1"></div>
+      </div>
       <div>
         <label class="text-[11px] font-body font-semibold text-outline uppercase tracking-widest block mb-1">Phone</label>
         <input type="tel" id="gc-phone" placeholder="(000) 000-0000" oninput="formatPhone(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-xl px-4 py-2 text-sm font-headline focus:border-primary outline-none">
@@ -2167,6 +2178,17 @@ tailwind.config = {
             <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Recipient phone</label><input id="qs-gc-phone" type="tel" placeholder="(000) 000-0000" oninput="formatPhone(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
           </div>
           <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">From <span class="normal-case tracking-normal text-on-surface-variant">(note, optional)</span></label><input id="qs-gc-from" type="text" oninput="autoCapitalize(this)" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-body focus:border-primary outline-none"></div>
+          <div>
+            <label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Discount <span class="normal-case tracking-normal text-on-surface-variant">(optional — card keeps full value)</span></label>
+            <div class="flex gap-2">
+              <div class="flex rounded-lg border-2 border-surface-container-high overflow-hidden flex-shrink-0">
+                <button type="button" id="qs-disc-mode-dollar" onclick="qsSetDiscMode('$')" class="px-3 py-1.5 text-sm font-headline font-bold">$</button>
+                <button type="button" id="qs-disc-mode-pct" onclick="qsSetDiscMode('%')" class="px-3 py-1.5 text-sm font-headline font-bold">%</button>
+              </div>
+              <input id="qs-gc-discount" type="text" inputmode="decimal" onfocus="openNumpad(this,'Discount')" oninput="qsRenderGcNet()" placeholder="0" class="flex-grow min-w-0 border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none">
+            </div>
+            <div id="qs-gc-discount-net" class="text-[10px] font-body font-semibold text-primary mt-1"></div>
+          </div>
           <button onclick="qsAddGiftCard()" class="w-full py-2 rounded-lg bg-primary text-on-primary font-body font-bold text-sm hover:bg-primary-dim transition-colors">Add gift card to sale</button>
         </div>
       </div>

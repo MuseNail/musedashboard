@@ -8,17 +8,20 @@ import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { getActiveUser } from '../session.js';
 import { showToast, newEntryId } from '../utils.js';
+import { resolveGiftDiscount, giftLineNet } from '../giftcard-sale-util.js';
 
 const cfg = () => getState().config;
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 let _qsCart = [];        // [{ itemId, label, price, qty }]
-let _qsGiftCards = [];   // [{ amount, serial, to, phone, from }]
+let _qsGiftCards = [];   // [{ amount, serial, to, phone, from, discount }] — discount = $ promo off (card still loads full amount)
+let _qsDiscMode = '$';   // gift-SALE discount input mode: '$' flat | '%'
 
 export function openQuickSale() {
-  _qsCart = []; _qsGiftCards = [];
+  _qsCart = []; _qsGiftCards = []; _qsDiscMode = '$';
   const nm = document.getElementById('qs-name'); if (nm) nm.value = '';
   const sb = document.getElementById('qs-soldby'); if (sb) sb.textContent = getActiveUser()?.name || '—';
-  ['qs-gc-amount', 'qs-gc-serial', 'qs-gc-to', 'qs-gc-phone', 'qs-gc-from'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  ['qs-gc-amount', 'qs-gc-serial', 'qs-gc-to', 'qs-gc-phone', 'qs-gc-from', 'qs-gc-discount'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  _qsRenderDiscModeBtns(); qsRenderGcNet();
   document.getElementById('qs-gc-form')?.classList.add('hidden');
   renderQuickSale();
   const m = document.getElementById('quicksale-modal'); if (m) { m.classList.remove('hidden'); m.style.display = 'flex'; }
@@ -27,7 +30,27 @@ export function openQuickSale() {
 export function closeQuickSale() { const m = document.getElementById('quicksale-modal'); if (m) { m.classList.add('hidden'); m.style.display = ''; } }
 
 const _items = () => (cfg().items || []).filter(i => i && !i.hidden);
-const _qsTotal = () => _qsCart.reduce((s, c) => s + (c.price || 0) * c.qty, 0) + _qsGiftCards.reduce((s, g) => s + (+g.amount || 0), 0);
+const _qsTotal = () => _qsCart.reduce((s, c) => s + (c.price || 0) * c.qty, 0) + _qsGiftCards.reduce((s, g) => s + giftLineNet(g), 0);   // gift = net of its promo discount
+
+// The $ discount currently typed in the gift-card capture form (resolved from the $/% toggle).
+function _qsCurrentGcDiscount() {
+  const amount = parseFloat(document.getElementById('qs-gc-amount')?.value) || 0;
+  const val = parseFloat(document.getElementById('qs-gc-discount')?.value) || 0;
+  return resolveGiftDiscount(amount, _qsDiscMode, val);
+}
+function _qsRenderDiscModeBtns() {
+  const on = 'background:var(--primary);color:var(--on-primary)', off = 'background:transparent;color:var(--on-surface-variant)';
+  const d = document.getElementById('qs-disc-mode-dollar'), p = document.getElementById('qs-disc-mode-pct');
+  if (d) d.style.cssText = _qsDiscMode === '$' ? on : off;
+  if (p) p.style.cssText = _qsDiscMode === '%' ? on : off;
+}
+export function qsSetDiscMode(mode) { _qsDiscMode = mode === '%' ? '%' : '$'; _qsRenderDiscModeBtns(); qsRenderGcNet(); }
+export function qsRenderGcNet() {
+  const amount = parseFloat(document.getElementById('qs-gc-amount')?.value) || 0;
+  const disc = _qsCurrentGcDiscount();
+  const el = document.getElementById('qs-gc-discount-net');
+  if (el) el.textContent = (disc > 0 && amount > 0) ? `Customer pays $${Math.max(0, amount - disc).toFixed(2)} · card loads $${amount.toFixed(2)}` : '';
+}
 
 export function qsAddItem(itemId) {
   const it = (cfg().items || []).find(i => i.id === itemId); if (!it) return;
@@ -46,19 +69,23 @@ export function qsSetQty(itemId, delta) {
 export function qsToggleGcForm() {
   const f = document.getElementById('qs-gc-form'); if (!f) return;
   f.classList.toggle('hidden');
-  if (!f.classList.contains('hidden')) setTimeout(() => document.getElementById('qs-gc-amount')?.focus(), 60);
+  if (!f.classList.contains('hidden')) { _qsRenderDiscModeBtns(); qsRenderGcNet(); setTimeout(() => document.getElementById('qs-gc-amount')?.focus(), 60); }
 }
 export function qsAddGiftCard() {
   const amount = parseFloat(document.getElementById('qs-gc-amount')?.value) || 0;
   if (!(amount > 0)) { showToast('Enter the gift card amount.'); return; }
+  const discount = _qsCurrentGcDiscount();   // promo: card loads full amount; customer pays amount − discount
+  if (!(amount - discount > 0)) { showToast('Discount must be less than the amount. For a free card, use the Gift Cards page “No charge” option.'); return; }
   _qsGiftCards.push({
     amount,
     serial: (document.getElementById('qs-gc-serial')?.value || '').trim(),
     to:     (document.getElementById('qs-gc-to')?.value || '').trim(),
     phone:  (document.getElementById('qs-gc-phone')?.value || '').trim(),
     from:   (document.getElementById('qs-gc-from')?.value || '').trim(),
+    ...(discount > 0 ? { discount } : {}),
   });
-  ['qs-gc-amount', 'qs-gc-serial', 'qs-gc-to', 'qs-gc-phone', 'qs-gc-from'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  ['qs-gc-amount', 'qs-gc-serial', 'qs-gc-to', 'qs-gc-phone', 'qs-gc-from', 'qs-gc-discount'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
+  _qsDiscMode = '$'; _qsRenderDiscModeBtns(); qsRenderGcNet();
   document.getElementById('qs-gc-form')?.classList.add('hidden');
   renderQuickSale();
 }
@@ -87,9 +114,9 @@ export function renderQuickSale() {
       </div>`).join('');
     const gcRows = _qsGiftCards.map((g, i) => `<div class="flex items-center gap-2 py-1.5 border-b border-surface-container-high last:border-0">
         <span class="material-symbols-outlined text-primary flex-shrink-0" style="font-size:18px">card_giftcard</span>
-        <span class="flex-1 min-w-0 truncate font-body text-on-surface text-sm">Gift Card${g.serial ? ' #' + esc(g.serial) : ''}${g.to ? ' → ' + esc(g.to) : ''}</span>
+        <span class="flex-1 min-w-0 truncate font-body text-on-surface text-sm">Gift Card${g.serial ? ' #' + esc(g.serial) : ''}${g.to ? ' → ' + esc(g.to) : ''}${g.discount ? ` · $${(+g.discount).toFixed(2)} off (loads $${(+g.amount).toFixed(2)})` : ''}</span>
         <button onclick="qsRemoveGiftCard(${i})" class="w-7 h-7 rounded-lg border border-surface-container-high flex items-center justify-center text-on-surface-variant hover:text-error flex-shrink-0"><span class="material-symbols-outlined" style="font-size:16px">close</span></button>
-        <span class="w-16 text-right font-headline font-bold text-primary text-sm flex-shrink-0">$${(+g.amount).toFixed(2)}</span>
+        <span class="w-16 text-right font-headline font-bold text-primary text-sm flex-shrink-0">$${giftLineNet(g).toFixed(2)}</span>
       </div>`).join('');
     cartEl.innerHTML = (itemRows + gcRows) || '<div class="text-sm font-body text-on-surface-variant italic py-3 text-center">Tap items above or add a gift card.</div>';
   }

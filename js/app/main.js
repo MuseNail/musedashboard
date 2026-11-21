@@ -143,6 +143,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.22', items: [
+    { icon: 'sell', t: 'Gift-card promos: sell a gift card at a discount', d: 'You can now run a gift-card promo — e.g. sell a $100 card for $90. When you ring up a gift card on the Gift Cards page or in Quick Sale, there’s a new Discount field (enter a dollar amount or a percent). The card still loads its full value for the customer; you just collect the discounted price. Everything counts correctly: the payment screen, the cash drawer, the receipt, and the reports (a new “Gift discounts given” line shows what you gave away, while “Gift Cards Sold” stays at full value). For a truly free card, use the “No charge — just register the card” option as before.' },
+  ] },
   { v: 'v6.21', items: [
     { icon: 'event_upcoming', t: 'Book next appointment — bigger prompt + a button on every queue card', d: 'The “Book next appointment” prompt at checkout now appears large and centered on the screen (over a dimmed background) so it’s easy to see — tap “Not now” or anywhere outside it to dismiss. You can also start a booking any time: every customer card in the Queue now has a calendar button that jumps straight to the Calendar to book that customer’s next visit, with their name and phone filled in.' },
   ] },
