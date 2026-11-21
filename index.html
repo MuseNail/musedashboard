@@ -2170,7 +2170,7 @@ tailwind.config = {
         <button onclick="qsToggleGcForm()" class="flex items-center gap-1.5 text-sm font-body font-semibold text-primary hover:underline"><span class="material-symbols-outlined" style="font-size:18px">card_giftcard</span> + Gift Card</button>
         <div id="qs-gc-form" class="hidden mt-2 p-3 rounded-xl border border-primary/40 bg-primary/5 space-y-2">
           <div class="grid grid-cols-2 gap-2">
-            <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Amount</label><input id="qs-gc-amount" type="text" inputmode="decimal" onfocus="openNumpad(this,'Gift card amount')" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none"></div>
+            <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Amount</label><input id="qs-gc-amount" type="text" inputmode="decimal" onfocus="openNumpad(this,'Gift card amount')" oninput="qsRenderGcNet()" placeholder="0.00" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none"></div>
             <div><label class="text-[10px] font-body font-semibold text-outline uppercase tracking-widest block mb-0.5">Serial <span class="normal-case tracking-normal text-on-surface-variant">(optional)</span></label><input id="qs-gc-serial" type="text" placeholder="#00000000" class="w-full border-2 border-surface-container-high bg-transparent rounded-lg px-3 py-1.5 text-sm font-headline focus:border-primary outline-none"></div>
           </div>
           <div class="grid grid-cols-2 gap-2">

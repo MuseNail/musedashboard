@@ -54,8 +54,7 @@ export function gcSyncTicket(ticketId, items) {
 // ── Gift card SOLD on a ticket / Quick Sale (Phase 3) ───────────────────────
 // A gift-card line is charged with the ticket but is NOT income — on paid it auto-creates a
 // ledger entry (counts in Gift Cards Sold, redeemable), tied to the ticket so a reopen reverses
-// it, and the recipient is auto-added to the directory (phone-keyed). Total used by the charge.
-export const giftSaleTotal = e => (e?.giftcardSales || []).reduce((s, g) => s + (+g.amount || 0), 0);
+// it, and the recipient is auto-added to the directory (phone-keyed).
 export function gcCreateSalesFromTicket(ticketId, sales) {
   if (!ticketId || !Array.isArray(sales)) return;
   sales.forEach((s, i) => {

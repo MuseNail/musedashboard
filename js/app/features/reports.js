@@ -2698,6 +2698,12 @@ function buildReportHtml(d) {
   </style></head><body>
     <div class="report-header">${logo?`<img src="${logo}" class="report-logo" onerror="this.style.display='none'">`:''}<div><h1>Muse Nails &amp; Spa — Daily Report</h1><p style="color:#666;margin:0">${period}</p></div></div>
     <div class="summary"><div class="card"><div class="val">$${(d.totalIncome+(d.gcSoldValue||0)-(d.gcSoldDiscount||0)-(d.gcRedeemed||0)+(d.tipsTotal||0)).toFixed(2)}</div><div class="lbl">Total Money Collected</div></div><div class="card"><div class="val">$${d.totalIncome.toFixed(2)}</div><div class="lbl">Total Billed</div></div><div class="card"><div class="val">${d.guestCount}</div><div class="lbl">Guests Served</div></div><div class="card"><div class="val">$${(d.totalIncome/Math.max(d.guestCount,1)).toFixed(2)}</div><div class="lbl">Avg Ticket</div></div><div class="card"><div class="val">$${(d.tipsTotal||0).toFixed(2)}</div><div class="lbl">Total Tips</div></div><div class="card"><div class="val">$${shopKeeps.toFixed(2)}</div><div class="lbl">Shop Keeps</div></div><div class="card amber"><div class="val">$${totalComm.toFixed(2)}</div><div class="lbl">Commission Owed</div></div></div>
+    ${((d.gcSoldValue||0) > 0 || (d.gcSoldDiscount||0) > 0 || (d.gcRedeemed||0) > 0) ? `<h2>Gift Cards <span style="font-size:11px;font-weight:normal;color:#666">(separate ledger — not in service income)</span></h2><table><tbody>
+      <tr><td>Gift Cards Sold (full value)</td><td style="text-align:right">$${(d.gcSoldValue||0).toFixed(2)}</td></tr>
+      ${(d.gcSoldDiscount||0) > 0 ? `<tr><td>Gift discounts given (promo cost)</td><td style="text-align:right;color:#a05000">-$${(d.gcSoldDiscount||0).toFixed(2)}</td></tr>` : ''}
+      <tr><td>Redeemed this period</td><td style="text-align:right">$${(d.gcRedeemed||0).toFixed(2)}</td></tr>
+      <tr><td>Outstanding balance (all cards)</td><td style="text-align:right">$${(d.gcOutstanding||0).toFixed(2)}</td></tr>
+    </tbody></table>` : ''}
     <h2>Staff Breakdown</h2><table><thead><tr><th>Technician</th><th>Services</th><th>Turns</th><th>Billed</th><th>Comm %</th><th>Commission</th><th>Shop Keeps</th></tr></thead><tbody>${staffRows}</tbody></table>
     <h2>Transactions (${d.filtered.length})</h2><table><thead><tr><th>Date</th><th>Time</th><th>Customer</th><th>Services</th><th>Staff</th><th>Total</th><th>Status</th></tr></thead><tbody>${txRows}</tbody></table>
     <div class="footer">Generated ${new Date().toLocaleString()} · Muse Nails &amp; Spa</div></body></html>`;
