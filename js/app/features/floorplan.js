@@ -9,7 +9,7 @@
 import { getState } from '../store.js';
 import { dispatch } from '../sync.js';
 import { showToast, todayStr, localDateStr, formatElapsed, partyLetterMap, escHtml } from '../utils.js';
-import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, applyAssignmentStatus, applyEntryStatus, effectiveServiceStatus } from './status.js';
+import { getAssignmentStatus, isPaidStatus, entryStatusSince, serviceLineStyle, applyEntryStatus, effectiveServiceStatus } from './status.js';
 import { getStations, stationDefs, stationType, stationLabel, stationCategories, categoryDef, categoryMaxTechs } from './queue.js';
 import { getActiveTurnsOrder, getTechStatusColor, getTechTurns, getActiveTechEntries, _dropHolders, techHasPendingAssignment, getDedicatedBonusServices, getTurnConfig, generalBonusCount, _techDoesService } from './turns.js';
 import { serviceTimeInfo, liveAssignmentMs } from './servicetime.js';
@@ -278,7 +278,7 @@ function renderFloorStaffRow() {
   if (!ids.length) { el.innerHTML = '<div class="text-[11px] font-body text-on-surface-variant italic p-2">No technicians in the rotation.</div>'; return; }
   // Next walk-in: the available tech with the fewest turns; tie → first in order. Skip techs holding a
   // still-waiting customer (fallback to all Available if that empties the pool).
-  const _availForNext = _dropHolders(ids.filter(id => getTechStatusColor(id).label === 'Available'), techHasPendingAssignment);
+  const _availForNext = _dropHolders(ids.filter(id => { const l = getTechStatusColor(id).label; return l === 'Available' || l === 'Assigned'; }), techHasPendingAssignment);
   let nextUpId = null, _nuTurns = Infinity;
   for (const id of _availForNext) { const tt = getTechTurns(id).total; if (tt < _nuTurns) { _nuTurns = tt; nextUpId = id; } }
   // v5.91: when dedicated bonus counters are on, keep the roster's "+Nb" in step with the turns board —
@@ -581,19 +581,32 @@ function assignTechToStation(techId, stationId) {
   if (pool.length === 1) { _assignTechToService(e, techId, stationId, pool[0]); return; }
   _openServicePicker(e, techId, stationId, pool);   // 2+ → ask which
 }
-// Put `techId` on one of the customer's services at this station + start it (In Service). No price
-// prompt — price is set later. (Front-desk whole-entry write; the queue.upsert per-assignment merge
-// protects a concurrent tech change.)
-function _assignTechToService(e, techId, stationId, item) {
-  if (!e.assignments) e.assignments = [];
+// Seat a tech on one of the customer's services WITHOUT starting it — the service stays Waiting; the
+// front desk starts it manually (Assign & Price "Waiting ›" / the queue-row ▶). A brand-new line is
+// created 'waiting'; an EXISTING line keeps its own status so a re-drag can never downgrade a started
+// or finished service (an un-teched line can legitimately be inservice/complete if the tech dropdown
+// was cleared in Assign & Price). Stamps a.assignedAt (seat-time ordering, matches check-in/turns-assign)
+// + a.updatedAt (the §14 per-assignment merge version on queue.upsert). Returns the assignment.
+export function seatTechWaiting(entry, techId, stationId, item) {
+  if (!entry.assignments) entry.assignments = [];
   let a = item.assignment;
-  if (!a) { a = { serviceId: item.serviceId, station: '', status: 'waiting', cost: 0 }; e.assignments.push(a); }
+  if (!a) { a = { serviceId: item.serviceId, station: '', status: 'waiting', cost: 0 }; entry.assignments.push(a); }
   a.techId = techId;
   a.station = stationId;
-  applyAssignmentStatus(a, 'inservice');   // start the service + bank timing + stamp a.updatedAt
-  applyEntryStatus(e);                      // recompute entry status + statusSince
+  if (!a.status) a.status = 'waiting';          // default ONLY — never overwrite an existing status
+  if (!a.assignedAt) a.assignedAt = Date.now(); // seat-time ordering (matches queue.js:523 / turns.js:396)
+  a.updatedAt = Date.now();                      // per-assignment version → queue.upsert per-assignment merge
+  return a;
+}
+// Put `techId` on one of the customer's services at this station. The service stays Waiting — the front
+// desk starts it (we no longer auto-flip to In Service on a floor drag). (Front-desk whole-entry write;
+// the queue.upsert per-assignment merge protects a concurrent tech change.)
+function _assignTechToService(e, techId, stationId, item) {
+  seatTechWaiting(e, techId, stationId, item);
+  applyEntryStatus(e);                      // recompute entry status + statusSince (stays Waiting unless another line is running)
   dispatch('queue.upsert', { entry: e });
   renderFloorPlan(); window.renderQueue?.(); window.renderTurns?.();
+  showToast(`${(staffById(techId)?.name || 'Tech').split(' ')[0]} assigned — tap the ticket to start`);
 }
 // Lightweight picker (2+ un-teched services): tap a service to give it to the dragged tech.
 function _openServicePicker(e, techId, stationId, pool) {

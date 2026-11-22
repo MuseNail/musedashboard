@@ -128,7 +128,7 @@ export function staffServiceAction(a, fieldPrice) {
   const status = (a && a.status) || 'waiting';
   if (status === 'complete' && a && a.awaitingPrice) return { mode: 'saveprice', label: 'Save price', fn: 'staffSavePrice', style: 'violet' };
   if (status === 'paid' || status === 'done')        return { mode: 'none' };   // finalized line → no button (never reactivate a sale)
-  if (status === 'waiting')                          return { mode: 'start',    label: 'Start',      fn: 'staffStart',    style: 'primary' };
+  if (status === 'waiting')                          return { mode: 'await',    label: 'Front desk starts' };   // FD-only start — the tech can't self-start a waiting line
   if (status === 'inservice') {
     if (a && a.comped)                               return { mode: 'complete', label: 'Done',       fn: 'staffComplete', style: 'primary' };
     const saved = (a && a.cost) || 0;
@@ -493,7 +493,10 @@ function lineHtml(entry, a) {
   const fieldPrice = parsePrice(priceVal);
   const act = staffServiceAction(a, fieldPrice);
   const actBtnDisabled = saveDisabled(act, fieldPrice);
-  const actBtn = act.mode === 'none' ? '' : (() => {
+  const actBtn = act.mode === 'none' ? ''
+    : act.mode === 'await' ? `<div class="flex-1 py-3 rounded-xl flex items-center justify-center gap-1.5 font-body text-sm whitespace-nowrap" style="border:1.5px dashed #9bbbe6;background:#f4f8fe;color:#1e5aa8;cursor:default">
+        <span class="material-symbols-outlined" style="font-size:18px">schedule</span>${act.label}</div>`
+    : (() => {
     const common = 'flex-1 py-4 rounded-xl font-headline font-bold text-lg transition-all active:scale-95';
     const cls = act.style === 'primary' ? 'bg-primary hover:bg-primary-dim text-on-primary'
               : act.style === 'outline' ? 'border-2 border-primary text-primary hover:bg-primary/10' : 'text-white';
@@ -689,11 +692,7 @@ window.staffPriceInput = (entryId, serviceId, val) => {
   b.disabled = dis; b.classList.toggle('opacity-40', dis); b.classList.toggle('pointer-events-none', dis);
 };
 
-window.staffStart = (entryId, serviceId) => {
-  const priced = parsePrice(_priceDraft[entryId + ':' + serviceId]);
-  updateAssignment(entryId, serviceId, 'inservice', priced);
-  showToast('Started');
-};
+// Techs no longer self-start a waiting service — the front desk starts it (staffServiceAction → 'await').
 window.staffComplete = (entryId, serviceId) => {
   const key = entryId + ':' + serviceId;
   const priced = parsePrice(_priceDraft[key]);

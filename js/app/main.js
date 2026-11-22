@@ -143,6 +143,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.26', items: [
+    { icon: 'touch_app', t: 'Dragging a tech on the floor no longer starts the service', d: 'When you drag a technician onto a waiting customer on the floor plan, it now just seats the tech next to them — the service stays “Waiting” (amber) instead of jumping straight to “In Service.” The front desk starts the service when the work actually begins: open the ticket and tap the status pill (or the ▶ on the queue row). The turn still counts toward the tech’s rotation the moment you drop them in. This also means a technician can no longer start a service from their own phone — starting is now a front-desk action for every customer, however they were assigned. And a tech who’s been given a customer but hasn’t started yet now shows a blue “Assigned” tag (instead of green “Available”) on the floor and turns board, so it’s clear at a glance they already have someone.' },
+  ] },
   { v: 'v6.25', items: [
     { icon: 'event_repeat', t: 'Book next appointment — the same setup, prefilled', d: 'When you book a customer’s next visit (from the checkout prompt or the calendar button on a queue card), the New Appointment form now opens already filled in with the same setup they just finished — the whole group, each person’s services, and the same technician for each service. For a rebook of the identical visit you usually just pick the day and time and save. Everything stays editable: change a service, swap a technician, or remove a guest. Tapping the button on any member of a group books the whole group together, with the main customer on top. Heads-up: the appointment length still starts at 60 minutes, so widen it if the party needs a longer block.' },
   ] },

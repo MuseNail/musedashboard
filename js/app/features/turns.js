@@ -238,6 +238,10 @@ export function getTechStatusColor(staffId) {
   if (cfg().turns_off.includes(staffId))   return { bg: '#f3f4f6', text: '#9ca3af', label: 'Off' };
   if (cfg().turns_break.includes(staffId)) return { bg: '#f5c870', text: '#3a2800', label: 'On Break' };
   if (getActiveTechEntries(staffId).length > 0) return { bg: '#fa746f', text: '#fff', label: 'In Service' };
+  // Assigned but not started: the tech holds a waiting customer (given a customer, hasn't begun) — shown
+  // distinct from a truly idle "Available" tech. The rotation math still treats them as a Next-up candidate
+  // (the candidate filters accept 'Assigned'); this label only changes the roster chip.
+  if (techHasPendingAssignment(staffId)) return { bg: '#3b7dd8', text: '#fff', label: 'Assigned' };
   return { bg: '#2a7a4f', text: '#fff', label: 'Available' };
 }
 
@@ -708,7 +712,7 @@ export function renderTurnsTechGrid() {
   // is higher in the turn order (scan top-down, replace only on strictly fewer turns). Flagged
   // in place — the row order itself never changes.
   // Candidates = Available, minus techs holding a still-waiting customer (fallback to all Available if that empties it).
-  const _availForNext = _dropHolders(order.filter(sid => getTechStatusColor(sid).label === 'Available'), techHasPendingAssignment);
+  const _availForNext = _dropHolders(order.filter(sid => { const l = getTechStatusColor(sid).label; return l === 'Available' || l === 'Assigned'; }), techHasPendingAssignment);
   let nextUpId = null, _nextUpTurns = Infinity;
   for (const sid of _availForNext) {
     const tt = getTechTurns(sid).total;
@@ -749,6 +753,7 @@ export function renderTurnsTechGrid() {
     const avPres = sc.label === 'Off'        ? { ring: '#b0b6ba', chip: 'background:#eceef0;color:#7a858a', lead: _dot('#b0b6ba'), label: 'Off' }
                  : sc.label === 'On Break'   ? { ring: '#e0a83a', chip: 'background:#faedcf;color:#9a6b00', lead: _dot('#e0a83a'), label: 'On break' }
                  : sc.label === 'In Service' ? { ring: '#fa746f', chip: 'background:#fdecea;color:#c0362f', lead: _dot('#fa746f'), label: 'Working now' }
+                 : sc.label === 'Assigned'   ? { ring: '#3b7dd8', chip: 'background:#e7f0fc;color:#1e5aa8', lead: _dot('#3b7dd8'), label: 'Assigned' }
                  :                             { ring: '#2a7a4f', chip: 'background:#e9f4ee;color:#1b5e3b', lead: _dot('#2a7a4f'), label: 'Available' };
     const ringColor = isNextUp ? '#1a5252' : avPres.ring;
     // Icon-only so it sits beside the Available chip without wrapping the row (the teal ring + inset bar

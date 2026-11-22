@@ -7,9 +7,9 @@ import { staffByPin, myActiveAssignments, myHistory, staffServiceAction, complet
 // staffServiceAction(a, fieldPrice) is pure: it maps (status + saved cost/comped + the price
 // currently shown in the field) to the ONE button to show. Saving a price never completes; only
 // Start and Complete move status. fieldPrice = parsePrice(field value) or null.
-test('staffServiceAction: waiting → Start', () => {
-  assert.equal(staffServiceAction({ status: 'waiting' }, null).mode, 'start');
-  assert.equal(staffServiceAction({}, null).mode, 'start');            // unset status defaults to waiting
+test('staffServiceAction: waiting → await (front desk starts it, the tech cannot self-start)', () => {
+  assert.equal(staffServiceAction({ status: 'waiting' }, null).mode, 'await');
+  assert.equal(staffServiceAction({}, null).mode, 'await');            // unset status defaults to waiting
 });
 test('staffServiceAction: in-service with no saved price → Save price', () => {
   assert.equal(staffServiceAction({ status: 'inservice' }, null).mode, 'saveprice');
