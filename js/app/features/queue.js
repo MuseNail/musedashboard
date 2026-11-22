@@ -691,7 +691,11 @@ function _assignGuestNotesHtml(e, recs, seenKeys) {
   } else {
     custBox = `<textarea class="ga-custnote ${_MANUAL_TA}" oninput="assignGuestCustNoteInput('${e.id}')" placeholder="Allergies, preferences…" style="${_NOTE6_H}">${escHtml(note)}</textarea>`;
   }
-  return `<div class="flex flex-col bg-surface-container-low rounded-xl border border-surface-container-high p-3" style="width:248px">
+  return `<div class="ga-note-box flex-shrink-0 flex flex-col bg-surface-container-low rounded-xl border border-surface-container-high p-3" style="width:248px">
+    <div class="flex items-baseline justify-between gap-2 mb-1" style="height:20px">
+      <span class="font-headline font-semibold text-on-surface text-sm truncate">${escHtml((e.name || '').trim() || 'Guest')}</span>
+      <span class="text-[11px] font-body text-on-surface-variant flex-shrink-0">${escHtml(_fmtPhone(e.phone))}</span>
+    </div>
     <label class="${lab}">Customer note</label>
     ${custBox}
     <label class="${lab}" style="margin-top:11px">Last 3 visits</label>
@@ -803,6 +807,29 @@ function _syncManualStrip() {
     const hint = document.getElementById('manual-notes-scrollhint');
     if (hint) hint.style.display = (row.scrollWidth > row.clientWidth + 2) ? '' : 'none';
   });
+}
+// A&P notes strip — same sizing as the check-in strip: fit up to ~4 guest columns then scroll,
+// clamped so the assign card (max-w-2xl, 672px) + strip never overflow. Stacks full-width under lg.
+function _syncAssignNotesStrip() {
+  const row = document.getElementById('ga-notes-row'), panel = document.getElementById('assign-notes-panel');
+  if (!row || !panel) return;
+  const n = row.querySelectorAll('.ga-note-box').length || 1;
+  const stacked = window.matchMedia('(max-width:1023px)').matches;
+  const wantPx = n * 248 + (n - 1) * 12 + 32;
+  const roomPx = Math.max(280, window.innerWidth - 712);   // leave room for the assign card + gutters
+  panel.style.width = stacked ? '100%' : Math.min(wantPx, 4 * 248 + 3 * 12 + 32, roomPx) + 'px';
+  requestAnimationFrame(() => {
+    const hint = document.getElementById('ga-notes-scrollhint');
+    if (hint) hint.style.display = (row.scrollWidth > row.clientWidth + 2) ? '' : 'none';
+  });
+}
+// Wire the resize re-sync once, lazily (called from renderGroupAssignContent at runtime — NOT at
+// module load, so importing queue.js in a node test never touches window.addEventListener).
+function _wireAssignStripResize() {
+  if (typeof window === 'undefined' || typeof window.addEventListener !== 'function' || window._gaStripResizeWired) return;
+  window._gaStripResizeWired = true;
+  let _gt = null;
+  window.addEventListener('resize', () => { clearTimeout(_gt); _gt = setTimeout(() => { if (document.getElementById('group-assign-modal')?.offsetParent) _syncAssignNotesStrip(); }, 150); });
 }
 // Live-sync the boxes as contact fields are typed (debounced; refreshes ALL boxes so a same-contact
 // box tracks the primary). Re-fit the strip on resize/orientation while the modal is open.
@@ -2013,8 +2040,7 @@ function _renderAssignOneList() {
     const nm = (e.name || '').trim().split(/\s+/), first = nm[0] || '', last = nm.slice(1).join(' ') || '';
     const rows = e.services.map(sid => _assignSvcRowHtml(e, sid, techOptions, stationOptions, e.services.length > 1)).join('')
       || `<div class="text-xs font-body text-on-surface-variant py-2 px-1 opacity-70">No services — tap one in the catalog.</div>`;
-    return `<div data-assign-entry="${e.id}" class="mb-4 flex flex-col lg:flex-row lg:items-start lg:gap-4">
-      <div class="flex-1 min-w-0">
+    return `<div data-assign-entry="${e.id}" class="mb-4">
       <div class="flex items-center gap-2 mb-2 flex-wrap">
         <span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${color}"></span>
         <input type="text" value="${first.replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="First"
@@ -2028,10 +2054,11 @@ function _renderAssignOneList() {
         ${isParty ? `<span class="ml-auto text-sm font-headline font-bold text-primary flex-shrink-0" id="ga-sub-${e.id}">$0.00</span>` : ''}
       </div>
       ${rows}
-      </div>
-      <div class="flex-shrink-0 mt-3 lg:mt-0">${_assignGuestNotesHtml(e, recs, _seenNoteKeys)}</div>
     </div>`;
   }).join('');
+  // Notes + history live in the SEPARATE side strip (#ga-notes-row), one column per guest — NOT inline
+  // per guest (that stacked tall boxes and left big vertical gaps). Built after content, below.
+  const notesColumns = party.map(e => _assignGuestNotesHtml(e, recs, _seenNoteKeys)).join('');
 
   const itemRows = cfg().items.map(item => {
     const existing = gItems.get(item.id) || {};
@@ -2107,9 +2134,14 @@ function _renderAssignOneList() {
     </div>`;
   updateGroupTotal();
   document.getElementById('group-split-btn')?.classList.toggle('hidden', !isParty);
-  // NL1: the one-list now carries a per-guest notes box in each guest section, so the single
-  // first-guest side panel is retired here (its markup + handlers stay for the kept tabbed layout).
-  document.getElementById('assign-notes-panel')?.style.setProperty('display', 'none');
+  // Notes + history side strip beside the card: one column per guest (mirrors the check-in strip),
+  // so a multi-customer ticket doesn't grow tall with inline note boxes.
+  const notesRow = document.getElementById('ga-notes-row');
+  const notesPanel = document.getElementById('assign-notes-panel');
+  if (notesRow) notesRow.innerHTML = notesColumns;
+  if (notesPanel) notesPanel.style.removeProperty('display');
+  _wireAssignStripResize();
+  _syncAssignNotesStrip();
 }
 
 export function assignToggleExtras() {

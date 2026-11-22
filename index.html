@@ -2008,8 +2008,8 @@ tailwind.config = {
      GROUP ASSIGN MODAL (multi-guest tabs)
 ═══════════════════════════════════════════════ -->
 <div id="group-assign-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-on-surface/40 px-4">
-  <div class="flex items-stretch justify-center gap-3 w-full" style="max-height:92vh">
-  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-2xl lg:max-w-5xl shadow-2xl fade-up max-h-[92vh] flex flex-col">
+  <div class="flex flex-col lg:flex-row items-stretch justify-center gap-3 w-full overflow-y-auto lg:overflow-visible" style="max-height:92vh">
+  <div class="bg-surface-container-lowest rounded-2xl w-full max-w-2xl shadow-2xl fade-up max-h-[92vh] flex flex-col">
     <div class="flex items-center justify-between p-6 border-b border-surface-container-high flex-shrink-0">
       <h2 class="text-xl font-headline font-bold text-on-surface">Assign & Price</h2>
       <button onclick="closeGroupAssignModal()" class="text-on-surface-variant hover:text-on-surface"><span class="material-symbols-outlined">close</span></button>
@@ -2036,26 +2036,14 @@ tailwind.config = {
       </div>
     </div>
   </div>
-  <!-- Notes panel beside the assign modal: the customer's saved note (read-only) + today's visit note -->
-  <div id="assign-notes-panel" class="bg-surface-container-lowest rounded-2xl shadow-2xl fade-up max-h-[92vh] flex flex-col flex-shrink-0" style="width:300px">
-    <div class="flex items-center gap-2 p-5 border-b border-surface-container-high flex-shrink-0">
+  <!-- Notes + visit history — one column per guest, beside the assign card; scrolls sideways when the party is large (mirrors the check-in strip) -->
+  <div id="assign-notes-panel" class="bg-surface-container-lowest rounded-2xl shadow-2xl fade-up lg:max-h-[92vh] flex flex-col flex-shrink-0 overflow-hidden" style="width:280px">
+    <div class="flex items-center gap-2 px-4 pt-4 pb-2 flex-shrink-0">
       <span class="material-symbols-outlined text-secondary" style="font-size:18px">sticky_note_2</span>
-      <h3 class="font-headline font-bold text-on-surface text-base">Notes</h3>
+      <h3 class="font-headline font-bold text-on-surface text-base">Notes &amp; history</h3>
+      <span class="text-[11px] font-body text-on-surface-variant ml-auto flex items-center gap-0.5" id="ga-notes-scrollhint" style="display:none">scroll <span class="material-symbols-outlined" style="font-size:14px">arrow_forward</span></span>
     </div>
-    <div class="p-4 border-b border-surface-container-high flex-shrink-0" style="background:rgba(26,82,82,0.06)">
-      <div class="flex items-center gap-1.5 mb-1">
-        <span class="material-symbols-outlined text-primary" style="font-size:15px">favorite</span>
-        <span class="text-[11px] font-body font-bold text-primary uppercase tracking-wide">Customer note · always</span>
-      </div>
-      <textarea id="assign-cust-note" oninput="saveAssignCustNote()" class="w-full bg-surface-container-lowest border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="height:138px"></textarea>
-    </div>
-    <div class="flex-grow flex flex-col p-4 min-h-0">
-      <div class="flex items-center gap-1.5 mb-2">
-        <span class="material-symbols-outlined text-on-surface-variant" style="font-size:15px">schedule</span>
-        <span class="text-[11px] font-body font-bold text-on-surface-variant uppercase tracking-wide">Today's visit</span>
-      </div>
-      <textarea id="assign-txn-note" placeholder="Notes for today's visit…" oninput="saveAssignTxnNote()" class="flex-grow w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none" style="min-height:160px"></textarea>
-    </div>
+    <div id="ga-notes-row" class="flex gap-3 overflow-x-auto overflow-y-hidden px-4 pb-4" style="scrollbar-width:thin"></div>
   </div>
   </div>
 </div>
