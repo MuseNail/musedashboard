@@ -674,8 +674,9 @@ function _manualHistoryHtml(phone, name, records) {
 // (a party would otherwise rebuild it per guest). `seenKeys` tracks phone keys already given an
 // editable box so a second party member sharing a phone gets a read-only shared view (no collision).
 function _assignGuestNotesHtml(e, recs, seenKeys) {
+  // Styled to look EXACTLY like the check-in notes box (manualGuestBoxHtml): same 248px column, the
+  // same _MANUAL_TA / _NOTE6_H textareas, a borderless 124px history, and margin-top label spacing.
   const lab = 'text-[11px] font-body font-semibold text-primary uppercase tracking-widest block mb-1';
-  const taCls = 'w-full bg-surface-container border border-surface-container-high rounded-xl px-3 py-2 text-sm font-body text-on-surface focus:outline-none focus:border-primary resize-none';
   const pk = notePhoneKey(e.phone);
   const dupe = !!pk && seenKeys.has(pk);
   if (pk) seenKeys.add(pk);
@@ -684,16 +685,19 @@ function _assignGuestNotesHtml(e, recs, seenKeys) {
   if (!pk) {
     // No phone on file → no key to save under. Disable the box so a typed note isn't silently dropped
     // (the FD adds a phone, then the note field enables on the next re-render), mirroring the old panel.
-    custBox = `<textarea class="${taCls} opacity-60" disabled placeholder="Add a phone number to save a customer note" style="height:110px"></textarea>`;
+    custBox = `<textarea class="${_MANUAL_TA} opacity-60" disabled placeholder="Add a phone number to save a customer note" style="${_NOTE6_H}"></textarea>`;
   } else if (dupe) {
-    custBox = `<div class="w-full rounded-xl border border-dashed border-surface-container-high bg-surface-container-lowest px-3 py-2 text-sm font-body text-on-surface-variant overflow-hidden" style="height:110px"><span class="text-[10px] uppercase tracking-widest text-outline block mb-0.5">Shared · read-only</span>${note ? escHtml(note) : '<span class="italic">Shared with another guest on this ticket</span>'}</div>`;
+    custBox = `<div class="w-full rounded-lg border border-dashed border-surface-container-high bg-surface-container-lowest px-2.5 py-1.5 text-sm font-body text-on-surface-variant overflow-hidden" style="${_NOTE6_H}"><span class="text-[10px] uppercase tracking-widest text-outline block mb-0.5">Shared · read-only</span>${note ? escHtml(note) : '<span class="italic">Shared with another guest on this ticket</span>'}</div>`;
   } else {
-    custBox = `<textarea class="ga-custnote ${taCls}" oninput="assignGuestCustNoteInput('${e.id}')" placeholder="Allergies, preferences…" style="height:110px">${escHtml(note)}</textarea>`;
+    custBox = `<textarea class="ga-custnote ${_MANUAL_TA}" oninput="assignGuestCustNoteInput('${e.id}')" placeholder="Allergies, preferences…" style="${_NOTE6_H}">${escHtml(note)}</textarea>`;
   }
-  return `<div class="rounded-xl border border-surface-container-high bg-surface-container-low p-3 space-y-2" style="max-width:23rem">
-    <div><span class="${lab}">Customer note</span>${custBox}</div>
-    <div><span class="${lab}">Last 3 visits</span><div id="ga-hist-${e.id}" class="overflow-y-auto bg-surface-container-lowest rounded-xl border border-surface-container-high px-2.5 py-1" style="height:120px">${_manualHistoryHtml(e.phone, (e.name || '').trim(), recs)}</div></div>
-    <div><span class="${lab}">Note for this visit <span class="text-outline normal-case tracking-normal">· optional</span></span><textarea class="ga-visitnote ${taCls}" oninput="assignGuestVisitNoteInput('${e.id}')" placeholder="e.g., design on ring fingers…" style="height:90px">${escHtml(e.txnNote || '')}</textarea></div>
+  return `<div class="flex flex-col bg-surface-container-low rounded-xl border border-surface-container-high p-3" style="width:248px">
+    <label class="${lab}">Customer note</label>
+    ${custBox}
+    <label class="${lab}" style="margin-top:11px">Last 3 visits</label>
+    <div id="ga-hist-${e.id}" class="overflow-y-auto" style="height:124px">${_manualHistoryHtml(e.phone, (e.name || '').trim(), recs)}</div>
+    <label class="${lab}" style="margin-top:11px">Note for this visit <span class="text-outline normal-case tracking-normal">· optional</span></label>
+    <textarea class="ga-visitnote ${_MANUAL_TA}" oninput="assignGuestVisitNoteInput('${e.id}')" placeholder="e.g., design on ring fingers…" style="${_NOTE6_H}">${escHtml(e.txnNote || '')}</textarea>
   </div>`;
 }
 // W2-4: "— None —" + active staff, for the per-guest preferred-tech picker.
@@ -2025,7 +2029,7 @@ function _renderAssignOneList() {
       </div>
       ${rows}
       </div>
-      <div class="flex-shrink-0 lg:w-[23rem] mt-3 lg:mt-0">${_assignGuestNotesHtml(e, recs, _seenNoteKeys)}</div>
+      <div class="flex-shrink-0 mt-3 lg:mt-0">${_assignGuestNotesHtml(e, recs, _seenNoteKeys)}</div>
     </div>`;
   }).join('');
 
