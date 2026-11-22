@@ -690,7 +690,7 @@ function _assignGuestNotesHtml(e, recs, seenKeys) {
   } else {
     custBox = `<textarea class="ga-custnote ${taCls}" oninput="assignGuestCustNoteInput('${e.id}')" placeholder="Allergies, preferences…" style="height:110px">${escHtml(note)}</textarea>`;
   }
-  return `<div class="mt-3 rounded-xl border border-surface-container-high bg-surface-container-low p-3 space-y-2" style="max-width:23rem">
+  return `<div class="rounded-xl border border-surface-container-high bg-surface-container-low p-3 space-y-2" style="max-width:23rem">
     <div><span class="${lab}">Customer note</span>${custBox}</div>
     <div><span class="${lab}">Last 3 visits</span><div id="ga-hist-${e.id}" class="overflow-y-auto bg-surface-container-lowest rounded-xl border border-surface-container-high px-2.5 py-1" style="height:120px">${_manualHistoryHtml(e.phone, (e.name || '').trim(), recs)}</div></div>
     <div><span class="${lab}">Note for this visit <span class="text-outline normal-case tracking-normal">· optional</span></span><textarea class="ga-visitnote ${taCls}" oninput="assignGuestVisitNoteInput('${e.id}')" placeholder="e.g., design on ring fingers…" style="height:90px">${escHtml(e.txnNote || '')}</textarea></div>
@@ -783,14 +783,18 @@ function updateAllManualBoxes() {
     const m = b.id.match(/manual-box-(\d+)/); if (m) updateManualGuestBox(+m[1], recs);
   });
 }
-// Size the strip to fit up to ~2 boxes then scroll (desktop/landscape). On a narrow/portrait viewport
-// the strip stacks BELOW the card (CSS) and fills the width — so there it's full-width + scrolls inside.
+// Size the strip to fit up to ~4 boxes then scroll (desktop-first), clamped to the viewport so the
+// modal + strip never overflow the screen. On a narrow/portrait viewport the strip stacks BELOW the
+// card (CSS) and fills the width — so there it's full-width + scrolls inside.
 function _syncManualStrip() {
   const row = document.getElementById('manual-notes-row'), panel = document.getElementById('manual-notes-strip');
   if (!row || !panel) return;
   const n = row.querySelectorAll('.manual-note-box').length || 1;
   const stacked = window.matchMedia('(max-width:1023px)').matches;
-  panel.style.width = stacked ? '100%' : Math.min(560, n * 248 + (n - 1) * 12 + 32) + 'px';
+  const wantPx = n * 248 + (n - 1) * 12 + 32;                       // width to show all n boxes
+  const fourBoxPx = 4 * 248 + 3 * 12 + 32;                          // cap: at least 4 before a horizontal scroll
+  const roomPx = Math.max(540, window.innerWidth - 540);           // leave ~540px for the manual card + gutters
+  panel.style.width = stacked ? '100%' : Math.min(wantPx, fourBoxPx, roomPx) + 'px';
   requestAnimationFrame(() => {
     const hint = document.getElementById('manual-notes-scrollhint');
     if (hint) hint.style.display = (row.scrollWidth > row.clientWidth + 2) ? '' : 'none';
@@ -2005,7 +2009,8 @@ function _renderAssignOneList() {
     const nm = (e.name || '').trim().split(/\s+/), first = nm[0] || '', last = nm.slice(1).join(' ') || '';
     const rows = e.services.map(sid => _assignSvcRowHtml(e, sid, techOptions, stationOptions, e.services.length > 1)).join('')
       || `<div class="text-xs font-body text-on-surface-variant py-2 px-1 opacity-70">No services — tap one in the catalog.</div>`;
-    return `<div data-assign-entry="${e.id}" class="mb-4">
+    return `<div data-assign-entry="${e.id}" class="mb-4 flex flex-col lg:flex-row lg:items-start lg:gap-4">
+      <div class="flex-1 min-w-0">
       <div class="flex items-center gap-2 mb-2 flex-wrap">
         <span class="w-3 h-3 rounded-full flex-shrink-0" style="background:${color}"></span>
         <input type="text" value="${first.replace(/"/g,'&quot;')}" oninput="autoCapitalize(this)" placeholder="First"
@@ -2019,7 +2024,8 @@ function _renderAssignOneList() {
         ${isParty ? `<span class="ml-auto text-sm font-headline font-bold text-primary flex-shrink-0" id="ga-sub-${e.id}">$0.00</span>` : ''}
       </div>
       ${rows}
-      ${_assignGuestNotesHtml(e, recs, _seenNoteKeys)}
+      </div>
+      <div class="flex-shrink-0 lg:w-[23rem] mt-3 lg:mt-0">${_assignGuestNotesHtml(e, recs, _seenNoteKeys)}</div>
     </div>`;
   }).join('');
 

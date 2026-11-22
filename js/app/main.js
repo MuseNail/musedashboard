@@ -143,6 +143,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.23', items: [
+    { icon: 'view_column', t: 'Less scrolling on multi-customer tickets + roomier check-in notes', d: 'In Assign & Price, each customer’s note and visit history now sit to the RIGHT of their services (instead of below), so a multi-person ticket takes far less scrolling on a desktop. And when checking in 3–4 people at once, the notes panel is now wide enough to show up to four people side by side before it needs to scroll. (Both are tuned for desktop first; on a narrow screen or iPad they stack as before.)' },
+  ] },
   { v: 'v6.22', items: [
     { icon: 'sell', t: 'Gift-card promos: sell a gift card at a discount', d: 'You can now run a gift-card promo — e.g. sell a $100 card for $90. When you ring up a gift card on the Gift Cards page or in Quick Sale, there’s a new Discount field (enter a dollar amount or a percent). The card still loads its full value for the customer; you just collect the discounted price. Everything counts correctly: the payment screen, the cash drawer, the receipt, and the reports (a new “Gift discounts given” line shows what you gave away, while “Gift Cards Sold” stays at full value). For a truly free card, use the “No charge — just register the card” option as before.' },
   ] },
