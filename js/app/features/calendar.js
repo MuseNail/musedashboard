@@ -1470,7 +1470,10 @@ function _buildTechOptions(sel) {
   return `<option value="" ${isU ? 'selected' : ''}>Unassigned</option>`
     + buildStaffColumns().filter(c => c.id !== '').map(c => `<option value="${_escHtml(c.id)}" ${c.id === sel ? 'selected' : ''}>${_escHtml(c.name)}</option>`).join('');
 }
-function _buildSvcOptions(sel) { return '<option value="">— Service —</option>' + cfg().services.filter(s => !cfg().hidden_dash_services.includes(s.id)).map(s => `<option value="${s.id}" ${s.id === sel ? 'selected' : ''}>${s.label}</option>`).join(''); }
+// Keep the currently-selected service in the list even if it's dashboard-hidden, so a rebook
+// (or an edited appt) that carries a hidden-but-cataloged service shows and saves it correctly
+// instead of silently falling back to the blank "— Service —" option.
+function _buildSvcOptions(sel) { return '<option value="">— Service —</option>' + cfg().services.filter(s => s.id === sel || !cfg().hidden_dash_services.includes(s.id)).map(s => `<option value="${s.id}" ${s.id === sel ? 'selected' : ''}>${s.label}</option>`).join(''); }
 
 export function renderApptServiceLines() {
   const container = document.getElementById('appt-service-lines'); if (!container) return;
@@ -1507,21 +1510,31 @@ export function showNewApptModal(calId, hour, minute, techName) {
   document.getElementById('appt-event-id').value = '';
   document.getElementById('appt-cal-id').value = calId || '';
   ['appt-name','appt-first','appt-last','appt-phone','appt-notes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  // Rebook: when a rebook is in progress, prefill the customer's name + phone (service/tech/time
-  // are chosen fresh). A "Rebooking …" chip makes the prefill obviously intentional.
+  // Rebook: when a rebook is in progress, prefill the SAME setup just finished — the whole
+  // party, each guest's services, and the same tech per service — so an identical rebook is
+  // just pick date/time + Save. Everything stays editable. A chip makes the prefill obvious.
   const _rb = rebookPending();
-  if (_rb) {
-    const nm = splitName(_rb.name);
-    const setV = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
-    setV('appt-first', nm.first); setV('appt-last', nm.last); setV('appt-name', _rb.name || ''); setV('appt-phone', _rb.phone || '');
-  }
-  _setApptRebookChip(_rb ? _rb.name : null);
+  const _rbParty = (_rb && _rb.party && _rb.party.length) ? _rb.party : null;
   document.getElementById('appt-delete-btn').classList.add('hidden');
   document.getElementById('appt-date').value = localDateStr(new Date(_calDate));
   setApptTimeFields(hour ?? 9, minute ?? 0);
-  // Default the line to the clicked column's staff (calId is now a staffId; '' = Unassigned).
-  const startStaff = (calId && buildStaffColumns().some(c => c.id === calId)) ? calId : '';
-  addApptServiceLine('', startStaff);
+  if (_rbParty) {
+    const p0 = _rbParty[0], nm = splitName(p0.name);
+    const setV = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    setV('appt-first', nm.first); setV('appt-last', nm.last); setV('appt-name', p0.name || ''); setV('appt-phone', p0.phone || '');
+    // Translate the appointment-canonical party ({serviceId,staffId}) to the form's model
+    // ({svcId} + split first/last), exactly as showEditApptModal does.
+    _apptLines = (p0.lines || []).map(l => ({ svcId: l.serviceId || '', staffId: l.staffId || '' }));
+    if (!_apptLines.length) _apptLines = [{ svcId: '', staffId: '' }];
+    _apptExtraGuests = _rbParty.slice(1).map(g => { const gn = splitName(g.name); return { first: gn.first, last: gn.last, phone: g.phone || '', lines: (g.lines || []).map(l => ({ svcId: l.serviceId || '', staffId: l.staffId || '' })) }; });
+    renderApptServiceLines();
+    renderApptExtraGuests();
+  } else {
+    // Normal new appointment: one blank line seeded to the clicked column's staff ('' = Unassigned).
+    const startStaff = (calId && buildStaffColumns().some(c => c.id === calId)) ? calId : '';
+    addApptServiceLine('', startStaff);
+  }
+  _setApptRebookChip(_rbParty ? (_rb.namesLabel || _rb.primaryName) : null);
   const m = document.getElementById('appt-modal'); m.classList.remove('hidden'); m.style.display = 'flex';
   setTimeout(() => document.getElementById('appt-phone').focus(), 100);
 }

@@ -9,6 +9,7 @@ import { squareUpsertCustomer, customerNote } from './square-customers.js';
 import { chargeOnHelcim, helcimActive, helcimCustomerCode } from './helcim.js';
 import { drawerTipPayoutCents } from './cashdrawer.js';
 import { maybeOfferRebook } from './rebook.js';
+import { buildRebookParty } from '../rebook-util.js';
 import { giftSalesNet } from '../giftcard-sale-util.js';
 
 const cfg     = () => getState().config;
@@ -602,12 +603,15 @@ function _pollTerminalCheckout(id) {
 
 function _finalizeTerminalPaid(partyIds, tenders, paymentIds, tipDollars, unrecorded) {
   hideTerminalModal();
-  // Rebook offer: capture the primary guest's name/phone BEFORE the paid-flip + state reset.
-  // This is the single local checkout chokepoint (cash/Zelle/gift/card + record-as-paid all
-  // funnel here); offering here — and nowhere in the sync/webhook path — keeps the card on the
-  // checkout device only.
-  const _rbP = queue().find(x => String(x.id) === String(partyIds[0]));
-  const _rbPrimary = _rbP ? { name: _rbP.name, phone: _rbP.phone || '', services: (_rbP.services || []).slice(), quickSale: _rbP.quickSale } : null;
+  // Rebook offer: capture the WHOLE party's setup (names + services + per-service tech) BEFORE
+  // the paid-flip loop below mutates/dispatches these entries. buildRebookParty returns fresh
+  // objects (no references into the live assignments), so maybeOfferRebook (called after the
+  // loop) is immune to the mutation. This is the single local checkout chokepoint (cash/Zelle/gift/card
+  // + record-as-paid all funnel here); offering here — and nowhere in the sync/webhook path —
+  // keeps the card on the checkout device only. _rbEntries (the originals) carry the gate fields
+  // (services/quickSale/name/rebook_prompt) the resolved party intentionally drops.
+  const _rbEntries = partyIds.map(id => queue().find(x => String(x.id) === String(id))).filter(Boolean);
+  const _rbParty = buildRebookParty(_rbEntries, cfg());
   // The Assign & Price modal stays open during the charge (so a cancel returns to it) — but once
   // the payment lands, close it; leaving it up showed a stale, already-paid ticket.
   window.closeGroupAssignModal?.();
@@ -628,7 +632,7 @@ function _finalizeTerminalPaid(partyIds, tenders, paymentIds, tipDollars, unreco
   showToast(unrecorded?.length
     ? `Paid ✓ — ${unrecorded.join(' & ')} not logged to Square (will show in Reconcile)`
     : 'Paid ✓');
-  maybeOfferRebook(_rbPrimary);   // offer to book the next visit (service tickets only; gated by config.rebook_prompt)
+  maybeOfferRebook(_rbEntries, _rbParty);   // offer to book the next visit (gated: rebook_prompt on + any party member is a service visit)
 }
 
 export async function cancelTerminalCheckout() {

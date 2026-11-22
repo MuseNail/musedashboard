@@ -143,6 +143,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.25', items: [
+    { icon: 'event_repeat', t: 'Book next appointment — the same setup, prefilled', d: 'When you book a customer’s next visit (from the checkout prompt or the calendar button on a queue card), the New Appointment form now opens already filled in with the same setup they just finished — the whole group, each person’s services, and the same technician for each service. For a rebook of the identical visit you usually just pick the day and time and save. Everything stays editable: change a service, swap a technician, or remove a guest. Tapping the button on any member of a group books the whole group together, with the main customer on top. Heads-up: the appointment length still starts at 60 minutes, so widen it if the party needs a longer block.' },
+  ] },
   { v: 'v6.23', items: [
     { icon: 'view_column', t: 'Less scrolling on multi-customer tickets + roomier check-in notes', d: 'In Assign & Price, each customer’s note and visit history now sit to the RIGHT of their services (instead of below), so a multi-person ticket takes far less scrolling on a desktop. And when checking in 3–4 people at once, the notes panel is now wide enough to show up to four people side by side before it needs to scroll. (Both are tuned for desktop first; on a narrow screen or iPad they stack as before.)' },
   ] },
