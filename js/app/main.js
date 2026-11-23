@@ -143,6 +143,9 @@ function goTo(screenId, param) {
 // differs from the loaded APP_VERSION. Brand-new devices are recorded silently (no popup). Plain-
 // English; add an entry (newest first) each release. To re-read it: window.showWhatsNew().
 const WHATS_NEW = [
+  { v: 'v6.27', items: [
+    { icon: 'sticky_note_2', t: 'Fixed: notes typed in Assign & Price now save', d: 'A bug from v6.24 meant that when the front desk typed a customer note (allergies, preferences) or a “note for this visit” directly in the Assign & Price window, the text looked accepted but was quietly dropped when the window closed. Those notes now save correctly again. (Notes added at check-in or from Edit Customer were never affected.) If you entered any Assign & Price notes over the last few days and they went missing, you’ll need to re-enter them.' },
+  ] },
   { v: 'v6.26', items: [
     { icon: 'touch_app', t: 'Dragging a tech on the floor no longer starts the service', d: 'When you drag a technician onto a waiting customer on the floor plan, it now just seats the tech next to them — the service stays “Waiting” (amber) instead of jumping straight to “In Service.” The front desk starts the service when the work actually begins: open the ticket and tap the status pill (or the ▶ on the queue row). The turn still counts toward the tech’s rotation the moment you drop them in. This also means a technician can no longer start a service from their own phone — starting is now a front-desk action for every customer, however they were assigned. And a tech who’s been given a customer but hasn’t started yet now shows a blue “Assigned” tag (instead of green “Available”) on the floor and turns board, so it’s clear at a glance they already have someone.' },
   ] },

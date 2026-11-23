@@ -691,7 +691,7 @@ function _assignGuestNotesHtml(e, recs, seenKeys) {
   } else {
     custBox = `<textarea class="ga-custnote ${_MANUAL_TA}" oninput="assignGuestCustNoteInput('${e.id}')" placeholder="Allergies, preferences…" style="${_NOTE6_H}">${escHtml(note)}</textarea>`;
   }
-  return `<div class="ga-note-box flex-shrink-0 flex flex-col bg-surface-container-low rounded-xl border border-surface-container-high p-3" style="width:248px">
+  return `<div class="ga-note-box flex-shrink-0 flex flex-col bg-surface-container-low rounded-xl border border-surface-container-high p-3" data-assign-entry="${e.id}" style="width:248px">
     <div class="flex items-baseline justify-between gap-2 mb-1" style="height:20px">
       <span class="font-headline font-semibold text-on-surface text-sm truncate">${escHtml((e.name || '').trim() || 'Guest')}</span>
       <span class="text-[11px] font-body text-on-surface-variant flex-shrink-0">${escHtml(_fmtPhone(e.phone))}</span>
@@ -1858,34 +1858,41 @@ export function saveAssignTxnNote() {
 // one-list rebuilds its whole innerHTML on nearly every interaction, notes are flushed BEFORE each
 // rebuild (via _saveAssignOneList → _flushAssignGuestCustNotes) and captured in the save loop; a 600ms
 // debounce covers a nav-force-hide that bypasses _saveAssignOneList.
+// The note boxes live in the SEPARATE #ga-notes-row strip (a sibling of #group-assign-content), each
+// tagged data-assign-entry. Scope the reads to the strip (not #group-assign-content, where the boxes no
+// longer are) so the notes actually persist.
 export function assignGuestVisitNoteInput(entryId) {
-  const sec = document.querySelector(`#group-assign-content [data-assign-entry="${entryId}"]`);
-  const ta = sec?.querySelector('.ga-visitnote');
+  const box = document.querySelector(`#ga-notes-row [data-assign-entry="${entryId}"]`);
+  const ta = box?.querySelector('.ga-visitnote');
   const entry = q().find(e => String(e.id) === String(entryId));
   if (entry && ta) entry.txnNote = ta.value;   // local (persisted on the next queue.upsert at pay/save)
 }
 let _assignNoteTimer = null;
 export function assignGuestCustNoteInput(entryId) {
-  const sec = document.querySelector(`#group-assign-content [data-assign-entry="${entryId}"]`);
-  const ta = sec?.querySelector('.ga-custnote');
+  const box = document.querySelector(`#ga-notes-row [data-assign-entry="${entryId}"]`);
+  const ta = box?.querySelector('.ga-custnote');
   if (ta) ta.dataset.touched = '1';
   clearTimeout(_assignNoteTimer);
   _assignNoteTimer = setTimeout(_flushAssignGuestCustNotes, 600);
 }
 // Persist every TOUCHED per-guest customer note to the synced phone-keyed store in ONE dispatch.
 // GATE on `touched` only (never write an untouched box) so an Edit-Customer edit (person_edit) or a
-// cross-device sync echo is never clobbered by a stale box. Reads the LIVE phone field so a number
-// changed inline keys correctly. Dispatches only when something actually changed (no write-amplification).
+// cross-device sync echo is never clobbered by a stale box. The strip box has no phone input, so key off
+// the LIVE inline phone field in #group-assign-content (matched by entry id — a number changed inline keys
+// correctly), falling back to the entry's stored phone only if that field is absent. Dispatches only when
+// something actually changed (no write-amplification).
 function _flushAssignGuestCustNotes() {
   clearTimeout(_assignNoteTimer); _assignNoteTimer = null;
-  const boxes = document.querySelectorAll('#group-assign-content .ga-custnote');
+  const boxes = document.querySelectorAll('#ga-notes-row .ga-custnote');
   if (!boxes.length) return;
   const notes = { ...(cfg().customer_notes || {}) };
   let changed = false;
   boxes.forEach(ta => {
     if (ta.dataset.touched !== '1') return;
-    const sec = ta.closest('[data-assign-entry]');
-    const key = notePhoneKey(sec?.querySelector('.ga-phone')?.value || '');
+    const id = ta.closest('[data-assign-entry]')?.dataset.assignEntry;
+    const phoneEl = document.querySelector(`#group-assign-content [data-assign-entry="${id}"] .ga-phone`);
+    const rawPhone = phoneEl ? phoneEl.value : (q().find(e => String(e.id) === String(id))?.phone || '');
+    const key = notePhoneKey(rawPhone || '');
     if (!key) return;
     const val = ta.value.trim();
     if (val === (notes[key] || '')) return;
@@ -2216,9 +2223,9 @@ function _saveAssignOneList() {
       _applyRowToAssignment(entry.id, a, row, isNew);
     });
     entry.services = entry.assignments.map(a => a.serviceId);
-    // NL1: capture THIS guest's visit note from their own box (was a single party[0] read that wiped
-    // guest-1 once the side panel went away).
-    const vn = sec.querySelector('.ga-visitnote'); if (vn) entry.txnNote = vn.value;
+    // Capture THIS guest's visit note from their own box in the SEPARATE #ga-notes-row strip (the box
+    // is no longer inside sec / #group-assign-content).
+    const vn = document.querySelector(`#ga-notes-row [data-assign-entry="${entry.id}"] .ga-visitnote`); if (vn) entry.txnNote = vn.value;
   });
   _flushAssignGuestCustNotes();   // NL1: persist per-guest customer notes BEFORE the caller rebuilds the DOM
 
